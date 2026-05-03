@@ -49,6 +49,18 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
       stderr += data.toString();
     });
 
+    // TODO: split stdout and stderr in the output instead of concatenating.
+    // Motivation:
+    //   - Models confuse warnings/progress on stderr (npm, cargo, pytest)
+    //     with real errors and chase phantom failures.
+    //   - Conversely, when a command fails with a useful message on stderr,
+    //     it gets mixed into stdout noise and buried.
+    //   - Tools that write structured data to stdout (jq, git diff) become
+    //     unparseable when stderr lines are interleaved.
+    // Shape: keep the combined view for short outputs; for non-empty stderr,
+    // emit a fenced "--- stderr ---" section after stdout so the model can
+    // see them separately without doubling the token cost on the common
+    // case where stderr is empty.
     proc.on('close', (code) => {
       const combined = [stdout, stderr].filter(Boolean).join('\n');
       const truncated = combined.length > 50000

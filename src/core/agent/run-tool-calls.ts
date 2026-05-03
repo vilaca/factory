@@ -283,18 +283,21 @@ async function* executeToolCall(
       signal.addEventListener('abort', abortHandler, { once: true });
     }
 
-    yield {
-      type: 'permission-request' as const,
-      toolName: tool.name,
-      args,
-      respond: (decision: PermissionDecision) => resolvePermission(decision),
-    };
-
-    const decision = await permissionPromise;
-
-    // Clean up abort listener
-    if (signal && abortHandler) {
-      signal.removeEventListener('abort', abortHandler);
+    let decision: PermissionDecision | 'abort';
+    try {
+      yield {
+        type: 'permission-request' as const,
+        toolName: tool.name,
+        args,
+        respond: (d: PermissionDecision) => resolvePermission(d),
+      };
+      decision = await permissionPromise;
+    } finally {
+      // finally so cleanup runs even if the generator is cancelled or throws
+      // mid-await — otherwise the closure stays attached to a long-lived signal.
+      if (signal && abortHandler) {
+        signal.removeEventListener('abort', abortHandler);
+      }
     }
 
     if (decision === 'abort') {

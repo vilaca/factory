@@ -327,6 +327,35 @@ describe('Bash tool', () => {
     assert.strictEqual(result.success, true);
     assert.match(result.output, /exit code 1/);
   });
+
+  // The following pin down the documented behavior: Bash invokes /bin/sh -c
+  // with no parsing or quoting, so all shell metacharacters work as expected.
+  // If we ever add a sanitizer/parser, these flip to negative assertions.
+
+  it('$(...) command substitution is evaluated by /bin/sh', async () => {
+    const result = await bash.execute({ command: 'echo $(echo nested)' });
+    assert.strictEqual(result.success, true);
+    assert.ok(result.output.includes('nested'));
+  });
+
+  it('backtick command substitution is evaluated by /bin/sh', async () => {
+    const result = await bash.execute({ command: 'echo `echo back`' });
+    assert.strictEqual(result.success, true);
+    assert.ok(result.output.includes('back'));
+  });
+
+  it('; chains multiple commands', async () => {
+    const result = await bash.execute({ command: 'echo first; echo second' });
+    assert.strictEqual(result.success, true);
+    assert.ok(result.output.includes('first'));
+    assert.ok(result.output.includes('second'));
+  });
+
+  it('pipes stdout between commands', async () => {
+    const result = await bash.execute({ command: 'printf "a\\nb\\nc\\n" | wc -l' });
+    assert.strictEqual(result.success, true);
+    assert.match(result.output, /\b3\b/);
+  });
 });
 
 // ─── Glob tool ──────────────────────────────────────────────────────────
@@ -385,5 +414,84 @@ describe('Grep tool', () => {
     const result = await grep.execute({});
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('required'));
+  });
+});
+
+// ─── File tool symlink behavior ─────────────────────────────────────────
+// Pin down current behavior: Read/Write/Edit follow symlinks and operate on
+// the target. There is no project-root jail. If a jail is added later, these
+// flip to negative assertions — that's the point.
+
+function makeSymlink(target: string, suffix: string): string {
+  const link = path.join(os.tmpdir(), `oc-unit-link-${suffix}-${crypto.randomUUID()}`);
+  fs.symlinkSync(target, link);
+  return link;
+}
+
+describe('File tool symlink behavior', () => {
+  const read = getTool('Read')!;
+  const write = getTool('Write')!;
+  const edit = getTool('Edit')!;
+
+  it('Read follows a symlink to its target', async () => {
+    const target = tmpFile('symlink-read-target', 'target-content\n');
+    const link = makeSymlink(target, 'read');
+    try {
+      const result = await read.execute({ file_path: link });
+      assert.strictEqual(result.success, true);
+      assert.ok(result.output.includes('target-content'));
+    } finally {
+      cleanup(link);
+      cleanup(target);
+    }
+  });
+
+  it('Write through a symlink overwrites the target file, not the link', async () => {
+    const target = tmpFile('symlink-write-target', 'old\n');
+    const link = makeSymlink(target, 'write');
+    try {
+      const result = await write.execute({ file_path: link, content: 'new content' });
+      assert.strictEqual(result.success, true);
+      // The target file was modified...
+      assert.strictEqual(fs.readFileSync(target, 'utf-8'), 'new content');
+      // ...and the link is still a symlink (not replaced by a regular file).
+      assert.ok(fs.lstatSync(link).isSymbolicLink());
+    } finally {
+      cleanup(link);
+      cleanup(target);
+    }
+  });
+
+  it('Edit through a symlink modifies the target file', async () => {
+    const target = tmpFile('symlink-edit-target', 'foo bar baz\n');
+    const link = makeSymlink(target, 'edit');
+    try {
+      const result = await edit.execute({ file_path: link, old_string: 'bar', new_string: 'qux' });
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(fs.readFileSync(target, 'utf-8'), 'foo qux baz\n');
+      assert.ok(fs.lstatSync(link).isSymbolicLink());
+    } finally {
+      cleanup(link);
+      cleanup(target);
+    }
+  });
+
+  it('Read via a symlink that escapes cwd succeeds (no project-root jail)', async () => {
+    // Create a directory outside cwd and a file inside it; symlink it from
+    // a different directory. Read via the symlink to prove there's no jail.
+    const outsideDir = path.join(os.tmpdir(), `oc-unit-outside-${crypto.randomUUID()}`);
+    fs.mkdirSync(outsideDir, { recursive: true });
+    const outsideFile = path.join(outsideDir, 'secret.txt');
+    fs.writeFileSync(outsideFile, 'outside-the-jail\n');
+    const link = makeSymlink(outsideFile, 'escape');
+    try {
+      const result = await read.execute({ file_path: link });
+      assert.strictEqual(result.success, true);
+      assert.ok(result.output.includes('outside-the-jail'));
+    } finally {
+      cleanup(link);
+      cleanup(outsideFile);
+      try { fs.rmSync(outsideDir, { recursive: true }); } catch { /* ignore */ }
+    }
   });
 });

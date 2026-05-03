@@ -45,6 +45,20 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
     return { success: false, output: 'file_path is required' };
   }
 
+  // TODO(security): path.resolve() does not jail to a project root, and
+  // fs operations follow symlinks. Same pattern in write.ts, edit.ts,
+  // glob.ts. To harden for untrusted models, add an opt-in jail:
+  //   1. Configurable allowed-roots list (cwd by default).
+  //   2. Resolve via fs.realpath() to collapse symlinks, then verify the
+  //      result startsWith() one of the allowed roots + path.sep.
+  //   3. Reject paths containing '..' segments before resolution as a
+  //      cheap pre-check (defense in depth, not a substitute for #2).
+  //   4. Apply uniformly across Read/Write/Edit/Glob/Grep — partial
+  //      coverage is worse than none because it implies safety.
+  // Detection (in addition to enforcement): log resolved paths that
+  // resolve outside the allowed roots and surface them to the user even
+  // when the call is permitted, so suspicious traversal attempts are
+  // visible in the session log.
   const resolved = path.resolve(filePath);
 
   try {
