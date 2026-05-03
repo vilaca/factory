@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { supportsLanguage } from 'cli-highlight';
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
@@ -13,6 +14,18 @@ ext.renderer.text = function (token: any): string {
     return this.parser.parseInline(token.tokens);
   }
   return origText.call(this, token);
+};
+
+// highlight.js writes "Could not find the language '…'" to stderr (and throws,
+// which marked-terminal catches) when the fence tag isn't a registered hljs
+// language — common with LLM output like ```plain / ```plaintext / ```output.
+// Strip unsupported langs so cli-highlight takes the auto-detect path instead.
+const origCode = ext.renderer.code;
+ext.renderer.code = function (token: any): string {
+  if (token && typeof token === 'object' && token.lang && !supportsLanguage(String(token.lang))) {
+    token = { ...token, lang: '' };
+  }
+  return origCode.call(this, token);
 };
 
 const marked = new Marked(ext);
