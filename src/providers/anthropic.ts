@@ -194,47 +194,56 @@ export class AnthropicProvider implements Provider {
   }
 
   private splitMessages(messages: ChatMessage[]): { system: string | null; msgs: any[] } {
-    let system: string | null = null;
-    const msgs: any[] = [];
-
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        system = msg.content;
-      } else if (msg.role === 'assistant' && msg.tool_calls) {
-        const content: any[] = [];
-        if (msg.content) {
-          content.push({ type: 'text', text: msg.content });
-        }
-        for (const tc of msg.tool_calls) {
-          content.push({
-            type: 'tool_use',
-            id: tc.id ?? `toolu_${Math.random().toString(36).slice(2, 14)}`,
-            name: tc.function.name,
-            input: tc.function.arguments,
-          });
-        }
-        msgs.push({ role: 'assistant', content });
-      } else if (msg.role === 'tool') {
-        const lastAssistant = msgs[msgs.length - 1];
-        let toolUseId = 'unknown';
-        if (lastAssistant?.role === 'assistant') {
-          const blocks = Array.isArray(lastAssistant.content) ? lastAssistant.content : [];
-          const toolUse = blocks.findLast?.((b: any) => b.type === 'tool_use');
-          if (toolUse) toolUseId = toolUse.id;
-        }
-        msgs.push({
-          role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: toolUseId,
-            content: msg.content,
-          }],
-        });
-      } else {
-        msgs.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    return { system, msgs };
+    return splitMessagesForAnthropic(messages);
   }
+}
+
+export function splitMessagesForAnthropic(
+  messages: ChatMessage[],
+): { system: string | null; msgs: any[] } {
+  let system: string | null = null;
+  const msgs: any[] = [];
+
+  for (const msg of messages) {
+    if (msg.role === 'system') {
+      system = msg.content;
+    } else if (msg.role === 'assistant' && msg.tool_calls) {
+      const content: any[] = [];
+      if (msg.content) {
+        content.push({ type: 'text', text: msg.content });
+      }
+      for (const tc of msg.tool_calls) {
+        content.push({
+          type: 'tool_use',
+          id: tc.id ?? `toolu_${Math.random().toString(36).slice(2, 14)}`,
+          name: tc.function.name,
+          input: tc.function.arguments,
+        });
+      }
+      msgs.push({ role: 'assistant', content });
+    } else if (msg.role === 'tool') {
+      const block = {
+        type: 'tool_result',
+        tool_use_id: msg.tool_call_id ?? 'unknown',
+        content: msg.content,
+      };
+      // Anthropic requires all tool_results from one turn to share a single
+      // user message that immediately follows the assistant's tool_use
+      // blocks. Coalesce consecutive tool messages into one user message.
+      const last = msgs[msgs.length - 1];
+      if (
+        last?.role === 'user' &&
+        Array.isArray(last.content) &&
+        last.content.every((b: any) => b?.type === 'tool_result')
+      ) {
+        last.content.push(block);
+      } else {
+        msgs.push({ role: 'user', content: [block] });
+      }
+    } else {
+      msgs.push({ role: msg.role, content: msg.content });
+    }
+  }
+
+  return { system, msgs };
 }
