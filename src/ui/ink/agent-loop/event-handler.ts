@@ -1,0 +1,217 @@
+import type { AgentEvent } from '../../../core/agent-types.js';
+import type { AgentLoopDeps } from './types.js';
+
+export interface StreamingState {
+  getStreamingBuffer: () => string;
+  setStreamingBuffer: (s: string) => void;
+  addSuccessfulToolCall: () => void;
+  markAutoRetryExhausted: () => void;
+  markTokenLimitHalt: () => void;
+}
+
+export function handleAgentEvent(
+  event: AgentEvent,
+  deps: AgentLoopDeps,
+  ss: StreamingState,
+): void {
+  if (!deps.refs.current) return;
+
+  switch (event.type) {
+    case 'text-chunk': {
+      deps.setThinking(false);
+      const next = ss.getStreamingBuffer() + event.content;
+      ss.setStreamingBuffer(next);
+      deps.setStreamingText(next);
+      break;
+    }
+    case 'text-done': {
+      // Commit the finalized text to items[] (which feeds <Static>) and
+      // clear the streaming buffer. <Static> keeps history in the terminal's
+      // real scrollback; only the streaming buffer + spinner re-render.
+      if (event.fullContent) {
+        deps.addItem({ kind: 'assistant-text', id: deps.nextId(), text: event.fullContent, streaming: false });
+      }
+      ss.setStreamingBuffer('');
+      deps.setStreamingText('');
+      deps.setThinking(true);
+      deps.refreshTokenEstimate();
+      break;
+    }
+    case 'tool-call-start': {
+      deps.setThinking(false);
+      deps.setRunningTool(event.toolName);
+      deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args });
+      break;
+    }
+    case 'tool-call-result': {
+      deps.addItem({
+        kind: 'tool-result',
+        id: deps.nextId(),
+        toolName: event.toolName,
+        output: event.result.displayOutput ?? event.result.output,
+        success: event.result.success,
+        empty: event.result.empty,
+      });
+      if (event.result.success) ss.addSuccessfulToolCall();
+      deps.setSessionToolCalls((n) => n + 1);
+      deps.setRunningTool(null);
+      deps.setThinking(true);
+      // Tool results add (often large) chunks to the conversation.
+      deps.refreshTokenEstimate();
+      break;
+    }
+    case 'tool-call-denied': {
+      deps.addItem({ kind: 'tool-denied', id: deps.nextId(), toolName: event.toolName });
+      deps.setRunningTool(null);
+      break;
+    }
+    case 'tool-call-recovered': {
+      if (!deps.refs.current.useTextToolFallback) {
+        const sourceLabel =
+          event.source === 'bare' ? 'bare JSON' :
+          event.source === 'fence' ? 'a JSON code block' :
+          event.source === 'shell-fence' ? 'a shell code block' :
+          'tagged JSON';
+        deps.addNotice('warn',
+          `⚠ Model emitted tool call as ${sourceLabel} instead of structured tool_calls. Recovered ${event.count} call${event.count === 1 ? '' : 's'} via fallback parser.`,
+        );
+        deps.refs.current.useTextToolFallback = true;
+        deps.refs.current.conversation.updateSystemPrompt(deps.composeSystemPrompt());
+        deps.refs.current.sessionLogger?.logSystemPromptChange('text-tool-fallback=true (auto)');
+        deps.addNotice('warn',
+          '⚠ Auto-enabling text-tool fallback mode — model will be instructed to use <tool_call> format from now on. Subsequent recoveries will be silent.',
+        );
+      }
+      break;
+    }
+    case 'tool-result-imitation-stripped': {
+      deps.addNotice('danger',
+        `⚠ Model fabricated ${event.count} tool result block${event.count === 1 ? '' : 's'} in its response. Stripped before storing — the result was NOT real.`,
+      );
+      break;
+    }
+    case 'auto-retry-injected': {
+      deps.addNotice('warn',
+        `↻ Model bailed after a tool failure — auto-injecting retry nudge (${event.remainingBudget} retr${event.remainingBudget === 1 ? 'y' : 'ies'} left).`,
+      );
+      break;
+    }
+    case 'auto-retry-exhausted': {
+      ss.markAutoRetryExhausted();
+      deps.addNotice('warn', '⚠ Auto-retry exhausted — model couldn\'t recover on its own.');
+      break;
+    }
+    case 'all-denied-halt': {
+      deps.addNotice('warn',
+        `⏸ All ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting. Tell the model what to do differently.`,
+      );
+      break;
+    }
+    case 'tool-call-corrected': {
+      deps.addNotice('warn',
+        `↺ Auto-correcting ${event.original.function.name} call (${event.reason.slice(0, 80)})...`,
+      );
+      break;
+    }
+    case 'tool-call-corrector-aborted': {
+      deps.addNotice('info', `↺ Corrector skipped: ${event.reason.slice(0, 100)}`);
+      break;
+    }
+    case 'tool-call-planned': {
+      const sig = `${event.toolName}:${JSON.stringify(event.args)}`;
+      const dup = deps.getPlannedCalls().some(p => `${p.toolName}:${JSON.stringify(p.args)}` === sig);
+      if (dup) {
+        deps.addNotice('info', `[planned] (skipped duplicate ${event.toolName} call)`);
+      } else {
+        deps.setPlannedCalls((prev) => [...prev, { toolName: event.toolName, args: event.args }]);
+        deps.addItem({ kind: 'tool-planned', id: deps.nextId(), toolName: event.toolName, args: event.args });
+      }
+      break;
+    }
+    case 'permission-request': {
+      deps.setState('awaiting-permission');
+      const respond = event.respond;
+      const toolName = event.toolName;
+      deps.setPermissionRequest({
+        toolName,
+        args: event.args,
+        resolve: (decision) => {
+          deps.refs.current?.sessionLogger?.logPermissionChange(`request:${decision}`, toolName);
+          respond(decision);
+          deps.setPermissionRequest(undefined);
+          deps.setState('running');
+        },
+      });
+      break;
+    }
+    case 'output-cap-reached': {
+      deps.addNotice('warn',
+        `⚠ Output cap reached (${event.completionTokens} tokens). Response was truncated — ask for the rest if needed.`,
+      );
+      break;
+    }
+    case 'empty-turn-warning': {
+      deps.addNotice('warn',
+        `⚠ Model produced ${event.completionTokens} tokens of internal reasoning but no visible output. ` +
+        `Try a different model or a more concrete prompt.`,
+      );
+      break;
+    }
+    case 'repetition-detected': {
+      deps.addNotice('danger',
+        `⚠ Runaway repetition (${event.streak} identical lines: ${event.line.slice(0, 60)}). Aborting.`,
+      );
+      break;
+    }
+    case 'read-cache-hit': {
+      deps.addNotice('info', `⤳ Read cache hit: ${event.path} unchanged`);
+      break;
+    }
+    case 'bash-dedup-nudge': {
+      deps.addNotice('warn',
+        `↻ Near-duplicate Bash pattern (${event.recentCommands.length} recent commands) — nudge injected.`,
+      );
+      break;
+    }
+    case 'compaction-start': {
+      deps.setCompacting({ aggressive: event.aggressive });
+      deps.setThinking(false);
+      deps.addNotice(
+        'info',
+        event.aggressive
+          ? '⊕ Context full — aggressively compacting (mechanical summary)…'
+          : '⊕ Compacting conversation history…',
+      );
+      break;
+    }
+    case 'compaction': {
+      deps.setCompacting(null);
+      deps.setThinking(true);
+      deps.addNotice(
+        'info',
+        `✓ Compacted ${event.oldMessages} messages → ${event.newMessages}` +
+          (event.aggressive ? ' (aggressive pass)' : ''),
+      );
+      // Conversation just shrank — refresh so the status bar reflects it
+      // before the next model response.
+      deps.refreshTokenEstimate();
+      break;
+    }
+    case 'error': {
+      deps.addNotice('danger', `Error: ${event.error.message}`);
+      break;
+    }
+    case 'turn-complete': {
+      deps.setSessionTurns((n) => n + event.turnsUsed);
+      if (event.usage) {
+        deps.setLastUsage(event.usage);
+      }
+      if (event.stopReason === 'turn-limit') {
+        deps.addNotice('warn', '(stopped: maximum turns reached)');
+      } else if (event.stopReason === 'token-limit') {
+        ss.markTokenLimitHalt();
+      }
+      break;
+    }
+  }
+}

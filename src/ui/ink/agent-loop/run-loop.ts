@@ -1,0 +1,137 @@
+import { runAgent } from '../../../core/agent.js';
+import { defaultRegistry } from '../../../tools/index.js';
+import { handleAgentEvent } from './event-handler.js';
+import type { AgentLoopDeps } from './types.js';
+
+const TRIVIAL_PROMPTS = new Set([
+  'ok', 'okay', 'yes', 'no', 'y', 'n', 'go', 'go on',
+  'do it', 'do the call', 'do the calls', 'continue', 'next', 'sure',
+]);
+const MAX_REPLAYS_PER_PROMPT = 2;
+
+export function isSubstantivePrompt(s: string): boolean {
+  if (s.length >= 25) return true;
+  return !TRIVIAL_PROMPTS.has(s.toLowerCase());
+}
+
+export async function runAgentLoopInternal(
+  userInput: string,
+  deps: AgentLoopDeps,
+): Promise<void> {
+  if (!deps.refs.current) return;
+  deps.refs.current.abort = new AbortController();
+  deps.setThinking(true);
+
+  let successfulToolCallsThisRun = 0;
+  let autoRetryExhaustedThisRun = false;
+  let tokenLimitHaltThisRun = false;
+
+  let assistantBuffer = '';
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutSec = deps.agentConfig?.turnTimeoutSec;
+  if (timeoutSec) {
+    timeoutHandle = setTimeout(() => {
+      deps.addNotice('warn', `⏱ Turn timeout (${timeoutSec}s) — aborting.`);
+      deps.refs.current?.abort?.abort();
+    }, timeoutSec * 1000);
+  }
+
+  const agent = runAgent(userInput, {
+    provider: deps.provider,
+    model: deps.refs.current.model,
+    conversation: deps.refs.current.conversation,
+    permissions: deps.refs.current.permissions,
+    toolRegistry: defaultRegistry,
+    useTextToolFallback: deps.refs.current.useTextToolFallback,
+    nativeToolSupport: deps.refs.current.nativeToolSupport,
+    planMode: deps.refs.current.planMode,
+    enableCorrector: deps.refs.current.enableCorrector,
+    contextManager: deps.refs.current.contextManager,
+    maxTurns: deps.agentConfig?.maxTurns,
+    experimental: {
+      bashDedup: deps.refs.current.experimental.bashDedup,
+      readCache: deps.refs.current.experimental.readCache,
+    },
+    fileCache: deps.refs.current.fileCache,
+    signal: deps.refs.current.abort.signal,
+  });
+
+  for await (const event of agent) {
+    if (event.type !== 'text-chunk') {
+      deps.refs.current.sessionLogger?.logAgentEvent(event);
+    }
+    handleAgentEvent(event, deps, {
+      getStreamingBuffer: () => assistantBuffer,
+      setStreamingBuffer: (s) => { assistantBuffer = s; },
+      addSuccessfulToolCall: () => successfulToolCallsThisRun++,
+      markAutoRetryExhausted: () => { autoRetryExhaustedThisRun = true; },
+      markTokenLimitHalt: () => { tokenLimitHaltThisRun = true; },
+    });
+  }
+
+  if (tokenLimitHaltThisRun) {
+    const replay = deps.refs.current.lastSubstantivePrompt ?? userInput;
+    const used = deps.refs.current.tokenLimitReplayCounts.get(replay) ?? 0;
+    if (used < 1) {
+      deps.refs.current.tokenLimitReplayCounts.set(replay, used + 1);
+      deps.addNotice('warn', '⏵ Context window full — aggressively compacted; replaying prompt once.');
+      await runAgentLoopInternal(replay, deps);
+      return;
+    }
+    deps.addNotice('danger', '⚠ Compaction couldn\'t free enough context. Use /clear and rephrase.');
+  }
+
+  // Auto-recovery: clear+replay if no successful tool call this run.
+  if (
+    autoRetryExhaustedThisRun &&
+    successfulToolCallsThisRun === 0 &&
+    deps.refs.current.lastSubstantivePrompt
+  ) {
+    const replay = deps.refs.current.lastSubstantivePrompt;
+    const used = deps.refs.current.replayCounts.get(replay) ?? 0;
+    if (used < MAX_REPLAYS_PER_PROMPT) {
+      deps.refs.current.replayCounts.set(replay, used + 1);
+      deps.addNotice('danger',
+        `⚠ Auto-recovery: clearing conversation and replaying the last substantive prompt (attempt ${used + 1}/${MAX_REPLAYS_PER_PROMPT}).`,
+      );
+      deps.refs.current.conversation.clear();
+      await runAgentLoopInternal(replay, deps);
+      return;
+    }
+    deps.addNotice('danger',
+      `⚠ Auto-recovery exhausted after ${MAX_REPLAYS_PER_PROMPT} replays — model couldn't make progress on this prompt. Giving up; please rephrase or take over manually.`,
+    );
+  }
+
+  if (deps.refs.current.planMode && deps.getPlannedCalls().length > 0) {
+    const count = deps.getPlannedCalls().length;
+    deps.addNotice('cyan',
+      `Proposed plan: ${count} change${count === 1 ? '' : 's'}.`,
+    );
+    deps.addNotice('info', 'Type y to approve, n to drop, or describe revisions.');
+  }
+
+  if (timeoutHandle) clearTimeout(timeoutHandle);
+  deps.refs.current.abort = undefined;
+  deps.setThinking(false);
+  deps.setRunningTool(null);
+  deps.setCompacting(null);
+}
+
+export async function processInput(
+  trimmed: string,
+  deps: AgentLoopDeps,
+): Promise<void> {
+  if (!deps.refs.current) return;
+
+  deps.refs.current.sessionLogger?.logUserInput(trimmed);
+  deps.addItem({ kind: 'user-input', id: deps.nextId(), text: trimmed });
+
+  if (isSubstantivePrompt(trimmed)) {
+    deps.refs.current.lastSubstantivePrompt = trimmed;
+  }
+
+  deps.setState('running');
+  await runAgentLoopInternal(trimmed, deps);
+}
