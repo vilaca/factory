@@ -2,6 +2,7 @@ import type { Config } from '../core/config-types.js';
 
 export type StartupProviderName =
   | 'ollama'
+  | 'llamacpp'
   | 'huggingface'
   | 'anthropic'
   | 'copilot'
@@ -51,6 +52,15 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'ollama',
     label: 'Ollama',
     aliases: ['ollama'],
+    authFlow: 'none',
+    probeAtStartup: true,
+    probeWithoutCredentials: true,
+    showInPicker: 'when-reachable',
+  },
+  llamacpp: {
+    name: 'llamacpp',
+    label: 'llama.cpp',
+    aliases: ['llamacpp', 'llama.cpp', 'llama'],
     authFlow: 'none',
     probeAtStartup: true,
     probeWithoutCredentials: true,

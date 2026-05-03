@@ -43,13 +43,15 @@ interface RowProps {
   shortcut: string;
   label: string;
   suffix?: string;
+  dim?: boolean;
 }
 
-function Row({ selected, shortcut, label, suffix }: RowProps): React.ReactElement {
+function Row({ selected, shortcut, label, suffix, dim }: RowProps): React.ReactElement {
   const cursor = selected ? chalk.cyan('▸ ') : '  ';
   const num = shortcut ? `${shortcut}. ` : '';
   const text = selected ? chalk.cyan.bold(label) : label;
-  return <Text>{`    ${cursor}${num}${text}${suffix ? '  ' + suffix : ''}`}</Text>;
+  const line = `    ${cursor}${num}${text}${suffix ? '  ' + suffix : ''}`;
+  return <Text dimColor={dim && !selected}>{line}</Text>;
 }
 
 interface AppProps {
@@ -165,6 +167,8 @@ function StartupMenuApp({
           selected={i === providerIdx}
           shortcut={shortcutFor(i)}
           label={opt.descriptor.label}
+          suffix={opt.offline ? chalk.dim('(offline)') : ''}
+          dim={opt.offline}
         />
       ))}
       <Text> </Text>

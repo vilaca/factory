@@ -96,15 +96,18 @@ export async function selectModel(models: string[], defaultModel?: string | null
 export interface PickerOption {
   descriptor: ProviderDescriptor;
   models?: string[];
+  /** True when a `when-reachable` provider failed its probe — surfaced in
+   * the picker as a dimmed "(offline)" entry instead of being hidden. */
+  offline?: boolean;
 }
 
 export function buildPickerOptions(
   probedModels: Map<StartupProviderName, string[] | null>,
 ): PickerOption[] {
-  return DESCRIPTOR_LIST.flatMap(descriptor => {
+  return DESCRIPTOR_LIST.map(descriptor => {
     const models = probedModels.get(descriptor.name) ?? null;
-    if (descriptor.showInPicker === 'when-reachable' && !models) return [];
-    return [{ descriptor, models: models ?? undefined }];
+    const offline = descriptor.showInPicker === 'when-reachable' && !models;
+    return { descriptor, models: models ?? undefined, offline };
   }).sort((a, b) => a.descriptor.label.localeCompare(b.descriptor.label));
 }
 

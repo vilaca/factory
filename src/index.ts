@@ -100,6 +100,8 @@ async function main(): Promise<void> {
     appendProviderLog({ provider: providerName, category: 'startup', action: 'startup-error', outcome: 'error', detail: err.message });
     if (providerName === 'ollama') {
       console.log(renderError('Cannot connect to Ollama. Is it running? (ollama serve)'));
+    } else if (providerName === 'llamacpp') {
+      console.log(renderError('Cannot connect to llama.cpp. Is the server running? (llama-server -m <model>)'));
     } else {
       console.log(renderError(err.message));
     }
