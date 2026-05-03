@@ -1,0 +1,272 @@
+import type { Config } from '../core/config-types.js';
+
+export type StartupProviderName =
+  | 'ollama'
+  | 'huggingface'
+  | 'copilot'
+  | 'openrouter'
+  | 'vercel'
+  | 'opencodezen'
+  | 'googleaistudio'
+  | 'mistral'
+  | 'codestral'
+  | 'cerebras'
+  | 'groq'
+  | 'cohere'
+  | 'workersai';
+
+export type AuthFlow = 'none' | 'simple-prompt' | 'device-flow' | 'oauth-or-key';
+
+export interface ProviderDescriptor {
+  name: StartupProviderName;
+  label: string;
+  aliases: string[];
+
+  configTokenKey?: keyof Config;
+  altConfigTokenKey?: keyof Config;
+  configAuthModeKey?: keyof Config;
+  envVars?: string[];
+  acceptsGenericToken?: boolean;
+  envPrecedesConfig?: boolean;
+
+  authFlow: AuthFlow;
+  needsAccountId?: boolean;
+
+  probeAtStartup: boolean;
+  probeWithoutCredentials?: boolean;
+  showInPicker: 'always' | 'when-reachable';
+
+  promptHeader?: string;
+  inputPrompt?: string;
+  missingError?: string;
+  saveSuccessLabel?: string;
+  noModelsMessage?: string;
+  accountIdInputPrompt?: string;
+  accountIdMissingError?: string;
+}
+
+export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
+  ollama: {
+    name: 'ollama',
+    label: 'Ollama',
+    aliases: ['ollama'],
+    authFlow: 'none',
+    probeAtStartup: true,
+    probeWithoutCredentials: true,
+    showInPicker: 'when-reachable',
+  },
+  huggingface: {
+    name: 'huggingface',
+    label: 'HuggingFace',
+    aliases: ['huggingface', 'hugging face', 'hf'],
+    configTokenKey: 'huggingfaceToken',
+    envVars: ['HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'HuggingFace API token required.',
+    inputPrompt: '  Enter HuggingFace API token: ',
+    missingError: 'HuggingFace API token required.',
+    noModelsMessage: 'No HuggingFace models available; API token was not saved.',
+  },
+  copilot: {
+    name: 'copilot',
+    label: 'GitHub Copilot',
+    aliases: ['copilot', 'github copilot', 'github-copilot', 'githubcopilot'],
+    configTokenKey: 'copilotToken',
+    altConfigTokenKey: 'githubToken',
+    envVars: ['GITHUB_COPILOT_API_KEY', 'COPILOT_API_KEY'],
+    authFlow: 'device-flow',
+    probeAtStartup: false,
+    showInPicker: 'always',
+  },
+  openrouter: {
+    name: 'openrouter',
+    label: 'OpenRouter',
+    aliases: ['openrouter', 'open-router', 'open router', 'or'],
+    configTokenKey: 'openrouterToken',
+    envVars: ['OPENROUTER_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'OpenRouter API key required.',
+    inputPrompt: '  Enter OpenRouter API key: ',
+    missingError: 'OpenRouter API key required.',
+  },
+  vercel: {
+    name: 'vercel',
+    label: 'Vercel AI Gateway',
+    aliases: ['vercel', 'ai-gateway', 'ai gateway', 'aigateway', 'vercel-ai-gateway'],
+    configTokenKey: 'vercelToken',
+    envVars: ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN'],
+    envPrecedesConfig: true,
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    probeWithoutCredentials: true,
+    showInPicker: 'always',
+    promptHeader: 'Vercel AI Gateway token required.',
+    inputPrompt: '  Enter Vercel AI Gateway API key: ',
+    missingError: 'Vercel AI Gateway token required.',
+  },
+  opencodezen: {
+    name: 'opencodezen',
+    label: 'OpenCode Zen',
+    aliases: ['opencodezen', 'opencode-zen', 'zen'],
+    configTokenKey: 'opencodeZenToken',
+    envVars: ['OPENCODE_ZEN_API_KEY', 'OPENCODE_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    probeWithoutCredentials: true,
+    showInPicker: 'always',
+    promptHeader: 'OpenCode Zen API key required.',
+    inputPrompt: '  Enter OpenCode Zen API key: ',
+    missingError: 'OpenCode Zen API key required.',
+  },
+  googleaistudio: {
+    name: 'googleaistudio',
+    label: 'Google AI Studio',
+    aliases: ['googleaistudio', 'google-ai-studio', 'google ai studio', 'google-ai', 'aistudio', 'ai-studio', 'gemini'],
+    configTokenKey: 'googleAiStudioToken',
+    configAuthModeKey: 'googleAiStudioAuthMode',
+    envVars: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+    authFlow: 'oauth-or-key',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    inputPrompt: '  Enter Google AI Studio API key: ',
+    missingError: 'Google AI Studio API key required.',
+  },
+  mistral: {
+    name: 'mistral',
+    label: 'Mistral',
+    aliases: ['mistral', 'mistral.ai'],
+    configTokenKey: 'mistralToken',
+    envVars: ['MISTRAL_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Mistral API key required.',
+    inputPrompt: '  Enter Mistral API key: ',
+    missingError: 'Mistral API key required.',
+  },
+  codestral: {
+    name: 'codestral',
+    label: 'Codestral',
+    aliases: ['codestral', 'codestral.mistral.ai'],
+    configTokenKey: 'codestralToken',
+    envVars: ['CODESTRAL_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Codestral API key required.',
+    inputPrompt: '  Enter Codestral API key: ',
+    missingError: 'Codestral API key required.',
+  },
+  cerebras: {
+    name: 'cerebras',
+    label: 'Cerebras',
+    aliases: ['cerebras'],
+    configTokenKey: 'cerebrasToken',
+    envVars: ['CEREBRAS_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Cerebras API key required.',
+    inputPrompt: '  Enter Cerebras API key: ',
+    missingError: 'Cerebras API key required.',
+  },
+  groq: {
+    name: 'groq',
+    label: 'Groq',
+    aliases: ['groq'],
+    configTokenKey: 'groqToken',
+    envVars: ['GROQ_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Groq API key required.',
+    inputPrompt: '  Enter Groq API key: ',
+    missingError: 'Groq API key required.',
+  },
+  cohere: {
+    name: 'cohere',
+    label: 'Cohere',
+    aliases: ['cohere'],
+    configTokenKey: 'cohereToken',
+    envVars: ['COHERE_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Cohere API key required.',
+    inputPrompt: '  Enter Cohere API key: ',
+    missingError: 'Cohere API key required.',
+  },
+  workersai: {
+    name: 'workersai',
+    label: 'Cloudflare Workers AI',
+    aliases: ['workersai', 'workers-ai', 'cloudflare', 'cloudflare-workers-ai'],
+    configTokenKey: 'workersAiToken',
+    envVars: ['CLOUDFLARE_API_TOKEN'],
+    authFlow: 'simple-prompt',
+    needsAccountId: true,
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Cloudflare Workers AI credentials required.',
+    inputPrompt: '  Enter Cloudflare API token: ',
+    missingError: 'Cloudflare Workers AI API token required.',
+    saveSuccessLabel: 'Workers AI',
+    noModelsMessage: 'No Workers AI models available; credentials were not saved.',
+    accountIdInputPrompt: '  Enter Cloudflare account ID: ',
+    accountIdMissingError: 'Cloudflare Workers AI account ID required.',
+  },
+};
+
+export const DESCRIPTOR_LIST: ProviderDescriptor[] = (Object.keys(DESCRIPTORS) as StartupProviderName[])
+  .map(name => DESCRIPTORS[name]);
+
+export function descriptorByAlias(input: string): ProviderDescriptor | undefined {
+  const lower = input.trim().toLowerCase();
+  return DESCRIPTOR_LIST.find(d => d.aliases.includes(lower));
+}
+
+export function resolveToken(
+  descriptor: ProviderDescriptor,
+  config: Config,
+  cliToken?: string,
+): string | undefined {
+  if (cliToken) return cliToken;
+
+  const fromConfig = (): string | undefined => {
+    if (descriptor.configTokenKey) {
+      const value = config[descriptor.configTokenKey];
+      if (typeof value === 'string' && value) return value;
+    }
+    if (descriptor.altConfigTokenKey) {
+      const value = config[descriptor.altConfigTokenKey];
+      if (typeof value === 'string' && value) return value;
+    }
+    if (descriptor.acceptsGenericToken && config.token) return config.token;
+    return undefined;
+  };
+
+  const fromEnv = (): string | undefined => {
+    for (const envVar of descriptor.envVars ?? []) {
+      const value = process.env[envVar];
+      if (value) return value;
+    }
+    return undefined;
+  };
+
+  return descriptor.envPrecedesConfig
+    ? (fromEnv() ?? fromConfig())
+    : (fromConfig() ?? fromEnv());
+}
+
+export function noModelsMessageFor(descriptor: ProviderDescriptor): string {
+  return descriptor.noModelsMessage
+    ?? `No ${descriptor.label} models available; API key was not saved.`;
+}
+
+export function saveSuccessMessageFor(descriptor: ProviderDescriptor, configDir: string): string {
+  const label = descriptor.saveSuccessLabel ?? descriptor.label;
+  return `Saved ${label} credentials to ${configDir}/config.json`;
+}

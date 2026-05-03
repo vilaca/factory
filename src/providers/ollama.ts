@@ -1,0 +1,245 @@
+import { Ollama, type ChatRequest, type Tool, type Message } from 'ollama';
+import type {
+  Provider, ChatMessage, ChatChunk, ToolDefinition,
+  ProviderCapabilities, ChatOptions, ModelTier, ModelInfo,
+} from './types.js';
+
+export class OllamaProvider implements Provider {
+  name = 'ollama';
+  private client: Ollama;
+  // Holds the AbortSignal for the current non-streaming call so the customFetch
+  // wrapper can attach it to the underlying HTTP request. The streaming path
+  // uses AbortableAsyncIterator separately and leaves this untouched.
+  private currentSignal: AbortSignal | undefined;
+
+  constructor(host?: string) {
+    const customFetch: typeof fetch = (input, init) => {
+      const signal = this.currentSignal;
+      if (signal && !init?.signal) {
+        return fetch(input as RequestInfo | URL, { ...init, signal });
+      }
+      return fetch(input as RequestInfo | URL, init);
+    };
+    this.client = new Ollama({
+      host: host ?? 'http://127.0.0.1:11434',
+      fetch: customFetch,
+    });
+  }
+
+  async listModels(): Promise<string[]> {
+    // Note: Ollama already exposes the locally installed chat-capable models we
+    // can target, so we return the server list verbatim without extra filtering.
+    const response = await this.client.list();
+    return response.models.map(m => m.name);
+  }
+
+  async getModelInfo(model: string): Promise<ModelInfo> {
+    const response = await this.client.show({ model });
+    const capabilities = response.capabilities ?? [];
+    return {
+      supportsTools: capabilities.includes('tools'),
+      capabilities,
+    };
+  }
+
+  getCapabilities(model: string): ProviderCapabilities {
+    const tier = estimateOllamaModelTier(model);
+    return {
+      contextWindow: estimateContextWindow(model),
+      maxOutputTokens: 4096,
+      toolSupport: tier === 'weak' ? 'basic' : 'native',
+      parallelToolCalls: false,
+      streaming: true,
+      tokenCounting: 'estimated',
+      modelTier: tier,
+    };
+  }
+
+  async *chat(
+    model: string,
+    messages: ChatMessage[],
+    tools?: ToolDefinition[],
+    options?: ChatOptions,
+  ): AsyncGenerator<ChatChunk> {
+    const request: ChatRequest & { stream: true } = {
+      model,
+      messages: messages as Message[],
+      stream: true,
+      tools: tools as Tool[],
+      // num_predict caps output length so degenerate repetition loops can't
+      // run forever. Ollama's default is -1 (no limit).
+      options: { num_ctx: estimateContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
+    };
+
+    const stream = await this.client.chat(request);
+    // Tie the iterator's abort to our signal so cancellation propagates to the
+    // underlying HTTP request — without this, ESC during prompt-eval (no chunks
+    // streaming yet) does nothing because the for-await is blocked. Both
+    // stream.abort() AND client.abort() are called: the former is the official
+    // per-iterator API, the latter is a belt-and-suspenders that aborts ALL
+    // ongoing streamed requests on the client, in case the iterator-level
+    // abort doesn't actually close the underlying socket.
+    const signal = options?.signal;
+    let onAbort: (() => void) | undefined;
+    const client = this.client;
+    if (signal) {
+      if (signal.aborted) {
+        stream.abort();
+        client.abort();
+      } else {
+        onAbort = () => {
+          stream.abort();
+          client.abort();
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+    try {
+      for await (const chunk of stream) {
+        const result: ChatChunk = {};
+        if (chunk.message?.content) {
+          result.content = chunk.message.content;
+        }
+        if (chunk.message?.tool_calls) {
+          result.tool_calls = chunk.message.tool_calls.map(tc => ({
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments as Record<string, unknown>,
+            },
+          }));
+        }
+        if (chunk.done) {
+          result.done = true;
+          const doneReason = (chunk as any).done_reason;
+          if (typeof doneReason === 'string') result.doneReason = doneReason;
+          if ((chunk as any).eval_count || (chunk as any).prompt_eval_count) {
+            result.usage = {
+              promptTokens: (chunk as any).prompt_eval_count ?? 0,
+              completionTokens: (chunk as any).eval_count ?? 0,
+              totalTokens: ((chunk as any).prompt_eval_count ?? 0) + ((chunk as any).eval_count ?? 0),
+            };
+          }
+        }
+        yield result;
+      }
+    } catch (err: any) {
+      // The iterator throws when stream.abort() runs. Surface this as an
+      // AbortError so callers can route it through their existing abort path.
+      if (signal?.aborted) {
+        throw makeAbortError();
+      }
+      throw translateOllamaError(err);
+    } finally {
+      if (onAbort && signal) signal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  async chatNoStream(
+    model: string,
+    messages: ChatMessage[],
+    tools?: ToolDefinition[],
+    options?: ChatOptions,
+  ): Promise<ChatChunk> {
+    const request: ChatRequest & { stream: false } = {
+      model,
+      messages: messages as Message[],
+      stream: false,
+      tools: tools as Tool[],
+      options: { num_ctx: estimateContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
+    };
+
+    const signal = options?.signal;
+    if (signal?.aborted) {
+      throw makeAbortError();
+    }
+
+    // Stash the signal so customFetch picks it up and attaches it to the
+    // underlying fetch call. Restored via finally.
+    const prevSignal = this.currentSignal;
+    this.currentSignal = signal;
+    let response;
+    try {
+      response = await this.client.chat(request);
+    } catch (err: any) {
+      if (signal?.aborted || err?.name === 'AbortError') {
+        throw makeAbortError();
+      }
+      throw translateOllamaError(err);
+    } finally {
+      this.currentSignal = prevSignal;
+    }
+
+    const result: ChatChunk = {
+      content: response.message?.content,
+      done: true,
+    };
+    const doneReason = (response as any).done_reason;
+    if (typeof doneReason === 'string') result.doneReason = doneReason;
+    if (response.message?.tool_calls) {
+      result.tool_calls = response.message.tool_calls.map(tc => ({
+        function: {
+          name: tc.function.name,
+          arguments: tc.function.arguments as Record<string, unknown>,
+        },
+      }));
+    }
+    if ((response as any).eval_count || (response as any).prompt_eval_count) {
+      result.usage = {
+        promptTokens: (response as any).prompt_eval_count ?? 0,
+        completionTokens: (response as any).eval_count ?? 0,
+        totalTokens: ((response as any).prompt_eval_count ?? 0) + ((response as any).eval_count ?? 0),
+      };
+    }
+    return result;
+  }
+}
+
+function makeAbortError(): Error {
+  const err = new Error('aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+/**
+ * Wrap Ollama's cryptic transport errors into a user-actionable message.
+ * "EOF" in particular means the server closed the connection mid-response —
+ * usually because Ollama crashed, ran out of memory, or unloaded the model
+ * and hit a race during reload.
+ */
+function translateOllamaError(err: any): Error {
+  const msg = err?.message ?? '';
+  const code = err?.code ?? '';
+  if (msg === 'EOF' || code === 'ECONNREFUSED' || code === 'ECONNRESET' ||
+      msg.includes('socket hang up') || msg.includes('fetch failed')) {
+    const detail = msg || code || 'connection lost';
+    const wrapped = new Error(
+      `Ollama connection dropped (${detail}). The model may have been unloaded or the server may be out of memory — check ollama serve and retry.`,
+    );
+    (wrapped as any).cause = err;
+    return wrapped;
+  }
+  return err;
+}
+
+function estimateOllamaModelTier(model: string): ModelTier {
+  const lower = model.toLowerCase();
+  // Extract parameter count from model name (e.g., "qwen2.5-coder:32b", "llama3:70b")
+  const paramMatch = lower.match(/(\d+)b/);
+  if (paramMatch) {
+    const params = parseInt(paramMatch[1], 10);
+    if (params >= 70) return 'strong';
+    if (params >= 14) return 'medium';
+    return 'weak';
+  }
+  // Default to medium for unknown models
+  return 'medium';
+}
+
+function estimateContextWindow(model: string): number {
+  const lower = model.toLowerCase();
+  if (lower.includes('qwen')) return 32768;
+  if (lower.includes('llama')) return 8192;
+  if (lower.includes('mixtral')) return 32768;
+  if (lower.includes('deepseek')) return 16384;
+  return 8192; // conservative default
+}

@@ -1,0 +1,198 @@
+import type { ToolCallMessage } from '../providers/types.js';
+
+const TOOL_CALL_TAG_PATTERN = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
+const JSON_FENCE_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/g;
+const SHELL_FENCE_PATTERN = /```(?:bash|sh|shell|console)\s*\n([\s\S]*?)\n```/g;
+// Hermes/Llama-style: <function=Name><parameter=key>value</parameter>...</function>
+const FUNCTION_TAG_PATTERN = /<function=([^>\s]+)>([\s\S]*?)<\/function>/g;
+const PARAMETER_TAG_PATTERN = /<parameter=([^>\s]+)>([\s\S]*?)<\/parameter>/g;
+
+export type ParseSource = 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag';
+
+export interface ParseResult {
+  toolCalls: ToolCallMessage[];
+  cleanedContent: string;
+  malformedCount: number;
+  sources: ParseSource[];
+}
+
+function tryParseToolCall(jsonText: string, knownToolNames?: ReadonlySet<string>): ToolCallMessage | null {
+  try {
+    const parsed = JSON.parse(jsonText.trim());
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof parsed.name === 'string' &&
+      parsed.name.length > 0
+    ) {
+      // Reject names that aren't actual tools — common false positive when the
+      // model emits JSON describing data (e.g. package.json content with a
+      // "name" field). Only enforce when we know what tools exist.
+      if (knownToolNames && !knownToolNames.has(parsed.name)) {
+        return null;
+      }
+      const args = (typeof parsed.arguments === 'object' && parsed.arguments !== null)
+        ? parsed.arguments as Record<string, unknown>
+        : {};
+      return { function: { name: parsed.name, arguments: args } };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/**
+ * Find every top-level JSON object substring in the content.
+ * Tracks brace depth and string/escape state so braces inside string literals
+ * don't break the count.
+ */
+function extractTopLevelJsonObjects(content: string): string[] {
+  const objects: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        objects.push(content.slice(start, i + 1));
+        start = -1;
+      } else if (depth < 0) {
+        depth = 0;
+        start = -1;
+      }
+    }
+  }
+  return objects;
+}
+
+function stripObjects(content: string, objects: string[]): string {
+  let out = content;
+  for (const obj of objects) {
+    out = out.replace(obj, '');
+  }
+  return out;
+}
+
+export function parseTextToolCalls(content: string, knownToolNames?: ReadonlySet<string>): ParseResult {
+  const toolCalls: ToolCallMessage[] = [];
+  const sources: ParseSource[] = [];
+  let malformedCount = 0;
+
+  let cleaned = content.replace(TOOL_CALL_TAG_PATTERN, (_match, body: string) => {
+    const call = tryParseToolCall(body, knownToolNames);
+    if (call) {
+      toolCalls.push(call);
+      sources.push('tag');
+    } else {
+      malformedCount++;
+    }
+    return '';
+  });
+
+  // Hermes/Llama style: <function=Name><parameter=k>v</parameter></function>
+  cleaned = cleaned.replace(FUNCTION_TAG_PATTERN, (_match, name: string, body: string) => {
+    if (knownToolNames && !knownToolNames.has(name)) {
+      malformedCount++;
+      return '';
+    }
+    const args: Record<string, unknown> = {};
+    let paramMatch: RegExpExecArray | null;
+    PARAMETER_TAG_PATTERN.lastIndex = 0;
+    while ((paramMatch = PARAMETER_TAG_PATTERN.exec(body)) !== null) {
+      const key = paramMatch[1];
+      const raw = paramMatch[2].trim();
+      // Try to parse the value as JSON (handles numbers, bools, arrays, objects).
+      // Fall back to the raw string if it isn't valid JSON.
+      try {
+        args[key] = JSON.parse(raw);
+      } catch {
+        args[key] = raw;
+      }
+    }
+    toolCalls.push({ function: { name, arguments: args } });
+    sources.push('function-tag');
+    return '';
+  });
+  // Some models emit a stray closing tag — strip it so it doesn't show as text.
+  cleaned = cleaned.replace(/<\/tool_call>/g, '');
+
+  cleaned = cleaned.replace(JSON_FENCE_PATTERN, (match, body: string) => {
+    const call = tryParseToolCall(body, knownToolNames);
+    if (call) {
+      toolCalls.push(call);
+      sources.push('fence');
+      return '';
+    }
+    return match;
+  });
+
+  if (toolCalls.length === 0) {
+    const objects = extractTopLevelJsonObjects(cleaned);
+    if (objects.length > 0) {
+      let allMatched = true;
+      const recovered: ToolCallMessage[] = [];
+      for (const obj of objects) {
+        const call = tryParseToolCall(obj, knownToolNames);
+        if (!call) {
+          allMatched = false;
+          break;
+        }
+        recovered.push(call);
+      }
+      // Only commit if EVERY top-level object parses as a tool call AND the
+      // residual content (after stripping objects) has no prose — only
+      // whitespace and stray punctuation like an extra "}" from a model typo.
+      // Models occasionally emit one too many closing braces; don't lose the
+      // recovery to that.
+      const nonObjectContent = stripObjects(cleaned, objects).replace(/[\s{}\[\],]/g, '');
+      if (allMatched && nonObjectContent.length === 0) {
+        for (const call of recovered) {
+          toolCalls.push(call);
+          sources.push('bare');
+        }
+        cleaned = '';
+      }
+    }
+  }
+
+  // Last-resort: shell fences (```bash / ```sh) become Bash tool calls when no
+  // structured call was recovered AND the Bash tool is registered. Treats the
+  // model's "I'll run X" code block as the call instead of just narration.
+  if (toolCalls.length === 0 && (!knownToolNames || knownToolNames.has('Bash'))) {
+    const shellCommands: string[] = [];
+    const stripped = cleaned.replace(SHELL_FENCE_PATTERN, (_match, body: string) => {
+      const trimmed = body.trim();
+      if (trimmed) shellCommands.push(trimmed);
+      return '';
+    });
+    if (shellCommands.length > 0 && stripped.trim().length === 0) {
+      for (const cmd of shellCommands) {
+        toolCalls.push({ function: { name: 'Bash', arguments: { command: cmd } } });
+        sources.push('shell-fence');
+      }
+      cleaned = '';
+    }
+  }
+
+  return {
+    toolCalls,
+    cleanedContent: cleaned.replace(/\n{3,}/g, '\n\n').trim(),
+    malformedCount,
+    sources,
+  };
+}

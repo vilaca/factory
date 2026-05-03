@@ -1,0 +1,46 @@
+{
+  "name": "factory",
+  "version": "0.1.0",
+  "description": "Claude Code-like CLI for Ollama models",
+  "main": "dist/index.js",
+  "bin": {
+    "factory": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:test": "tsc -p tsconfig.test.json",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "lint": "eslint src/**/*.ts",
+    "test": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/unit/*.test.js && node --test dist-test/test/e2e.test.js",
+    "test:unit": "tsc -p tsconfig.test.json && node --test dist-test/test/unit/*.test.js",
+    "test:e2e": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/e2e.test.js",
+    "test:only": "node --test dist-test/test/e2e.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
+    "@huggingface/inference": "^4.13.15",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/react": "^19.2.14",
+    "chalk": "^5.4.1",
+    "glob": "^11.0.1",
+    "google-auth-library": "^10.6.2",
+    "ink": "^7.0.1",
+    "ink-text-input": "^6.0.0",
+    "marked": "^15.0.0",
+    "marked-terminal": "^7.3.0",
+    "ollama": "^0.5.12",
+    "react": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.59.1",
+    "eslint": "^10.3.0",
+    "typescript": "^5.7.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}
