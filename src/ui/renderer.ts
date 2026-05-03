@@ -6,7 +6,7 @@ import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-t
 // marked-terminal v7's `text` renderer ignores marked v15's `tokens` array on
 // text tokens, so inline formatting (bold/italic/code/links) is dropped inside
 // list items. Patch it to parse the inline tokens when present.
-const ext = markedTerminal({ reflowText: false, width: 0 }) as any;
+const ext = markedTerminal({ reflowText: false, width: 0, showSectionPrefix: false }) as any;
 const origText = ext.renderer.text;
 ext.renderer.text = function (token: any): string {
   if (token && typeof token === 'object' && Array.isArray(token.tokens) && token.tokens.length > 0) {
