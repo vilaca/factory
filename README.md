@@ -254,6 +254,18 @@ factory -p gemini -m gemini-2.5-pro
 | `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
 | `--help` | `-h` | Show help |
 
+### Debugging
+
+Set `FACTORY_DEBUG=1` to print startup checkpoints (picker selection, auth flow, provider creation, model listing, validation) to stderr. Useful when the app exits unexpectedly during startup — the last log line tells you which step failed.
+
+```bash
+FACTORY_DEBUG=1 factory 2>/tmp/factory-debug.log
+# then in another terminal:
+tail -f /tmp/factory-debug.log
+```
+
+The picker UI keeps writing to stdout, so redirecting only stderr keeps the interactive flow intact.
+
 ### Slash Commands
 
 | Command | Description |

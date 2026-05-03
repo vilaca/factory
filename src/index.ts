@@ -27,9 +27,8 @@ import {
 import {
   buildPickerOptions,
   findDefaultSelection,
-  selectModel,
 } from './cli/picker.js';
-import { selectStartupSession } from './cli/startup-menu.js';
+import { selectStartupSession, selectModelInk } from './cli/startup-menu.js';
 
 const DEBUG = process.env.FACTORY_DEBUG === '1';
 function dbg(message: string): void {
@@ -131,7 +130,7 @@ async function main(): Promise<void> {
   } else {
     const lastModelForProvider = lastSession?.provider === providerName ? lastSession.model : null;
     dbg(`opening selectModel (default=${lastModelForProvider ?? '<none>'})`);
-    model = await selectModel(availableModels ?? [], lastModelForProvider, provider);
+    model = await selectModelInk(availableModels ?? [], lastModelForProvider, provider);
     dbg(`selectModel returned: ${model}`);
   }
 

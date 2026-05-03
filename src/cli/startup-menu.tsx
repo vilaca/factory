@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput, render } from 'ink';
 import chalk from 'chalk';
 import type { RecentSession, SessionErrorStatus } from '../core/session-log.js';
 import type { StartupProviderName } from '../providers/descriptors.js';
+import type { ModelPickerInfo, Provider } from '../providers/types.js';
 import type { PickerOption } from './picker.js';
 import { exitStartupSelection } from './prompts.js';
 
@@ -247,6 +248,100 @@ export async function selectStartupSession(
   }
   process.stdin.resume();
   dbg('stdin restored, returning');
+  if (result === null) exitStartupSelection();
+  return result;
+}
+
+interface ModelMenuProps {
+  models: string[];
+  defaultModel: string | null;
+  provider?: Provider;
+  onResolve: (model: string | null) => void;
+}
+
+function ModelMenuApp({ models, defaultModel, provider, onResolve }: ModelMenuProps): React.ReactElement {
+  const defaultIdx = Math.max(0, models.indexOf(defaultModel ?? ''));
+  const [idx, setIdx] = useState(defaultIdx);
+  const { exit } = useApp();
+
+  const finish = (m: string | null): void => {
+    onResolve(m);
+    exit();
+  };
+
+  useInput((input, key) => {
+    if (input === 'q' || input === 'Q' || (key.ctrl && input === 'c')) {
+      finish(null);
+      return;
+    }
+    if (key.upArrow) {
+      setIdx(i => Math.max(0, i - 1));
+    } else if (key.downArrow) {
+      setIdx(i => Math.min(models.length - 1, i + 1));
+    } else if (key.return || input === ' ') {
+      finish(models[idx]);
+    } else {
+      const num = indexForShortcut(input);
+      if (num >= 0 && num < models.length) finish(models[num]);
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>{'  Select a model:'}</Text>
+      <Text> </Text>
+      {models.map((m, i) => {
+        const info: ModelPickerInfo | undefined = provider?.getModelPickerInfo?.(m);
+        const label = info?.label ?? provider?.getDisplayModelName?.(m) ?? m;
+        const suffix = info?.warning ? chalk.yellow(`(${info.warning})`) : '';
+        return (
+          <Row
+            key={m}
+            selected={i === idx}
+            shortcut={shortcutFor(i)}
+            label={label}
+            suffix={suffix}
+          />
+        );
+      })}
+      <Text> </Text>
+      <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · Q exit'}</Text>
+    </Box>
+  );
+}
+
+export async function selectModelInk(
+  models: string[],
+  defaultModel: string | null,
+  provider?: Provider,
+): Promise<string> {
+  if (models.length === 0) {
+    throw new Error('No models available.');
+  }
+  if (models.length === 1) return models[0];
+
+  const debug = process.env.FACTORY_DEBUG === '1';
+  const dbg = (msg: string): void => {
+    if (debug) process.stderr.write(`[factory:debug] model-menu: ${msg}\n`);
+  };
+
+  let result: string | null = null;
+  const inkApp = render(
+    <ModelMenuApp
+      models={models}
+      defaultModel={defaultModel}
+      provider={provider}
+      onResolve={(m) => { dbg(`onResolve model=${m ?? '<exit>'}`); result = m; }}
+    />,
+  );
+  dbg(`rendered ${models.length} models`);
+  await inkApp.waitUntilExit();
+  dbg(`waitUntilExit resolved, result=${result ?? '<null>'}`);
+  inkApp.unmount();
+  if (process.stdin.isTTY && process.stdin.setRawMode) {
+    process.stdin.setRawMode(false);
+  }
+  process.stdin.resume();
   if (result === null) exitStartupSelection();
   return result;
 }
