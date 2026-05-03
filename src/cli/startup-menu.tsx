@@ -12,6 +12,19 @@ export interface StartupSelection {
   model?: string;
 }
 
+function shortcutFor(index: number): string {
+  if (index < 10) return index.toString();
+  if (index < 36) return String.fromCharCode('A'.charCodeAt(0) + index - 10);
+  return '';
+}
+
+function indexForShortcut(input: string): number {
+  if (/^[0-9]$/.test(input)) return Number.parseInt(input, 10);
+  const upper = input.toUpperCase();
+  if (/^[A-Z]$/.test(upper)) return 10 + (upper.charCodeAt(0) - 'A'.charCodeAt(0));
+  return -1;
+}
+
 const STATUS_LABELS: Record<SessionErrorStatus, string> = {
   throttle: 'throttled',
   quota: 'out of quota',
@@ -87,12 +100,12 @@ function StartupMenuApp({
         }
       } else if (input === 'p' || input === 'P') {
         setScreen('provider');
-      } else if (/^[0-9]$/.test(input)) {
-        const num = Number.parseInt(input, 10);
-        if (num < recentRows) {
+      } else {
+        const idx = indexForShortcut(input);
+        if (idx >= 0 && idx < recentRows) {
           finish({
-            provider: recentSessions[num].provider as StartupProviderName,
-            model: recentSessions[num].model,
+            provider: recentSessions[idx].provider as StartupProviderName,
+            model: recentSessions[idx].model,
           });
         }
       }
@@ -108,10 +121,10 @@ function StartupMenuApp({
       finish({ provider: providerOptions[providerIdx].descriptor.name });
     } else if (key.escape && recentRows > 0) {
       setScreen('recent');
-    } else if (/^[0-9]$/.test(input)) {
-      const num = Number.parseInt(input, 10);
-      if (num < providerOptions.length) {
-        finish({ provider: providerOptions[num].descriptor.name });
+    } else {
+      const idx = indexForShortcut(input);
+      if (idx >= 0 && idx < providerOptions.length) {
+        finish({ provider: providerOptions[idx].descriptor.name });
       }
     }
   });
@@ -125,7 +138,7 @@ function StartupMenuApp({
           <Row
             key={i}
             selected={i === recentIdx}
-            shortcut={i.toString()}
+            shortcut={shortcutFor(i)}
             label={`${s.provider} / ${s.model}`}
             suffix={s.status ? STATUS_COLORS[s.status](`(${STATUS_LABELS[s.status]})`) : ''}
           />
@@ -150,13 +163,13 @@ function StartupMenuApp({
         <Row
           key={opt.descriptor.name}
           selected={i === providerIdx}
-          shortcut={i < 10 ? i.toString() : ''}
+          shortcut={shortcutFor(i)}
           label={opt.descriptor.label}
         />
       ))}
       <Text> </Text>
       <Text dimColor>
-        {`     ↑/↓ navigate · ↵ / space select · 0-9 jump · ${recentRows > 0 ? 'Esc back · ' : ''}Q exit`}
+        {`     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · ${recentRows > 0 ? 'Esc back · ' : ''}Q exit`}
       </Text>
     </Box>
   );
