@@ -70,11 +70,33 @@ function StartupMenuApp({
   const recentRows = recentSessions.length;
   // Last row of the recent menu is the "Pick a different provider" entry.
   const recentLastIdx = recentRows;
+
+  // A recent session shares the offline state of its underlying provider — if
+  // the provider didn't probe successfully at startup, picking it would
+  // immediately fail downstream, so block selection at the menu level.
+  const offlineByProvider = new Map<string, boolean>(
+    providerOptions.map(o => [o.descriptor.name, !!o.offline]),
+  );
+  const isRecentOffline = (i: number): boolean =>
+    offlineByProvider.get(recentSessions[i]?.provider) === true;
+  const isProviderOffline = (i: number): boolean => !!providerOptions[i]?.offline;
+
+  // Initial cursor lands on the first non-offline row so Enter immediately
+  // works. If everything is offline (recent menu only), drop to the
+  // "Pick a different provider" entry; in the provider menu, fall back to 0.
+  const initialRecentIdx = (() => {
+    const i = recentSessions.findIndex(s => !offlineByProvider.get(s.provider));
+    return i >= 0 ? i : recentLastIdx;
+  })();
+  const initialProviderIdx = providerOptions[defaultProviderIndex]?.offline
+    ? Math.max(0, providerOptions.findIndex(o => !o.offline))
+    : defaultProviderIndex;
+
   const [screen, setScreen] = useState<'recent' | 'provider'>(
     recentRows > 0 ? 'recent' : 'provider',
   );
-  const [recentIdx, setRecentIdx] = useState(0);
-  const [providerIdx, setProviderIdx] = useState(defaultProviderIndex);
+  const [recentIdx, setRecentIdx] = useState(initialRecentIdx);
+  const [providerIdx, setProviderIdx] = useState(initialProviderIdx);
   const { exit } = useApp();
 
   const finish = (sel: StartupSelection | null): void => {
@@ -96,7 +118,7 @@ function StartupMenuApp({
       } else if (key.return || input === ' ') {
         if (recentIdx === recentLastIdx) {
           setScreen('provider');
-        } else {
+        } else if (!isRecentOffline(recentIdx)) {
           const s = recentSessions[recentIdx];
           finish({ provider: s.provider as StartupProviderName, model: s.model });
         }
@@ -104,7 +126,7 @@ function StartupMenuApp({
         setScreen('provider');
       } else {
         const idx = indexForShortcut(input);
-        if (idx >= 0 && idx < recentRows) {
+        if (idx >= 0 && idx < recentRows && !isRecentOffline(idx)) {
           finish({
             provider: recentSessions[idx].provider as StartupProviderName,
             model: recentSessions[idx].model,
@@ -120,12 +142,14 @@ function StartupMenuApp({
     } else if (key.downArrow) {
       setProviderIdx(i => Math.min(providerOptions.length - 1, i + 1));
     } else if (key.return || input === ' ') {
-      finish({ provider: providerOptions[providerIdx].descriptor.name });
+      if (!isProviderOffline(providerIdx)) {
+        finish({ provider: providerOptions[providerIdx].descriptor.name });
+      }
     } else if (key.escape && recentRows > 0) {
       setScreen('recent');
     } else {
       const idx = indexForShortcut(input);
-      if (idx >= 0 && idx < providerOptions.length) {
+      if (idx >= 0 && idx < providerOptions.length && !isProviderOffline(idx)) {
         finish({ provider: providerOptions[idx].descriptor.name });
       }
     }
@@ -136,15 +160,24 @@ function StartupMenuApp({
       <Box flexDirection="column">
         <Text bold>{'  Recent sessions:'}</Text>
         <Text> </Text>
-        {recentSessions.map((s, i) => (
-          <Row
-            key={i}
-            selected={i === recentIdx}
-            shortcut={shortcutFor(i)}
-            label={`${s.provider} / ${s.model}`}
-            suffix={s.status ? STATUS_COLORS[s.status](`(${STATUS_LABELS[s.status]})`) : ''}
-          />
-        ))}
+        {recentSessions.map((s, i) => {
+          const offline = isRecentOffline(i);
+          const statusSuffix = s.status
+            ? STATUS_COLORS[s.status](`(${STATUS_LABELS[s.status]})`)
+            : '';
+          const offlineSuffix = offline ? chalk.dim('(offline)') : '';
+          const suffix = [statusSuffix, offlineSuffix].filter(Boolean).join('  ');
+          return (
+            <Row
+              key={i}
+              selected={i === recentIdx}
+              shortcut={shortcutFor(i)}
+              label={`${s.provider} / ${s.model}`}
+              suffix={suffix}
+              dim={offline}
+            />
+          );
+        })}
         <Text> </Text>
         <Row
           selected={recentIdx === recentLastIdx}
