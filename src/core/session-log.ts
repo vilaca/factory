@@ -42,6 +42,15 @@ export interface LastSessionSelection {
   model: string;
 }
 
+export type SessionErrorStatus = 'throttle' | 'quota' | 'permission' | 'error';
+
+export interface RecentSession {
+  provider: string;
+  model: string;
+  startedAt: string;
+  status?: SessionErrorStatus;
+}
+
 export interface ProviderAuthMeta {
   provider: string;
   action: string;
@@ -213,6 +222,70 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
     // ignore
   }
   return null;
+}
+
+function classifyErrorMessage(message: string): SessionErrorStatus {
+  const m = message.toLowerCase();
+  if (/(\b429\b|rate[ -]?limit|throttl)/.test(m)) return 'throttle';
+  if (/quota|insufficient|out of (free )?credit|credit balance/.test(m)) return 'quota';
+  if (/(\b401\b|\b403\b|unauthorized|forbidden|invalid api key|authentication)/.test(m)) return 'permission';
+  return 'error';
+}
+
+/**
+ * Returns the most recent `limit` sessions, newest first. Each entry includes
+ * provider+model from session-start; status is set only when the session
+ * recorded a model-side error (rate-limit, quota, permission, or other).
+ */
+export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
+  const sessions = await listSessionLogs();
+  const out: RecentSession[] = [];
+  for (const session of sessions.slice(0, limit)) {
+    let raw: string;
+    try {
+      raw = await fs.promises.readFile(session.path, 'utf-8');
+    } catch {
+      continue;
+    }
+    const lines = raw.split('\n').filter(Boolean);
+    if (lines.length === 0) continue;
+
+    let provider = '';
+    let model = '';
+    let startedAt = '';
+    let lastErrorMessage: string | null = null;
+
+    try {
+      const first = JSON.parse(lines[0]);
+      if (first.type !== 'session-start') continue;
+      if (typeof first.provider !== 'string' || typeof first.model !== 'string') continue;
+      provider = first.provider;
+      model = first.model;
+      startedAt = typeof first.ts === 'string' ? first.ts : '';
+    } catch {
+      continue;
+    }
+    if (!provider || !model) continue;
+
+    // The latest model swap wins for the model field; the latest error (if
+    // any) wins for status.
+    for (const line of lines.slice(1)) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry.type === 'model-change' && typeof entry.to === 'string' && entry.to !== STARTUP_MODEL_PLACEHOLDER) {
+          model = entry.to;
+        } else if (entry.type === 'agent-event' && entry.event?.type === 'error' && typeof entry.event.error?.message === 'string') {
+          lastErrorMessage = entry.event.error.message;
+        }
+      } catch {
+        // skip malformed lines
+      }
+    }
+
+    const status = lastErrorMessage ? classifyErrorMessage(lastErrorMessage) : undefined;
+    out.push({ provider, model, startedAt, status });
+  }
+  return out;
 }
 
 /**

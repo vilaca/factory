@@ -12,8 +12,8 @@ import { runHeadless } from './ui/headless.js';
 import { renderApp } from './ui/ink/index.js';
 import { buildSystemPrompt } from './core/system-prompt.js';
 import { validateModelToolSupport } from './core/model-validation.js';
-import { appendProviderLog, getLastSessionSelection, sessionsDir } from './core/session-log.js';
-import { renderWelcome, renderError } from './ui/renderer.js';
+import { appendProviderLog, getLastSessionSelection, getRecentSessions, sessionsDir } from './core/session-log.js';
+import { renderWelcome, renderError, renderRecentSessions } from './ui/renderer.js';
 import { getGitBranch, isGitDirty } from './utils/git.js';
 import { parseArgs, printUsage } from './cli/args.js';
 import {
@@ -61,6 +61,10 @@ async function main(): Promise<void> {
   if (config.provider) {
     providerName = config.provider;
   } else {
+    const recentSessions = await getRecentSessions(16).catch(() => []);
+    const recentBlock = renderRecentSessions(recentSessions);
+    if (recentBlock) process.stdout.write(recentBlock);
+
     const startupOptions = buildPickerOptions(probedModels);
     const defaultFromLast = await findDefaultSelection(lastSession, probedModels, config, credentials);
     const fallbackDefault = startupOptions[0]
