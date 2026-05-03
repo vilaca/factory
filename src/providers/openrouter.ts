@@ -1,9 +1,11 @@
 import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ToolCallMessage, ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
 } from './types.js';
+import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+const PROVIDER_NAME = 'OpenRouter';
 const APP_TITLE = 'factory';
 const APP_REFERER = 'https://github.com/vilaca/factory';
 
@@ -44,7 +46,7 @@ export class OpenRouterProvider implements Provider {
       );
     }
     this.apiKey = key;
-    this.baseUrl = normalizeBaseUrl(options.host ?? DEFAULT_BASE_URL);
+    this.baseUrl = (options.host ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
   }
 
   async listModels(): Promise<string[]> {
@@ -110,67 +112,13 @@ export class OpenRouterProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.requestHeaders(true),
-      body: JSON.stringify(this.buildChatBody(model, messages, tools, true, options)),
+    yield* streamOpenAiChat({
+      url: `${this.baseUrl}/chat/completions`,
+      headers: this.requestHeaders(),
+      body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
-
-    if (!res.ok) {
-      throw new Error(`OpenRouter API error ${res.status}: ${await res.text()}`);
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let toolCalls: ChatChunk['tool_calls'] = undefined;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed === 'data: [DONE]' || !trimmed.startsWith('data: ')) continue;
-
-        let parsed: any;
-        try {
-          parsed = JSON.parse(trimmed.slice(6));
-        } catch {
-          continue;
-        }
-
-        const delta = parsed.choices?.[0]?.delta;
-        if (delta?.content) {
-          yield { content: delta.content };
-        }
-
-        if (delta?.tool_calls) {
-          if (!toolCalls) toolCalls = [];
-          mergeStreamedToolCalls(toolCalls, delta.tool_calls);
-        }
-
-        const finishReason = parsed.choices?.[0]?.finish_reason;
-        if (finishReason === 'stop' || finishReason === 'tool_calls') {
-          yield { done: true, usage: extractUsage(parsed) };
-        }
-      }
-    }
-
-    if (toolCalls && toolCalls.length > 0) {
-      const parsed = finalizeToolCalls(toolCalls);
-      if (parsed.length > 0) {
-        yield { tool_calls: parsed, done: true };
-      }
-    }
   }
 
   async chatNoStream(
@@ -179,133 +127,37 @@ export class OpenRouterProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
+    return sendOpenAiChat({
+      url: `${this.baseUrl}/chat/completions`,
       headers: this.requestHeaders(),
-      body: JSON.stringify(this.buildChatBody(model, messages, tools, false, options)),
+      body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
-
-    if (!res.ok) {
-      throw new Error(`OpenRouter API error ${res.status}: ${await res.text()}`);
-    }
-
-    const data = await res.json() as any;
-    const choice = data.choices?.[0];
-    const result: ChatChunk = {
-      content: choice?.message?.content ?? undefined,
-      done: true,
-      usage: extractUsage(data),
-    };
-
-    if (choice?.message?.tool_calls) {
-      result.tool_calls = choice.message.tool_calls.flatMap((tc: any) => {
-        if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
-          return [];
-        }
-
-        return [{
-          id: tc.id,
-          function: {
-            name: tc.function.name,
-            arguments: typeof tc.function.arguments === 'string'
-              ? parseToolArgs(tc.function.arguments)
-              : tc.function.arguments,
-          },
-        }];
-      });
-    }
-
-    return result;
   }
 
-  private requestHeaders(stream = false): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.apiKey}`,
-      'Content-Type': 'application/json',
+  private requestHeaders(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.apiKey}`,
       'HTTP-Referer': APP_REFERER,
       'X-OpenRouter-Title': APP_TITLE,
     };
-    if (stream) {
-      headers.Accept = 'text/event-stream';
-    }
-    return headers;
-  }
-
-  private buildChatBody(
-    model: string,
-    messages: ChatMessage[],
-    tools: ToolDefinition[] | undefined,
-    stream: boolean,
-    options?: ChatOptions,
-  ): Record<string, unknown> {
-    const body: Record<string, unknown> = {
-      model,
-      messages: messages.map(message => this.formatMessage(message)),
-      stream,
-    };
-
-    if (tools && tools.length > 0) {
-      body.tools = tools;
-      body.parallel_tool_calls = true;
-    }
-    if (options?.maxTokens) {
-      body.max_tokens = options.maxTokens;
-    }
-    if (options?.temperature !== undefined) {
-      body.temperature = options.temperature;
-    }
-
-    return body;
-  }
-
-  private formatMessage(msg: ChatMessage): Record<string, unknown> {
-    const formatted: Record<string, unknown> = {
-      role: msg.role,
-      content: msg.content,
-    };
-
-    if (msg.tool_calls) {
-      formatted.tool_calls = msg.tool_calls.map(tc => ({
-        id: tc.id ?? `call_${Math.random().toString(36).slice(2, 10)}`,
-        type: 'function',
-        function: {
-          name: tc.function.name,
-          arguments: JSON.stringify(tc.function.arguments),
-        },
-      }));
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      formatted.tool_call_id = msg.tool_call_id;
-    }
-
-    return formatted;
   }
 
   private async getCatalog(): Promise<OpenRouterModel[]> {
     if (this.modelsCache) return this.modelsCache;
 
-    const res = await fetch(`${this.baseUrl}/models`, {
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Accept': 'application/json',
-        'HTTP-Referer': APP_REFERER,
-        'X-OpenRouter-Title': APP_TITLE,
-      },
+    const items = await fetchOpenAiCatalog({
+      url: `${this.baseUrl}/models`,
+      headers: this.requestHeaders(),
+      providerName: PROVIDER_NAME,
     });
 
-    if (!res.ok) {
-      throw new Error(`OpenRouter API error ${res.status}: ${await res.text()}`);
-    }
-
-    const data = await res.json() as any;
-    const rawItems = Array.isArray(data?.data) ? data.data : [];
-    const models = rawItems
+    const models = (items as any[])
       // Note: keep only models whose declared modalities include text I/O,
       // since this CLI currently talks in chat-completions-style text turns.
-      .filter((item: any) => isChatCapableModel(item))
-      .map((item: any) => ({
+      .filter(item => isChatCapableModel(item))
+      .map(item => ({
         id: item.id,
         context_length: typeof item.context_length === 'number' ? item.context_length : undefined,
         expiration_date: typeof item.expiration_date === 'string' ? item.expiration_date : null,
@@ -344,15 +196,11 @@ export class OpenRouterProvider implements Provider {
               : undefined,
           }
           : undefined,
-       }));
+      }));
     this.modelsCache = models;
 
     return models;
   }
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
 }
 
 function isChatCapableModel(item: any): item is OpenRouterModel & { id: string } {
@@ -529,58 +377,6 @@ function formatLimitCount(value: number): string {
     return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
   }
   return String(value);
-}
-
-function mergeStreamedToolCalls(target: NonNullable<ChatChunk['tool_calls']>, incoming: any[]): void {
-  for (const tc of incoming) {
-    const idx = tc.index ?? 0;
-    if (!target[idx]) {
-      target[idx] = {
-        id: tc.id,
-        function: { name: '', arguments: {} },
-      };
-    }
-    if (tc.function?.name) {
-      target[idx].function.name += tc.function.name;
-    }
-    if (tc.function?.arguments) {
-      (target[idx].function as any).__rawArgs =
-        ((target[idx].function as any).__rawArgs ?? '') + tc.function.arguments;
-    }
-  }
-}
-
-function finalizeToolCalls(toolCalls: NonNullable<ChatChunk['tool_calls']>): ToolCallMessage[] {
-  return toolCalls.flatMap(tc => {
-    if (!tc?.function || !tc.function.name) {
-      return [];
-    }
-    return [{
-      id: tc.id,
-      function: {
-        name: tc.function.name,
-        arguments: parseToolArgs((tc.function as any).__rawArgs),
-      },
-    }];
-  });
-}
-
-function parseToolArgs(raw?: string): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
-  }
-}
-
-function extractUsage(data: any): ChatChunk['usage'] {
-  if (!data?.usage) return undefined;
-  return {
-    promptTokens: data.usage.prompt_tokens ?? 0,
-    completionTokens: data.usage.completion_tokens ?? 0,
-    totalTokens: data.usage.total_tokens ?? 0,
-  };
 }
 
 function estimateOpenRouterModelTier(model: string): ModelTier {
