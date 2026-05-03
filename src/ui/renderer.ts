@@ -3,13 +3,25 @@ import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
 
-const marked = new Marked(markedTerminal({ reflowText: false, width: 0 }) as any);
+// marked-terminal v7's `text` renderer ignores marked v15's `tokens` array on
+// text tokens, so inline formatting (bold/italic/code/links) is dropped inside
+// list items. Patch it to parse the inline tokens when present.
+const ext = markedTerminal({ reflowText: false, width: 0 }) as any;
+const origText = ext.renderer.text;
+ext.renderer.text = function (token: any): string {
+  if (token && typeof token === 'object' && Array.isArray(token.tokens) && token.tokens.length > 0) {
+    return this.parser.parseInline(token.tokens);
+  }
+  return origText.call(this, token);
+};
+
+const marked = new Marked(ext);
 
 export function renderMarkdown(text: string): string {
   if (!text.trim()) return text;
   const rendered = marked.parse(text);
   if (typeof rendered === 'string') {
-    return rendered.replace(/\n+$/, '');
+    return rendered.replace(/^\n+/, '').replace(/\n+$/, '');
   }
   return text;
 }

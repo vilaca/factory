@@ -8,10 +8,19 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
   switch (item.kind) {
     case 'user-input':
       return <Text color="green" bold>{`> ${item.text}`}</Text>;
-    case 'assistant-text':
-      return item.streaming
-        ? <Text>{item.text}▌</Text>
-        : <Text>{renderMarkdown(item.text)}</Text>;
+    case 'assistant-text': {
+      const body = item.streaming ? `${item.text}▌` : renderMarkdown(item.text);
+      return (
+        <Box flexDirection="row">
+          <Box width={2} flexShrink={0}>
+            <Text color="cyan">{item.streaming ? ' ' : '⏺'}</Text>
+          </Box>
+          <Box flexGrow={1} flexDirection="column">
+            <Text dimColor={item.streaming}>{body}</Text>
+          </Box>
+        </Box>
+      );
+    }
     case 'tool-call':
       return (
         <Box flexDirection="column">
