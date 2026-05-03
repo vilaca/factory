@@ -335,9 +335,7 @@ describe('Glob tool', () => {
   const glob = getTool('Glob')!;
 
   it('finds files matching pattern', async () => {
-    // From dist-test/test/unit/ -> project root is 3 levels up
-    const projectRoot = path.resolve(__dirname, '..', '..', '..');
-    const result = await glob.execute({ pattern: 'package.json', path: projectRoot });
+    const result = await glob.execute({ pattern: 'package.json', path: process.cwd() });
     assert.strictEqual(result.success, true);
     assert.ok(result.output.includes('package.json'));
   });
