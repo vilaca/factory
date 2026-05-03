@@ -1,5 +1,18 @@
 import chalk from 'chalk';
+import { Marked } from 'marked';
+import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
+
+const marked = new Marked(markedTerminal({ reflowText: false, width: 0 }) as any);
+
+export function renderMarkdown(text: string): string {
+  if (!text.trim()) return text;
+  const rendered = marked.parse(text);
+  if (typeof rendered === 'string') {
+    return rendered.replace(/\n+$/, '');
+  }
+  return text;
+}
 
 export function renderToolCall(toolName: string, args: Record<string, unknown>): string {
   const lines: string[] = [];

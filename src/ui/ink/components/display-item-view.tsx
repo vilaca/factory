@@ -2,13 +2,16 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { DisplayItem } from '../types.js';
 import { formatArgValue } from '../format.js';
+import { renderMarkdown } from '../../renderer.js';
 
 export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactElement {
   switch (item.kind) {
     case 'user-input':
       return <Text color="green" bold>{`> ${item.text}`}</Text>;
     case 'assistant-text':
-      return <Text>{item.text}{item.streaming ? '▌' : ''}</Text>;
+      return item.streaming
+        ? <Text>{item.text}▌</Text>
+        : <Text>{renderMarkdown(item.text)}</Text>;
     case 'tool-call':
       return (
         <Box flexDirection="column">
