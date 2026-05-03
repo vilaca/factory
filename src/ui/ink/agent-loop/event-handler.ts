@@ -61,7 +61,7 @@ export function handleAgentEvent(
       break;
     }
     case 'tool-call-denied': {
-      deps.addItem({ kind: 'tool-denied', id: deps.nextId(), toolName: event.toolName });
+      deps.addItem({ kind: 'tool-denied', id: deps.nextId(), toolName: event.toolName, args: event.args });
       deps.setRunningTool(null);
       break;
     }
