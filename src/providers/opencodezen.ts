@@ -3,8 +3,10 @@ import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
   ToolCallMessage, ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
 } from './types.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://opencode.ai/zen/v1';
+const PROVIDER_NAME = 'OpenCode Zen';
 const MISSING_TOKEN_ERROR =
   'OpenCode Zen API key required. Set OPENCODE_ZEN_API_KEY or OPENCODE_API_KEY env var or use --token flag.';
 
@@ -117,72 +119,18 @@ export class OpenCodeZenProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.openAiHeaders(true, true),
-      body: JSON.stringify(this.buildOpenAiChatBody(model, messages, tools, true, options)),
+    // TODO: Zen's /models catalog currently includes some chat/completions models
+    // that still fail at runtime (for example nemotron-3-super-free -> 500 and
+    // trinity-large-preview-free -> wrapped provider 404). If Zen exposes route
+    // or availability metadata, use it here to retry with the correct backend
+    // instead of surfacing the raw gateway error.
+    yield* streamOpenAiChat({
+      url: `${this.baseUrl}/chat/completions`,
+      headers: this.requireOpenAiAuthHeaders(),
+      body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
-
-    if (!res.ok) {
-      // TODO: Zen's /models catalog currently includes some chat/completions models
-      // that still fail at runtime (for example nemotron-3-super-free -> 500 and
-      // trinity-large-preview-free -> wrapped provider 404). If Zen exposes route
-      // or availability metadata, use it here to retry with the correct backend
-      // instead of surfacing the raw gateway error.
-      throw new Error(`OpenCode Zen API error ${res.status}: ${await res.text()}`);
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let toolCalls: ChatChunk['tool_calls'] = undefined;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed === 'data: [DONE]' || !trimmed.startsWith('data: ')) continue;
-
-        let parsed: any;
-        try {
-          parsed = JSON.parse(trimmed.slice(6));
-        } catch {
-          continue;
-        }
-
-        const delta = parsed.choices?.[0]?.delta;
-        if (delta?.content) {
-          yield { content: delta.content };
-        }
-
-        if (delta?.tool_calls) {
-          if (!toolCalls) toolCalls = [];
-          mergeStreamedToolCalls(toolCalls, delta.tool_calls);
-        }
-
-        const finishReason = parsed.choices?.[0]?.finish_reason;
-        if (finishReason === 'stop' || finishReason === 'tool_calls') {
-          yield { done: true, usage: extractOpenAiUsage(parsed) };
-        }
-      }
-    }
-
-    if (toolCalls && toolCalls.length > 0) {
-      const parsed = finalizeToolCalls(toolCalls);
-      if (parsed.length > 0) {
-        yield { tool_calls: parsed, done: true };
-      }
-    }
   }
 
   private async chatCompletionsNoStream(
@@ -191,44 +139,20 @@ export class OpenCodeZenProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.openAiHeaders(false, true),
-      body: JSON.stringify(this.buildOpenAiChatBody(model, messages, tools, false, options)),
+    return sendOpenAiChat({
+      url: `${this.baseUrl}/chat/completions`,
+      headers: this.requireOpenAiAuthHeaders(),
+      body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
+  }
 
-    if (!res.ok) {
-      throw new Error(`OpenCode Zen API error ${res.status}: ${await res.text()}`);
+  private requireOpenAiAuthHeaders(): Record<string, string> {
+    if (!this.apiKey) {
+      throw new Error(MISSING_TOKEN_ERROR);
     }
-
-    const data = await res.json() as any;
-    const choice = data.choices?.[0];
-    const result: ChatChunk = {
-      content: choice?.message?.content ?? undefined,
-      done: true,
-      usage: extractOpenAiUsage(data),
-    };
-
-    if (choice?.message?.tool_calls) {
-      result.tool_calls = choice.message.tool_calls.flatMap((tc: any) => {
-        if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
-          return [];
-        }
-
-        return [{
-          id: tc.id,
-          function: {
-            name: tc.function.name,
-            arguments: typeof tc.function.arguments === 'string'
-              ? parseToolArgs(tc.function.arguments)
-              : tc.function.arguments,
-          },
-        }];
-      });
-    }
-
-    return result;
+    return { Authorization: `Bearer ${this.apiKey}` };
   }
 
   private async *chatAnthropic(
@@ -451,21 +375,6 @@ export class OpenCodeZenProvider implements Provider {
     };
   }
 
-  private openAiHeaders(stream: boolean, requireAuth: boolean): Record<string, string> {
-    if (requireAuth && !this.apiKey) {
-      throw new Error(MISSING_TOKEN_ERROR);
-    }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': stream ? 'text/event-stream' : 'application/json',
-    };
-    if (this.apiKey) {
-      headers.Authorization = `Bearer ${this.apiKey}`;
-    }
-    return headers;
-  }
-
   private googleHeaders(): Record<string, string> {
     if (!this.apiKey) {
       throw new Error(MISSING_TOKEN_ERROR);
@@ -476,33 +385,6 @@ export class OpenCodeZenProvider implements Provider {
       'x-goog-api-key': this.apiKey,
       'Accept': 'application/json',
     };
-  }
-
-  private buildOpenAiChatBody(
-    model: string,
-    messages: ChatMessage[],
-    tools: ToolDefinition[] | undefined,
-    stream: boolean,
-    options?: ChatOptions,
-  ): Record<string, unknown> {
-    const body: Record<string, unknown> = {
-      model,
-      messages: messages.map(message => this.formatOpenAiMessage(message)),
-      stream,
-    };
-
-    if (tools && tools.length > 0) {
-      body.tools = tools;
-      body.parallel_tool_calls = true;
-    }
-    if (options?.maxTokens) {
-      body.max_tokens = options.maxTokens;
-    }
-    if (options?.temperature !== undefined) {
-      body.temperature = options.temperature;
-    }
-
-    return body;
   }
 
   private buildGoogleBody(
@@ -538,30 +420,6 @@ export class OpenCodeZenProvider implements Provider {
     }
 
     return body;
-  }
-
-  private formatOpenAiMessage(msg: ChatMessage): Record<string, unknown> {
-    const formatted: Record<string, unknown> = {
-      role: msg.role,
-      content: msg.content,
-    };
-
-    if (msg.tool_calls) {
-      formatted.tool_calls = msg.tool_calls.map(tc => ({
-        id: tc.id ?? `call_${Math.random().toString(36).slice(2, 10)}`,
-        type: 'function',
-        function: {
-          name: tc.function.name,
-          arguments: JSON.stringify(tc.function.arguments),
-        },
-      }));
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      formatted.tool_call_id = msg.tool_call_id;
-    }
-
-    return formatted;
   }
 
   private formatGoogleMessages(messages: ChatMessage[]): {
@@ -695,7 +553,7 @@ export class OpenCodeZenProvider implements Provider {
     if (this.modelsCache) return this.modelsCache;
 
     const res = await fetch(`${this.baseUrl}/models`, {
-      headers: this.openAiHeaders(false, false),
+      headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
     });
 
     if (!res.ok) {
@@ -873,40 +731,6 @@ function formatTokenCount(value: number): string {
   return String(value);
 }
 
-function mergeStreamedToolCalls(target: NonNullable<ChatChunk['tool_calls']>, incoming: any[]): void {
-  for (const tc of incoming) {
-    const idx = tc.index ?? 0;
-    if (!target[idx]) {
-      target[idx] = {
-        id: tc.id,
-        function: { name: '', arguments: {} },
-      };
-    }
-    if (tc.function?.name) {
-      target[idx].function.name += tc.function.name;
-    }
-    if (tc.function?.arguments) {
-      (target[idx].function as any).__rawArgs =
-        ((target[idx].function as any).__rawArgs ?? '') + tc.function.arguments;
-    }
-  }
-}
-
-function finalizeToolCalls(toolCalls: NonNullable<ChatChunk['tool_calls']>): ToolCallMessage[] {
-  return toolCalls.flatMap(tc => {
-    if (!tc?.function || !tc.function.name) {
-      return [];
-    }
-    return [{
-      id: tc.id,
-      function: {
-        name: tc.function.name,
-        arguments: parseToolArgs((tc.function as any).__rawArgs),
-      },
-    }];
-  });
-}
-
 function parseToolArgs(raw?: string): Record<string, unknown> {
   if (!raw) return {};
   try {
@@ -914,15 +738,6 @@ function parseToolArgs(raw?: string): Record<string, unknown> {
   } catch {
     return { _raw: raw };
   }
-}
-
-function extractOpenAiUsage(data: any): ChatChunk['usage'] {
-  if (!data?.usage) return undefined;
-  return {
-    promptTokens: data.usage.prompt_tokens ?? 0,
-    completionTokens: data.usage.completion_tokens ?? 0,
-    totalTokens: data.usage.total_tokens ?? 0,
-  };
 }
 
 function extractGoogleUsage(data: any): ChatChunk['usage'] {
