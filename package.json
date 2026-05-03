@@ -33,8 +33,6 @@
     "google-auth-library": "^10.6.2",
     "ink": "^7.0.1",
     "ink-text-input": "^6.0.0",
-    "marked": "^15.0.0",
-    "marked-terminal": "^7.3.0",
     "ollama": "^0.5.12",
     "react": "^19.2.5"
   },

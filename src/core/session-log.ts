@@ -117,7 +117,7 @@ export interface ProviderLogEvent {
   detail: string;
 }
 
-export function providerEventsLogPath(): string {
+function providerEventsLogPath(): string {
   return path.join(os.homedir(), '.factory', 'provider-events.jsonl');
 }
 
@@ -134,7 +134,7 @@ export function appendProviderLog(event: ProviderLogEvent): void {
   }
 }
 
-export async function listSessionLogs(): Promise<{ name: string; path: string; mtime: Date }[]> {
+async function listSessionLogs(): Promise<{ name: string; path: string; mtime: Date }[]> {
   const dir = sessionsDir();
   let entries: string[];
   try {
@@ -160,7 +160,7 @@ export async function listSessionLogs(): Promise<{ name: string; path: string; m
     .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 }
 
-export async function extractUserInputs(filePath: string): Promise<string[]> {
+async function extractUserInputs(filePath: string): Promise<string[]> {
   const raw = await fs.promises.readFile(filePath, 'utf-8');
   const inputs: string[] = [];
   for (const line of raw.split('\n')) {
@@ -176,15 +176,6 @@ export async function extractUserInputs(filePath: string): Promise<string[]> {
     }
   }
   return inputs;
-}
-
-/**
- * Returns the model name used in the most recent session log, or null if none.
- * Reads only the first line of the newest log (the session-start event).
- */
-export async function getLastSessionModel(): Promise<string | null> {
-  const selection = await getLastSessionSelection();
-  return selection?.model ?? null;
 }
 
 /**
@@ -222,10 +213,6 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
     // ignore
   }
   return null;
-}
-
-export function getStartupModelPlaceholder(): string {
-  return STARTUP_MODEL_PLACEHOLDER;
 }
 
 /**

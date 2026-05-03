@@ -109,6 +109,3 @@ export function createProvider(name: string, options: CreateProviderOptions = {}
   }
 }
 
-export function getProviderNames(): string[] {
-  return ['ollama', 'huggingface', 'llamacpp', 'anthropic', 'copilot', 'openrouter', 'vercel', 'opencodezen', 'googleaistudio', 'mistral', 'codestral', 'cerebras', 'groq', 'cohere', 'workersai'];
-}

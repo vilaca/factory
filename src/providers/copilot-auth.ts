@@ -244,11 +244,11 @@ export function inferCopilotCredentialKind(token?: string): 'github' | 'copilot'
   return 'copilot';
 }
 
-export function githubLoginBaseUrl(): string {
+function githubLoginBaseUrl(): string {
   return normalizeBaseUrl(process.env.FACTORY_GITHUB_LOGIN_BASE_URL ?? DEFAULT_GITHUB_LOGIN_BASE_URL);
 }
 
-export function githubApiBaseUrl(): string {
+function githubApiBaseUrl(): string {
   return normalizeBaseUrl(process.env.FACTORY_GITHUB_API_BASE_URL ?? DEFAULT_GITHUB_API_BASE_URL);
 }
 

@@ -16,5 +16,3 @@ export function getAllTools(): ToolHandler[] {
   return defaultRegistry.getAll();
 }
 
-export { ToolRegistry } from './registry.js';
-export type { ToolHandler, ToolResult, ToolDefinition, ToolCategory } from './types.js';

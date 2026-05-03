@@ -161,7 +161,7 @@ export async function loadProjectInstructions(cwd: string): Promise<string | nul
   return readTextFile(instructionsPath);
 }
 
-export function mergeConfigs(...configs: Config[]): Config {
+function mergeConfigs(...configs: Config[]): Config {
   const result: Config = {};
 
   for (const config of configs) {
