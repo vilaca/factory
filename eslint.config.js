@@ -4,11 +4,14 @@ import parser from '@typescript-eslint/parser';
 
 export default [
   {
-    files: ["**/*.ts"],
+    ignores: ["dist/**", "dist-test/**", "node_modules/**", "*.tsbuildinfo"]
+  },
+  {
+    files: ["**/*.ts", "**/*.tsx"],
     languageOptions: {
       parser: parser,
       parserOptions: {
-        project: './tsconfig.json'
+        project: ['./tsconfig.json', './tsconfig.test.json']
       }
     },
     plugins: {
@@ -21,7 +24,12 @@ export default [
         argsIgnorePattern: "^_",
         varsIgnorePattern: "^_",
         ignoreRestSiblings: true
-      }]
+      }],
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/prefer-nullish-coalescing": "warn"
     }
   }
 ];
