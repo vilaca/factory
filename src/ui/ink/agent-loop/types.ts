@@ -103,6 +103,7 @@ export interface AgentLoopApi {
   historyUp(currentInput: string): string | null;
   historyDown(): string | null;
   addNotice(level: NoticeLevel, text: string): void;
+  addNoticeBlock(lines: { level: NoticeLevel; text: string }[]): void;
   setIdle(): void;
   /** Snapshot the running-state needed when handleSubmit dispatches inputs. */
   getRunState(): RunState;
