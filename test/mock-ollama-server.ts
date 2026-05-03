@@ -34,8 +34,7 @@ export function setModelCapabilities(capabilities: string[]): void {
 }
 
 function handleShow(req: http.IncomingMessage, res: http.ServerResponse): void {
-  let body = '';
-  req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+  req.on('data', () => {});
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({

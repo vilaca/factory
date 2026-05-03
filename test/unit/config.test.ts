@@ -3,7 +3,6 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import crypto from 'crypto';
 import { loadGlobalConfig, loadProjectConfig, saveGlobalConfig } from '../../src/core/config.js';
 
 async function withTempProject(

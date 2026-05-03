@@ -277,7 +277,6 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       sessionLogger?.logSessionEnd();
       sessionLogger?.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ─── Agent run loop ────────────────────────────────────────────────

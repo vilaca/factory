@@ -31,5 +31,14 @@ export default [
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/prefer-nullish-coalescing": "warn"
     }
+  },
+  {
+    // node:test accepts async test/describe callbacks and handles them internally,
+    // so the floating-promise/misused-promise rules produce false positives there.
+    files: ["test/**/*.ts", "test/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-misused-promises": "off"
+    }
   }
 ];

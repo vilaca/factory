@@ -822,8 +822,8 @@ async function main(): Promise<void> {
   const cleanup = async () => {
     if (mcpManager) await mcpManager.disconnect().catch(() => {});
   };
-  process.on('SIGINT', async () => { await cleanup(); process.exit(130); });
-  process.on('SIGTERM', async () => { await cleanup(); process.exit(0); });
+  process.on('SIGINT', () => { void cleanup().finally(() => process.exit(130)); });
+  process.on('SIGTERM', () => { void cleanup().finally(() => process.exit(0)); });
 
   let gitBranch: string | undefined;
   let gitDirty: boolean | null = null;

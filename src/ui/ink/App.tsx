@@ -173,7 +173,7 @@ export function App(props: AppProps): React.ReactElement {
 
       <Box borderStyle="round" borderColor={inputBorderColor} paddingX={1}>
         <Text color={inputBorderColor} bold>{'> '}</Text>
-        <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
+        <TextInput value={input} onChange={setInput} onSubmit={(value) => { void handleSubmit(value); }} />
       </Box>
 
       <StatusBar

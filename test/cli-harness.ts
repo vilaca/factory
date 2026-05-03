@@ -54,7 +54,6 @@ export function spawnCli(args: string[], env?: Record<string, string>): CliHarne
 
     waitForOutput(match: string | RegExp, timeoutMs = 10000): Promise<string> {
       return new Promise((resolve, reject) => {
-        const startLen = output.length;
         const start = Date.now();
 
         const check = (): void => {
