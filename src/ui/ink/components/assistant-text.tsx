@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Text } from 'ink';
 import { renderMarkdown } from '../../renderer.js';
 
 interface Props {
@@ -10,16 +10,10 @@ interface Props {
 export function AssistantText({ text, streaming }: Props): React.ReactElement {
   const rendered = renderMarkdown(text);
   return (
-    <Box flexDirection="row">
-      <Box width={2} flexShrink={0}>
-        <Text color="cyan">⏺</Text>
-      </Box>
-      <Box flexGrow={1} flexDirection="column">
-        <Text>
-          {rendered}
-          {streaming ? <Text color="cyan">▌</Text> : null}
-        </Text>
-      </Box>
-    </Box>
+    <Text>
+      <Text color="cyan">⏺ </Text>
+      {rendered}
+      {streaming ? <Text color="cyan">▌</Text> : null}
+    </Text>
   );
 }
