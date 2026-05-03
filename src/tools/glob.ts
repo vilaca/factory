@@ -1,7 +1,9 @@
-import { glob as globFn } from 'glob';
 import fs from 'fs';
+import { glob as fsGlob } from 'fs/promises';
 import path from 'path';
 import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+
+const EXCLUDE_DIR_SEGMENTS = new Set(['node_modules', '.git']);
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -34,26 +36,23 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
   }
 
   try {
-    const matches = await globFn(pattern, {
+    const matches: { file: string; mtime: number }[] = [];
+    for await (const file of fsGlob(pattern, {
       cwd: searchPath,
-      nodir: true,
-      ignore: ['**/node_modules/**', '**/.git/**'],
-    });
-
-    // Sort by modification time (newest first)
-    const withStats = matches.map(file => {
+      exclude: (p: string) => p.split(path.sep).some(seg => EXCLUDE_DIR_SEGMENTS.has(seg)),
+    })) {
       const fullPath = path.resolve(searchPath, file);
       try {
         const stat = fs.statSync(fullPath);
-        return { file, mtime: stat.mtimeMs };
+        if (!stat.isFile()) continue;
+        matches.push({ file, mtime: stat.mtimeMs });
       } catch {
-        return { file, mtime: 0 };
+        // unreadable entry — skip it
       }
-    });
+    }
 
-    withStats.sort((a, b) => b.mtime - a.mtime);
-
-    const result = withStats.map(f => f.file);
+    matches.sort((a, b) => b.mtime - a.mtime);
+    const result = matches.map(m => m.file);
 
     if (result.length === 0) {
       return { success: true, output: 'No files matched the pattern.', empty: true };
