@@ -51,9 +51,7 @@ export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknow
 
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
-    if (opts.parallelToolCalls !== false) {
-      body.parallel_tool_calls = true;
-    }
+    body.parallel_tool_calls = opts.parallelToolCalls ?? true;
   }
   if (opts.options?.maxTokens) {
     body[opts.maxTokensField ?? 'max_completion_tokens'] = opts.options.maxTokens;

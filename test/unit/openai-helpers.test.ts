@@ -184,13 +184,13 @@ describe('buildChatBody', () => {
     assert.strictEqual(body.max_completion_tokens, 200);
   });
 
-  it('omits parallel_tool_calls when parallelToolCalls=false', () => {
+  it('writes parallel_tool_calls=false explicitly when supplied', () => {
     const body = buildChatBody({
       model: 'm', messages: [], stream: false,
       tools: [{ type: 'function', function: { name: 'X', description: '', parameters: {} } }],
       parallelToolCalls: false,
     });
-    assert.strictEqual(body.parallel_tool_calls, undefined);
+    assert.strictEqual(body.parallel_tool_calls, false);
   });
 
   it('merges extra fields', () => {
