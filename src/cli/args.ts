@@ -16,6 +16,7 @@ interface CliArgs {
   noReadCache?: boolean;
   noLineCountHint?: boolean;
   turnTimeoutSec?: number;
+  noClear?: boolean;
 }
 
 export function parseArgs(args: string[]): CliArgs {
@@ -51,6 +52,8 @@ export function parseArgs(args: string[]): CliArgs {
       result.lineCountHint = true;
     } else if (arg === '--no-line-count-hint') {
       result.noLineCountHint = true;
+    } else if (arg === '--no-clear') {
+      result.noClear = true;
     } else if (arg === '--turn-timeout') {
       const n = Number(args[++i]);
       if (!isFinite(n) || n <= 0) {
@@ -86,6 +89,7 @@ export function printUsage(): void {
     '    --no-read-cache          Disable Read mtime/hash cache (on by default)',
     '    --no-line-count-hint     Drop the cloc/scc system-prompt hint (on by default)',
     '    --turn-timeout <sec>     Auto-abort the agent after N seconds per user prompt (default: off)',
+    '    --no-clear               Do not clear the screen on startup',
     '    --help, -h               Show this help',
     '',
     chalk.bold('  Examples:'),

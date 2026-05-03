@@ -56,6 +56,7 @@ export interface UseAgentLoopOptions {
   mcpInfo?: { servers: string[]; toolCount: number };
   gitBranch?: string;
   gitDirty?: boolean | null;
+  validationWarning?: string;
 }
 
 export interface AgentLoopApi {

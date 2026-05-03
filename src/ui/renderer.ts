@@ -32,6 +32,202 @@ function formatExperimentalFlags(flags: ExperimentalFlags | undefined): string {
     .join(', ');
 }
 
+export const LOGO_LETTERS_LEET: ReadonlyArray<{ color: string; rows: string[] }> = [
+  {
+    color: '#FFD93D',
+    rows: [
+      '███████╗',
+      '██╔════╝',
+      '█████╗  ',
+      '██╔══╝  ',
+      '██║     ',
+      '╚═╝     ',
+    ],
+  },
+  {
+    color: '#FF6BD0',
+    rows: [
+      '██╗  ██╗',
+      '██║  ██║',
+      '███████║',
+      '╚════██║',
+      '     ██║',
+      '     ╚═╝',
+    ],
+  },
+  {
+    color: '#00E0FF',
+    rows: [
+      '██╗  ██╗',
+      '██║ ██╔╝',
+      '█████╔╝ ',
+      '██╔═██╗ ',
+      '██║  ██╗',
+      '╚═╝  ╚═╝',
+    ],
+  },
+  {
+    color: '#7CFF6B',
+    rows: [
+      '███████╗ ',
+      '╚════██║ ',
+      '    ██╔╝ ',
+      '   ██╔╝  ',
+      '   ██║   ',
+      '   ╚═╝   ',
+    ],
+  },
+  {
+    color: '#FFA94D',
+    rows: [
+      ' ██████╗ ',
+      '██╔═████╗',
+      '██║██╔██║',
+      '████╔╝██║',
+      '╚██████╔╝',
+      ' ╚═════╝ ',
+    ],
+  },
+  {
+    color: '#FF5C5C',
+    rows: [
+      '██████╗ ',
+      '██╔══██╗',
+      '██████╔╝',
+      '██╔══██╗',
+      '██║  ██║',
+      '╚═╝  ╚═╝',
+    ],
+  },
+  {
+    color: '#B266FF',
+    rows: [
+      '██╗   ██╗',
+      '╚██╗ ██╔╝',
+      ' ╚████╔╝ ',
+      '  ╚██╔╝  ',
+      '   ██║   ',
+      '   ╚═╝   ',
+    ],
+  },
+];
+
+export const LOGO_LETTERS: ReadonlyArray<{ color: string; rows: string[] }> = [
+  {
+    color: '#FFD93D',
+    rows: [
+      '███████╗',
+      '██╔════╝',
+      '█████╗  ',
+      '██╔══╝  ',
+      '██║     ',
+      '╚═╝     ',
+    ],
+  },
+  {
+    color: '#FF6BD0',
+    rows: [
+      ' █████╗ ',
+      '██╔══██╗',
+      '███████║',
+      '██╔══██║',
+      '██║  ██║',
+      '╚═╝  ╚═╝',
+    ],
+  },
+  {
+    color: '#00E0FF',
+    rows: [
+      ' ██████╗',
+      '██╔════╝',
+      '██║     ',
+      '██║     ',
+      '╚██████╗',
+      ' ╚═════╝',
+    ],
+  },
+  {
+    color: '#7CFF6B',
+    rows: [
+      '████████╗',
+      '╚══██╔══╝',
+      '   ██║   ',
+      '   ██║   ',
+      '   ██║   ',
+      '   ╚═╝   ',
+    ],
+  },
+  {
+    color: '#FFA94D',
+    rows: [
+      ' ██████╗ ',
+      '██╔═══██╗',
+      '██║   ██║',
+      '██║   ██║',
+      '╚██████╔╝',
+      ' ╚═════╝ ',
+    ],
+  },
+  {
+    color: '#FF5C5C',
+    rows: [
+      '██████╗ ',
+      '██╔══██╗',
+      '██████╔╝',
+      '██╔══██╗',
+      '██║  ██║',
+      '╚═╝  ╚═╝',
+    ],
+  },
+  {
+    color: '#B266FF',
+    rows: [
+      '██╗   ██╗',
+      '╚██╗ ██╔╝',
+      ' ╚████╔╝ ',
+      '  ╚██╔╝  ',
+      '   ██║   ',
+      '   ╚═╝   ',
+    ],
+  },
+];
+
+function renderLogoFrame(shift: number): string {
+  const palette = LOGO_LETTERS.map(l => l.color);
+  const animating = shift < palette.length;
+  const letters = animating ? LOGO_LETTERS_LEET : LOGO_LETTERS;
+  const rowCount = letters[0].rows.length;
+  const lines: string[] = [];
+  for (let r = 0; r < rowCount; r++) {
+    const segments = letters.map((letter, i) => {
+      const color = palette[(i + shift) % palette.length];
+      return chalk.hex(color)(letter.rows[r]);
+    });
+    lines.push('  ' + segments.join(''));
+  }
+  return lines.join('\n');
+}
+
+export function renderLogo(): string {
+  return renderLogoFrame(LOGO_LETTERS.length);
+}
+
+export async function animateLogo(frameMs = 220): Promise<void> {
+  const rowCount = LOGO_LETTERS[0].rows.length;
+  if (!process.stdout.isTTY) {
+    process.stdout.write(renderLogoFrame(LOGO_LETTERS.length) + '\n');
+    return;
+  }
+  const totalFrames = LOGO_LETTERS.length + 1;
+  for (let frame = 0; frame < totalFrames; frame++) {
+    if (frame > 0) process.stdout.write(`\x1B[${rowCount}A`);
+    process.stdout.write(renderLogoFrame(frame) + '\n');
+    if (frame < totalFrames - 1) {
+      await new Promise(resolve => setTimeout(resolve, frameMs));
+    }
+  }
+}
+
 export function renderWelcome(
   model: string,
   cwd: string,
@@ -43,7 +239,7 @@ export function renderWelcome(
     (gitBranch ? chalk.dim('  (') + chalk.cyan(gitBranch) + chalk.dim(')') : '');
   const lines = [
     '',
-    chalk.bold.cyan('  factory') + chalk.dim(` v0.1.0`),
+    chalk.dim('  v0.1.0'),
     '',
     chalk.dim('  Model: ') + chalk.white(model),
     cwdLine,

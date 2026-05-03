@@ -252,6 +252,7 @@ factory -p gemini -m gemini-2.5-pro
 | `--no-read-cache` | | Disable Read mtime/hash cache |
 | `--no-line-count-hint` | | Drop cloc/scc system-prompt hint |
 | `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
+| `--no-clear` | | Do not clear the screen on startup |
 | `--help` | `-h` | Show help |
 
 ### Debugging

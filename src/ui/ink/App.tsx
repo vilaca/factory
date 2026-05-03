@@ -24,6 +24,7 @@ export interface AppProps {
   mcpInfo?: { servers: string[]; toolCount: number };
   gitBranch?: string;
   gitDirty?: boolean | null;
+  validationWarning?: string;
 }
 
 export function App(props: AppProps): React.ReactElement {

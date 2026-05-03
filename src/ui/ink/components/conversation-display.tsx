@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Static, Text } from 'ink';
+import { Box, Static } from 'ink';
 import type { DisplayItem } from '../types.js';
 import { DisplayItemView } from './display-item-view.js';
 import { AssistantText } from './assistant-text.js';
@@ -34,9 +34,6 @@ export function ConversationDisplay({
 }: ConversationDisplayProps): React.ReactElement {
   return (
     <Box flexDirection="column">
-      {items.length === 0 && !streamingText && !spinner && (
-        <Text dimColor>(no output yet — type a prompt below)</Text>
-      )}
       <Static items={items}>
         {(item) => (
           <PanelLine key={item.id}>

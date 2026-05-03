@@ -13,7 +13,7 @@ import { renderApp } from './ui/ink/index.js';
 import { buildSystemPrompt } from './core/system-prompt.js';
 import { validateModelToolSupport } from './core/model-validation.js';
 import { appendProviderLog, getLastSessionSelection, getRecentSessions, sessionsDir } from './core/session-log.js';
-import { renderWelcome, renderError } from './ui/renderer.js';
+import { renderWelcome, renderError, animateLogo } from './ui/renderer.js';
 import { getGitBranch, isGitDirty } from './utils/git.js';
 import { parseArgs, printUsage } from './cli/args.js';
 import {
@@ -41,6 +41,10 @@ async function main(): Promise<void> {
   if (cliArgs.help) {
     printUsage();
     process.exit(0);
+  }
+
+  if (process.stdout.isTTY && !cliArgs.noClear) {
+    process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
   }
 
   const cwd = process.cwd();
@@ -142,9 +146,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const useTextToolFallback = validation.mode === 'fallback';
-  if (useTextToolFallback) {
-    console.log(chalk.yellow(`  ⚠ ${validation.warning}`));
-  }
+  const validationWarning = useTextToolFallback ? validation.warning : undefined;
 
   const modelTier = provider.getCapabilities(model).modelTier;
   const systemPrompt = await buildSystemPrompt(cwd, modelTier);
@@ -205,13 +207,13 @@ async function main(): Promise<void> {
     ...(cliArgs.turnTimeoutSec !== undefined ? { turnTimeoutSec: cliArgs.turnTimeoutSec } : {}),
   };
 
-  console.log(renderWelcome(
+  const welcomeText = renderWelcome(
     model,
     cwd,
     mergedAgentConfig.experimental,
     cliArgs.noLog ? 'disabled' : sessionsDir(),
     gitBranch,
-  ));
+  );
 
   const appOptions = {
     model,
@@ -227,13 +229,24 @@ async function main(): Promise<void> {
     mcpInfo,
     gitBranch,
     gitDirty,
+    validationWarning,
   };
 
   const isInteractiveTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
   if (isInteractiveTty) {
+    if (!cliArgs.noClear) {
+      process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+    }
+    process.stdout.write('\n');
+    await animateLogo();
+    console.log(welcomeText);
     const app = renderApp(appOptions);
     await app.waitUntilExit();
   } else {
+    console.log(welcomeText);
+    if (validationWarning) {
+      console.log(chalk.yellow(`  ⚠ ${validationWarning}`));
+    }
     await runHeadless(appOptions);
   }
 }

@@ -121,6 +121,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       addNotice('info', `Session log: ${sessionLogger.filePath}`);
     }
 
+    if (opts.validationWarning) {
+      addNotice('warn', `⚠ ${opts.validationWarning}`);
+    }
+
     void loadInitialHistory(refs, addNotice);
 
     return () => {
