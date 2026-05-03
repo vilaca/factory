@@ -1,12 +1,14 @@
 import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ToolCallMessage, ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
 } from './types.js';
 import type { GoogleAiStudioAuthMode } from '../core/config-types.js';
 import { appendProviderLog } from '../core/session-log.js';
 import { GoogleAiStudioAuthManager } from './googleaistudio-auth.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
 const DEFAULT_OPENAI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+const PROVIDER_NAME = 'Google AI Studio';
 
 interface GoogleAiStudioModel {
   name: string;
@@ -32,8 +34,8 @@ export class GoogleAiStudioProvider implements Provider {
       apiKey: key,
       authMode: options.authMode,
     });
-    this.openAiBaseUrl = normalizeOpenAiBaseUrl(options.host ?? DEFAULT_OPENAI_BASE_URL);
-    this.modelsBaseUrl = deriveModelsBaseUrl(this.openAiBaseUrl);
+    this.openAiBaseUrl = (options.host ?? DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, '');
+    this.modelsBaseUrl = this.openAiBaseUrl.replace(/\/openai\/?$/, '');
   }
 
   async listModels(): Promise<string[]> {
@@ -113,71 +115,13 @@ export class GoogleAiStudioProvider implements Provider {
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
     const headers = await this.auth.getChatHeaders();
-    const res = await fetch(`${this.openAiBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify(this.buildChatBody(model, messages, tools, true, options)),
+    yield* streamOpenAiChat({
+      url: `${this.openAiBaseUrl}/chat/completions`,
+      headers,
+      body: this.body(model, messages, tools, true, options),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
-
-    if (!res.ok) {
-      throw new Error(`Google AI Studio API error ${res.status}: ${await res.text()}`);
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let toolCalls: ChatChunk['tool_calls'] = undefined;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed === 'data: [DONE]' || !trimmed.startsWith('data: ')) continue;
-
-        let parsed: any;
-        try {
-          parsed = JSON.parse(trimmed.slice(6));
-        } catch {
-          continue;
-        }
-
-        const delta = parsed.choices?.[0]?.delta;
-        if (delta?.content) {
-          yield { content: delta.content };
-        }
-
-        if (delta?.tool_calls) {
-          if (!toolCalls) toolCalls = [];
-          mergeStreamedToolCalls(toolCalls, delta.tool_calls);
-        }
-
-        const finishReason = parsed.choices?.[0]?.finish_reason;
-        if (finishReason === 'stop' || finishReason === 'tool_calls') {
-          yield { done: true, usage: extractUsage(parsed) };
-        }
-      }
-    }
-
-    if (toolCalls && toolCalls.length > 0) {
-      const parsed = finalizeToolCalls(toolCalls);
-      if (parsed.length > 0) {
-        yield { tool_calls: parsed, done: true };
-      }
-    }
   }
 
   async chatNoStream(
@@ -187,98 +131,31 @@ export class GoogleAiStudioProvider implements Provider {
     options?: ChatOptions,
   ): Promise<ChatChunk> {
     const headers = await this.auth.getChatHeaders();
-    const res = await fetch(`${this.openAiBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(this.buildChatBody(model, messages, tools, false, options)),
+    return sendOpenAiChat({
+      url: `${this.openAiBaseUrl}/chat/completions`,
+      headers,
+      body: this.body(model, messages, tools, false, options),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
-
-    if (!res.ok) {
-      throw new Error(`Google AI Studio API error ${res.status}: ${await res.text()}`);
-    }
-
-    const data = await res.json() as any;
-    const choice = data.choices?.[0];
-    const result: ChatChunk = {
-      content: choice?.message?.content ?? undefined,
-      done: true,
-      usage: extractUsage(data),
-    };
-
-    if (choice?.message?.tool_calls) {
-      result.tool_calls = choice.message.tool_calls.flatMap((tc: any) => {
-        if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
-          return [];
-        }
-
-        return [{
-          id: tc.id,
-          function: {
-            name: tc.function.name,
-            arguments: typeof tc.function.arguments === 'string'
-              ? parseToolArgs(tc.function.arguments)
-              : tc.function.arguments,
-          },
-        }];
-      });
-    }
-
-    return result;
   }
 
-  private buildChatBody(
+  private body(
     model: string,
     messages: ChatMessage[],
     tools: ToolDefinition[] | undefined,
     stream: boolean,
     options?: ChatOptions,
   ): Record<string, unknown> {
-    const body: Record<string, unknown> = {
+    return buildChatBody({
       model,
-      messages: messages.map(message => this.formatMessage(message)),
+      messages,
+      tools,
       stream,
-    };
-
-    if (tools && tools.length > 0) {
-      body.tools = tools;
-      body.tool_choice = 'auto';
-    }
-    if (options?.maxTokens) {
-      body.max_tokens = options.maxTokens;
-    }
-    if (options?.temperature !== undefined) {
-      body.temperature = options.temperature;
-    }
-
-    return body;
-  }
-
-  private formatMessage(msg: ChatMessage): Record<string, unknown> {
-    const formatted: Record<string, unknown> = {
-      role: msg.role,
-      content: msg.content,
-    };
-
-    if (msg.tool_calls) {
-      formatted.tool_calls = msg.tool_calls.map(tc => ({
-        id: tc.id ?? `call_${Math.random().toString(36).slice(2, 10)}`,
-        type: 'function',
-        function: {
-          name: tc.function.name,
-          arguments: JSON.stringify(tc.function.arguments),
-        },
-      }));
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      formatted.tool_call_id = msg.tool_call_id;
-    }
-
-    return formatted;
+      options,
+      maxTokensField: 'max_tokens',
+      extra: tools && tools.length > 0 ? { tool_choice: 'auto' } : undefined,
+    });
   }
 
   private async getCatalog(): Promise<GoogleAiStudioModel[]> {
@@ -311,7 +188,7 @@ export class GoogleAiStudioProvider implements Provider {
       if (!res.ok) {
         // TODO: Detect Gemini SERVICE_DISABLED / PERMISSION_DENIED responses here
         // and surface a clearer message with the activationUrl plus propagation delay hint.
-        throw new Error(`Google AI Studio API error ${res.status}: ${await res.text()}`);
+        throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${await res.text()}`);
       }
 
       const data = await res.json() as any;
@@ -333,20 +210,18 @@ export class GoogleAiStudioProvider implements Provider {
           detail: pageModels.slice(0, 10).map((item: any) => item?.baseModelId ?? item?.name ?? '<unknown>').join(', '),
         });
       }
-      models.push(...pageModels
-        .filter((item: any) => isSupportedGoogleAiStudioModel(item))
-        .map((item: any) => ({
-          name: item.name,
-          baseModelId: getGoogleAiStudioModelId(item),
-          displayName: typeof item.displayName === 'string' ? item.displayName : undefined,
-          description: typeof item.description === 'string' ? item.description : undefined,
-          inputTokenLimit: typeof item.inputTokenLimit === 'number' ? item.inputTokenLimit : undefined,
-          outputTokenLimit: typeof item.outputTokenLimit === 'number' ? item.outputTokenLimit : undefined,
-          supportedGenerationMethods: Array.isArray(item.supportedGenerationMethods)
-            ? item.supportedGenerationMethods.filter((value: unknown): value is string => typeof value === 'string')
-            : undefined,
-          thinking: item.thinking === true,
-        })));
+      models.push(...supportedModels.map((item: any) => ({
+        name: item.name,
+        baseModelId: getGoogleAiStudioModelId(item)!,
+        displayName: typeof item.displayName === 'string' ? item.displayName : undefined,
+        description: typeof item.description === 'string' ? item.description : undefined,
+        inputTokenLimit: typeof item.inputTokenLimit === 'number' ? item.inputTokenLimit : undefined,
+        outputTokenLimit: typeof item.outputTokenLimit === 'number' ? item.outputTokenLimit : undefined,
+        supportedGenerationMethods: Array.isArray(item.supportedGenerationMethods)
+          ? item.supportedGenerationMethods.filter((value: unknown): value is string => typeof value === 'string')
+          : undefined,
+        thinking: item.thinking === true,
+      })));
 
       pageToken = typeof data?.nextPageToken === 'string' && data.nextPageToken ? data.nextPageToken : undefined;
     } while (pageToken);
@@ -354,14 +229,6 @@ export class GoogleAiStudioProvider implements Provider {
     this.modelsCache = dedupeModels(models);
     return this.modelsCache;
   }
-}
-
-function normalizeOpenAiBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
-}
-
-function deriveModelsBaseUrl(openAiBaseUrl: string): string {
-  return openAiBaseUrl.replace(/\/openai\/?$/, '');
 }
 
 function isSupportedGoogleAiStudioModel(item: any): boolean {
@@ -484,56 +351,4 @@ function formatDiagnostics(values: Record<string, string | boolean>): string {
   return Object.entries(values)
     .map(([key, value]) => `${key}=${String(value)}`)
     .join(', ');
-}
-
-function mergeStreamedToolCalls(target: NonNullable<ChatChunk['tool_calls']>, incoming: any[]): void {
-  for (const tc of incoming) {
-    const idx = tc.index ?? 0;
-    if (!target[idx]) {
-      target[idx] = {
-        id: tc.id,
-        function: { name: '', arguments: {} },
-      };
-    }
-    if (tc.function?.name) {
-      target[idx].function.name += tc.function.name;
-    }
-    if (tc.function?.arguments) {
-      (target[idx].function as any).__rawArgs =
-        ((target[idx].function as any).__rawArgs ?? '') + tc.function.arguments;
-    }
-  }
-}
-
-function finalizeToolCalls(toolCalls: NonNullable<ChatChunk['tool_calls']>): ToolCallMessage[] {
-  return toolCalls.flatMap(tc => {
-    if (!tc?.function || !tc.function.name) {
-      return [];
-    }
-    return [{
-      id: tc.id,
-      function: {
-        name: tc.function.name,
-        arguments: parseToolArgs((tc.function as any).__rawArgs),
-      },
-    }];
-  });
-}
-
-function parseToolArgs(raw?: string): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
-  }
-}
-
-function extractUsage(data: any): ChatChunk['usage'] {
-  if (!data?.usage) return undefined;
-  return {
-    promptTokens: data.usage.prompt_tokens ?? 0,
-    completionTokens: data.usage.completion_tokens ?? 0,
-    totalTokens: data.usage.total_tokens ?? 0,
-  };
 }
