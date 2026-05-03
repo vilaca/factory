@@ -14,31 +14,6 @@ export function renderMarkdown(text: string): string {
   return text;
 }
 
-export function renderToolCall(toolName: string, args: Record<string, unknown>): string {
-  const lines: string[] = [];
-  lines.push(chalk.cyan.bold(`  ▶ ${toolName}`));
-
-  for (const [key, value] of Object.entries(args)) {
-    const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
-    const truncated = valueStr.length > 200 ? valueStr.slice(0, 200) + '...' : valueStr;
-    lines.push(chalk.dim(`    ${key}: `) + truncated);
-  }
-
-  return lines.join('\n');
-}
-
-export function renderToolResult(result: string, success: boolean, empty?: boolean): string {
-  const icon = !success ? chalk.red('  ✗') : empty ? chalk.yellow('  ○') : chalk.green('  ✓');
-  const preview = result.length > 500 ? result.slice(0, 500) + '\n    ...(truncated)' : result;
-  const indented = preview.split('\n').map(l => '    ' + l).join('\n');
-  return `${icon}\n${chalk.dim(indented)}`;
-}
-
-export function renderPermissionPrompt(toolName: string): string {
-  return chalk.yellow(`  Allow ${chalk.bold(toolName)}? `) +
-    chalk.dim('[y]es / [n]o / [a]llow all: ');
-}
-
 function formatExperimentalFlags(flags: ExperimentalFlags | undefined): string {
   return EXPERIMENTAL_FLAG_KEYS
     .map(key => `${key}=${flags?.[key] ? 'on' : 'off'}`)

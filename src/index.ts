@@ -17,7 +17,7 @@ import { createProvider, type CreateProviderOptions } from './providers/registry
 import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from './core/config.js';
 import { McpManager } from './mcp/client.js';
 import { defaultRegistry } from './tools/index.js';
-import { Repl } from './ui/repl.js';
+import { runHeadless } from './ui/headless.js';
 import { renderApp } from './ui/ink/index.js';
 import { buildSystemPrompt } from './core/system-prompt.js';
 import { validateModelToolSupport } from './core/model-validation.js';
@@ -882,8 +882,7 @@ async function main(): Promise<void> {
     const app = renderApp(appOptions);
     await app.waitUntilExit();
   } else {
-    const repl = new Repl(appOptions);
-    await repl.start();
+    await runHeadless(appOptions);
   }
 }
 
