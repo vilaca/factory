@@ -150,10 +150,18 @@ async function main(): Promise<void> {
 
   let gitBranch: string | undefined;
   let gitDirty: boolean | null = null;
-  try {
-    [gitBranch, gitDirty] = await Promise.all([getGitBranch(cwd), isGitDirty(cwd)]);
-  } catch (err: any) {
-    console.log(chalk.yellow(`  ⚠ Could not read git state: ${err.message}`));
+  const [branchRes, dirtyRes] = await Promise.allSettled([getGitBranch(cwd), isGitDirty(cwd)]);
+  if (branchRes.status === 'fulfilled') {
+    gitBranch = branchRes.value;
+  } else {
+    const msg = branchRes.reason instanceof Error ? branchRes.reason.message : String(branchRes.reason);
+    console.log(chalk.yellow(`  ⚠ Could not read git branch: ${msg}`));
+  }
+  if (dirtyRes.status === 'fulfilled') {
+    gitDirty = dirtyRes.value;
+  } else {
+    const msg = dirtyRes.reason instanceof Error ? dirtyRes.reason.message : String(dirtyRes.reason);
+    console.log(chalk.yellow(`  ⚠ Could not check git dirty state: ${msg}`));
   }
 
   // Experimental flags default to on except for bashDedup, which is opt-in

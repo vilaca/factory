@@ -3,6 +3,10 @@ import { glob as fsGlob } from 'fs/promises';
 import path from 'path';
 import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
+// Convenience filter to skip the heaviest dirs by default. Not exhaustive
+// (build outputs like dist/, .next/, coverage/ are not listed) and not a
+// security boundary — if a caller needs tighter scoping, pass a more
+// specific `path` or `pattern`.
 const EXCLUDE_DIR_SEGMENTS = new Set(['node_modules', '.git']);
 
 const definition: ToolDefinition = {

@@ -1,6 +1,11 @@
 import type { ChatChunk, ToolCallMessage } from '../types.js';
 import { parseSseStream } from './sse.js';
-import { finalizeToolCalls, mergeStreamedToolCalls, parseToolArgs } from './tool-calls.js';
+import {
+  finalizeToolCalls,
+  mergeStreamedToolCalls,
+  parseToolArgs,
+  type StreamingToolCallAcc,
+} from './tool-calls.js';
 import { extractUsage } from './usage.js';
 
 export interface OpenAiChatRequest {
@@ -35,7 +40,7 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
   const reader = res.body?.getReader();
   if (!reader) throw new Error('No response body');
 
-  let toolCalls: ChatChunk['tool_calls'] | undefined;
+  let toolCalls: StreamingToolCallAcc | undefined;
 
   for await (const parsed of parseSseStream(reader)) {
     const p = parsed as any;

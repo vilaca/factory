@@ -1,6 +1,15 @@
-import type { ChatChunk, ToolCallMessage } from '../types.js';
+import type { ToolCallMessage } from '../types.js';
 
-export type StreamingToolCallAcc = NonNullable<ChatChunk['tool_calls']>;
+interface ToolCallAcc {
+  id?: string;
+  function: {
+    name: string;
+    arguments: Record<string, unknown>;
+    __rawArgs?: string;
+  };
+}
+
+export type StreamingToolCallAcc = ToolCallAcc[];
 
 export function mergeStreamedToolCalls(target: StreamingToolCallAcc, incoming: any[]): void {
   for (const tc of incoming) {
@@ -15,8 +24,8 @@ export function mergeStreamedToolCalls(target: StreamingToolCallAcc, incoming: a
       target[idx].function.name += tc.function.name;
     }
     if (tc.function?.arguments) {
-      (target[idx].function as any).__rawArgs =
-        ((target[idx].function as any).__rawArgs ?? '') + tc.function.arguments;
+      target[idx].function.__rawArgs =
+        (target[idx].function.__rawArgs ?? '') + tc.function.arguments;
     }
   }
 }
@@ -30,7 +39,7 @@ export function finalizeToolCalls(toolCalls: StreamingToolCallAcc): ToolCallMess
       id: tc.id,
       function: {
         name: tc.function.name,
-        arguments: parseToolArgs((tc.function as any).__rawArgs),
+        arguments: parseToolArgs(tc.function.__rawArgs),
       },
     }];
   });

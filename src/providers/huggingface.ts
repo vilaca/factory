@@ -3,6 +3,11 @@ import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
   ProviderCapabilities, ChatOptions, ModelTier,
 } from './types.js';
+import {
+  mergeStreamedToolCalls,
+  finalizeToolCalls,
+  type StreamingToolCallAcc,
+} from './_openai/tool-calls.js';
 
 export class HuggingFaceProvider implements Provider {
   name = 'huggingface';
@@ -71,7 +76,7 @@ export class HuggingFaceProvider implements Provider {
         signal: options?.signal,
       } as any);
 
-      let toolCalls: ChatChunk['tool_calls'] = undefined;
+      let toolCalls: StreamingToolCallAcc | undefined;
 
       for await (const chunk of stream) {
         if (options?.signal?.aborted) break;
@@ -86,22 +91,7 @@ export class HuggingFaceProvider implements Provider {
 
         if (delta.tool_calls) {
           if (!toolCalls) toolCalls = [];
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            if (!toolCalls[idx]) {
-              toolCalls[idx] = {
-                id: tc.id,
-                function: { name: '', arguments: {} },
-              };
-            }
-            if (tc.function?.name) {
-              toolCalls[idx].function.name += tc.function.name;
-            }
-            if (tc.function?.arguments) {
-              (toolCalls[idx].function as any).__rawArgs =
-                ((toolCalls[idx].function as any).__rawArgs ?? '') + tc.function.arguments;
-            }
-          }
+          mergeStreamedToolCalls(toolCalls, delta.tool_calls as any[]);
         }
 
         if (chunk.choices?.[0]?.finish_reason === 'tool_calls' ||
@@ -115,20 +105,10 @@ export class HuggingFaceProvider implements Provider {
       }
 
       if (toolCalls && toolCalls.length > 0) {
-        const parsed = toolCalls.map(tc => {
-          let args: Record<string, unknown> = {};
-          const rawArgs = (tc.function as any).__rawArgs;
-          if (rawArgs) {
-            try { args = JSON.parse(rawArgs); } catch { args = { _raw: rawArgs }; }
-          } else if (typeof tc.function.arguments === 'object') {
-            args = tc.function.arguments;
-          }
-          return {
-            id: tc.id,
-            function: { name: tc.function.name, arguments: args },
-          };
-        });
-        yield { tool_calls: parsed, done: true };
+        const finalized = finalizeToolCalls(toolCalls);
+        if (finalized.length > 0) {
+          yield { tool_calls: finalized, done: true };
+        }
       }
     } catch (err: any) {
       throw new Error(`HuggingFace API error: ${err.message}`);

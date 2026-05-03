@@ -9,7 +9,7 @@ const TRIVIAL_PROMPTS = new Set([
 ]);
 const MAX_REPLAYS_PER_PROMPT = 2;
 
-export function isSubstantivePrompt(s: string): boolean {
+function isSubstantivePrompt(s: string): boolean {
   if (s.length >= 25) return true;
   return !TRIVIAL_PROMPTS.has(s.toLowerCase());
 }
