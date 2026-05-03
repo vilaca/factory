@@ -3,7 +3,9 @@ import type {
   ProviderCapabilities, ChatOptions, ModelPickerInfo, ModelTier,
 } from './types.js';
 import { CopilotAuthManager, inferCopilotCredentialKind } from './copilot-auth.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
+const PROVIDER_NAME = 'GitHub Copilot';
 const FALLBACK_MODELS = [
   'gpt-4.1',
   'gpt-4o',
@@ -42,7 +44,7 @@ export class CopilotProvider implements Provider {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GitHub Copilot API error ${res.status}: ${text}`);
+      throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${text}`);
     }
 
     const data = await res.json() as unknown;
@@ -78,135 +80,14 @@ export class CopilotProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
-    const body: any = {
-      model,
-      messages: messages.map(message => this.formatMessage(message)),
-      stream: true,
-    };
-
-    if (tools && tools.length > 0) {
-      body.tools = tools;
-    }
-    if (options?.maxTokens) {
-      body.max_tokens = options.maxTokens;
-    }
-    if (options?.temperature !== undefined) {
-      body.temperature = options.temperature;
-    }
-
-    const session = await this.auth.getSession(options?.signal);
-    if (!session.chatEnabled) {
-      throw new Error('GitHub Copilot chat is not enabled for this account.');
-    }
-
-    const res = await fetch(`${session.apiBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        ...this.auth.authHeaders(session.token),
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-      },
-      body: JSON.stringify(body),
+    const session = await this.requireChatSession(options?.signal);
+    yield* streamOpenAiChat({
+      url: `${session.apiBaseUrl}/chat/completions`,
+      headers: this.auth.authHeaders(session.token),
+      body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
       signal: options?.signal,
+      providerName: PROVIDER_NAME,
     });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GitHub Copilot API error ${res.status}: ${text}`);
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let toolCalls: ChatChunk['tool_calls'] = undefined;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed === 'data: [DONE]') continue;
-        if (!trimmed.startsWith('data: ')) continue;
-
-        let parsed: any;
-        try {
-          parsed = JSON.parse(trimmed.slice(6));
-        } catch {
-          continue;
-        }
-
-        const delta = parsed.choices?.[0]?.delta;
-        if (!delta) continue;
-
-        if (delta.content) {
-          yield { content: delta.content };
-        }
-
-        if (delta.tool_calls) {
-          if (!toolCalls) toolCalls = [];
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            if (!toolCalls[idx]) {
-              toolCalls[idx] = {
-                id: tc.id,
-                function: { name: '', arguments: {} },
-              };
-            }
-            if (tc.function?.name) {
-              toolCalls[idx].function.name += tc.function.name;
-            }
-            if (tc.function?.arguments) {
-              (toolCalls[idx].function as any).__rawArgs =
-                ((toolCalls[idx].function as any).__rawArgs ?? '') + tc.function.arguments;
-            }
-          }
-        }
-
-        const finishReason = parsed.choices?.[0]?.finish_reason;
-        if (finishReason === 'stop' || finishReason === 'tool_calls') {
-          const usage = parsed.usage
-            ? {
-              promptTokens: parsed.usage.prompt_tokens ?? 0,
-              completionTokens: parsed.usage.completion_tokens ?? 0,
-              totalTokens: parsed.usage.total_tokens ?? 0,
-            }
-            : undefined;
-          yield { done: true, usage };
-        }
-      }
-    }
-
-    if (toolCalls && toolCalls.length > 0) {
-      const parsed = toolCalls.flatMap(tc => {
-        if (!tc?.function || !tc.function.name) {
-          return [];
-        }
-        let args: Record<string, unknown> = {};
-        const rawArgs = (tc.function as any).__rawArgs;
-        if (rawArgs) {
-          try {
-            args = JSON.parse(rawArgs);
-          } catch {
-            args = { _raw: rawArgs };
-          }
-        }
-        return [{
-          id: tc.id,
-          function: { name: tc.function.name, arguments: args },
-        }];
-      });
-      if (parsed.length > 0) {
-        yield { tool_calls: parsed, done: true };
-      }
-    }
   }
 
   async chatNoStream(
@@ -215,109 +96,22 @@ export class CopilotProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
-    const body: any = {
-      model,
-      messages: messages.map(message => this.formatMessage(message)),
-      stream: false,
-    };
+    const session = await this.requireChatSession(options?.signal);
+    return sendOpenAiChat({
+      url: `${session.apiBaseUrl}/chat/completions`,
+      headers: this.auth.authHeaders(session.token),
+      body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
+      signal: options?.signal,
+      providerName: PROVIDER_NAME,
+    });
+  }
 
-    if (tools && tools.length > 0) {
-      body.tools = tools;
-    }
-    if (options?.maxTokens) {
-      body.max_tokens = options.maxTokens;
-    }
-    if (options?.temperature !== undefined) {
-      body.temperature = options.temperature;
-    }
-
-    const session = await this.auth.getSession(options?.signal);
+  private async requireChatSession(signal?: AbortSignal) {
+    const session = await this.auth.getSession(signal);
     if (!session.chatEnabled) {
       throw new Error('GitHub Copilot chat is not enabled for this account.');
     }
-
-    const res = await fetch(`${session.apiBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        ...this.auth.authHeaders(session.token),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: options?.signal,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`GitHub Copilot API error ${res.status}: ${text}`);
-    }
-
-    const data = await res.json() as any;
-    const choice = data.choices?.[0];
-
-    const result: ChatChunk = {
-      content: choice?.message?.content ?? undefined,
-      done: true,
-    };
-
-    if (choice?.message?.tool_calls) {
-      result.tool_calls = choice.message.tool_calls.flatMap((tc: any) => {
-        if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
-          return [];
-        }
-
-        return [{
-          id: tc.id,
-          function: {
-            name: tc.function.name,
-            arguments: typeof tc.function.arguments === 'string'
-              ? parseToolArgs(tc.function.arguments)
-              : tc.function.arguments,
-          },
-        }];
-      });
-    }
-
-    if (data.usage) {
-      result.usage = {
-        promptTokens: data.usage.prompt_tokens ?? 0,
-        completionTokens: data.usage.completion_tokens ?? 0,
-        totalTokens: data.usage.total_tokens ?? 0,
-      };
-    }
-
-    return result;
-  }
-
-  private formatMessage(msg: ChatMessage): Record<string, unknown> {
-    const formatted: Record<string, unknown> = {
-      role: msg.role,
-      content: msg.content,
-    };
-
-    if (msg.tool_calls) {
-      formatted.tool_calls = msg.tool_calls.map(tc => ({
-        id: tc.id ?? `call_${Math.random().toString(36).slice(2, 10)}`,
-        type: 'function',
-        function: {
-          name: tc.function.name,
-          arguments: JSON.stringify(tc.function.arguments),
-        },
-      }));
-    }
-
-    if (msg.role === 'tool' && msg.tool_call_id) {
-      formatted.tool_call_id = msg.tool_call_id;
-    }
-
-    return formatted;
-  }
-}
-
-function parseToolArgs(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
+    return session;
   }
 }
 
