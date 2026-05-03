@@ -31,6 +31,11 @@ import {
 } from './cli/picker.js';
 import { selectStartupSession } from './cli/startup-menu.js';
 
+const DEBUG = process.env.FACTORY_DEBUG === '1';
+function dbg(message: string): void {
+  if (DEBUG) process.stderr.write(`[factory:debug] ${message}\n`);
+}
+
 async function main(): Promise<void> {
   const cliArgs = parseArgs(process.argv.slice(2));
 
@@ -67,7 +72,9 @@ async function main(): Promise<void> {
     const fallbackDefault = startupOptions[0]
       ? { provider: startupOptions[0].descriptor.name }
       : { provider: 'copilot' as StartupProviderName };
+    dbg(`opening picker (${recentSessions.length} recent, ${startupOptions.length} providers)`);
     const selection = await selectStartupSession(recentSessions, startupOptions, defaultFromLast ?? fallbackDefault);
+    dbg(`picker returned provider=${selection.provider} model=${selection.model ?? '<none>'}`);
     providerName = selection.provider;
     resumeModel = selection.model ?? null;
   }
@@ -77,9 +84,11 @@ async function main(): Promise<void> {
   let availableModels: string[] | null = descriptor ? probedModels.get(descriptor.name) ?? null : null;
 
   try {
+    dbg(`ensureAuth flow=${descriptor?.authFlow ?? 'no-descriptor'}`);
     const auth: AuthResult = descriptor
       ? await ensureAuth(descriptor, config, cliArgs.token)
       : { shouldSave: false };
+    dbg(`ensureAuth ok shouldSave=${auth.shouldSave}`);
 
     provider = createProvider(providerName, {
       host: config.host,
@@ -88,15 +97,19 @@ async function main(): Promise<void> {
       googleAiStudioAuthMode: auth.authMode,
       accountId: auth.accountId,
     });
+    dbg(`createProvider ok`);
 
     if (!availableModels || provider.getDisplayModelName || provider.getModelPickerInfo) {
+      dbg(`listModels (probe ${availableModels ? 'present but re-listing' : 'missing'})`);
       availableModels = await provider.listModels();
     }
+    dbg(`availableModels.length=${availableModels?.length ?? 0}`);
 
     if (descriptor) {
       await saveCredentialsAfterModelDiscovery(descriptor, auth, availableModels.length > 0);
     }
   } catch (err: any) {
+    dbg(`startup error: ${err.message}`);
     appendProviderLog({ provider: providerName, category: 'startup', action: 'startup-error', outcome: 'error', detail: err.message });
     if (providerName === 'ollama') {
       console.log(renderError('Cannot connect to Ollama. Is it running? (ollama serve)'));
@@ -111,14 +124,20 @@ async function main(): Promise<void> {
   let model: string;
   if (config.model) {
     model = config.model;
+    dbg(`model from config: ${model}`);
   } else if (resumeModel && availableModels?.includes(resumeModel)) {
     model = resumeModel;
+    dbg(`resuming model from picker: ${model}`);
   } else {
     const lastModelForProvider = lastSession?.provider === providerName ? lastSession.model : null;
+    dbg(`opening selectModel (default=${lastModelForProvider ?? '<none>'})`);
     model = await selectModel(availableModels ?? [], lastModelForProvider, provider);
+    dbg(`selectModel returned: ${model}`);
   }
 
+  dbg(`validating model capabilities for ${model}`);
   const validation = await validateModelToolSupport(provider, model);
+  dbg(`validation mode=${validation.mode}`);
   if (validation.mode === 'unreachable') {
     console.log(renderError(validation.reason));
     process.exit(1);

@@ -222,17 +222,31 @@ export async function selectStartupSession(
     providerOptions.findIndex(o => o.descriptor.name === defaultSelection?.provider),
   );
 
+  const debug = process.env.FACTORY_DEBUG === '1';
+  const dbg = (msg: string): void => {
+    if (debug) process.stderr.write(`[factory:debug] startup-menu: ${msg}\n`);
+  };
+
   let result: StartupSelection | null = null;
   const inkApp = render(
     <StartupMenuApp
       recentSessions={recentSessions}
       providerOptions={providerOptions}
       defaultProviderIndex={defaultProviderIndex}
-      onResolve={(sel) => { result = sel; }}
+      onResolve={(sel) => { dbg(`onResolve sel=${JSON.stringify(sel)}`); result = sel; }}
     />,
   );
+  dbg('rendered, waiting for exit');
   await inkApp.waitUntilExit();
+  dbg(`waitUntilExit resolved, result=${JSON.stringify(result)}`);
   inkApp.unmount();
+  // Ink keeps stdin in raw/paused state in some terminals; restore it
+  // explicitly so subsequent readline-based prompts (selectModel) work.
+  if (process.stdin.isTTY && process.stdin.setRawMode) {
+    process.stdin.setRawMode(false);
+  }
+  process.stdin.resume();
+  dbg('stdin restored, returning');
   if (result === null) exitStartupSelection();
   return result;
 }
