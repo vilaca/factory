@@ -40,6 +40,7 @@ export interface Config {
   host?: string;
   token?: string;
   huggingfaceToken?: string;
+  anthropicToken?: string;
   copilotToken?: string;
   githubToken?: string;
   openrouterToken?: string;

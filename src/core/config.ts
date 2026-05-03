@@ -48,7 +48,7 @@ function validateConfig(data: unknown, filePath: string): Config {
   }
   const obj = data as Record<string, unknown>;
 
-  for (const key of ['provider', 'model', 'host', 'token', 'huggingfaceToken', 'copilotToken', 'githubToken', 'openrouterToken', 'vercelToken', 'opencodeZenToken', 'googleAiStudioToken', 'mistralToken', 'codestralToken', 'cerebrasToken', 'groqToken', 'cohereToken', 'workersAiToken', 'workersAiAccountId'] as const) {
+  for (const key of ['provider', 'model', 'host', 'token', 'huggingfaceToken', 'anthropicToken', 'copilotToken', 'githubToken', 'openrouterToken', 'vercelToken', 'opencodeZenToken', 'googleAiStudioToken', 'mistralToken', 'codestralToken', 'cerebrasToken', 'groqToken', 'cohereToken', 'workersAiToken', 'workersAiAccountId'] as const) {
     if (obj[key] !== undefined && typeof obj[key] !== 'string') {
       throw new Error(`${filePath}: "${key}" must be a string`);
     }
@@ -187,6 +187,7 @@ function mergeConfigs(...configs: Config[]): Config {
     if (config.host !== undefined) result.host = config.host;
     if (config.token !== undefined) result.token = config.token;
     if (config.huggingfaceToken !== undefined) result.huggingfaceToken = config.huggingfaceToken;
+    if (config.anthropicToken !== undefined) result.anthropicToken = config.anthropicToken;
     if (config.copilotToken !== undefined) result.copilotToken = config.copilotToken;
     if (config.githubToken !== undefined) result.githubToken = config.githubToken;
     if (config.openrouterToken !== undefined) result.openrouterToken = config.openrouterToken;

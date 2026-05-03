@@ -3,6 +3,7 @@ import type { Config } from '../core/config-types.js';
 export type StartupProviderName =
   | 'ollama'
   | 'huggingface'
+  | 'anthropic'
   | 'copilot'
   | 'openrouter'
   | 'vercel'
@@ -68,6 +69,19 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     inputPrompt: '  Enter HuggingFace API token: ',
     missingError: 'HuggingFace API token required.',
     noModelsMessage: 'No HuggingFace models available; API token was not saved.',
+  },
+  anthropic: {
+    name: 'anthropic',
+    label: 'Anthropic',
+    aliases: ['anthropic', 'claude'],
+    configTokenKey: 'anthropicToken',
+    envVars: ['ANTHROPIC_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'Anthropic API key required.',
+    inputPrompt: '  Enter Anthropic API key: ',
+    missingError: 'Anthropic API key required.',
   },
   copilot: {
     name: 'copilot',

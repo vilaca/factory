@@ -106,13 +106,11 @@ interface ProviderSelectionResult {
 export function buildPickerOptions(
   probedModels: Map<StartupProviderName, string[] | null>,
 ): PickerOption[] {
-  // TODO: Give Anthropic the same startup-picker/auth-prompt/save-config
-  // flow parity as the other hosted providers.
   return DESCRIPTOR_LIST.flatMap(descriptor => {
     const models = probedModels.get(descriptor.name) ?? null;
     if (descriptor.showInPicker === 'when-reachable' && !models) return [];
     return [{ descriptor, models: models ?? undefined }];
-  });
+  }).sort((a, b) => a.descriptor.label.localeCompare(b.descriptor.label));
 }
 
 export async function selectProvider(
