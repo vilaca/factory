@@ -40,6 +40,7 @@ export function App(props: AppProps): React.ReactElement {
     runningTool,
     streamingText,
     permissionRequest,
+    pendingToolCall,
     plannedCalls,
     planMode,
     model,
@@ -164,7 +165,12 @@ export function App(props: AppProps): React.ReactElement {
 
   return (
     <Box flexDirection="column">
-      <ConversationDisplay items={items} streamingText={streamingText} spinner={spinner} />
+      <ConversationDisplay
+        items={items}
+        streamingText={streamingText}
+        pendingToolCall={pendingToolCall}
+        spinner={spinner}
+      />
 
       {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} />}
 

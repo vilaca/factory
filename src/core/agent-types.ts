@@ -19,7 +19,7 @@ export type AgentEvent =
   | { type: 'text-chunk'; content: string }
   | { type: 'text-done'; fullContent: string }
   | { type: 'tool-call-start'; toolName: string; args: Record<string, unknown> }
-  | { type: 'tool-call-result'; toolName: string; result: ToolResult }
+  | { type: 'tool-call-result'; toolName: string; args: Record<string, unknown>; result: ToolResult }
   | { type: 'tool-call-denied'; toolName: string; args: Record<string, unknown> }
   | { type: 'tool-call-recovered'; count: number; source: 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag' }
   | { type: 'tool-result-imitation-stripped'; count: number }

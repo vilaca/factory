@@ -40,10 +40,15 @@ export function handleAgentEvent(
     case 'tool-call-start': {
       deps.setThinking(false);
       deps.setRunningTool(event.toolName);
-      deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args });
+      // Hold the call in the dynamic region instead of committing it to
+      // <Static> immediately. We don't yet know whether it's going to
+      // resolve as ok/denied, and Static can't re-render past items.
+      deps.setPendingToolCall({ toolName: event.toolName, args: event.args });
       break;
     }
     case 'tool-call-result': {
+      deps.setPendingToolCall(null);
+      deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'ok' });
       deps.addItem({
         kind: 'tool-result',
         id: deps.nextId(),
@@ -61,7 +66,8 @@ export function handleAgentEvent(
       break;
     }
     case 'tool-call-denied': {
-      deps.addItem({ kind: 'tool-denied', id: deps.nextId(), toolName: event.toolName, args: event.args });
+      deps.setPendingToolCall(null);
+      deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'denied' });
       deps.setRunningTool(null);
       break;
     }

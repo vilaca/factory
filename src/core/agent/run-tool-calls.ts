@@ -187,7 +187,7 @@ async function* tryReadCacheHit(
     ctx.conversation.addToolResult(message, toolCall.id);
   }
   const result: ToolResult = { success: true, output: message, displayOutput: message };
-  yield { type: 'tool-call-result', toolName: 'Read', result };
+  yield { type: 'tool-call-result', toolName: 'Read', args: args ?? {}, result };
   return true;
 }
 
@@ -315,13 +315,14 @@ async function* executeToolCall(
   try {
     const result = await tool.execute(args);
     recordResult(result.output, tool.name);
-    yield { type: 'tool-call-result', toolName: tool.name, result };
+    yield { type: 'tool-call-result', toolName: tool.name, args, result };
   } catch (err: any) {
     const errMsg = `Tool execution error: ${err.message}`;
     recordResult(errMsg, tool.name);
     yield {
       type: 'tool-call-result',
       toolName: tool.name,
+      args,
       result: { success: false, output: errMsg },
     };
   }

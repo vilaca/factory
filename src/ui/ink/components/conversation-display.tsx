@@ -1,13 +1,18 @@
 import React from 'react';
 import { Box, Static } from 'ink';
 import type { DisplayItem } from '../types.js';
-import { DisplayItemView } from './display-item-view.js';
+import type { ToolCallSummary } from '../types.js';
+import { DisplayItemView, ToolCallLine } from './display-item-view.js';
 import { AssistantText } from './assistant-text.js';
 import { Spinner } from './spinner.js';
 
 export interface ConversationDisplayProps {
   items: DisplayItem[];
   streamingText: string;
+  /** Tool call rendered live in the dynamic region while we wait for the
+   * permission decision / execution to resolve. Once resolved it's flushed
+   * into items[] (and thus Static) as the final tool-call entry. */
+  pendingToolCall?: ToolCallSummary | null;
   spinner?: { label: string; color: string };
 }
 
@@ -30,6 +35,7 @@ function PanelLine({ children }: { children: React.ReactNode }): React.ReactElem
 export function ConversationDisplay({
   items,
   streamingText,
+  pendingToolCall,
   spinner,
 }: ConversationDisplayProps): React.ReactElement {
   return (
@@ -44,6 +50,15 @@ export function ConversationDisplay({
       {streamingText && (
         <PanelLine>
           <AssistantText text={streamingText} streaming={true} />
+        </PanelLine>
+      )}
+      {pendingToolCall && (
+        <PanelLine>
+          <ToolCallLine
+            icon="🔧"
+            toolName={pendingToolCall.toolName}
+            args={pendingToolCall.args}
+          />
         </PanelLine>
       )}
       {spinner && (
