@@ -25,7 +25,6 @@ interface WorkersAiModel {
 export class WorkersAiProvider implements Provider {
   name = 'workersai';
   private readonly apiKey: string;
-  private readonly accountId: string;
   private readonly chatBaseUrl: string;
   private readonly modelSearchUrl: string;
   private modelsCache: WorkersAiModel[] | null = null;
@@ -41,7 +40,6 @@ export class WorkersAiProvider implements Provider {
     }
 
     this.apiKey = key;
-    this.accountId = accountId;
     this.chatBaseUrl = normalizeChatBaseUrl(options.host, accountId);
     this.modelSearchUrl = normalizeModelSearchUrl(options.host, accountId);
   }

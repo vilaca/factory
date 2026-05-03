@@ -19,7 +19,6 @@ interface CopilotModelEntry {
 export class CopilotProvider implements Provider {
   name = 'copilot';
   private auth: CopilotAuthManager;
-  private modelsCache: CopilotModelEntry[] | null = null;
 
   constructor(options: { token?: string; githubToken?: string; host?: string } = {}) {
     const envToken = process.env.GITHUB_COPILOT_API_KEY ?? process.env.COPILOT_API_KEY;
@@ -48,7 +47,6 @@ export class CopilotProvider implements Provider {
 
     const data = await res.json() as unknown;
     const models = extractModelEntries(data);
-    this.modelsCache = models;
     return models.length > 0 ? models.map(model => model.id) : [...FALLBACK_MODELS];
   }
 

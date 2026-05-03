@@ -15,6 +15,7 @@
     "build": "tsc",
     "build:test": "tsc -p tsconfig.test.json",
     "clean": "rm -rf dist dist-test *.tsbuildinfo",
+    "knip": "knip",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "lint": "eslint .",
@@ -43,6 +44,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
     "eslint": "^10.3.0",
+    "knip": "^6.11.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
