@@ -13,7 +13,7 @@ import { renderApp } from './ui/ink/index.js';
 import { buildSystemPrompt } from './core/system-prompt.js';
 import { validateModelToolSupport } from './core/model-validation.js';
 import { appendProviderLog, getLastSessionSelection, getRecentSessions, sessionsDir } from './core/session-log.js';
-import { renderWelcome, renderError, renderRecentSessions } from './ui/renderer.js';
+import { renderWelcome, renderError } from './ui/renderer.js';
 import { getGitBranch, isGitDirty } from './utils/git.js';
 import { parseArgs, printUsage } from './cli/args.js';
 import {
@@ -28,8 +28,8 @@ import {
   buildPickerOptions,
   findDefaultSelection,
   selectModel,
-  selectProvider,
 } from './cli/picker.js';
+import { selectStartupSession } from './cli/startup-menu.js';
 
 async function main(): Promise<void> {
   const cliArgs = parseArgs(process.argv.slice(2));
@@ -61,18 +61,15 @@ async function main(): Promise<void> {
   if (config.provider) {
     providerName = config.provider;
   } else {
-    const recentSessions = await getRecentSessions(16).catch(() => []);
-    const recentBlock = renderRecentSessions(recentSessions);
-    if (recentBlock) process.stdout.write(recentBlock);
-
+    const recentSessions = await getRecentSessions(10).catch(() => []);
     const startupOptions = buildPickerOptions(probedModels);
     const defaultFromLast = await findDefaultSelection(lastSession, probedModels, config, credentials);
     const fallbackDefault = startupOptions[0]
       ? { provider: startupOptions[0].descriptor.name }
       : { provider: 'copilot' as StartupProviderName };
-    const selection = await selectProvider(startupOptions, defaultFromLast ?? fallbackDefault);
+    const selection = await selectStartupSession(recentSessions, startupOptions, defaultFromLast ?? fallbackDefault);
     providerName = selection.provider;
-    resumeModel = selection.resumeLastModel ? defaultFromLast?.model ?? null : null;
+    resumeModel = selection.model ?? null;
   }
 
   const descriptor = descriptorByAlias(providerName) ?? (DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[providerName];

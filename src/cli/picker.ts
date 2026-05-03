@@ -40,12 +40,12 @@ export async function selectModel(models: string[], defaultModel?: string | null
   }
 
   console.log(renderModelList(choices));
-  console.log(chalk.cyan('    0.') + ' Exit');
+  console.log(chalk.cyan('    Q.') + ' Exit');
 
   const hasDefault = defaultModel ? choices.some(model => model.value === defaultModel) : false;
   const promptString = hasDefault
-    ? chalk.cyan(`  Enter model number or name (press Enter for ${chalk.bold(defaultModel)}, 0 to exit): `)
-    : chalk.cyan('  Enter model number or name (0 to exit): ');
+    ? chalk.cyan(`  Enter model number or name (press Enter for ${chalk.bold(defaultModel)}, Q to exit): `)
+    : chalk.cyan('  Enter model number or name (Q to exit): ');
 
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -93,14 +93,9 @@ export async function selectModel(models: string[], defaultModel?: string | null
   });
 }
 
-interface PickerOption {
+export interface PickerOption {
   descriptor: ProviderDescriptor;
   models?: string[];
-}
-
-interface ProviderSelectionResult {
-  provider: StartupProviderName;
-  resumeLastModel: boolean;
 }
 
 export function buildPickerOptions(
@@ -111,42 +106,6 @@ export function buildPickerOptions(
     if (descriptor.showInPicker === 'when-reachable' && !models) return [];
     return [{ descriptor, models: models ?? undefined }];
   }).sort((a, b) => a.descriptor.label.localeCompare(b.descriptor.label));
-}
-
-export async function selectProvider(
-  options: PickerOption[],
-  defaultSelection?: { provider: StartupProviderName; model?: string },
-): Promise<ProviderSelectionResult> {
-  const defaultProvider = defaultSelection?.provider ?? options[0]?.descriptor.name ?? 'copilot';
-  console.log(chalk.bold('\n  Select a provider:'));
-  options.forEach((option, index) => {
-    console.log(chalk.cyan(`    ${index + 1}.`) + ` ${option.descriptor.label}`);
-  });
-  console.log(chalk.cyan('    0.') + ' Exit');
-
-  const defaultLabel = options.find(o => o.descriptor.name === defaultProvider)?.descriptor.label ?? defaultProvider;
-  const providerPrompt = defaultSelection?.model
-    ? chalk.cyan(`  Enter provider number or name (press Enter for ${chalk.bold(`${defaultLabel} / ${defaultSelection.model}`)}, 0 to exit): `)
-    : chalk.cyan(`  Enter provider number or name (press Enter for ${chalk.bold(defaultLabel)}, 0 to exit): `);
-
-  const answer = (await promptText(providerPrompt)).toLowerCase();
-  if (isExitSelection(answer)) exitStartupSelection();
-  if (answer === '') {
-    return { provider: defaultProvider, resumeLastModel: Boolean(defaultSelection?.model) };
-  }
-
-  const byNumber = Number.parseInt(answer, 10);
-  if (!Number.isNaN(byNumber) && byNumber >= 1 && byNumber <= options.length) {
-    return { provider: options[byNumber - 1].descriptor.name, resumeLastModel: false };
-  }
-
-  const matched = options.find(o => o.descriptor.aliases.includes(answer));
-  if (matched) {
-    return { provider: matched.descriptor.name, resumeLastModel: false };
-  }
-
-  console.log(chalk.dim(`  Provider "${answer}" not recognized, using ${defaultLabel}.`));
-  return { provider: defaultProvider, resumeLastModel: Boolean(defaultSelection?.model) };
 }
 
 export async function findDefaultSelection(

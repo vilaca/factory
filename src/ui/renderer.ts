@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
-import type { RecentSession, SessionErrorStatus } from '../core/session-log.js';
 
 // marked-terminal v7's `text` renderer ignores marked v15's `tokens` array on
 // text tokens, so inline formatting (bold/italic/code/links) is dropped inside
@@ -62,36 +61,6 @@ export function renderWelcome(
 
 export function renderError(message: string): string {
   return chalk.red.bold('  Error: ') + chalk.red(message);
-}
-
-const STATUS_COLORS: Record<SessionErrorStatus, (s: string) => string> = {
-  throttle: chalk.yellow,
-  quota: chalk.red,
-  permission: chalk.red,
-  error: chalk.red,
-};
-
-const STATUS_LABELS: Record<SessionErrorStatus, string> = {
-  throttle: 'throttled',
-  quota: 'out of quota',
-  permission: 'permission denied',
-  error: 'error',
-};
-
-export function renderRecentSessions(sessions: RecentSession[]): string {
-  if (sessions.length === 0) return '';
-  const lines = ['', chalk.bold('  Recent sessions:'), ''];
-  const width = sessions.length.toString().length;
-  sessions.forEach((session, i) => {
-    const num = chalk.dim((i + 1).toString().padStart(width) + '.');
-    const id = `${session.provider} / ${session.model}`;
-    const status = session.status
-      ? '  ' + STATUS_COLORS[session.status](`(${STATUS_LABELS[session.status]})`)
-      : '';
-    lines.push(`    ${num} ${id}${status}`);
-  });
-  lines.push('');
-  return lines.join('\n');
 }
 
 export interface ModelListItem {
