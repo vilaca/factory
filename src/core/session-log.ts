@@ -233,14 +233,20 @@ function classifyErrorMessage(message: string): SessionErrorStatus {
 }
 
 /**
- * Returns the most recent `limit` sessions, newest first. Each entry includes
- * provider+model from session-start; status is set only when the session
- * recorded a model-side error (rate-limit, quota, permission, or other).
+ * Returns up to `limit` recent sessions, newest first, deduplicated by
+ * provider+model — only the most recent session per pair survives. Sessions
+ * that recorded no user input are skipped (e.g. abandoned probes from tests
+ * or crashes before the first prompt). Status is set only when the surviving
+ * session recorded a model-side error.
  */
 export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
   const sessions = await listSessionLogs();
+  const seen = new Set<string>();
   const out: RecentSession[] = [];
-  for (const session of sessions.slice(0, limit)) {
+
+  for (const session of sessions) {
+    if (out.length >= limit) break;
+
     let raw: string;
     try {
       raw = await fs.promises.readFile(session.path, 'utf-8');
@@ -254,6 +260,7 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
     let model = '';
     let startedAt = '';
     let lastErrorMessage: string | null = null;
+    let userInputCount = 0;
 
     try {
       const first = JSON.parse(lines[0]);
@@ -268,11 +275,14 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
     if (!provider || !model) continue;
 
     // The latest model swap wins for the model field; the latest error (if
-    // any) wins for status.
+    // any) wins for status. Count user inputs to skip sessions that were
+    // started but never used.
     for (const line of lines.slice(1)) {
       try {
         const entry = JSON.parse(line);
-        if (entry.type === 'model-change' && typeof entry.to === 'string' && entry.to !== STARTUP_MODEL_PLACEHOLDER) {
+        if (entry.type === 'user-input') {
+          userInputCount++;
+        } else if (entry.type === 'model-change' && typeof entry.to === 'string' && entry.to !== STARTUP_MODEL_PLACEHOLDER) {
           model = entry.to;
         } else if (entry.type === 'agent-event' && entry.event?.type === 'error' && typeof entry.event.error?.message === 'string') {
           lastErrorMessage = entry.event.error.message;
@@ -281,6 +291,12 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
         // skip malformed lines
       }
     }
+
+    if (userInputCount === 0) continue;
+
+    const key = `${provider}/${model}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
 
     const status = lastErrorMessage ? classifyErrorMessage(lastErrorMessage) : undefined;
     out.push({ provider, model, startedAt, status });
