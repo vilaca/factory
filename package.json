@@ -6,9 +6,15 @@
   "bin": {
     "factory": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "build:test": "tsc -p tsconfig.test.json",
+    "clean": "rm -rf dist dist-test *.tsbuildinfo",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts",
