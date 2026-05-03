@@ -347,4 +347,69 @@ describe('saveGlobalConfig', () => {
       await fs.rm(configHome, { recursive: true, force: true });
     }
   });
+
+  it('writes config file with mode 0o600', { skip: process.platform === 'win32' }, async () => {
+    const prev = process.env.XDG_CONFIG_HOME;
+    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
+    process.env.XDG_CONFIG_HOME = configHome;
+
+    try {
+      await saveGlobalConfig({ token: 'secret' });
+      const stat = await fs.stat(path.join(configHome, 'factory', 'config.json'));
+      assert.strictEqual(stat.mode & 0o777, 0o600);
+      const dirStat = await fs.stat(path.join(configHome, 'factory'));
+      assert.strictEqual(dirStat.mode & 0o777, 0o700);
+    } finally {
+      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prev;
+      await fs.rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  it('repairs loose permissions on a pre-existing config', { skip: process.platform === 'win32' }, async () => {
+    const prev = process.env.XDG_CONFIG_HOME;
+    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
+    process.env.XDG_CONFIG_HOME = configHome;
+
+    try {
+      const dir = path.join(configHome, 'factory');
+      const file = path.join(dir, 'config.json');
+      await fs.mkdir(dir, { recursive: true, mode: 0o755 });
+      await fs.writeFile(file, '{"token":"old"}\n', { mode: 0o644 });
+      assert.strictEqual((await fs.stat(file)).mode & 0o777, 0o644);
+
+      await saveGlobalConfig({ token: 'new' });
+
+      assert.strictEqual((await fs.stat(file)).mode & 0o777, 0o600);
+      assert.strictEqual((await fs.stat(dir)).mode & 0o777, 0o700);
+      const cfg = await loadGlobalConfig();
+      assert.strictEqual(cfg.token, 'new');
+    } finally {
+      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prev;
+      await fs.rm(configHome, { recursive: true, force: true });
+    }
+  });
+
+  it('produces a valid JSON file under concurrent writes', async () => {
+    const prev = process.env.XDG_CONFIG_HOME;
+    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
+    process.env.XDG_CONFIG_HOME = configHome;
+
+    try {
+      await Promise.all([
+        saveGlobalConfig({ token: 'a' }),
+        saveGlobalConfig({ huggingfaceToken: 'b' }),
+      ]);
+      const cfg = await loadGlobalConfig();
+      // One of the writes wins last; either way, the file must be valid JSON
+      // (loadGlobalConfig would throw otherwise) and contain at least one of
+      // the two values.
+      assert.ok(cfg.token === 'a' || cfg.huggingfaceToken === 'b');
+    } finally {
+      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prev;
+      await fs.rm(configHome, { recursive: true, force: true });
+    }
+  });
 });

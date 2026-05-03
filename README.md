@@ -710,10 +710,7 @@ Still stuck? Check the [session logs](#session-logs) or [open an issue](https://
 
 1. **Bash Tool Execution**: The Bash tool executes arbitrary shell commands with your user permissions. Review commands carefully before approving, especially with models you don't trust.
 
-2. **API Key Storage**: Credentials are stored in plaintext in `~/.factory/config.json`. Ensure this file has appropriate permissions:
-   ```bash
-   chmod 600 ~/.factory/config.json
-   ```
+2. **API Key Storage**: Credentials are stored in plaintext in `~/.config/factory/config.json` (or `$XDG_CONFIG_HOME/factory/config.json`). The file is created with mode `0o600` and the directory with mode `0o700`; factory also repairs looser permissions on the next save. Credentials are not encrypted at rest, so anyone with access to your user account can read them.
 
 3. **File System Access**: The Read, Write, Edit, Glob, and Grep tools can access any file your user can. Use plan mode (`--plan`) for untrusted models.
 

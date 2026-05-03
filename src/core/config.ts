@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { randomBytes } from 'crypto';
 import type { Config } from './config-types.js';
 import { EXPERIMENTAL_FLAG_KEYS } from './config-types.js';
 
@@ -144,8 +145,24 @@ export async function saveGlobalConfig(config: Partial<Config>): Promise<Config>
   // merged raw object so unknown keys are not silently dropped.
   const merged = { ...existingRaw, ...config };
   const validated = validateConfig(merged, filePath);
-  await fs.mkdir(getGlobalConfigDir(), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(merged, null, 2) + '\n', 'utf-8');
+  const dir = getGlobalConfigDir();
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  // Atomic write: temp file (mode 0o600 from creation) -> rename. Crash
+  // mid-write leaves either old-good or new-good content, never corrupt.
+  const tmp = path.join(dir, `config.json.tmp-${process.pid}-${randomBytes(6).toString('hex')}`);
+  const data = JSON.stringify(merged, null, 2) + '\n';
+  try {
+    await fs.writeFile(tmp, data, { encoding: 'utf-8', mode: 0o600 });
+    await fs.rename(tmp, filePath);
+  } catch (err) {
+    await fs.unlink(tmp).catch(() => {});
+    throw err;
+  }
+  if (process.platform !== 'win32') {
+    // Repair legacy configs/dirs created by older versions with looser perms.
+    await fs.chmod(filePath, 0o600).catch(() => {});
+    await fs.chmod(dir, 0o700).catch(() => {});
+  }
   return validated;
 }
 
