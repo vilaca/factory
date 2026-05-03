@@ -54,6 +54,7 @@ factory -p anthropic            # Will prompt for API key if needed
   - [Permission System](#permission-system)
   - [Auto-Correction](#auto-correction)
   - [Session Logs](#session-logs)
+  - [Headless / Non-TTY Mode](#headless--non-tty-mode)
 - [Architecture](#architecture)
 - [Development](#development)
   - [Testing](#testing)
@@ -472,6 +473,30 @@ tail -f ~/.factory/sessions/2025-01-10T12-34-56-abc123.jsonl
 ⚠️ **Privacy Note:** Session logs may contain sensitive data including API responses, file contents, and command outputs. Review logs before sharing or storing in version control.
 
 Disable with `--no-log`.
+
+### Headless / Non-TTY Mode
+
+When stdin or stdout isn't a TTY (piped input, CI jobs, scripts), `factory` skips the interactive Ink UI and runs in headless mode: it reads stdin to EOF as a single user prompt, executes one agent turn, streams the assistant's text to stdout, and writes tool diagnostics to stderr.
+
+```bash
+echo "what does src/index.ts do?" | factory -p ollama -m qwen2.5-coder
+```
+
+**Permissions in headless mode.** There's no TTY to answer permission prompts, so any tool that isn't pre-allowed will be denied and the process exits with code 3. To grant access, list the tools in your config:
+
+```json
+{
+  "permissions": {
+    "allowAll": ["Read", "Glob", "Grep"]
+  }
+}
+```
+
+Be deliberate about which tools you allow — `Bash`, `Edit`, and `Write` execute side effects without confirmation in this mode.
+
+**Exit codes.** `0` success, `1` agent error, `2` empty stdin, `3` permission denied (no TTY), `4` turn limit, `5` token limit.
+
+Session logs are written exactly as in interactive mode, so headless runs are still inspectable in `~/.factory/sessions/`.
 
 ## Architecture
 
