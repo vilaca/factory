@@ -2,25 +2,14 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { DisplayItem } from '../types.js';
 import { formatArgValue } from '../format.js';
-import { renderMarkdown } from '../../renderer.js';
+import { AssistantText } from './assistant-text.js';
 
 export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactElement {
   switch (item.kind) {
     case 'user-input':
       return <Text color="green" bold>{`> ${item.text}`}</Text>;
-    case 'assistant-text': {
-      const body = item.streaming ? `${item.text}▌` : renderMarkdown(item.text);
-      return (
-        <Box flexDirection="row">
-          <Box width={2} flexShrink={0}>
-            <Text color="cyan">{item.streaming ? ' ' : '⏺'}</Text>
-          </Box>
-          <Box flexGrow={1} flexDirection="column">
-            <Text dimColor={item.streaming}>{body}</Text>
-          </Box>
-        </Box>
-      );
-    }
+    case 'assistant-text':
+      return <AssistantText text={item.text} streaming={item.streaming} />;
     case 'tool-call':
       return (
         <Box flexDirection="column">

@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Static, Text } from 'ink';
 import type { DisplayItem } from '../types.js';
 import { DisplayItemView } from './display-item-view.js';
+import { AssistantText } from './assistant-text.js';
 import { Spinner } from './spinner.js';
 
 export interface ConversationDisplayProps {
@@ -45,11 +46,7 @@ export function ConversationDisplay({
       </Static>
       {streamingText && (
         <PanelLine>
-          {/* Inline-nested Text so the caret follows the end of the streamed
-              text on its actual last line. A row-layout Box places the caret
-              at the right edge of the first line, which looks wrong on
-              multi-line output. */}
-          <Text>{streamingText}<Text color="cyan">▌</Text></Text>
+          <AssistantText text={streamingText} streaming={true} />
         </PanelLine>
       )}
       {spinner && (
