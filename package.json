@@ -1,7 +1,7 @@
 {
   "name": "factory",
   "version": "0.1.0",
-  "description": "Claude Code-like CLI for Ollama models",
+  "description": "Interactive terminal coding agent with tool use, plan mode, and pluggable LLM providers (local and cloud).",
   "main": "dist/index.js",
   "bin": {
     "factory": "dist/index.js"
