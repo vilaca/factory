@@ -41,6 +41,29 @@ export class Conversation {
   }
 
   /**
+   * Replace the most recent tool result in place. Used by the tool-call
+   * corrector so that a failed call followed by a corrected substitute
+   * resolves into a *single* tool_result keyed to the original tool_use id —
+   * appending a second tool_result would have no matching tool_use and the
+   * Anthropic API rejects the request.
+   *
+   * Falls back to appending if no prior tool result exists.
+   */
+  replaceLastToolResult(content: string, toolCallId?: string): void {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'tool') {
+        const msg: ChatMessage = { role: 'tool', content };
+        if (toolCallId) {
+          msg.tool_call_id = toolCallId;
+        }
+        this.messages[i] = msg;
+        return;
+      }
+    }
+    this.addToolResult(content, toolCallId);
+  }
+
+  /**
    * Replace all messages before the recency window with a summary message.
    * Keeps the last `keepCount` messages intact.
    */

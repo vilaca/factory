@@ -707,6 +707,66 @@ describe('Agent loop', () => {
         try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
       }
     });
+
+    it('records exactly one tool_result keyed to the original tool_use id after correction', async () => {
+      // Anthropic rejects requests where a tool_result has no matching
+      // tool_use in the previous assistant message. Before the fix, the
+      // corrector path appended a second tool_result (for the substituted
+      // call) on top of the failed call's tool_result, which violated that
+      // invariant. This test pins the fix.
+      const permissions = new PermissionManager();
+      permissions.allowAll('Read');
+
+      const tmpFp = path.join(os.tmpdir(), `oc-corr2-${crypto.randomUUID()}.txt`);
+      fs.writeFileSync(tmpFp, 'corrected file content');
+
+      try {
+        const provider = createMockProvider([
+          {
+            tool_calls: [{
+              // Provider-supplied id, like the real Anthropic stream.
+              id: 'toolu_test_orig_id',
+              function: { name: 'Read', arguments: { file_path: '/definitely-does-not-exist-zzz' } },
+            } as any],
+          },
+          { content: `{"name":"Read","arguments":{"file_path":${JSON.stringify(tmpFp)}}}` },
+          { content: 'Done.' },
+        ]);
+
+        const conversation = new Conversation('You are a test assistant.');
+        const events: AgentEvent[] = [];
+        const agent = runAgent('read it', {
+          provider,
+          model: 'mock-model',
+          conversation,
+          permissions,
+          toolRegistry: defaultRegistry,
+          enableCorrector: true,
+        });
+        for await (const ev of agent) {
+          events.push(ev);
+          if (ev.type === 'permission-request') ev.respond('allow');
+        }
+
+        const corrected = findEvents(events, 'tool-call-corrected');
+        assert.strictEqual(corrected.length, 1);
+
+        const msgs = conversation.getMessages();
+        const toolMsgs = msgs.filter(m => m.role === 'tool');
+        assert.strictEqual(toolMsgs.length, 1, 'expected a single tool_result after correction');
+        assert.strictEqual(toolMsgs[0].tool_call_id, 'toolu_test_orig_id');
+        assert.ok(
+          (toolMsgs[0].content as string).includes('corrected file content'),
+          'tool_result should carry the substituted output',
+        );
+        assert.ok(
+          (toolMsgs[0].content as string).includes('Tool corrector'),
+          'tool_result should carry the substitution preamble',
+        );
+      } finally {
+        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+      }
+    });
   });
 
   describe('compaction', () => {

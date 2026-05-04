@@ -136,7 +136,22 @@ export async function* runToolCalls(
           corrected: correction.call,
           reason: lastFailedResult.output.slice(0, 200),
         };
-        for await (const event of executeToolCall(correction.call, ctx)) {
+        // Forward the original tool_use id onto the corrected call. The
+        // corrected call's tool_result will *replace* the failed call's
+        // tool_result rather than appending a second one — Anthropic requires
+        // each tool_result to pair with a tool_use in the previous assistant
+        // message, and the model only ever emitted one tool_use here.
+        const correctedCall: ToolCallMessage = { ...correction.call, id: toolCall.id };
+        const origName = toolCall.function?.name ?? 'unknown';
+        const newName = correction.call.function?.name ?? 'unknown';
+        const errSnippet = lastFailedResult.output.slice(0, 500);
+        const prefix =
+          `[Tool corrector: original ${origName} call failed (${errSnippet}). ` +
+          `Substituted with ${newName}; output below.]\n\n`;
+        for await (const event of executeToolCall(correctedCall, ctx, {
+          replaceLastToolResult: true,
+          outputPrefix: prefix,
+        })) {
           if (event.type === 'tool-call-denied') {
             deniedCount++;
           }
@@ -226,9 +241,23 @@ export async function readFileForCorrector(call: ToolCallMessage): Promise<{ pat
   }
 }
 
+interface ExecuteToolCallOptions {
+  /**
+   * If true, replace the most recent tool_result in the conversation instead
+   * of appending. Used by the corrector path so that the original failed
+   * call's tool_result gets overwritten with the substituted call's output —
+   * keeping a 1:1 tool_use ↔ tool_result invariant for the Anthropic API.
+   * No effect under useUserResultFraming.
+   */
+  replaceLastToolResult?: boolean;
+  /** Prepended to the recorded output. */
+  outputPrefix?: string;
+}
+
 async function* executeToolCall(
   toolCall: ToolCallMessage,
   ctx: ToolLoopContext,
+  options?: ExecuteToolCallOptions,
 ): AsyncGenerator<AgentEvent> {
   const { conversation, permissions, toolRegistry, signal, useUserResultFraming, planMode } = ctx;
   const fnName = toolCall.function?.name;
@@ -236,11 +265,14 @@ async function* executeToolCall(
   const toolCallId = toolCall.id;
 
   const recordResult = (output: string, name?: string): void => {
+    const finalOutput = options?.outputPrefix ? options.outputPrefix + output : output;
     if (useUserResultFraming) {
       const label = name ?? fnName ?? 'unknown';
-      conversation.addUser(formatToolResultMessage(label, output));
+      conversation.addUser(formatToolResultMessage(label, finalOutput));
+    } else if (options?.replaceLastToolResult) {
+      conversation.replaceLastToolResult(finalOutput, toolCallId);
     } else {
-      conversation.addToolResult(output, toolCallId);
+      conversation.addToolResult(finalOutput, toolCallId);
     }
   };
 
