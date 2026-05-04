@@ -75,7 +75,6 @@ export function ToolCallLine({
 }): React.ReactElement {
   const summary = summarizeToolArgs(toolName, args);
   const nameColor = denied ? 'red' : 'cyan';
-  const chipBg = denied ? 'red' : 'gray';
   if (!summary) {
     return (
       <Text>
@@ -89,16 +88,14 @@ export function ToolCallLine({
         <Text>
           {icon} <Text color={nameColor} bold>{toolName}</Text>:
         </Text>
-        <Box width="100%" backgroundColor={chipBg}>
-          <Text color="white" strikethrough={denied}>{` ${summary} `}</Text>
-        </Box>
+        <Text color={denied ? 'red' : undefined}>{`    ${summary}`}</Text>
       </Box>
     );
   }
   return (
     <Text>
       {icon} <Text color={nameColor} bold>{toolName}</Text>:{' '}
-      <Text backgroundColor={chipBg} color="white" strikethrough={denied}>{` ${summary} `}</Text>
+      <Text color={denied ? 'red' : undefined}>{summary}</Text>
     </Text>
   );
 }
