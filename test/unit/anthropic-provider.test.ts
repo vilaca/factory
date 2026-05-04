@@ -85,4 +85,21 @@ describe('splitMessagesForAnthropic', () => {
     assert.strictEqual(msgs[2].content, 'follow-up');
     assert.strictEqual(msgs[4].content[0].tool_use_id, 'toolu_b');
   });
+
+  it('throws when a tool message is missing tool_call_id', () => {
+    // Used to silently emit tool_use_id="unknown" and let the API 400. Now
+    // we fail at the boundary so upstream bugs surface immediately.
+    const messages: ChatMessage[] = [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ id: 'toolu_a', function: { name: 'X', arguments: {} } }],
+      },
+      { role: 'tool', content: 'orphan' },
+    ];
+    assert.throws(
+      () => splitMessagesForAnthropic(messages),
+      /tool message has no tool_call_id/,
+    );
+  });
 });

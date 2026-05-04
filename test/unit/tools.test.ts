@@ -99,6 +99,22 @@ describe('Read tool', () => {
       cleanup(fp);
     }
   });
+
+  it('returns a structured error pointing at Glob/ls when the path is a directory', async () => {
+    const dir = path.join(os.tmpdir(), `oc-unit-readdir-${crypto.randomUUID()}`);
+    fs.mkdirSync(dir);
+    try {
+      const result = await read.execute({ file_path: dir });
+      assert.strictEqual(result.success, false);
+      assert.ok(result.output.includes('is a directory'));
+      assert.ok(result.output.includes('Glob'));
+      // No raw EISDIR leaking out — that error string is what tripped the
+      // corrector path before this guard existed.
+      assert.ok(!result.output.includes('EISDIR'));
+    } finally {
+      try { fs.rmdirSync(dir); } catch { /* ignore */ }
+    }
+  });
 });
 
 // ─── Write tool ─────────────────────────────────────────────────────────
