@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -99,9 +99,9 @@ async function tryGrep(
   }
 }
 
-async function execute(args: Record<string, unknown>): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const pattern = args.pattern as string;
-  const searchPath = (args.path as string) ?? process.cwd();
+  const searchPath = (args.path as string) ?? ctx?.cwd ?? process.cwd();
   const fileGlob = args.glob as string | undefined;
   const includeContent = (args.include_content as boolean) ?? false;
 

@@ -1,5 +1,10 @@
 import { spawn } from 'child_process';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+
+// Marker that the wrapped command emits on stdout so we can extract the
+// post-run $PWD without polluting the user-visible output. Random-ish prefix
+// to avoid colliding with anything a real command might emit.
+const CWD_SENTINEL = '__FACTORY_CWD_AFTER__';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -23,17 +28,27 @@ const definition: ToolDefinition = {
   },
 };
 
-async function execute(args: Record<string, unknown>): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const command = args.command as string;
   const timeout = (args.timeout as number) ?? 120000;
+  const cwd = ctx?.cwd ?? process.cwd();
 
   if (!command) {
     return { success: false, output: 'command is required' };
   }
 
+  // Wrap the user command so we can capture the final $PWD without disturbing
+  // the exit code. The user's command must run in the SAME shell as the
+  // printf below — otherwise `cd /foo` in a subshell wouldn't be visible to
+  // `$PWD`. We use a leading newline before the bookkeeping so commands that
+  // don't end in a newline (or that emit incomplete lines) still get a clean
+  // separator. Variable names use a `__factory_` prefix to avoid colliding
+  // with anything the user's command might set.
+  const wrapped = `${command}\n__factory_rc=$?\nprintf '\\n%s%s\\n' '${CWD_SENTINEL}:' "$PWD"\nexit $__factory_rc`;
+
   return new Promise((resolve) => {
-    const proc = spawn('sh', ['-c', command], {
-      cwd: process.cwd(),
+    const proc = spawn('sh', ['-c', wrapped], {
+      cwd,
       env: process.env,
       timeout,
     });
@@ -62,6 +77,17 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
     // see them separately without doubling the token cost on the common
     // case where stderr is empty.
     proc.on('close', (code) => {
+      // Strip the sentinel from stdout before showing the user/model. Look at
+      // the very tail (\\n SENTINEL : path \\n?) to avoid eating earlier text
+      // that might coincidentally contain the sentinel string.
+      let cwdAfter: string | undefined;
+      const sentinelRe = new RegExp(`\\n${CWD_SENTINEL}:([^\\n]*)\\n?$`);
+      const m = stdout.match(sentinelRe);
+      if (m) {
+        cwdAfter = m[1];
+        stdout = stdout.replace(sentinelRe, '');
+      }
+
       const combined = [stdout, stderr].filter(Boolean).join('\n');
       const truncated = combined.length > 50000
         ? combined.slice(0, 50000) + '\n...(output truncated)'
@@ -80,7 +106,10 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
       // failing tests, grep miss). Don't treat as a tool failure; let the
       // model interpret the exit code in the output. Real tool failures only
       // come from the 'error' event below (spawn / system error).
-      resolve({ success: true, output });
+      // Only surface cwdAfter when the command actually changed the dir —
+      // otherwise the agent loop wastefully re-renders refreshGitState etc.
+      const dirChanged = cwdAfter !== undefined && cwdAfter !== cwd;
+      resolve({ success: true, output, cwdAfter: dirChanged ? cwdAfter : undefined });
     });
 
     proc.on('error', (err) => {

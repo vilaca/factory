@@ -70,6 +70,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     fileCache: new FileCache(),
     baseSystemPrompt: input.baseSystemPrompt,
     pastHistory: [],
+    provider: opts.provider,
     model: opts.model,
     useTextToolFallback: input.useTextToolFallback,
     nativeToolSupport: opts.nativeToolSupport ?? true,
@@ -78,6 +79,9 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     experimental: input.initialExperimental,
     gitBranch: opts.gitBranch,
     gitDirty: input.initialGitDirty,
+    // Each tab snapshots process.cwd() at session start; subsequent tabs
+    // inherit it, but each tab can diverge via `cd` in Bash or `/cwd`.
+    cwd: process.cwd(),
     lastSubstantivePrompt: null,
     replayCounts: new Map(),
     tokenLimitReplayCounts: new Map(),

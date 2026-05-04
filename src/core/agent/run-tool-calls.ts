@@ -24,6 +24,12 @@ export interface ToolLoopContext {
   provider: Provider;
   model: string;
   userInput: string;
+  /** Mutable cwd holder for the per-tab working directory. Tools resolve
+   * relative paths against `.current`, and Bash updates it via `cwdAfter` so
+   * `cd` persists across calls within a turn. The agent loop syncs this back
+   * to RunRefs after the loop completes. Optional so headless callers can
+   * skip it. */
+  cwdRef?: { current: string };
 }
 
 export interface ToolLoopResult {
@@ -346,7 +352,13 @@ async function* executeToolCall(
   }
 
   try {
-    const result = await tool.execute(args);
+    const toolCtx = ctx.cwdRef ? { cwd: ctx.cwdRef.current } : undefined;
+    const result = await tool.execute(args, toolCtx);
+    // Bash signals cwd changes via cwdAfter; propagate so subsequent tools in
+    // this turn (and the next turn) see the new directory.
+    if (result.cwdAfter && ctx.cwdRef) {
+      ctx.cwdRef.current = result.cwdAfter;
+    }
     recordResult(result.output, tool.name);
     yield { type: 'tool-call-result', toolName: tool.name, args, result };
   } catch (err: any) {

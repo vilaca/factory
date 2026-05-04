@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -36,7 +36,7 @@ function formatNumberedLine(lineNum: number, line: string, padWidth: number): st
   return `${lineNum.toString().padStart(padWidth)} │ ${line}`;
 }
 
-async function execute(args: Record<string, unknown>): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const filePath = args.file_path as string;
   const offset = (args.offset as number) ?? 0;
   const limit = args.limit as number | undefined;
@@ -59,7 +59,7 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
   // resolve outside the allowed roots and surface them to the user even
   // when the call is permitted, so suspicious traversal attempts are
   // visible in the session log.
-  const resolved = path.resolve(filePath);
+  const resolved = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
 
   // Models routinely call Read on a directory expecting a listing; Node's
   // readFile then returns a raw EISDIR which is uninformative. Detect the

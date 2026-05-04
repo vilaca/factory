@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { glob as fsGlob } from 'fs/promises';
 import path from 'path';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
 // Convenience filter to skip the heaviest dirs by default. Not exhaustive
 // (build outputs like dist/, .next/, coverage/ are not listed) and not a
@@ -31,9 +31,9 @@ const definition: ToolDefinition = {
   },
 };
 
-async function execute(args: Record<string, unknown>): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const pattern = args.pattern as string;
-  const searchPath = (args.path as string) ?? process.cwd();
+  const searchPath = (args.path as string) ?? ctx?.cwd ?? process.cwd();
 
   if (!pattern) {
     return { success: false, output: 'pattern is required' };

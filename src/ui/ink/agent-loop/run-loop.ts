@@ -37,8 +37,12 @@ export async function runAgentLoopInternal(
     }, timeoutSec * 1000);
   }
 
+  // Pass a mutable holder so Bash's `cwdAfter` flows back into refs.cwd in
+  // real time (subsequent tools in the same turn see the new directory).
+  const cwdRef = { current: deps.refs.current.cwd };
+
   const agent = runAgent(userInput, {
-    provider: deps.provider,
+    provider: deps.refs.current.provider,
     model: deps.refs.current.model,
     conversation: deps.refs.current.conversation,
     permissions: deps.refs.current.permissions,
@@ -54,6 +58,7 @@ export async function runAgentLoopInternal(
     },
     fileCache: deps.refs.current.fileCache,
     signal: deps.refs.current.abort.signal,
+    cwdRef,
   });
 
   for await (const event of agent) {
@@ -67,6 +72,14 @@ export async function runAgentLoopInternal(
       markAutoRetryExhausted: () => { autoRetryExhaustedThisRun = true; },
       markTokenLimitHalt: () => { tokenLimitHaltThisRun = true; },
     });
+  }
+
+  // Persist any cwd change Bash made during this turn back into refs so the
+  // next turn (and the StatusBar) sees it. Surface the change so the user
+  // understands subsequent tool calls operate in the new directory.
+  if (deps.refs.current && cwdRef.current !== deps.refs.current.cwd) {
+    deps.addNotice('info', `📁 cwd → ${cwdRef.current}`);
+    deps.refs.current.cwd = cwdRef.current;
   }
 
   if (tokenLimitHaltThisRun) {

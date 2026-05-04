@@ -16,10 +16,20 @@ export interface StatusBarProps {
   queueLength: number;
   gitBranch?: string;
   gitDirty?: boolean | null;
+  /** Per-tab working directory. Shown as basename only — full path would
+   * crowd the bar; users can run /cwd to see the full path. */
+  cwd?: string;
+}
+
+function shortenCwd(cwd: string): string {
+  const home = process.env.HOME;
+  if (home && cwd === home) return '~';
+  if (home && cwd.startsWith(home + '/')) return '~/' + cwd.slice(home.length + 1).split('/').slice(-1)[0];
+  return cwd.split('/').filter(Boolean).slice(-1)[0] ?? cwd;
 }
 
 export function StatusBar(props: StatusBarProps): React.ReactElement {
-  const { planMode, state, providerName, model, totalTokens, tokensAreEstimate, contextWindow, sessionTurns, sessionToolCalls, queueLength, gitBranch, gitDirty } = props;
+  const { planMode, state, providerName, model, totalTokens, tokensAreEstimate, contextWindow, sessionTurns, sessionToolCalls, queueLength, gitBranch, gitDirty, cwd } = props;
   const tokenPct = totalTokens && contextWindow
     ? Math.round((totalTokens / contextWindow) * 100)
     : undefined;
@@ -32,6 +42,12 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
         {state === 'awaiting-permission' ? <Text color="yellow" bold>PERMISSION · </Text> : ''}
         {state === 'running' ? <Text color="green">running · </Text> : ''}
         {`${providerName}/${model}`}
+        {cwd && (
+          <>
+            {' · '}
+            <Text color="blue">{shortenCwd(cwd)}</Text>
+          </>
+        )}
         {gitBranch && (
           <>
             {' · '}

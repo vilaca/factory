@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -28,7 +28,7 @@ const definition: ToolDefinition = {
   },
 };
 
-async function execute(args: Record<string, unknown>): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const filePath = args.file_path as string;
   const oldString = args.old_string as string;
   const newString = args.new_string as string;
@@ -37,7 +37,7 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
   if (!oldString) return { success: false, output: 'old_string is required' };
   if (newString === undefined) return { success: false, output: 'new_string is required' };
 
-  const resolved = path.resolve(filePath);
+  const resolved = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
 
   try {
     const content = await fs.readFile(resolved, 'utf-8');

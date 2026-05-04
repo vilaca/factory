@@ -1,15 +1,11 @@
-import React, { useState } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import React from 'react';
+import { useApp, useInput } from 'ink';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config-types.js';
-import { ConversationDisplay } from './components/conversation-display.js';
-import { Separator } from './components/separator.js';
-import { StatusBar } from './components/status-bar.js';
-import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
-import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
-import { useAgentLoop } from './use-agent-loop.js';
-import { dispatchSlashCommand } from './slash-commands.js';
+import { Session } from './Session.js';
+import { TabsProvider } from './tabs/TabsContext.js';
+import { useTabs } from './tabs/use-tabs.js';
+import { TabStrip } from './tabs/TabStrip.js';
 
 export interface AppProps {
   model: string;
@@ -29,179 +25,63 @@ export interface AppProps {
 }
 
 export function App(props: AppProps): React.ReactElement {
+  return (
+    <TabsProvider>
+      <TabbedApp {...props} />
+    </TabsProvider>
+  );
+}
+
+function TabbedApp(props: AppProps): React.ReactElement {
+  const { tabs, activeId, openTab, closeTab, cycle, registry } = useTabs();
   const { exit } = useApp();
-  const [input, setInput] = useState('');
-  const agent = useAgentLoop(props);
 
-  const {
-    items,
-    state,
-    thinking,
-    compacting,
-    runningTool,
-    streamingText,
-    permissionRequest,
-    pendingToolCall,
-    plannedCalls,
-    planMode,
-    model,
-    sessionTurns,
-    sessionToolCalls,
-    lastUsage,
-    estimatedTokens,
-    queueLength,
-    gitBranch,
-    gitDirty,
-    refs,
-    addNotice,
-  } = agent;
-
-  // Keyboard: Esc aborts; Ctrl+C exits (raw mode swallows SIGINT, so we
-  // handle it explicitly); Up/Down navigates input history.
-  useInput((inputChar, key) => {
-    if (key.ctrl && inputChar === 'c') {
-      // Cancel any in-flight stream before exiting — otherwise the open HTTP
-      // socket keeps Node alive (and Ollama keeps generating on the GPU).
-      agent.abort();
-      exit();
+  // Parent-level hotkeys for tab management. Ink fires both this listener and
+  // the active Session's listener, so the keys here must not collide with the
+  // Session's keys (Ctrl+C, Esc, Up/Down). These do not.
+  // Note: terminals don't reliably send Ctrl+digit or Ctrl+Tab, so switch by
+  // index/cycle uses Ctrl+N/Ctrl+P plus the /switch slash command.
+  useInput((input, key) => {
+    if (!key.ctrl) return;
+    if (input === 't') {
+      openTab();
       return;
     }
-    if (key.escape && state === 'running') {
-      addNotice('warn', '⏸ Esc — aborting agent run.');
-      agent.abort();
+    if (input === 'w') {
+      if (tabs.length === 1) {
+        // Last tab: aborting the active session and exiting matches /exit.
+        const api = registry.get(activeId);
+        api?.abort();
+        exit();
+        setTimeout(() => process.exit(0), 1000).unref();
+        return;
+      }
+      const api = registry.get(activeId);
+      api?.abort();
+      closeTab(activeId);
       return;
     }
-    if (key.upArrow) {
-      const next = agent.historyUp(input);
-      if (next !== null) setInput(next);
+    if (input === 'n') {
+      cycle(1);
       return;
     }
-    if (key.downArrow) {
-      const next = agent.historyDown();
-      if (next !== null) setInput(next);
+    if (input === 'p') {
+      cycle(-1);
       return;
     }
   });
 
-  async function handleSubmit(value: string): Promise<void> {
-    const trimmed = value.trim();
-    setInput('');
-    agent.recordHistory(trimmed);
-    if (!trimmed) return;
-
-    if (state === 'running') {
-      // Slash commands always fire immediately — they are UI/state ops,
-      // not prompts for the agent. Only plain text gets queued.
-      if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ');
-        refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit });
-        return;
-      }
-      agent.queueInput(trimmed);
-      return;
-    }
-
-    if (state === 'awaiting-permission') {
-      // Submitted via TextInput while a permission is pending — route to resolver.
-      const decision = parsePermissionInput(trimmed);
-      agent.respondToPermission(decision);
-      return;
-    }
-
-    // Idle — process and drain queue.
-    await processIdleInput(trimmed);
-  }
-
-  async function processIdleInput(trimmed: string): Promise<void> {
-    if (!refs.current) return;
-
-    // Plan-mode approval shortcuts when a plan is queued.
-    if (refs.current.planMode && plannedCalls.length > 0) {
-      const kind = parsePlanInput(trimmed);
-      if (kind === 'approve') {
-        refs.current.sessionLogger?.logCommand('/approve', '');
-        await agent.approvePlan();
-        return;
-      }
-      if (kind === 'cancel') {
-        refs.current.sessionLogger?.logCommand('/cancel', '');
-        agent.cancelPlan();
-        addNotice('info', 'Plan dropped. Still in plan mode.');
-        return;
-      }
-      // 'revise' — non-slash input drops the plan and treats the input as a
-      // follow-up prompt; slash commands fall through to the dispatcher below.
-      if (!trimmed.startsWith('/')) {
-        agent.cancelPlan();
-        addNotice('info', '(revising plan...)');
-      }
-    }
-
-    if (trimmed.startsWith('/')) {
-      const [cmd, ...rest] = trimmed.split(' ');
-      refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
-      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit });
-      if (handled) return;
-    }
-
-    await agent.submitPrompt(trimmed);
-  }
-
-  // Render
-  const capabilities = props.provider.getCapabilities(model);
-  const inputAccentColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
-  const spinner = !permissionRequest && compacting
-    ? {
-        label: compacting.aggressive
-          ? 'Compacting (aggressive)…'
-          : 'Compacting context…',
-        color: 'yellow',
-      }
-    : !permissionRequest && runningTool
-    ? { label: `Running ${runningTool}…`, color: 'magenta' }
-    : !permissionRequest && thinking
-    ? { label: 'Thinking…', color: 'cyan' }
-    : undefined;
-
   return (
-    <Box flexDirection="column">
-      <ConversationDisplay
-        items={items}
-        streamingText={streamingText}
-        pendingToolCall={pendingToolCall}
-        spinner={spinner}
-      />
-
-      {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} />}
-
-      {planMode && plannedCalls.length > 0 && state === 'idle' && (
-        <PlanApprovalPanel count={plannedCalls.length} />
-      )}
-
-      <Separator />
-
-      <Box paddingX={1} width="100%">
-        <Text color={inputAccentColor} bold>{'> '}</Text>
-        <TextInput value={input} onChange={setInput} onSubmit={(value) => { void handleSubmit(value); }} />
-      </Box>
-
-      <Separator />
-
-      <StatusBar
-        planMode={planMode}
-        state={state}
-        providerName={props.provider.name}
-        model={model}
-        totalTokens={lastUsage?.totalTokens ?? estimatedTokens}
-        tokensAreEstimate={lastUsage?.totalTokens === undefined && estimatedTokens !== undefined}
-        contextWindow={capabilities.contextWindow}
-        sessionTurns={sessionTurns}
-        sessionToolCalls={sessionToolCalls}
-        queueLength={queueLength}
-        gitBranch={gitBranch}
-        gitDirty={gitDirty}
-      />
-    </Box>
+    <>
+      <TabStrip />
+      {tabs.map(tab => (
+        <Session
+          key={tab.id}
+          tabId={tab.id}
+          isActive={tab.id === activeId}
+          {...props}
+        />
+      ))}
+    </>
   );
 }

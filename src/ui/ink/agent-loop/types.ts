@@ -26,6 +26,10 @@ export interface RunRefs {
   fileCache: FileCache;
   baseSystemPrompt: string;
   pastHistory: string[];
+  /** Per-tab provider. Seeded from the launch provider; can be swapped via
+   * `/provider <name>`. Two tabs can hold the same Provider instance — they
+   * are stateless per call. */
+  provider: Provider;
   model: string;
   useTextToolFallback: boolean;
   nativeToolSupport: boolean;
@@ -34,6 +38,11 @@ export interface RunRefs {
   experimental: ExperimentalFlags;
   gitBranch: string | undefined;
   gitDirty: boolean | null;
+  /** Per-tab working directory. Tools resolve relative paths against this and
+   * spawn shells with this as their cwd. We never call process.chdir(), since
+   * concurrent tabs would race the global cwd. Updated by `cd` in Bash and by
+   * the `/cwd` slash command. */
+  cwd: string;
   lastSubstantivePrompt: string | null;
   replayCounts: Map<string, number>;
   tokenLimitReplayCounts: Map<string, number>;
@@ -78,6 +87,9 @@ export interface AgentLoopApi {
   pendingToolCall: ToolCallSummary | null;
   plannedCalls: ToolCallSummary[];
   planMode: boolean;
+  /** Display-name of the active provider, surfaced in the StatusBar so it
+   * follows the active tab when the user runs `/provider`. */
+  providerName: string;
   model: string;
   sessionTurns: number;
   sessionToolCalls: number;
@@ -88,6 +100,9 @@ export interface AgentLoopApi {
   queueLength: number;
   gitBranch: string | undefined;
   gitDirty: boolean | null;
+  /** Per-tab working directory, surfaced in the StatusBar. Updated by /cwd
+   * and by Bash when a command changes $PWD via `cd`. */
+  cwd: string;
   /** Read-only access to mutable settings/state for slash commands. */
   refs: { readonly current: RunRefs | null };
 
@@ -104,6 +119,11 @@ export interface AgentLoopApi {
   approvePlan(): Promise<void>;
   cancelPlan(): void;
   resetPermissions(): void;
+  setCwd(target: string): void;
+  /** Swap to another provider by name. The model can be set in one shot via
+   * "providerName:modelName" — useful so the user doesn't end up on a
+   * provider whose default model is invalid. */
+  setProviderByName(name: string, model?: string): Promise<void>;
   recordHistory(text: string): void;
   historyUp(currentInput: string): string | null;
   historyDown(): string | null;
@@ -121,7 +141,6 @@ export interface AgentLoopApi {
  */
 export interface AgentLoopDeps {
   refs: { current: RunRefs | null };
-  provider: Provider;
   agentConfig?: AgentConfig;
   addItem(item: DisplayItem): void;
   addNotice(level: NoticeLevel, text: string): void;
