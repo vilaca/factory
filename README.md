@@ -1,6 +1,6 @@
-# factory
+# factory 🏭
 
-An interactive coding agent for the terminal. Tool-using REPL with per-call permission prompts, plan mode, and streaming markdown.
+A coding agent for both interactive workflows and automation.
 
 Pick whichever fits your privacy, cost, and latency needs — local models ([llama.cpp](https://github.com/ggerganov/llama.cpp), [Ollama](https://ollama.ai)) or any of 13 cloud providers ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://codestral.mistral.ai), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)).
 
