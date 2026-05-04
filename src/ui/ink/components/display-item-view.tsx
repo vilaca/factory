@@ -51,6 +51,17 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
       if (item.level === 'info') return <Text dimColor>{item.text}</Text>;
       return <Text color={color}>{item.text}</Text>;
     }
+    case 'notice-block': {
+      const colorMap = { info: undefined, warn: 'yellow', danger: 'red', cyan: 'cyan' } as const;
+      return (
+        <Box flexDirection="column">
+          {item.lines.map((line, i) => {
+            if (line.level === 'info') return <Text key={i} dimColor>{line.text}</Text>;
+            return <Text key={i} color={colorMap[line.level]}>{line.text}</Text>;
+          })}
+        </Box>
+      );
+    }
     default:
       return <Text>{(item as any).text ?? ''}</Text>;
   }

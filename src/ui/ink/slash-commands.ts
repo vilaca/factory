@@ -102,7 +102,6 @@ export async function dispatchSlashCommand(
 }
 
 function printHelp(agent: AgentLoopApi): void {
-  agent.addNotice('cyan', 'Commands:');
   const lines: [string, string][] = [
     ['/exit, /quit, /q', 'Exit factory'],
     ['/clear', 'Clear conversation history'],
@@ -117,7 +116,13 @@ function printHelp(agent: AgentLoopApi): void {
     ['/exp [name on|off]', 'List or toggle experimental flags'],
     ['/help', 'Show this help'],
   ];
-  for (const [c, desc] of lines) agent.addNotice('info', `  ${c.padEnd(18)} ${desc}`);
+  agent.addNoticeBlock([
+    { level: 'cyan', text: 'Commands:' },
+    ...lines.map(([c, desc]) => ({
+      level: 'info' as const,
+      text: `  ${c.padEnd(18)} ${desc}`,
+    })),
+  ]);
 }
 
 function handleExpCommand(agent: AgentLoopApi, arg: string): void {
@@ -126,12 +131,14 @@ function handleExpCommand(agent: AgentLoopApi, arg: string): void {
   const exp = refs.current.experimental;
 
   if (!arg) {
-    agent.addNotice('cyan', 'Experimental flags:');
-    for (const key of EXPERIMENTAL_FLAG_KEYS) {
-      const state = exp[key] ? 'on' : 'off';
-      agent.addNotice('info', `  ${key.padEnd(18)} ${state}`);
-    }
-    agent.addNotice('info', 'Toggle: /exp <name> on|off');
+    agent.addNoticeBlock([
+      { level: 'cyan', text: 'Experimental flags:' },
+      ...EXPERIMENTAL_FLAG_KEYS.map((key) => ({
+        level: 'info' as const,
+        text: `  ${key.padEnd(18)} ${exp[key] ? 'on' : 'off'}`,
+      })),
+      { level: 'info', text: 'Toggle: /exp <name> on|off' },
+    ]);
     return;
   }
 
@@ -161,12 +168,18 @@ function printPlanQueue(agent: AgentLoopApi): void {
     agent.addNotice('info', 'No queued plan.');
     return;
   }
-  agent.addNotice('cyan', `Queued plan (${agent.plannedCalls.length} call${agent.plannedCalls.length === 1 ? '' : 's'}):`);
+  const lines: { level: 'info' | 'cyan'; text: string }[] = [
+    {
+      level: 'cyan',
+      text: `Queued plan (${agent.plannedCalls.length} call${agent.plannedCalls.length === 1 ? '' : 's'}):`,
+    },
+  ];
   agent.plannedCalls.forEach((p, i) => {
-    agent.addNotice('cyan', `  #${i + 1} ${p.toolName}`);
+    lines.push({ level: 'cyan', text: `  #${i + 1} ${p.toolName}` });
     for (const [k, v] of Object.entries(p.args)) {
-      agent.addNotice('info', `     ${k}: ${formatArgValue(v)}`);
+      lines.push({ level: 'info', text: `     ${k}: ${formatArgValue(v)}` });
     }
   });
-  agent.addNotice('info', '  Type y to approve, n to drop, or describe revisions.');
+  lines.push({ level: 'info', text: '  Type y to approve, n to drop, or describe revisions.' });
+  agent.addNoticeBlock(lines);
 }

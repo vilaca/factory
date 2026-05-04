@@ -13,6 +13,7 @@ export type DisplayItem =
   | { kind: 'tool-denied'; id: number; toolName: string }
   | { kind: 'tool-planned'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'notice'; id: number; text: string; level: 'info' | 'warn' | 'danger' | 'cyan' }
+  | { kind: 'notice-block'; id: number; lines: { text: string; level: 'info' | 'warn' | 'danger' | 'cyan' }[] }
   | { kind: 'permission-prompt'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'status'; id: number; turnsUsed: number; usage?: { totalTokens: number } };
 

@@ -66,6 +66,9 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   function addNotice(level: NoticeLevel, text: string): void {
     addItem({ kind: 'notice', id: nextId(), text, level });
   }
+  function addNoticeBlock(lines: { level: NoticeLevel; text: string }[]): void {
+    addItem({ kind: 'notice-block', id: nextId(), lines });
+  }
   function refreshTokenEstimate(): void {
     if (!refs.current) return;
     refs.current.contextManager.updateUsage(undefined);
@@ -346,6 +349,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     historyUp,
     historyDown,
     addNotice,
+    addNoticeBlock,
     setIdle,
     getRunState,
   };
