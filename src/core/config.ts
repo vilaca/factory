@@ -64,11 +64,6 @@ function validateConfig(data: unknown, filePath: string): Config {
       throw new Error(`${filePath}: "agent" must be an object`);
     }
     const agent = obj.agent as Record<string, unknown>;
-    if (agent.maxTurns !== undefined) {
-      if (typeof agent.maxTurns !== 'number' || agent.maxTurns < 1 || !Number.isFinite(agent.maxTurns)) {
-        throw new Error(`${filePath}: "agent.maxTurns" must be a number >= 1`);
-      }
-    }
     if (agent.compactionThreshold !== undefined) {
       if (typeof agent.compactionThreshold !== 'number' ||
           agent.compactionThreshold < 0 || agent.compactionThreshold > 1) {

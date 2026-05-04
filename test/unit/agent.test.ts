@@ -84,7 +84,6 @@ async function collectEvents(
   provider: Provider,
   opts?: {
     permissions?: PermissionManager;
-    maxTurns?: number;
     signal?: AbortSignal;
     onPermission?: (toolName: string) => PermissionDecision;
     enableCorrector?: boolean;
@@ -100,7 +99,6 @@ async function collectEvents(
     conversation,
     permissions,
     toolRegistry: defaultRegistry,
-    maxTurns: opts?.maxTurns,
     signal: opts?.signal,
     // Default off in tests so the corrector doesn't consume mock responses
     // unexpectedly. Specific corrector tests opt in.
@@ -243,31 +241,6 @@ describe('Agent loop', () => {
       const errors = findEvents(events, 'error');
       assert.ok(errors.length > 0);
       assert.ok((errors[0] as any).error.message.includes('NonExistent'));
-    });
-  });
-
-  describe('maxTurns limit', () => {
-    it('stops after maxTurns consecutive tool-calling turns', async () => {
-      // Create a provider that always returns tool calls
-      const responses: MockResponse[] = [];
-      for (let i = 0; i < 10; i++) {
-        responses.push({
-          tool_calls: [{ function: { name: 'Bash', arguments: { command: `echo ${i}` } } }],
-        });
-      }
-
-      const permissions = new PermissionManager();
-      permissions.allowAll('Bash');
-
-      const events = await collectEvents('loop forever', createMockProvider(responses), {
-        permissions,
-        maxTurns: 3,
-      });
-
-      const complete = findEvents(events, 'turn-complete');
-      assert.strictEqual(complete.length, 1);
-      assert.strictEqual((complete[0] as any).stopReason, 'turn-limit');
-      assert.strictEqual((complete[0] as any).turnsUsed, 3);
     });
   });
 

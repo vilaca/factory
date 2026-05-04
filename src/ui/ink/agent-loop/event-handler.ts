@@ -212,9 +212,7 @@ export function handleAgentEvent(
       if (event.usage) {
         deps.setLastUsage(event.usage);
       }
-      if (event.stopReason === 'turn-limit') {
-        deps.addNotice('warn', '(stopped: maximum turns reached)');
-      } else if (event.stopReason === 'token-limit') {
+      if (event.stopReason === 'token-limit') {
         ss.markTokenLimitHalt();
       }
       break;

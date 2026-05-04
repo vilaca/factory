@@ -3,7 +3,6 @@ import type { McpServerConfig } from '../mcp/types.js';
 export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
 
 export interface AgentConfig {
-  maxTurns?: number;
   compactionThreshold?: number;
   recencyWindow?: number;
   /** Hard ceiling per turn. When set, the runtime aborts the agent run after

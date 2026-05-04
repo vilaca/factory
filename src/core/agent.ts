@@ -7,7 +7,6 @@ import { runToolCalls } from './agent/run-tool-calls.js';
 import { maybeCompact } from './agent/compaction.js';
 import { BashDedupTracker } from './agent/bash-dedup.js';
 
-const DEFAULT_MAX_TURNS = 25;
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
 
@@ -16,7 +15,6 @@ export async function* runAgent(
   options: AgentOptions,
 ): AsyncGenerator<AgentEvent> {
   const { provider, model, conversation, permissions, toolRegistry, contextManager, signal } = options;
-  const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
   const useTextToolFallback = options.useTextToolFallback ?? false;
   const nativeToolSupport = options.nativeToolSupport ?? true;
   const planMode = options.planMode ?? false;
@@ -38,11 +36,6 @@ export async function* runAgent(
   while (true) {
     if (signal?.aborted) {
       yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
-      return;
-    }
-
-    if (turnsUsed >= maxTurns) {
-      yield { type: 'turn-complete', stopReason: 'turn-limit', turnsUsed, usage: lastUsage };
       return;
     }
 
