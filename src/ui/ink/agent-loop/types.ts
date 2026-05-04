@@ -71,6 +71,11 @@ export interface AgentLoopApi {
    * proper terminal scrollback. */
   streamingText: string;
   permissionRequest: PermissionRequestState | undefined;
+  /** In-flight tool call rendered in the dynamic region until result/denial
+   * resolves. Then it's committed to items[] (and Static) as a single
+   * tool-call entry with the right status — so the user sees one panel that
+   * morphs from running to ok/denied, instead of a separate denial panel. */
+  pendingToolCall: ToolCallSummary | null;
   plannedCalls: ToolCallSummary[];
   planMode: boolean;
   model: string;
@@ -132,6 +137,7 @@ export interface AgentLoopDeps {
   setSessionToolCalls(updater: (n: number) => number): void;
   setLastUsage(u: { totalTokens?: number } | undefined): void;
   setPermissionRequest(r: PermissionRequestState | undefined): void;
+  setPendingToolCall(v: ToolCallSummary | null): void;
   setPlannedCalls(updater: (prev: ToolCallSummary[]) => ToolCallSummary[]): void;
   /** Snapshot of plannedCalls used for the dedup check inside the
    * tool-call-planned handler. The orchestrator returns the value

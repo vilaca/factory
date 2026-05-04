@@ -48,6 +48,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [lastUsage, setLastUsage] = useState<{ totalTokens?: number } | undefined>();
   const [estimatedTokens, setEstimatedTokens] = useState<number | undefined>();
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequestState | undefined>();
+  const [pendingToolCall, setPendingToolCall] = useState<ToolCallSummary | null>(null);
   const [queueLength, setQueueLength] = useState(0);
   const [thinking, setThinking] = useState(false);
   const [compacting, setCompacting] = useState<{ aggressive: boolean } | null>(null);
@@ -155,6 +156,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       setSessionToolCalls,
       setLastUsage,
       setPermissionRequest,
+      setPendingToolCall,
       setPlannedCalls,
       getPlannedCalls: () => plannedCalls,
     };
@@ -322,6 +324,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     runningTool,
     streamingText,
     permissionRequest,
+    pendingToolCall,
     plannedCalls,
     planMode,
     model,

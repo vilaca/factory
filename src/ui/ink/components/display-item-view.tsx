@@ -10,8 +10,17 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
       return <Text color="green" bold>{`> ${item.text}`}</Text>;
     case 'assistant-text':
       return <AssistantText text={item.text} streaming={item.streaming} />;
-    case 'tool-call':
-      return <ToolCallLine icon="🔧" toolName={item.toolName} args={item.args} />;
+    case 'tool-call': {
+      const denied = item.status === 'denied';
+      return (
+        <ToolCallLine
+          icon={denied ? '🚫' : '🔧'}
+          toolName={item.toolName}
+          args={item.args}
+          denied={denied}
+        />
+      );
+    }
     case 'tool-result': {
       const lines = item.output.split('\n');
       // Empty success (e.g. Grep with zero matches) renders distinctly so it
@@ -27,8 +36,6 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
         </Box>
       );
     }
-    case 'tool-denied':
-      return <ToolCallLine icon="🚫" toolName={item.toolName} args={item.args} denied />;
     case 'tool-planned':
       return <ToolCallLine icon="📋" toolName={item.toolName} args={item.args} />;
     case 'notice': {
@@ -55,7 +62,7 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
 
 const INLINE_CHIP_THRESHOLD = 40;
 
-function ToolCallLine({
+export function ToolCallLine({
   icon,
   toolName,
   args,
