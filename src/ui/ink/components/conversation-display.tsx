@@ -5,6 +5,7 @@ import type { ToolCallSummary } from '../types.js';
 import { DisplayItemView, ToolCallLine } from './display-item-view.js';
 import { AssistantText } from './assistant-text.js';
 import { Spinner } from './spinner.js';
+import { Separator } from './separator.js';
 
 export interface ConversationDisplayProps {
   items: DisplayItem[];
@@ -20,13 +21,12 @@ export interface ConversationDisplayProps {
  * Items committed to <Static> get written to the terminal once and live in
  * its real scrollback — that's what lets the user scroll up while the model
  * is still streaming. A single outer Box around <Static> wouldn't work
- * (Static items are flushed above any dynamic parent), so each item gets a
- * left-bar accent instead. Visually it reads as one continuous conversation
- * panel without the re-render snapping to the bottom every tick.
+ * (Static items are flushed above any dynamic parent), so each item gets
+ * its own padded Box and turns are split by an inline <Separator />.
  */
 function PanelLine({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <Box borderStyle="round" borderColor="gray" paddingX={1} width="100%">
+    <Box paddingX={1} width="100%">
       {children}
     </Box>
   );
@@ -41,30 +41,42 @@ export function ConversationDisplay({
   return (
     <Box flexDirection="column">
       <Static items={items}>
-        {(item) => (
-          <PanelLine key={item.id}>
-            <DisplayItemView item={item} />
-          </PanelLine>
+        {(item, index) => (
+          <React.Fragment key={item.id}>
+            {index > 0 && <Separator />}
+            <PanelLine>
+              <DisplayItemView item={item} />
+            </PanelLine>
+          </React.Fragment>
         )}
       </Static>
       {streamingText && (
-        <PanelLine>
-          <AssistantText text={streamingText} streaming={true} />
-        </PanelLine>
+        <>
+          {items.length > 0 && <Separator />}
+          <PanelLine>
+            <AssistantText text={streamingText} streaming={true} />
+          </PanelLine>
+        </>
       )}
       {pendingToolCall && (
-        <PanelLine>
-          <ToolCallLine
-            icon="🔧"
-            toolName={pendingToolCall.toolName}
-            args={pendingToolCall.args}
-          />
-        </PanelLine>
+        <>
+          {items.length > 0 && !streamingText && <Separator />}
+          <PanelLine>
+            <ToolCallLine
+              icon="🔧"
+              toolName={pendingToolCall.toolName}
+              args={pendingToolCall.args}
+            />
+          </PanelLine>
+        </>
       )}
       {spinner && (
-        <PanelLine>
-          <Spinner label={spinner.label} color={spinner.color} />
-        </PanelLine>
+        <>
+          {items.length > 0 && !streamingText && !pendingToolCall && <Separator />}
+          <PanelLine>
+            <Spinner label={spinner.label} color={spinner.color} />
+          </PanelLine>
+        </>
       )}
     </Box>
   );
