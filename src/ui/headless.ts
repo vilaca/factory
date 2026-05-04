@@ -107,7 +107,6 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       permissions,
       toolRegistry: defaultRegistry,
       contextManager,
-      maxTurns: options.agentConfig?.maxTurns,
       useTextToolFallback: options.useTextToolFallback,
       nativeToolSupport: options.nativeToolSupport,
       planMode: options.planMode,
@@ -144,7 +143,6 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           break;
         case 'turn-complete':
           if (event.stopReason === 'error') exitCode = exitCode || 1;
-          else if (event.stopReason === 'turn-limit') exitCode = exitCode || 4;
           else if (event.stopReason === 'token-limit') exitCode = exitCode || 5;
           break;
       }

@@ -48,7 +48,6 @@ export async function runAgentLoopInternal(
     planMode: deps.refs.current.planMode,
     enableCorrector: deps.refs.current.enableCorrector,
     contextManager: deps.refs.current.contextManager,
-    maxTurns: deps.agentConfig?.maxTurns,
     experimental: {
       bashDedup: deps.refs.current.experimental.bashDedup,
       readCache: deps.refs.current.experimental.readCache,

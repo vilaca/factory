@@ -11,7 +11,6 @@ export type { PermissionDecision };
 export type StopReason =
   | 'completed'
   | 'user-abort'
-  | 'turn-limit'
   | 'token-limit'
   | 'error';
 
@@ -53,7 +52,6 @@ export interface AgentOptions {
   permissions: PermissionManager;
   toolRegistry: ToolRegistry;
   contextManager?: ContextManager;
-  maxTurns?: number;
   signal?: AbortSignal;
   useTextToolFallback?: boolean;
   nativeToolSupport?: boolean;

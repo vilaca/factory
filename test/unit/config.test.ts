@@ -47,7 +47,7 @@ describe('loadProjectConfig', () => {
       cohereToken: 'cohere-test',
       workersAiToken: 'workersai-test',
       workersAiAccountId: 'workersai-account-test',
-      agent: { maxTurns: 10, compactionThreshold: 0.7, recencyWindow: 4 },
+      agent: { compactionThreshold: 0.7, recencyWindow: 4 },
       permissions: { allowAll: ['Bash', 'Read'] },
     });
     await withTempProject(content, async (cwd) => {
@@ -66,7 +66,6 @@ describe('loadProjectConfig', () => {
       assert.strictEqual(cfg.cohereToken, 'cohere-test');
       assert.strictEqual(cfg.workersAiToken, 'workersai-test');
       assert.strictEqual(cfg.workersAiAccountId, 'workersai-account-test');
-      assert.strictEqual(cfg.agent?.maxTurns, 10);
       assert.deepStrictEqual(cfg.permissions?.allowAll, ['Bash', 'Read']);
     });
   });
@@ -103,15 +102,6 @@ describe('loadProjectConfig', () => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /compactionThreshold.*between 0 and 1/.test(err.message),
-      );
-    });
-  });
-
-  it('rejects negative maxTurns', async () => {
-    await withTempProject('{"agent": {"maxTurns": -3}}', async (cwd) => {
-      await assert.rejects(
-        () => loadProjectConfig(cwd),
-        (err: Error) => /maxTurns.*>= 1/.test(err.message),
       );
     });
   });
