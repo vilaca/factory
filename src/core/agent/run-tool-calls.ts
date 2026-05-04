@@ -149,7 +149,7 @@ export async function* runToolCalls(
           `[Tool corrector: original ${origName} call failed (${errSnippet}). ` +
           `Substituted with ${newName}; output below.]\n\n`;
         for await (const event of executeToolCall(correctedCall, ctx, {
-          replaceLastToolResult: true,
+          replaceLastToolResult: !ctx.useUserResultFraming,
           outputPrefix: prefix,
         })) {
           if (event.type === 'tool-call-denied') {
@@ -247,7 +247,8 @@ interface ExecuteToolCallOptions {
    * of appending. Used by the corrector path so that the original failed
    * call's tool_result gets overwritten with the substituted call's output —
    * keeping a 1:1 tool_use ↔ tool_result invariant for the Anthropic API.
-   * No effect under useUserResultFraming.
+   * Callers must pass false under useUserResultFraming, where results are
+   * recorded as user messages (no tool_result to replace).
    */
   replaceLastToolResult?: boolean;
   /** Prepended to the recorded output. */
