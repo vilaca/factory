@@ -307,7 +307,7 @@ async function* executeToolCall(
       permissions.allowAll(tool.name);
     } else if (decision === 'deny') {
       recordResult(`Tool call "${tool.name}" was denied by the user.`, tool.name);
-      yield { type: 'tool-call-denied', toolName: tool.name };
+      yield { type: 'tool-call-denied', toolName: tool.name, args };
       return;
     }
   }

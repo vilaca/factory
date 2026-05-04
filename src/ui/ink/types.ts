@@ -10,7 +10,7 @@ export type DisplayItem =
   | { kind: 'assistant-text'; id: number; text: string; streaming: boolean }
   | { kind: 'tool-call'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'tool-result'; id: number; toolName: string; output: string; success: boolean; empty?: boolean }
-  | { kind: 'tool-denied'; id: number; toolName: string }
+  | { kind: 'tool-denied'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'tool-planned'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'notice'; id: number; text: string; level: 'info' | 'warn' | 'danger' | 'cyan' }
   | { kind: 'notice-block'; id: number; lines: { text: string; level: 'info' | 'warn' | 'danger' | 'cyan' }[] }

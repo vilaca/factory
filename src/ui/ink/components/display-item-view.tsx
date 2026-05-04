@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { DisplayItem } from '../types.js';
-import { formatArgValue } from '../format.js';
+import { summarizeToolArgs } from '../format.js';
 import { AssistantText } from './assistant-text.js';
 
 export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactElement {
@@ -11,14 +11,7 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
     case 'assistant-text':
       return <AssistantText text={item.text} streaming={item.streaming} />;
     case 'tool-call':
-      return (
-        <Box flexDirection="column">
-          <Text color="cyan">▶ <Text bold>{item.toolName}</Text></Text>
-          {Object.entries(item.args).map(([k, v]) => (
-            <Text dimColor key={k}>    {k}: {formatArgValue(v)}</Text>
-          ))}
-        </Box>
-      );
+      return <ToolCallLine icon="🔧" toolName={item.toolName} args={item.args} />;
     case 'tool-result': {
       const lines = item.output.split('\n');
       // Empty success (e.g. Grep with zero matches) renders distinctly so it
@@ -35,16 +28,9 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
       );
     }
     case 'tool-denied':
-      return <Text dimColor>  (denied)</Text>;
+      return <ToolCallLine icon="🚫" toolName={item.toolName} args={item.args} denied />;
     case 'tool-planned':
-      return (
-        <Box flexDirection="column">
-          <Text color="cyan">[planned] <Text bold>{item.toolName}</Text></Text>
-          {Object.entries(item.args).map(([k, v]) => (
-            <Text dimColor key={k}>     {k}: {formatArgValue(v)}</Text>
-          ))}
-        </Box>
-      );
+      return <ToolCallLine icon="📋" toolName={item.toolName} args={item.args} />;
     case 'notice': {
       const colorMap = { info: undefined, warn: 'yellow', danger: 'red', cyan: 'cyan' } as const;
       const color = colorMap[item.level];
@@ -65,4 +51,47 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
     default:
       return <Text>{(item as any).text ?? ''}</Text>;
   }
+}
+
+const INLINE_CHIP_THRESHOLD = 40;
+
+function ToolCallLine({
+  icon,
+  toolName,
+  args,
+  denied,
+}: {
+  icon: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  denied?: boolean;
+}): React.ReactElement {
+  const summary = summarizeToolArgs(toolName, args);
+  const nameColor = denied ? 'red' : 'cyan';
+  const chipBg = denied ? 'red' : 'gray';
+  if (!summary) {
+    return (
+      <Text>
+        {icon} <Text color={nameColor} bold>{toolName}</Text>
+      </Text>
+    );
+  }
+  if (summary.length > INLINE_CHIP_THRESHOLD) {
+    return (
+      <Box flexDirection="column">
+        <Text>
+          {icon} <Text color={nameColor} bold>{toolName}</Text>:
+        </Text>
+        <Box width="100%" backgroundColor={chipBg}>
+          <Text color="white" strikethrough={denied}>{` ${summary} `}</Text>
+        </Box>
+      </Box>
+    );
+  }
+  return (
+    <Text>
+      {icon} <Text color={nameColor} bold>{toolName}</Text>:{' '}
+      <Text backgroundColor={chipBg} color="white" strikethrough={denied}>{` ${summary} `}</Text>
+    </Text>
+  );
 }
