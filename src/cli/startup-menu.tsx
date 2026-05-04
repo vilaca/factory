@@ -106,12 +106,16 @@ function StartupMenuApp({
   };
 
   useInput((input, key) => {
-    if (input === 'q' || input === 'Q' || (key.ctrl && input === 'c')) {
+    if (key.ctrl && input === 'c') {
       finish(null);
       return;
     }
 
     if (screen === 'recent') {
+      if (key.escape) {
+        finish(null);
+        return;
+      }
       if (key.upArrow) {
         setRecentIdx(i => Math.max(0, i - 1));
       } else if (key.downArrow) {
@@ -146,8 +150,12 @@ function StartupMenuApp({
       if (!isProviderOffline(providerIdx)) {
         finish({ provider: providerOptions[providerIdx].descriptor.name });
       }
-    } else if (key.escape && recentRows > 0) {
-      setScreen('recent');
+    } else if (key.escape) {
+      if (recentRows > 0) {
+        setScreen('recent');
+      } else {
+        finish(null);
+      }
     } else {
       const idx = indexForShortcut(input);
       if (idx >= 0 && idx < providerOptions.length && !isProviderOffline(idx)) {
@@ -186,7 +194,7 @@ function StartupMenuApp({
           label="Pick a different provider"
         />
         <Text> </Text>
-        <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 jump · Q exit'}</Text>
+        <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 jump · Esc exit'}</Text>
       </Box>
     );
   }
@@ -207,7 +215,7 @@ function StartupMenuApp({
       ))}
       <Text> </Text>
       <Text dimColor>
-        {`     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · ${recentRows > 0 ? 'Esc back · ' : ''}Q exit`}
+        {`     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · ${recentRows > 0 ? 'Esc back' : 'Esc exit'}`}
       </Text>
     </Box>
   );
@@ -270,7 +278,7 @@ function ModelMenuApp({ models, defaultModel, provider, onResolve }: ModelMenuPr
   };
 
   useInput((input, key) => {
-    if (input === 'q' || input === 'Q' || (key.ctrl && input === 'c')) {
+    if (key.escape || (key.ctrl && input === 'c')) {
       finish(null);
       return;
     }
@@ -305,7 +313,7 @@ function ModelMenuApp({ models, defaultModel, provider, onResolve }: ModelMenuPr
         );
       })}
       <Text> </Text>
-      <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · Q exit'}</Text>
+      <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · Esc exit'}</Text>
     </Box>
   );
 }
