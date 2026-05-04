@@ -37,12 +37,21 @@ export function Session(props: SessionProps): React.ReactElement {
   const [input, setInput] = useState('');
   const agent = useAgentLoop(props);
 
+  // <Static> can only be used once we know we're staying single-tab. Once a
+  // second tab has ever existed, switch to .map permanently — flipping back
+  // to Static after the second tab closes would cause Ink to re-flush the
+  // committed scrollback and double-print prior turns.
+  const everMultiTabRef = useRef(false);
+  const tabsCtx = useContext(TabsContext);
+  if (tabsCtx && tabsCtx.tabs.length > 1) everMultiTabRef.current = true;
+  const useStatic = !tabsCtx || (tabsCtx.tabs.length === 1 && !everMultiTabRef.current);
+
   // Register a stable getter with the tabs registry so consumers (TabStrip,
   // tab-management hotkeys, parent slash commands) can read this session's
   // current AgentLoopApi without re-registering on every render.
   const apiRef = useRef<AgentLoopApi>(agent);
   apiRef.current = agent;
-  const tabs = useContext(TabsContext);
+  const tabs = tabsCtx;
   const tabId = props.tabId;
   useEffect(() => {
     if (!tabs || tabId === undefined) return;
@@ -217,7 +226,7 @@ export function Session(props: SessionProps): React.ReactElement {
         streamingText={streamingText}
         pendingToolCall={pendingToolCall}
         spinner={spinner}
-        useStatic={!tabs || tabs.tabs.length === 1}
+        useStatic={useStatic}
       />
 
       {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} />}

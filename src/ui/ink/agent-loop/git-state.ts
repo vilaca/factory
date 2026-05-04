@@ -7,10 +7,11 @@ export async function refreshGitState(
   setGitDirtyState: (d: boolean | null) => void,
 ): Promise<void> {
   if (!deps.refs.current) return;
+  const cwd = deps.refs.current.cwd;
   try {
     const [branch, dirty] = await Promise.all([
-      getGitBranch(process.cwd()),
-      isGitDirty(process.cwd()),
+      getGitBranch(cwd),
+      isGitDirty(cwd),
     ]);
     const prevBranch = deps.refs.current.gitBranch;
     const prevDirty = deps.refs.current.gitDirty;
