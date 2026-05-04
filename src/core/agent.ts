@@ -183,6 +183,7 @@ export async function* runAgent(
           provider,
           model,
           userInput,
+          cwdRef: options.cwdRef,
         },
         callSignature,
         recovery,

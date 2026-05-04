@@ -1,10 +1,12 @@
 import { formatArgValue } from './format.js';
 import type { AgentLoopApi } from './use-agent-loop.js';
+import type { TabsContextValue } from './tabs/TabsContext.js';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../core/config-types.js';
 
 export interface SlashCommandContext {
   agent: AgentLoopApi;
   exit: () => void;
+  tabs?: TabsContextValue;
 }
 
 export async function dispatchSlashCommand(
@@ -12,7 +14,7 @@ export async function dispatchSlashCommand(
   arg: string,
   ctx: SlashCommandContext,
 ): Promise<boolean> {
-  const { agent, exit } = ctx;
+  const { agent, exit, tabs } = ctx;
   const refs = agent.refs;
   if (!refs.current) return false;
 
@@ -20,6 +22,14 @@ export async function dispatchSlashCommand(
     case '/exit':
     case '/quit':
     case '/q':
+      // With multiple tabs open, /exit closes the active one; only the last
+      // tab triggers a process exit. Without tabs context (legacy callers),
+      // fall through to the original exit-process behavior.
+      if (tabs && tabs.tabs.length > 1) {
+        agent.abort();
+        tabs.closeTab(tabs.activeId);
+        return true;
+      }
       // Abort any in-flight model stream first — without this, Ink unmounts
       // but Node sits waiting for the open HTTP socket to drain before
       // actually exiting, which looks like /q is hung.
@@ -31,6 +41,88 @@ export async function dispatchSlashCommand(
       // job, but this ensures the user always gets out promptly.
       setTimeout(() => process.exit(0), 1000).unref();
       return true;
+    case '/new': {
+      if (!tabs) {
+        agent.addNotice('warn', 'Tabs not available.');
+        return true;
+      }
+      const label = arg.trim() || undefined;
+      tabs.openTab(label);
+      return true;
+    }
+    case '/close': {
+      if (!tabs) {
+        agent.addNotice('warn', 'Tabs not available.');
+        return true;
+      }
+      if (tabs.tabs.length === 1) {
+        agent.addNotice('info', 'Last tab — use /exit to quit.');
+        return true;
+      }
+      agent.abort();
+      tabs.closeTab(tabs.activeId);
+      return true;
+    }
+    case '/tabs': {
+      if (!tabs) {
+        agent.addNotice('warn', 'Tabs not available.');
+        return true;
+      }
+      const lines: { level: 'cyan' | 'info'; text: string }[] = [
+        { level: 'cyan', text: `Open tabs (${tabs.tabs.length}):` },
+      ];
+      tabs.tabs.forEach((tab, i) => {
+        const marker = tab.id === tabs.activeId ? '●' : '○';
+        lines.push({ level: 'info', text: `  ${marker} ${i + 1}: ${tab.label}` });
+      });
+      lines.push({ level: 'info', text: 'Switch with /switch <n|label>, Ctrl+N (next), Ctrl+P (prev). Open with /new or Ctrl+T.' });
+      agent.addNoticeBlock(lines);
+      return true;
+    }
+    case '/switch': {
+      if (!tabs) {
+        agent.addNotice('warn', 'Tabs not available.');
+        return true;
+      }
+      const a = arg.trim();
+      if (!a) {
+        agent.addNotice('warn', `Usage: /switch <n|label>  (1..${tabs.tabs.length}, or tab label / prefix)`);
+        return true;
+      }
+      // Pure integer → index switch.
+      if (/^\d+$/.test(a)) {
+        const n = Number.parseInt(a, 10);
+        if (n < 1 || n > tabs.tabs.length) {
+          agent.addNotice('warn', `Tab ${n} doesn't exist (1..${tabs.tabs.length})`);
+          return true;
+        }
+        tabs.switchToIndex(n - 1);
+        return true;
+      }
+      // Exact label match — preferred when labels alone disambiguate.
+      const exact = tabs.tabs.filter(t => t.label === a);
+      if (exact.length === 1) {
+        tabs.switchTo(exact[0]!.id);
+        return true;
+      }
+      if (exact.length > 1) {
+        agent.addNotice('warn', `Multiple tabs labelled "${a}" — switch by index instead.`);
+        return true;
+      }
+      // Unique prefix match. Allows `/switch sa` for a tab labelled "sandbox".
+      const prefix = tabs.tabs.filter(t => t.label.startsWith(a));
+      if (prefix.length === 1) {
+        tabs.switchTo(prefix[0]!.id);
+        return true;
+      }
+      if (prefix.length > 1) {
+        const labels = prefix.map(t => t.label).join(', ');
+        agent.addNotice('warn', `Ambiguous "${a}": matches ${labels}`);
+        return true;
+      }
+      agent.addNotice('warn', `No tab matches "${a}".`);
+      return true;
+    }
     case '/clear':
       agent.clearConversation();
       return true;
@@ -92,6 +184,23 @@ export async function dispatchSlashCommand(
         agent.addNotice('info', `Current model: ${refs.current.model}`);
       }
       return true;
+    case '/cwd':
+      agent.setCwd(arg);
+      return true;
+    case '/provider': {
+      // `/provider` alone shows the current provider.
+      // `/provider <name>` switches; `/provider <name> <model>` does both.
+      // Equivalent to `/model <name>:<model>`.
+      const parts = arg.trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) {
+        agent.addNotice('info', `Current provider: ${refs.current.provider.name}`);
+        return true;
+      }
+      const [name, ...modelParts] = parts;
+      const requested = modelParts.length > 0 ? modelParts.join(' ') : undefined;
+      await agent.setProviderByName(name, requested);
+      return true;
+    }
     case '/exp':
       handleExpCommand(agent, arg);
       return true;
@@ -103,9 +212,15 @@ export async function dispatchSlashCommand(
 
 function printHelp(agent: AgentLoopApi): void {
   const lines: [string, string][] = [
-    ['/exit, /quit, /q', 'Exit factory'],
+    ['/exit, /quit, /q', 'Exit (or close active tab if multiple open)'],
+    ['/new [label]', 'Open a new tab'],
+    ['/close', 'Close the active tab'],
+    ['/tabs', 'List open tabs'],
+    ['/switch <n|label>', 'Switch to tab by index, label, or unique prefix'],
     ['/clear', 'Clear conversation history'],
-    ['/model <name>', 'Switch model (or show current)'],
+    ['/model <name>', 'Switch model (or show current). Accepts <provider>:<model>.'],
+    ['/provider <name> [model]', 'Switch provider for this tab (or show current)'],
+    ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],
     ['/plan', 'Toggle plan mode (or show queue if one exists)'],
     ['/queue', 'Show the queued plan'],

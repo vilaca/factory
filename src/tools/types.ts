@@ -18,6 +18,23 @@ export interface ToolResult {
    * with zero matches). The renderer surfaces these distinctly so they don't
    * look identical to a successful "found something" call. */
   empty?: boolean;
+  /** Set by Bash when the command changed the working directory. The agent
+   * loop reads this and updates the session's refs.cwd so the new directory
+   * persists across subsequent tool calls. */
+  cwdAfter?: string;
+}
+
+/** Per-call context that an agent loop passes when executing a tool.
+ *
+ * Optional so that headless / test callers can keep using the bare
+ * `execute(args)` form. When omitted, tools fall back to process-global
+ * defaults (e.g. `process.cwd()`).
+ */
+export interface ToolContext {
+  /** Working directory the tool should resolve relative paths against and
+   * spawn shells with. Per-tab in the Ink UI; defaults to process.cwd()
+   * elsewhere. */
+  cwd: string;
 }
 
 export interface ToolHandler {
@@ -25,5 +42,5 @@ export interface ToolHandler {
   description: string;
   category: ToolCategory;
   definition: ToolDefinition;
-  execute(args: Record<string, unknown>): Promise<ToolResult>;
+  execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult>;
 }

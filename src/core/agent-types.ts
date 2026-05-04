@@ -65,4 +65,10 @@ export interface AgentOptions {
   };
   /** Session-level cache of Read fingerprints. Required when experimental.readCache is on. */
   fileCache?: FileCache;
+  /** Mutable working-directory holder. Tools resolve relative paths against
+   * `.current` and Bash updates it via `cwdAfter`, so `cd` persists across
+   * calls within a turn. The agent loop reads it back after the turn to keep
+   * RunRefs in sync. Optional — headless callers may omit it and tools fall
+   * back to `process.cwd()`. */
+  cwdRef?: { current: string };
 }

@@ -15,6 +15,11 @@ export interface ConversationDisplayProps {
    * into items[] (and thus Static) as the final tool-call entry. */
   pendingToolCall?: ToolCallSummary | null;
   spinner?: { label: string; color: string };
+  /** Ink only supports one <Static> instance per render tree (its reconciler
+   * tracks a single staticNode). With multiple tabs mounted concurrently, we
+   * fall back to a plain map for all sessions. Single-tab keeps Static so the
+   * existing scrollback UX is preserved. */
+  useStatic?: boolean;
 }
 
 /**
@@ -37,19 +42,31 @@ export function ConversationDisplay({
   streamingText,
   pendingToolCall,
   spinner,
+  useStatic = true,
 }: ConversationDisplayProps): React.ReactElement {
   return (
     <Box flexDirection="column">
-      <Static items={items}>
-        {(item, index) => (
+      {useStatic ? (
+        <Static items={items}>
+          {(item, index) => (
+            <React.Fragment key={item.id}>
+              {index > 0 && <Separator />}
+              <PanelLine>
+                <DisplayItemView item={item} />
+              </PanelLine>
+            </React.Fragment>
+          )}
+        </Static>
+      ) : (
+        items.map((item, index) => (
           <React.Fragment key={item.id}>
             {index > 0 && <Separator />}
             <PanelLine>
               <DisplayItemView item={item} />
             </PanelLine>
           </React.Fragment>
-        )}
-      </Static>
+        ))
+      )}
       {streamingText && (
         <>
           {items.length > 0 && <Separator />}

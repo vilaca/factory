@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -24,7 +24,7 @@ const definition: ToolDefinition = {
   },
 };
 
-async function execute(args: Record<string, unknown>): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const filePath = args.file_path as string;
   const content = args.content as string;
 
@@ -35,7 +35,7 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
     return { success: false, output: 'content is required' };
   }
 
-  const resolved = path.resolve(filePath);
+  const resolved = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
 
   try {
     await fs.mkdir(path.dirname(resolved), { recursive: true });

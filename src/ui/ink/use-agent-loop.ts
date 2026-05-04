@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ContextManager } from '../../core/context-manager.js';
 import { validateModelToolSupport } from '../../core/model-validation.js';
+import { createProvider } from '../../providers/registry.js';
+import * as fs from 'fs';
+import * as path from 'path';
 import type { ExperimentalFlags } from '../../core/config-types.js';
+import type { Provider } from '../../providers/types.js';
 import type { DisplayItem, ToolCallSummary } from './types.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './agent-loop/system-prompt.js';
 import {
@@ -43,6 +47,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [plannedCalls, setPlannedCalls] = useState<ToolCallSummary[]>([]);
   const [planMode, setPlanMode] = useState(opts.planMode ?? false);
   const [model, setModel] = useState(opts.model);
+  const [providerName, setProviderName] = useState(opts.provider.name);
   const [sessionTurns, setSessionTurns] = useState(0);
   const [sessionToolCalls, setSessionToolCalls] = useState(0);
   const [lastUsage, setLastUsage] = useState<{ totalTokens?: number } | undefined>();
@@ -56,6 +61,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [streamingText, setStreamingText] = useState('');
   const [gitBranch, setGitBranch] = useState<string | undefined>(opts.gitBranch);
   const [gitDirty, setGitDirtyState] = useState<boolean | null>(opts.gitDirty ?? null);
+  const [cwd, setCwdState] = useState<string>(process.cwd());
 
   const idCounter = useRef(0);
   const nextId = useCallback(() => ++idCounter.current, []);
@@ -121,6 +127,11 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.contextManager.updateUsage(undefined);
     setEstimatedTokens(refs.current.contextManager.getTokenEstimate());
 
+    // Sync cwd state with the freshly-seeded refs.cwd (createInitialRefs uses
+    // process.cwd() at creation time; useState's lazy init may have captured a
+    // different value if process.cwd() shifted in between).
+    setCwdState(refs.current.cwd);
+
     if (sessionLogger) {
       sessionLogger.logSystemPrompt(initialSystemPrompt);
       addNotice('info', `Session log: ${sessionLogger.filePath}`);
@@ -141,7 +152,6 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   function buildDeps(): AgentLoopDeps {
     return {
       refs,
-      provider: opts.provider,
       agentConfig: opts.agentConfig,
       addItem,
       addNotice,
@@ -179,6 +189,11 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       }
     }
     setState('idle');
+    // Sync cwd state in case Bash ran `cd` during the turn — run-loop already
+    // wrote refs.current.cwd; pull it into React state for the StatusBar.
+    if (refs.current && refs.current.cwd !== cwd) {
+      setCwdState(refs.current.cwd);
+    }
     // Refresh after every turn: branch and dirty state may have changed
     // out-of-band — a Bash tool call ran `git checkout` / committed / edited
     // a tracked file, or the user switched branches in another terminal.
@@ -215,7 +230,21 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
 
   async function setModelByName(name: string): Promise<void> {
     if (!refs.current) return;
-    const validation = await validateModelToolSupport(opts.provider, name);
+    // Support `provider:model` so the user can switch both in one shot —
+    // useful so they don't end up on a provider whose default model isn't
+    // valid for it.
+    if (name.includes(':')) {
+      const [providerPart, ...rest] = name.split(':');
+      const modelPart = rest.join(':');
+      if (!providerPart || !modelPart) {
+        addNotice('warn', 'Usage: /model <name> or /model <provider>:<model>');
+        return;
+      }
+      await setProviderByName(providerPart, modelPart);
+      return;
+    }
+    const provider = refs.current.provider;
+    const validation = await validateModelToolSupport(provider, name);
     if (validation.mode === 'unreachable') {
       addNotice('danger', validation.reason);
       return;
@@ -235,12 +264,74 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.sessionLogger?.logModelChange(refs.current.model, name);
     refs.current.model = name;
     setModel(name);
-    const caps = opts.provider.getCapabilities(name);
+    const caps = provider.getCapabilities(name);
     refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
       compactionThreshold: opts.agentConfig?.compactionThreshold,
       recencyWindow: opts.agentConfig?.recencyWindow,
     });
     addNotice('info', `Model switched to ${name}`);
+  }
+
+  // Swap to another provider. We don't drive auth flows from inside the
+  // running CLI — providers fall back to env-var/config-file credentials. If
+  // the user hasn't authed yet, `createProvider` throws and we surface the
+  // hint. If a model is supplied (via `/provider <name> <model>` or as
+  // `provider:model` from /model), validate and apply it; otherwise fall
+  // back to a sensible default by listing the new provider's models.
+  async function setProviderByName(name: string, requestedModel?: string): Promise<void> {
+    if (!refs.current) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      addNotice('info', `Current provider: ${refs.current.provider.name}`);
+      return;
+    }
+    if (trimmed === refs.current.provider.name) {
+      if (requestedModel) await setModelByName(requestedModel);
+      else addNotice('info', `Already on ${trimmed}.`);
+      return;
+    }
+    let nextProvider: Provider;
+    try {
+      nextProvider = createProvider(trimmed, {});
+    } catch (err) {
+      addNotice('danger', `Cannot switch to ${trimmed}: ${(err as Error).message}`);
+      return;
+    }
+    let nextModel: string | undefined = requestedModel;
+    if (!nextModel) {
+      try {
+        const list = await nextProvider.listModels();
+        nextModel = list[0];
+      } catch (err) {
+        addNotice('danger', `Cannot list models for ${trimmed}: ${(err as Error).message}`);
+        return;
+      }
+      if (!nextModel) {
+        addNotice('warn', `${trimmed} returned no models. Pass one explicitly: /provider ${trimmed} <model>`);
+        return;
+      }
+    }
+    const validation = await validateModelToolSupport(nextProvider, nextModel);
+    if (validation.mode === 'unreachable') {
+      addNotice('danger', validation.reason);
+      return;
+    }
+    refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel);
+    refs.current.provider = nextProvider;
+    refs.current.model = nextModel;
+    refs.current.useTextToolFallback = validation.mode === 'fallback';
+    refs.current.nativeToolSupport = validation.mode === 'native';
+    setProviderName(nextProvider.name);
+    setModel(nextModel);
+    if (validation.mode === 'fallback') {
+      addNotice('warn', `⚠ ${validation.warning}`);
+    }
+    const caps = nextProvider.getCapabilities(nextModel);
+    refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
+      compactionThreshold: opts.agentConfig?.compactionThreshold,
+      recencyWindow: opts.agentConfig?.recencyWindow,
+    });
+    addNotice('info', `Provider → ${nextProvider.name}, model → ${nextModel}`);
   }
 
   function togglePlanMode(): void {
@@ -305,6 +396,35 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current?.sessionLogger?.logPermissionChange('reset');
   }
 
+  // Validate and apply a cwd change. Empty/missing arg is treated as "show
+  // current cwd". Relative paths resolve against the *current* refs.cwd, not
+  // process.cwd() — so `/cwd ../sibling` works as expected from a per-tab
+  // working directory.
+  function setCwd(target: string): void {
+    if (!refs.current) return;
+    const trimmed = target.trim();
+    if (!trimmed) {
+      addNotice('info', `cwd: ${refs.current.cwd}`);
+      return;
+    }
+    let resolved = trimmed;
+    if (resolved.startsWith('~')) resolved = (process.env.HOME ?? '') + resolved.slice(1);
+    resolved = path.resolve(refs.current.cwd, resolved);
+    try {
+      const stat = fs.statSync(resolved);
+      if (!stat.isDirectory()) {
+        addNotice('warn', `cwd: ${resolved} is not a directory.`);
+        return;
+      }
+    } catch (err) {
+      addNotice('warn', `cwd: ${resolved} — ${(err as Error).message}`);
+      return;
+    }
+    refs.current.cwd = resolved;
+    setCwdState(resolved);
+    addNotice('info', `📁 cwd → ${resolved}`);
+  }
+
   function recordHistory(text: string): void {
     recordHistoryPure(refs, text);
   }
@@ -336,6 +456,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     pendingToolCall,
     plannedCalls,
     planMode,
+    providerName,
     model,
     sessionTurns,
     sessionToolCalls,
@@ -344,6 +465,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     queueLength,
     gitBranch,
     gitDirty,
+    cwd,
     refs,
     submitPrompt,
     queueInput,
@@ -357,6 +479,8 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     approvePlan,
     cancelPlan,
     resetPermissions,
+    setCwd,
+    setProviderByName,
     recordHistory,
     historyUp,
     historyDown,
