@@ -10,8 +10,36 @@ export async function extractProjectFacts(cwd: string): Promise<string | null> {
   const tscFacts = await readTsConfig(cwd);
   if (tscFacts) sections.push(tscFacts);
 
-  const pyFacts = await readPythonMarkers(cwd);
+  const cargoFacts = await readCargoToml(cwd);
+  if (cargoFacts) sections.push(cargoFacts);
+
+  const goFacts = await readGoMod(cwd);
+  if (goFacts) sections.push(goFacts);
+
+  const pyFacts = await readMarkers(cwd, 'Python', ['pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile', 'poetry.lock']);
   if (pyFacts) sections.push(pyFacts);
+
+  const javaFacts = await readMarkers(cwd, 'JVM (Java/Kotlin/Scala)', [
+    'pom.xml',
+    'build.gradle',
+    'build.gradle.kts',
+    'settings.gradle',
+    'settings.gradle.kts',
+    'build.sbt',
+  ]);
+  if (javaFacts) sections.push(javaFacts);
+
+  const rubyFacts = await readMarkers(cwd, 'Ruby', ['Gemfile', 'Gemfile.lock', '*.gemspec']);
+  if (rubyFacts) sections.push(rubyFacts);
+
+  const phpFacts = await readMarkers(cwd, 'PHP', ['composer.json', 'composer.lock']);
+  if (phpFacts) sections.push(phpFacts);
+
+  const elixirFacts = await readMarkers(cwd, 'Elixir', ['mix.exs', 'mix.lock']);
+  if (elixirFacts) sections.push(elixirFacts);
+
+  const cppFacts = await readMarkers(cwd, 'C/C++', ['CMakeLists.txt', 'Makefile', 'configure', 'meson.build']);
+  if (cppFacts) sections.push(cppFacts);
 
   if (sections.length === 0) return null;
   return sections.join('\n\n');
@@ -57,9 +85,15 @@ async function readTsConfig(cwd: string): Promise<string | null> {
   }
 }
 
-async function readPythonMarkers(cwd: string): Promise<string | null> {
+async function readMarkers(cwd: string, label: string, files: string[]): Promise<string | null> {
   const markers: string[] = [];
-  for (const file of ['pyproject.toml', 'requirements.txt', 'setup.py']) {
+  for (const file of files) {
+    if (file.includes('*')) {
+      const dirEntries = await fs.readdir(cwd).catch(() => [] as string[]);
+      const re = new RegExp('^' + file.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+      if (dirEntries.some((e) => re.test(e))) markers.push(file);
+      continue;
+    }
     try {
       await fs.access(path.join(cwd, file));
       markers.push(file);
@@ -68,5 +102,36 @@ async function readPythonMarkers(cwd: string): Promise<string | null> {
     }
   }
   if (markers.length === 0) return null;
-  return `### Python\n- markers present: ${markers.join(', ')}`;
+  return `### ${label}\n- markers present: ${markers.join(', ')}`;
+}
+
+async function readCargoToml(cwd: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(path.join(cwd, 'Cargo.toml'), 'utf-8');
+    const lines: string[] = [];
+    const name = raw.match(/^\s*name\s*=\s*"([^"]+)"/m)?.[1];
+    const version = raw.match(/^\s*version\s*=\s*"([^"]+)"/m)?.[1];
+    const edition = raw.match(/^\s*edition\s*=\s*"([^"]+)"/m)?.[1];
+    if (name) lines.push(`- name: ${name}${version ? `@${version}` : ''}`);
+    if (edition) lines.push(`- edition: ${edition}`);
+    if (lines.length === 0) return null;
+    return `### Cargo.toml\n${lines.join('\n')}`;
+  } catch {
+    return null;
+  }
+}
+
+async function readGoMod(cwd: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(path.join(cwd, 'go.mod'), 'utf-8');
+    const lines: string[] = [];
+    const moduleName = raw.match(/^module\s+(\S+)/m)?.[1];
+    const goVersion = raw.match(/^go\s+(\S+)/m)?.[1];
+    if (moduleName) lines.push(`- module: ${moduleName}`);
+    if (goVersion) lines.push(`- go version: ${goVersion}`);
+    if (lines.length === 0) return null;
+    return `### go.mod\n${lines.join('\n')}`;
+  } catch {
+    return null;
+  }
 }
