@@ -1,4 +1,4 @@
-# factory 🏭
+# 🏭 factory
 
 A coding agent for both interactive workflows and automation.
 
