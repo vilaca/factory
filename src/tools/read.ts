@@ -61,6 +61,22 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
   // visible in the session log.
   const resolved = path.resolve(filePath);
 
+  // Models routinely call Read on a directory expecting a listing; Node's
+  // readFile then returns a raw EISDIR which is uninformative. Detect the
+  // directory case up front and steer the model toward Glob/Bash ls.
+  try {
+    const stat = await fs.stat(resolved);
+    if (stat.isDirectory()) {
+      return {
+        success: false,
+        output: `${resolved} is a directory, not a file. Use Glob (e.g. pattern "${resolved}/**/*") or Bash "ls" to list its contents.`,
+      };
+    }
+  } catch {
+    // Fall through — let the readFile call below produce the canonical
+    // ENOENT/EACCES error so we don't double-stat in the success path.
+  }
+
   try {
     const content = await fs.readFile(resolved, 'utf-8');
     const lines = content.split('\n');

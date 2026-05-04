@@ -222,9 +222,21 @@ export function splitMessagesForAnthropic(
       }
       msgs.push({ role: 'assistant', content });
     } else if (msg.role === 'tool') {
+      // Bare 'unknown' used to be a silent fallback here, which let upstream
+      // bugs (corrector running a substitute call without forwarding the
+      // original tool_use id) reach the API and 400 with an opaque
+      // "unexpected tool_use_id ... unknown". Fail loudly at the boundary
+      // instead — every tool_result must carry the id of the tool_use it's
+      // resolving.
+      if (!msg.tool_call_id) {
+        throw new Error(
+          'splitMessagesForAnthropic: tool message has no tool_call_id; ' +
+          'every tool_result must reference a tool_use from the prior assistant message',
+        );
+      }
       const block = {
         type: 'tool_result',
-        tool_use_id: msg.tool_call_id ?? 'unknown',
+        tool_use_id: msg.tool_call_id,
         content: msg.content,
       };
       // Anthropic requires all tool_results from one turn to share a single
