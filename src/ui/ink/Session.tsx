@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import { TextInput } from './components/text-input.js';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config-types.js';
 import { ConversationDisplay } from './components/conversation-display.js';
@@ -29,6 +29,7 @@ export interface SessionProps {
   validationWarning?: string;
   isActive?: boolean;
   tabId?: number;
+  tabLabel?: string;
 }
 
 export function Session(props: SessionProps): React.ReactElement {
@@ -46,9 +47,9 @@ export function Session(props: SessionProps): React.ReactElement {
   if (tabsCtx && tabsCtx.tabs.length > 1) everMultiTabRef.current = true;
   const useStatic = !tabsCtx || (tabsCtx.tabs.length === 1 && !everMultiTabRef.current);
 
-  // Register a stable getter with the tabs registry so consumers (TabStrip,
-  // tab-management hotkeys, parent slash commands) can read this session's
-  // current AgentLoopApi without re-registering on every render.
+  // Register a stable getter with the tabs registry so tab-management
+  // hotkeys and parent slash commands can read this session's current
+  // AgentLoopApi without re-registering on every render.
   const apiRef = useRef<AgentLoopApi>(agent);
   apiRef.current = agent;
   const tabs = tabsCtx;
@@ -59,27 +60,6 @@ export function Session(props: SessionProps): React.ReactElement {
     tabs.registry.register(tabId, getter);
     return () => { tabs.registry.unregister(tabId); };
   }, [tabs, tabId]);
-
-  // Push status to the registry so the TabStrip can badge tabs that are
-  // running, awaiting permission, or have completed work while hidden.
-  // The 'attention' badge persists across `state` flips until the tab gains
-  // focus, so a hidden tab that finishes its turn keeps its mark until the
-  // user looks at it.
-  const prevStateRef = useRef(agent.state);
-  const attentionRef = useRef(false);
-  useEffect(() => {
-    if (!tabs || tabId === undefined) return;
-    const prev = prevStateRef.current;
-    prevStateRef.current = agent.state;
-    if (isActive) attentionRef.current = false;
-    else if (prev === 'running' && agent.state === 'idle') attentionRef.current = true;
-
-    let badge: 'running' | 'awaiting-permission' | 'attention' | null = null;
-    if (agent.state === 'running') badge = 'running';
-    else if (agent.state === 'awaiting-permission') badge = 'awaiting-permission';
-    else if (attentionRef.current) badge = 'attention';
-    tabs.registry.setStatus(tabId, { badge });
-  }, [tabs, tabId, agent.state, isActive]);
 
   const {
     items,
@@ -239,6 +219,9 @@ export function Session(props: SessionProps): React.ReactElement {
         <>
           <Separator />
           <Box paddingX={1} width="100%">
+            {props.tabLabel && (
+              <Text dimColor>{`[${props.tabLabel}]`}</Text>
+            )}
             <Text color={inputAccentColor} bold>{'> '}</Text>
             <TextInput value={input} onChange={setInput} onSubmit={(value) => { void handleSubmit(value); }} />
           </Box>

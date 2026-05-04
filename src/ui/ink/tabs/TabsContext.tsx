@@ -26,15 +26,17 @@ export interface TabsProviderProps {
 }
 
 export function TabsProvider(props: TabsProviderProps): React.ReactElement {
+  // The initial tab is "main"; subsequent unnamed tabs become `tab-<id>`.
+  // The id is monotonic and never reused, so labels stay unique after closes.
   const initialLabel = props.initialLabel ?? 'main';
   const [tabs, setTabs] = useState<Tab[]>([{ id: 1, label: initialLabel }]);
   const [activeId, setActiveId] = useState<number>(1);
   const nextId = useRef<number>(2);
   const registryRef = useRef<TabsRegistry>(new TabsRegistry());
 
-  const openTab = useCallback((label = 'new'): number => {
+  const openTab = useCallback((label?: string): number => {
     const id = nextId.current++;
-    setTabs(prev => [...prev, { id, label }]);
+    setTabs(prev => [...prev, { id, label: label ?? `tab-${id}` }]);
     setActiveId(id);
     return id;
   }, []);

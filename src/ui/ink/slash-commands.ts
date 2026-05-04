@@ -231,11 +231,25 @@ function printHelp(agent: AgentLoopApi): void {
     ['/exp [name on|off]', 'List or toggle experimental flags'],
     ['/help', 'Show this help'],
   ];
+  const hotkeys: [string, string][] = [
+    ['Ctrl+T', 'New tab'],
+    ['Ctrl+W', 'Close active tab (or exit if last tab)'],
+    ['Ctrl+N / Ctrl+P', 'Cycle to next / previous tab'],
+    ['F1–F12', 'Jump directly to tab N'],
+    ['Ctrl+C', 'Abort running turn (or exit when idle)'],
+    ['Esc', 'Abort running turn'],
+    ['↑ / ↓', 'Recall previous / next prompt'],
+  ];
   agent.addNoticeBlock([
     { level: 'cyan', text: 'Commands:' },
     ...lines.map(([c, desc]) => ({
       level: 'info' as const,
-      text: `  ${c.padEnd(18)} ${desc}`,
+      text: `  ${c.padEnd(26)} ${desc}`,
+    })),
+    { level: 'cyan', text: 'Hotkeys:' },
+    ...hotkeys.map(([k, desc]) => ({
+      level: 'info' as const,
+      text: `  ${k.padEnd(26)} ${desc}`,
     })),
   ]);
 }
