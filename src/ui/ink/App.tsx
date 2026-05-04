@@ -172,7 +172,7 @@ export function App(props: AppProps): React.ReactElement {
         <PlanApprovalPanel count={plannedCalls.length} />
       )}
 
-      <Box borderStyle="round" borderColor={inputBorderColor} paddingX={1}>
+      <Box borderStyle="round" borderColor={inputBorderColor} paddingX={1} width="100%">
         <Text color={inputBorderColor} bold>{'> '}</Text>
         <TextInput value={input} onChange={setInput} onSubmit={(value) => { void handleSubmit(value); }} />
       </Box>

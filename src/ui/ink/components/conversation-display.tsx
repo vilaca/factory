@@ -21,7 +21,7 @@ export interface ConversationDisplayProps {
  */
 function PanelLine({ children }: { children: React.ReactNode }): React.ReactElement {
   return (
-    <Box borderStyle="round" borderColor="gray" paddingX={1}>
+    <Box borderStyle="round" borderColor="gray" paddingX={1} width="100%">
       {children}
     </Box>
   );
