@@ -117,6 +117,10 @@ export async function* runAgent(
         yield { type: 'text-done', fullContent };
       }
 
+      // TODO: evaluate whether to add an experimental LLM-as-judge hallucination check here
+      // (second-pass call over fullContent + project-facts, behind a flag). Decide first
+      // whether it's worth the cost/latency and false-positive risk before building it.
+
       // Provider hit its output cap (Ollama's num_predict). Surface it so the
       // user knows their response was truncated, not naturally finished.
       if (modelResult.doneReason === 'length' && lastUsage) {
