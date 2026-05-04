@@ -25,6 +25,7 @@ export interface SessionLogger {
   logAgentEvent(event: AgentEvent): void;
   logCommand(command: string, arg: string): void;
   logModelChange(from: string, to: string): void;
+  logSystemPrompt(prompt: string): void;
   logSystemPromptChange(reason: string): void;
   logPermissionChange(action: string, toolName?: string): void;
   logStuckPattern(consecutiveCount: number): void;
@@ -85,6 +86,7 @@ export function createSessionLogger(): SessionLogger {
     logUserInput(content) { write({ type: 'user-input', content }); },
     logCommand(command, arg) { write({ type: 'command', command, arg }); },
     logModelChange(from, to) { write({ type: 'model-change', from, to }); },
+    logSystemPrompt(prompt) { write({ type: 'system-prompt', content: prompt }); },
     logSystemPromptChange(reason) { write({ type: 'system-prompt-change', reason }); },
     logPermissionChange(action, toolName) { write({ type: 'permission-change', action, toolName }); },
     logStuckPattern(consecutiveCount) { write({ type: 'stuck-pattern', consecutiveCount }); },
@@ -301,6 +303,7 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
     const status = lastErrorMessage ? classifyErrorMessage(lastErrorMessage) : undefined;
     out.push({ provider, model, startedAt, status });
   }
+  out.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   return out;
 }
 

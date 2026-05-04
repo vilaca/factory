@@ -122,6 +122,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     setEstimatedTokens(refs.current.contextManager.getTokenEstimate());
 
     if (sessionLogger) {
+      sessionLogger.logSystemPrompt(initialSystemPrompt);
       addNotice('info', `Session log: ${sessionLogger.filePath}`);
     }
 
@@ -226,8 +227,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       addNotice('warn', `⚠ ${validation.warning}`);
     }
     if (prevFallback !== refs.current.useTextToolFallback) {
-      refs.current.conversation.updateSystemPrompt(composeSystemPrompt());
+      const sp = composeSystemPrompt();
+      refs.current.conversation.updateSystemPrompt(sp);
       refs.current.sessionLogger?.logSystemPromptChange(`text-tool-fallback=${refs.current.useTextToolFallback}`);
+      refs.current.sessionLogger?.logSystemPrompt(sp);
     }
     refs.current.sessionLogger?.logModelChange(refs.current.model, name);
     refs.current.model = name;
@@ -244,8 +247,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     if (!refs.current) return;
     refs.current.planMode = !refs.current.planMode;
     setPlanMode(refs.current.planMode);
-    refs.current.conversation.updateSystemPrompt(composeSystemPrompt());
+    const sp = composeSystemPrompt();
+    refs.current.conversation.updateSystemPrompt(sp);
     refs.current.sessionLogger?.logSystemPromptChange(`plan-mode=${refs.current.planMode}`);
+    refs.current.sessionLogger?.logSystemPrompt(sp);
     addNotice('cyan', `Plan mode: ${refs.current.planMode ? 'ON' : 'OFF'}.`);
   }
 
@@ -260,8 +265,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.experimental = { ...refs.current.experimental, [name]: value };
     // System prompt depends on lineCountHint, so refresh it on toggle.
     if (name === 'lineCountHint') {
-      refs.current.conversation.updateSystemPrompt(composeSystemPrompt());
+      const sp = composeSystemPrompt();
+      refs.current.conversation.updateSystemPrompt(sp);
       refs.current.sessionLogger?.logSystemPromptChange(`lineCountHint=${value}`);
+      refs.current.sessionLogger?.logSystemPrompt(sp);
     }
     addNotice('info', `Experimental ${name}: ${value ? 'on' : 'off'}.`);
   }
@@ -272,8 +279,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     setPlannedCalls([]);
     refs.current.planMode = false;
     setPlanMode(false);
-    refs.current.conversation.updateSystemPrompt(composeSystemPrompt());
+    const sp = composeSystemPrompt();
+    refs.current.conversation.updateSystemPrompt(sp);
     refs.current.sessionLogger?.logSystemPromptChange('plan-mode=false');
+    refs.current.sessionLogger?.logSystemPrompt(sp);
     addNotice('cyan', `Executing ${plan.length} planned tool call${plan.length === 1 ? '' : 's'}...`);
     const summary = plan.map(p => `- ${p.toolName}: ${JSON.stringify(p.args).slice(0, 200)}`).join('\n');
     setState('running');
