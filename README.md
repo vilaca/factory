@@ -6,7 +6,7 @@
 **A coding agent that runs anywhere — local or cloud, frontier or 7B — with the resilience to make smaller models actually useful.**
 
 - **Bring your own model.** 15 providers on equal footing — local-first ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://codestral.mistral.ai), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)). Pick what fits your privacy, cost, and latency.
-- **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a Claude refactor in one tab while a local Qwen explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
+- **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a frontier LLM on a refactor in one tab while a local LLM explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
 - **Built for models that don't behave.** Text-tool fallback recovers tool calls from prose for models without native function calling. An LLM-based corrector retries malformed calls with a fixed signature. An imitation guard strips fabricated tool-result blocks. Bash dedup nudges the model out of spinning loops.
 - **Plan mode.** Read-only tools execute freely; writes are queued for review. Approve, cancel, or refine before anything touches disk.
 - **Human or headless.** Interactive TUI on a TTY; in scripts and CI it auto-detects no-TTY, reads stdin as a prompt, runs one turn, and streams the result to stdout — same agent, no UI.
@@ -27,7 +27,7 @@ npm install && npm run build && npm link
 factory
 ```
 
-That's it. `factory` opens a picker for provider, model, and API key (saved for next time).
+That's it. `factory` opens a picker for provider, model, and API key the first time. Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
 
 ## Table of Contents
 
@@ -64,9 +64,10 @@ That's it. `factory` opens a picker for provider, model, and API key (saved for 
 - **Built-in tools**: Read, Write, Edit, Bash, Glob, Grep
 - **Permission system**: approve, deny, or allow-all per tool type
 - **Multi-provider support**: Anthropic Claude, Cerebras, Cloudflare Workers AI, Codestral, Cohere, GitHub Copilot, Google AI Studio, Groq, HuggingFace, llama.cpp, Mistral, Ollama, OpenCode Zen, OpenRouter, Vercel AI Gateway
-- **Per-tab provider/model switching**: `/provider <name> [model]` and `/model <name>` rebind a single tab without affecting others
-- **Model picker**: select from installed models interactively
-- **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/provider`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), tuning (`/correct`, `/exp`)
+- **Per-tab provider/model switching**: `/pick` (or `Ctrl+K`) for the interactive picker; `/model <provider>:<model>` for a one-shot switch — either path rebinds a single tab without affecting others
+- **Provider/model picker**: at startup or mid-session via `/pick` / `Ctrl+K`, with recently-used pairs at the top
+- **Resume on launch**: if a previous session is on file, factory skips the menu and starts on the same provider/model (override with `--pick`)
+- **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/pick`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), tuning (`/correct`, `/exp`)
 - **Cross-session history**: up-arrow recalls inputs from prior sessions, not just the current one
 - **Esc to abort**: stops the running agent immediately
 - **Tool support detection**: queries provider APIs at startup; reports native vs. fallback support
@@ -91,8 +92,8 @@ That's it. `factory` opens a picker for provider, model, and API key (saved for 
 | `/tabs` | List open tabs |
 | `/switch <n\|label>` | Switch to a tab by index, label, or unique prefix |
 | `/clear` | Clear conversation history |
-| `/model [<name>]` | Switch model or show current (accepts `<provider>:<model>`) |
-| `/provider [<name> [<model>]]` | Switch provider (and optionally model) for the active tab |
+| `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
+| `/pick` | Open the provider/model picker (recent pairs first) |
 | `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |
 | `/plan` | Toggle plan mode or show queued plan |
@@ -108,6 +109,7 @@ That's it. `factory` opens a picker for provider, model, and API key (saved for 
 
 | Key | Action |
 |-----|--------|
+| `Ctrl+K` | Open the provider/model picker |
 | `Ctrl+T` | New tab |
 | `Ctrl+W` | Close active tab (or exit if last) |
 | `Ctrl+N` / `Ctrl+P` | Cycle to next / previous tab |
@@ -146,6 +148,7 @@ Three layers, lowest to highest precedence: config files → environment variabl
 | `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
 | `--no-log` | | Disable session JSONL logging |
 | `--no-clear` | | Do not clear the screen on startup |
+| `--pick` | | Force the startup picker even when a previous session is on file |
 | `--help` | `-h` | Show help |
 
 ### Environment variables
@@ -197,8 +200,8 @@ Example `config.json`:
 
 ```json
 {
-  "provider": "anthropic",
-  "model": "claude-sonnet-4-6",
+  "provider": "<llm-provider>",
+  "model": "<llm-model>",
   "agent": {
     "experimental": {
       "bashDedup": false,
@@ -226,7 +229,7 @@ Create `.factory/INSTRUCTIONS.md` in your repository root for project-specific g
 
 ### Multi-Tab Sessions
 
-Each tab is an independent agent: its own conversation, working directory, provider, and model. Open one tab against Claude Sonnet for a refactor, another against a local Ollama model for cheap exploration, and a third in a different repo entirely — they don't share state.
+Each tab is an independent agent: its own conversation, working directory, provider, and model. Open one tab against a frontier cloud LLM for a refactor, another against a local LLM for cheap exploration, and a third in a different repo entirely — they don't share state.
 
 **Managing tabs:**
 
@@ -241,8 +244,9 @@ Each tab is an independent agent: its own conversation, working directory, provi
 **Per-tab provider and model:**
 
 ```
-> /provider anthropic claude-sonnet-4-6   # rebind this tab only
-> /model qwen2.5-coder                    # swap model, keep provider
+> /pick                                   # interactive picker (or Ctrl+K)
+> /model <llm-provider>:<llm-model>       # one-shot switch (rebinds this tab only)
+> /model <llm-model>                      # swap model, keep provider
 > /cwd ~/work/other-repo                  # change working directory
 ```
 
@@ -349,7 +353,7 @@ Disable with `--no-log`.
 When stdin or stdout isn't a TTY (piped input, CI jobs, scripts), `factory` skips the interactive TUI and runs in headless mode: it reads stdin to EOF as a single user prompt, executes one agent turn, streams the assistant's text to stdout, and writes tool diagnostics to stderr.
 
 ```bash
-echo "what does src/index.ts do?" | factory -p ollama -m qwen2.5-coder
+echo "what does src/index.ts do?" | factory -p <llm-provider> -m <llm-model>
 ```
 
 **Permissions in headless mode.** There's no TTY to answer permission prompts, so any tool that isn't pre-allowed will be denied and the process exits with code 3. To grant access, list the tools in your config:
