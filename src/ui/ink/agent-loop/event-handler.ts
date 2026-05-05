@@ -192,7 +192,20 @@ export function handleAgentEvent(
     }
     case 'key-rotation-exhausted': {
       const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
-      deps.addNotice('warn', `⟲ no more keys for ${event.provider} (${reasonLabel}); surfacing error`);
+      deps.addNotice('warn', `⟲ no more keys for ${event.provider} (${reasonLabel})`);
+      break;
+    }
+    case 'tuple-rotation': {
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      deps.addNotice(
+        'warn',
+        `⟲ ${event.from.provider}/${event.from.model} ${reasonLabel}, falling back to ${event.to.provider}/${event.to.model}`,
+      );
+      break;
+    }
+    case 'tuple-rotation-exhausted': {
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      deps.addNotice('warn', `⟲ rotation chain exhausted (${reasonLabel}); surfacing error`);
       break;
     }
     case 'bash-dedup-nudge': {

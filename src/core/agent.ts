@@ -14,11 +14,12 @@ export async function* runAgent(
   userInput: string,
   options: AgentOptions,
 ): AsyncGenerator<AgentEvent> {
-  const { model, conversation, permissions, toolRegistry, contextManager, signal } = options;
-  // Provider can be swapped mid-turn by key rotation; subsequent compactions
-  // and model calls in the same run must see the rotated instance, not the
-  // stale one we started with.
+  const { conversation, permissions, toolRegistry, contextManager, signal } = options;
+  // Provider/model can be swapped mid-turn by rotation; subsequent
+  // compactions and model calls in the same run must see the rotated
+  // instance, not the stale one we started with.
   let provider = options.provider;
+  let model = options.model;
   const useTextToolFallback = options.useTextToolFallback ?? false;
   const nativeToolSupport = options.nativeToolSupport ?? true;
   const planMode = options.planMode ?? false;
@@ -87,6 +88,10 @@ export async function* runAgent(
       if (modelResult.finalProvider) {
         provider = modelResult.finalProvider;
         options.rotation?.onProviderChange?.(provider);
+      }
+      if (modelResult.finalModel) {
+        model = modelResult.finalModel;
+        options.rotation?.onModelChange?.(model);
       }
       fullContent = modelResult.fullContent;
       toolCalls = modelResult.toolCalls;

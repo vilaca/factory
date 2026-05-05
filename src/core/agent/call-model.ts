@@ -10,6 +10,44 @@ import { keyFingerprint, selectNextKey } from '../credentials.js';
 import { classifyForRotation } from '../provider-errors.js';
 import { RepeatDetector } from './repeat-detector.js';
 
+/**
+ * Walk the rotation chain looking for the next entry that hasn't been tried
+ * yet AND whose provider has at least one saved key. Skips entries with
+ * unknown providers (caller's `loadKeysForProvider` returns empty) and
+ * already-tried tuples. Returns null when the chain is exhausted.
+ */
+async function advanceTuple(
+  rotation: RotationOptions,
+  tried: ReadonlySet<string>,
+): Promise<{
+  entry: { provider: string; model: string };
+  provider: Provider;
+  keys: import('../config-types.js').ProviderKey[];
+  firstKey: import('../config-types.js').ProviderKey;
+} | null> {
+  if (!rotation.chain || !rotation.loadKeysForProvider || !rotation.withTuple) return null;
+  for (const entry of rotation.chain) {
+    const tupleKey = `${entry.provider}:${entry.model}`;
+    if (tried.has(tupleKey)) continue;
+    let keys: import('../config-types.js').ProviderKey[];
+    try {
+      keys = await rotation.loadKeysForProvider(entry.provider);
+    } catch {
+      continue;
+    }
+    if (keys.length === 0) continue;
+    const firstKey = keys[0]!;
+    let nextProvider: Provider;
+    try {
+      nextProvider = rotation.withTuple(entry.provider, firstKey);
+    } catch {
+      continue;
+    }
+    return { entry, provider: nextProvider, keys, firstKey };
+  }
+  return null;
+}
+
 function sanitizeToolCalls(
   toolCalls: Array<ToolCallMessage | null | undefined>,
 ): ToolCallMessage[] {
@@ -44,6 +82,9 @@ export interface ModelCallResult {
    *  same turn (otherwise compaction or follow-up turns would use the
    *  stale, rate-limited provider). */
   finalProvider?: Provider;
+  /** When tier-2 rotation swapped to a different (provider, model)
+   *  tuple, this is the model the call ended on. */
+  finalModel?: string;
 }
 
 /**
@@ -58,17 +99,24 @@ export interface ModelCallResult {
  */
 export async function* callModel(
   initialProvider: Provider,
-  model: string,
+  initialModel: string,
   messages: ChatMessage[],
   tools: ToolDefinition[] | undefined,
   signal: AbortSignal | undefined,
   rotation?: RotationOptions,
 ): AsyncGenerator<AgentEvent, ModelCallResult> {
   let provider = initialProvider;
-  // Per-call tried-set to prevent looping when every key 429s.
-  const triedKeyIds = new Set<string>();
+  let model = initialModel;
+  // Per-call tried-set to prevent looping when every key 429s. Reset when
+  // tier 2 advances to a new tuple — each tuple gets its own pool to walk.
+  let triedKeyIds = new Set<string>();
   if (rotation?.activeKeyId) triedKeyIds.add(rotation.activeKeyId);
   let activeKeyId = rotation?.activeKeyId;
+  // Tier-2 bookkeeping: track which (provider, model) tuples have already
+  // been tried so we don't loop back to the original on chain advance.
+  const triedTuples = new Set<string>([`${provider.name}:${model}`]);
+  /** Did tier-2 ever advance away from the initial tuple? */
+  let tupleRotated = false;
 
   let fullContent = '';
   let toolCalls: ToolCallMessage[] = [];
@@ -127,47 +175,86 @@ export async function* callModel(
         if (signal) signal.removeEventListener('abort', cascade);
         return { fullContent, toolCalls: sanitizeToolCalls(toolCalls), lastUsage, aborted: true, doneReason };
       }
-      // Tier 1 rotation: only meaningful when no tokens have streamed yet
-      // (otherwise we'd duplicate output on retry) and when we know which
-      // key is currently active (otherwise we can't tell which keys we've
-      // already tried).
-      if (rotation && rotation.activeKeyId && !streamedAnything) {
+      // Rotation: only meaningful when no tokens have streamed yet
+      // (otherwise we'd duplicate output on retry).
+      if (rotation && !streamedAnything) {
         const reason = classifyForRotation(err);
         if (reason !== 'other') {
-          if (rotation.failureLog && activeKeyId) {
-            rotation.failureLog.set(activeKeyId, Date.now());
+          // ─── Tier 1: rotate keys for the current (provider, model) ──
+          let keyRotated = false;
+          if (rotation.activeKeyId && rotation.keys.length > 0) {
+            if (rotation.failureLog && activeKeyId) {
+              rotation.failureLog.set(activeKeyId, Date.now());
+            }
+            const next = selectNextKey(rotation.keys, triedKeyIds, {
+              failureLog: rotation.failureLog,
+            });
+            if (next) {
+              const fromKey = activeKeyId
+                ? rotation.keys.find(k => k.id === activeKeyId)
+                : undefined;
+              yield {
+                type: 'key-rotation',
+                provider: provider.name,
+                from: fromKey
+                  ? { keyId: fromKey.id, fingerprint: keyFingerprint(fromKey.token), ...(fromKey.label ? { label: fromKey.label } : {}) }
+                  : null,
+                to: { keyId: next.id, fingerprint: keyFingerprint(next.token), ...(next.label ? { label: next.label } : {}) },
+                reason,
+              };
+              triedKeyIds.add(next.id);
+              activeKeyId = next.id;
+              rotation.activeKeyId = next.id;
+              rotation.onActiveKeyChange?.(next.id);
+              provider = rotation.withKey(next);
+              fullContent = '';
+              toolCalls = [];
+              lastUsage = undefined;
+              doneReason = undefined;
+              keyRotated = true;
+            } else {
+              yield { type: 'key-rotation-exhausted', provider: provider.name, reason };
+            }
           }
-          const next = selectNextKey(rotation.keys, triedKeyIds, {
-            failureLog: rotation.failureLog,
-          });
-          if (next) {
-            const fromKey = activeKeyId
-              ? rotation.keys.find(k => k.id === activeKeyId)
-              : undefined;
-            yield {
-              type: 'key-rotation',
-              provider: provider.name,
-              from: fromKey
-                ? { keyId: fromKey.id, fingerprint: keyFingerprint(fromKey.token), ...(fromKey.label ? { label: fromKey.label } : {}) }
-                : null,
-              to: { keyId: next.id, fingerprint: keyFingerprint(next.token), ...(next.label ? { label: next.label } : {}) },
-              reason,
-            };
-            triedKeyIds.add(next.id);
-            activeKeyId = next.id;
-            rotation.activeKeyId = next.id;
-            rotation.onActiveKeyChange?.(next.id);
-            provider = rotation.withKey(next);
-            // Reset accumulators — the failed call yielded nothing usable.
-            fullContent = '';
-            toolCalls = [];
-            lastUsage = undefined;
-            doneReason = undefined;
-            continue;
+          if (keyRotated) continue;
+
+          // ─── Tier 2: advance to the next entry in the chain ────────
+          if (
+            rotation.modelsEnabled !== false &&
+            rotation.chain && rotation.chain.length > 0 &&
+            rotation.loadKeysForProvider && rotation.withTuple
+          ) {
+            const advance = await advanceTuple(rotation, triedTuples);
+            if (advance) {
+              yield {
+                type: 'tuple-rotation',
+                from: { provider: provider.name, model },
+                to: { provider: advance.entry.provider, model: advance.entry.model },
+                reason,
+              };
+              provider = advance.provider;
+              model = advance.entry.model;
+              activeKeyId = advance.firstKey.id;
+              rotation.activeKeyId = advance.firstKey.id;
+              rotation.onActiveKeyChange?.(advance.firstKey.id);
+              rotation.onModelChange?.(advance.entry.model);
+              // Reset tier-1 state for the new tuple.
+              triedKeyIds = new Set<string>([advance.firstKey.id]);
+              // Override `rotation.keys` so subsequent tier-1 attempts
+              // for this new tuple see *its* keys, not the original
+              // tuple's. Mutating the caller's options is awkward but
+              // keeps callModel's internal state coherent.
+              rotation.keys = advance.keys;
+              triedTuples.add(`${advance.entry.provider}:${advance.entry.model}`);
+              tupleRotated = true;
+              fullContent = '';
+              toolCalls = [];
+              lastUsage = undefined;
+              doneReason = undefined;
+              continue;
+            }
+            yield { type: 'tuple-rotation-exhausted', reason };
           }
-          // Pool exhausted — surface a final notice and let the original
-          // error propagate below.
-          yield { type: 'key-rotation-exhausted', provider: provider.name, reason };
         }
       }
       // Existing isStreamish fallback: stream-only failures and transient
@@ -198,5 +285,6 @@ export async function* callModel(
     lastUsage,
     doneReason,
     ...(provider !== initialProvider ? { finalProvider: provider } : {}),
+    ...(tupleRotated ? { finalModel: model } : {}),
   };
 }
