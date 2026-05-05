@@ -100,19 +100,32 @@ describe('Read tool', () => {
     }
   });
 
-  it('returns a structured error pointing at Glob/ls when the path is a directory', async () => {
+  it('lists directory entries when the path is a directory', async () => {
     const dir = path.join(os.tmpdir(), `oc-unit-readdir-${crypto.randomUUID()}`);
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'b.txt'), '');
+    fs.writeFileSync(path.join(dir, 'a.txt'), '');
+    fs.mkdirSync(path.join(dir, 'sub'));
+    try {
+      const result = await read.execute({ file_path: dir });
+      assert.strictEqual(result.success, true);
+      // Sorted alphabetically; subdirectories suffixed with `/`.
+      assert.match(result.output, /a\.txt\nb\.txt\nsub\//);
+      assert.ok(!result.output.includes('EISDIR'));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an empty directory clearly', async () => {
+    const dir = path.join(os.tmpdir(), `oc-unit-readdir-empty-${crypto.randomUUID()}`);
     fs.mkdirSync(dir);
     try {
       const result = await read.execute({ file_path: dir });
-      assert.strictEqual(result.success, false);
-      assert.ok(result.output.includes('is a directory'));
-      assert.ok(result.output.includes('Glob'));
-      // No raw EISDIR leaking out — that error string is what tripped the
-      // corrector path before this guard existed.
-      assert.ok(!result.output.includes('EISDIR'));
+      assert.strictEqual(result.success, true);
+      assert.match(result.output, /empty directory/);
     } finally {
-      try { fs.rmdirSync(dir); } catch { /* ignore */ }
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

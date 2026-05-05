@@ -6,7 +6,7 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: 'Read',
-    description: 'Read a file from the filesystem. Returns content with line numbers. Use this instead of cat/head/tail.',
+    description: 'Read a file (returns content with line numbers, use instead of cat/head/tail) or a directory (returns a sorted listing of its entries, with a trailing "/" on subdirectories).',
     parameters: {
       type: 'object',
       required: ['file_path'],
@@ -61,16 +61,24 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   // visible in the session log.
   const resolved = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
 
-  // Models routinely call Read on a directory expecting a listing; Node's
-  // readFile then returns a raw EISDIR which is uninformative. Detect the
-  // directory case up front and steer the model toward Glob/Bash ls.
   try {
     const stat = await fs.stat(resolved);
     if (stat.isDirectory()) {
-      return {
-        success: false,
-        output: `${resolved} is a directory, not a file. Use Glob (e.g. pattern "${resolved}/**/*") or Bash "ls" to list its contents.`,
-      };
+      const entries = await fs.readdir(resolved, { withFileTypes: true });
+      const names = entries
+        .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
+        .sort();
+      const output = names.length === 0
+        ? `${resolved} is an empty directory.`
+        : `${resolved}:\n${names.join('\n')}`;
+      const previewSize = Math.min(names.length, DISPLAY_PREVIEW_LINES);
+      const previewLines = names.slice(0, previewSize);
+      const hidden = names.length - previewSize;
+      if (hidden > 0) {
+        previewLines.push(`… (+${hidden} entr${hidden === 1 ? 'y' : 'ies'}, full listing sent to model)`);
+      }
+      const displayOutput = names.length === 0 ? '(empty directory)' : previewLines.join('\n');
+      return { success: true, output, displayOutput };
     }
   } catch {
     // Fall through — let the readFile call below produce the canonical
