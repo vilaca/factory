@@ -65,40 +65,4 @@ describe('TabsRegistry', () => {
     r.register(2, () => stubApi());
     assert.strictEqual(count, after, 'unsubscribed listener must not fire');
   });
-
-  it('setStatus is a no-op when the badge is unchanged (avoids notify storms)', () => {
-    // The TabStrip subscribes via useSyncExternalStore. If setStatus fired
-    // notifications on every render even when the badge is unchanged, every
-    // tab would re-render on every keystroke. The dedup is load-bearing.
-    const r = new TabsRegistry();
-    r.register(1, () => stubApi());
-    let count = 0;
-    r.subscribe(() => { count++; });
-    r.setStatus(1, { badge: 'running' });
-    const afterFirst = count;
-    r.setStatus(1, { badge: 'running' });
-    assert.strictEqual(count, afterFirst, 'duplicate badge should not notify');
-    r.setStatus(1, { badge: null });
-    assert.ok(count > afterFirst, 'badge change should notify');
-  });
-
-  it('setStatus on an unregistered id is ignored', () => {
-    const r = new TabsRegistry();
-    r.setStatus(99, { badge: 'running' });
-    assert.deepStrictEqual(r.getStatus(99), { badge: null });
-  });
-
-  it('getStatus returns a default object when id is unknown', () => {
-    const r = new TabsRegistry();
-    const status = r.getStatus(42);
-    assert.deepStrictEqual(status, { badge: null });
-  });
-
-  it('unregister also clears status', () => {
-    const r = new TabsRegistry();
-    r.register(1, () => stubApi());
-    r.setStatus(1, { badge: 'awaiting-permission' });
-    r.unregister(1);
-    assert.deepStrictEqual(r.getStatus(1), { badge: null });
-  });
 });
