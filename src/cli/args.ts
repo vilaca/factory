@@ -17,6 +17,7 @@ interface CliArgs {
   noLineCountHint?: boolean;
   turnTimeoutSec?: number;
   noClear?: boolean;
+  pick?: boolean;
 }
 
 export function parseArgs(args: string[]): CliArgs {
@@ -54,6 +55,8 @@ export function parseArgs(args: string[]): CliArgs {
       result.noLineCountHint = true;
     } else if (arg === '--no-clear') {
       result.noClear = true;
+    } else if (arg === '--pick') {
+      result.pick = true;
     } else if (arg === '--turn-timeout') {
       const n = Number(args[++i]);
       if (!isFinite(n) || n <= 0) {
@@ -90,6 +93,7 @@ export function printUsage(): void {
     '    --no-line-count-hint     Drop the cloc/scc system-prompt hint (on by default)',
     '    --turn-timeout <sec>     Auto-abort the agent after N seconds per user prompt (default: off)',
     '    --no-clear               Do not clear the screen on startup',
+    '    --pick                   Force the startup picker even when a previous session is on file',
     '    --help, -h               Show this help',
     '',
     chalk.bold('  Examples:'),
