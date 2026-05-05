@@ -90,6 +90,15 @@ export function Session(props: SessionProps): React.ReactElement {
     return () => { tabs.registry.unregister(tabId); };
   }, [tabs, tabId]);
 
+  // Report whether this tab is blocked on user input so other tabs can
+  // surface a "N waiting" hint in their prompt area.
+  const isWaiting = !!agent.permissionRequest
+    || (agent.planMode && agent.plannedCalls.length > 0 && agent.state === 'idle');
+  useEffect(() => {
+    if (!tabs || tabId === undefined) return;
+    tabs.setWaiting(tabId, isWaiting);
+  }, [tabs, tabId, isWaiting]);
+
   const {
     items,
     state,
@@ -171,7 +180,15 @@ export function Session(props: SessionProps): React.ReactElement {
     }
 
     if (state === 'awaiting-permission') {
-      // Submitted via TextInput while a permission is pending — route to resolver.
+      // Slash commands are UI/state ops — never interpret them as a
+      // permission decision (e.g. /clear shouldn't deny the pending tool).
+      // Dispatch them and leave the permission still pending.
+      if (trimmed.startsWith('/')) {
+        const [cmd, ...rest] = trimmed.split(' ');
+        refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true) });
+        return;
+      }
       const decision = parsePermissionInput(trimmed);
       agent.respondToPermission(decision);
       return;
@@ -268,24 +285,31 @@ export function Session(props: SessionProps): React.ReactElement {
         />
       )}
 
-      {isActive && (
-        <>
-          <Separator />
-          <Box paddingX={1} width="100%">
-            {props.tabLabel && (
-              <Text dimColor>{`[${props.tabLabel}]`}</Text>
-            )}
-            <Text color={inputAccentColor} bold>{'> '}</Text>
-            <TextInput
-              value={input}
-              onChange={setInput}
-              onSubmit={(value) => { void handleSubmit(value); }}
-              focus={!pickerOpen}
-            />
-          </Box>
-          <Separator />
-        </>
-      )}
+      {isActive && (() => {
+        const totalWaiting = tabs ? tabs.waitingTabs.size : 0;
+        const showWaiting = tabs && tabs.tabs.length > 1 && totalWaiting > 0;
+        return (
+          <>
+            <Separator />
+            <Box paddingX={1} width="100%">
+              {props.tabLabel && (
+                <Text dimColor>{`[${props.tabLabel}]`}</Text>
+              )}
+              {showWaiting && (
+                <Text color="yellow">{` (${totalWaiting} waiting)`}</Text>
+              )}
+              <Text color={inputAccentColor} bold>{'> '}</Text>
+              <TextInput
+                value={input}
+                onChange={setInput}
+                onSubmit={(value) => { void handleSubmit(value); }}
+                focus={!pickerOpen}
+              />
+            </Box>
+            <Separator />
+          </>
+        );
+      })()}
 
       <StatusBar
         planMode={planMode}
