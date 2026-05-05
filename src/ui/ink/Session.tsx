@@ -8,9 +8,12 @@ import { Separator } from './components/separator.js';
 import { StatusBar } from './components/status-bar.js';
 import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
 import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
+import { ProviderPicker, type RecentPair } from './components/provider-picker.js';
 import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
 import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
+import { listProviderNames, createProvider } from '../../providers/registry.js';
+import { getRecentSessions } from '../../core/session-log.js';
 
 export interface SessionProps {
   model: string;
@@ -36,7 +39,30 @@ export function Session(props: SessionProps): React.ReactElement {
   const isActive = props.isActive ?? true;
   const { exit } = useApp();
   const [input, setInput] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerRecents, setPickerRecents] = useState<RecentPair[]>([]);
   const agent = useAgentLoop(props);
+
+  // Reload recents each time the picker opens so the freshest pairs are
+  // offered. Cheap (~16 jsonl head reads) and avoids stale entries when the
+  // user has been switching models in this session.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    let cancelled = false;
+    void getRecentSessions(8).then((sessions) => {
+      if (cancelled) return;
+      const seen = new Set<string>();
+      const pairs: RecentPair[] = [];
+      for (const s of sessions) {
+        const key = `${s.provider}\0${s.model}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push({ provider: s.provider, model: s.model });
+      }
+      setPickerRecents(pairs);
+    });
+    return () => { cancelled = true; };
+  }, [pickerOpen]);
 
   // <Static> can only be used once we know we're staying single-tab. Once a
   // second tab has ever existed, switch to .map permanently — flipping back
@@ -100,6 +126,11 @@ export function Session(props: SessionProps): React.ReactElement {
       exit();
       return;
     }
+    if (!pickerOpen && key.ctrl && inputChar === 'k') {
+      setPickerOpen(true);
+      return;
+    }
+    if (pickerOpen) return;
     if (key.escape && state === 'running') {
       addNotice('warn', '⏸ Esc — aborting agent run.');
       agent.abort();
@@ -129,7 +160,7 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true) });
         return;
       }
       agent.queueInput(trimmed);
@@ -175,7 +206,7 @@ export function Session(props: SessionProps): React.ReactElement {
     if (trimmed.startsWith('/')) {
       const [cmd, ...rest] = trimmed.split(' ');
       refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
-      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined });
+      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true) });
       if (handled) return;
     }
 
@@ -215,6 +246,24 @@ export function Session(props: SessionProps): React.ReactElement {
         <PlanApprovalPanel count={plannedCalls.length} />
       )}
 
+      {pickerOpen && (
+        <ProviderPicker
+          providers={listProviderNames()}
+          recents={pickerRecents}
+          initialProvider={providerName}
+          initialModel={model}
+          loadModels={async (name) => {
+            const p = createProvider(name, {});
+            return p.listModels();
+          }}
+          onCancel={() => setPickerOpen(false)}
+          onCommit={(provider, chosenModel) => {
+            setPickerOpen(false);
+            void agent.setProviderByName(provider, chosenModel);
+          }}
+        />
+      )}
+
       {isActive && (
         <>
           <Separator />
@@ -223,7 +272,12 @@ export function Session(props: SessionProps): React.ReactElement {
               <Text dimColor>{`[${props.tabLabel}]`}</Text>
             )}
             <Text color={inputAccentColor} bold>{'> '}</Text>
-            <TextInput value={input} onChange={setInput} onSubmit={(value) => { void handleSubmit(value); }} />
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={(value) => { void handleSubmit(value); }}
+              focus={!pickerOpen}
+            />
           </Box>
           <Separator />
         </>
