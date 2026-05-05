@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config-types.js';
 import { ConversationDisplay } from './components/conversation-display.js';
+import { Separator } from './components/separator.js';
 import { StatusBar } from './components/status-bar.js';
 import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
 import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
@@ -149,7 +150,7 @@ export function App(props: AppProps): React.ReactElement {
 
   // Render
   const capabilities = props.provider.getCapabilities(model);
-  const inputBorderColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
+  const inputAccentColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
   const spinner = !permissionRequest && compacting
     ? {
         label: compacting.aggressive
@@ -178,10 +179,14 @@ export function App(props: AppProps): React.ReactElement {
         <PlanApprovalPanel count={plannedCalls.length} />
       )}
 
-      <Box borderStyle="round" borderColor={inputBorderColor} paddingX={1} width="100%">
-        <Text color={inputBorderColor} bold>{'> '}</Text>
+      <Separator />
+
+      <Box paddingX={1} width="100%">
+        <Text color={inputAccentColor} bold>{'> '}</Text>
         <TextInput value={input} onChange={setInput} onSubmit={(value) => { void handleSubmit(value); }} />
       </Box>
+
+      <Separator />
 
       <StatusBar
         planMode={planMode}
