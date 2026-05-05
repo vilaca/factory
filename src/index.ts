@@ -35,6 +35,17 @@ function dbg(message: string): void {
   if (DEBUG) process.stderr.write(`[factory:debug] ${message}\n`);
 }
 
+function canResumeLastSession(
+  last: { provider: string; model: string },
+  probed: Map<StartupProviderName, string[] | null>,
+): boolean {
+  const descriptor = descriptorByAlias(last.provider);
+  if (!descriptor) return false;
+  const models = probed.get(descriptor.name);
+  if (!models) return false;
+  return models.includes(last.model);
+}
+
 async function main(): Promise<void> {
   const cliArgs = parseArgs(process.argv.slice(2));
 
@@ -68,6 +79,17 @@ async function main(): Promise<void> {
 
   if (config.provider) {
     providerName = config.provider;
+  } else if (
+    !cliArgs.pick &&
+    lastSession &&
+    canResumeLastSession(lastSession, probedModels)
+  ) {
+    // Fast path: jump straight into the prompt with the same provider/model
+    // the user finished on. Use /pick or Ctrl+K mid-session to change, or
+    // pass --pick to force the startup menu.
+    dbg(`resuming last session: ${lastSession.provider}/${lastSession.model}`);
+    providerName = lastSession.provider;
+    resumeModel = lastSession.model;
   } else {
     const recentSessions = await getRecentSessions(10).catch(() => []);
     const startupOptions = buildPickerOptions(probedModels);
