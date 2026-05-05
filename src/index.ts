@@ -156,7 +156,7 @@ async function main(): Promise<void> {
   } else {
     const lastModelForProvider = lastSession?.provider === providerName ? lastSession.model : null;
     dbg(`opening selectModel (default=${lastModelForProvider ?? '<none>'})`);
-    model = await selectModelInk(availableModels ?? [], lastModelForProvider, provider);
+    model = await selectModelInk(availableModels ?? [], lastModelForProvider, provider, providerName);
     dbg(`selectModel returned: ${model}`);
   }
 

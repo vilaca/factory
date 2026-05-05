@@ -8,7 +8,8 @@ import { Separator } from './components/separator.js';
 import { StatusBar } from './components/status-bar.js';
 import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
 import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
-import { ProviderPicker, type RecentPair } from './components/provider-picker.js';
+import { ProviderPicker, type ProviderEntry, type RecentPair } from './components/provider-picker.js';
+import { DESCRIPTORS } from '../../providers/descriptors.js';
 import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
 import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
@@ -65,7 +66,11 @@ export function Session(props: SessionProps): React.ReactElement {
         const key = `${s.provider}\0${s.model}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        pairs.push({ provider: s.provider, model: s.model });
+        pairs.push({
+          provider: s.provider,
+          model: s.model,
+          ...(s.status ? { status: s.status } : {}),
+        });
       }
       setPickerRecents(pairs);
       setPickerRecentsLoading(false);
@@ -275,7 +280,10 @@ export function Session(props: SessionProps): React.ReactElement {
 
       {pickerOpen && (
         <ProviderPicker
-          providers={listProviderNames()}
+          providers={listProviderNames().map((name): ProviderEntry => {
+            const desc = (DESCRIPTORS as Record<string, { label: string } | undefined>)[name];
+            return { name, label: desc?.label ?? name };
+          })}
           recents={pickerRecents}
           recentsLoading={pickerRecentsLoading}
           initialProvider={providerName}
