@@ -94,6 +94,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `/clear` | Clear conversation history |
 | `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
 | `/pick` | Open the provider/model picker (recent pairs first) |
+| `/full` | Toggle full vs preview tool output (applies going forward) |
 | `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |
 | `/plan` | Toggle plan mode or show queued plan |

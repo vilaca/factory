@@ -42,6 +42,12 @@ export function Session(props: SessionProps): React.ReactElement {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerRecents, setPickerRecents] = useState<RecentPair[]>([]);
   const [pickerRecentsLoading, setPickerRecentsLoading] = useState(false);
+  const [showFullOutput, setShowFullOutput] = useState(false);
+  // Capture the latest value in a ref so the slash dispatch context's
+  // toggle closure stays current without re-creating the dispatch arg
+  // every render.
+  const showFullOutputRef = useRef(showFullOutput);
+  showFullOutputRef.current = showFullOutput;
   const agent = useAgentLoop(props);
 
   // Reload recents each time the picker opens so the freshest pairs are
@@ -172,7 +178,7 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true) });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true), toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
         return;
       }
       agent.queueInput(trimmed);
@@ -186,7 +192,7 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true) });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true), toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
         return;
       }
       const decision = parsePermissionInput(trimmed);
@@ -226,7 +232,7 @@ export function Session(props: SessionProps): React.ReactElement {
     if (trimmed.startsWith('/')) {
       const [cmd, ...rest] = trimmed.split(' ');
       refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
-      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true) });
+      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true), toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
       if (handled) return;
     }
 
@@ -258,6 +264,7 @@ export function Session(props: SessionProps): React.ReactElement {
         pendingToolCall={pendingToolCall}
         spinner={spinner}
         useStatic={useStatic}
+        showFullOutput={showFullOutput}
       />
 
       {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} />}
@@ -297,6 +304,9 @@ export function Session(props: SessionProps): React.ReactElement {
               )}
               {showWaiting && (
                 <Text color="yellow">{` (${totalWaiting} waiting)`}</Text>
+              )}
+              {showFullOutput && (
+                <Text color="cyan">{' [full]'}</Text>
               )}
               <Text color={inputAccentColor} bold>{'> '}</Text>
               <TextInput
