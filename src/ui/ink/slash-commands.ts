@@ -185,26 +185,15 @@ export async function dispatchSlashCommand(
       if (arg) {
         await agent.setModelByName(arg);
       } else {
-        agent.addNotice('info', `Current model: ${refs.current.model}`);
+        agent.addNoticeBlock([
+          { level: 'info', text: `Current: ${refs.current.provider.name} / ${refs.current.model}` },
+          { level: 'info', text: 'Switch with /pick (or Ctrl+K). Power users: /model <provider>:<model>.' },
+        ]);
       }
       return true;
     case '/cwd':
       agent.setCwd(arg);
       return true;
-    case '/provider': {
-      // `/provider` alone shows the current provider.
-      // `/provider <name>` switches; `/provider <name> <model>` does both.
-      // Equivalent to `/model <name>:<model>`.
-      const parts = arg.trim().split(/\s+/).filter(Boolean);
-      if (parts.length === 0) {
-        agent.addNotice('info', `Current provider: ${refs.current.provider.name}`);
-        return true;
-      }
-      const [name, ...modelParts] = parts;
-      const requested = modelParts.length > 0 ? modelParts.join(' ') : undefined;
-      await agent.setProviderByName(name, requested);
-      return true;
-    }
     case '/exp':
       handleExpCommand(agent, arg);
       return true;
@@ -229,8 +218,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/tabs', 'List open tabs'],
     ['/switch <n|label>', 'Switch to tab by index, label, or unique prefix'],
     ['/clear', 'Clear conversation history'],
-    ['/model <name>', 'Switch model (or show current). Accepts <provider>:<model>.'],
-    ['/provider <name> [model]', 'Switch provider for this tab (or show current)'],
+    ['/model [<name>]', 'Show current provider/model, or switch model. Accepts <provider>:<model>.'],
     ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
     ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],
