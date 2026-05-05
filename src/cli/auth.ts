@@ -143,12 +143,13 @@ export async function ensureAuth(
   descriptor: ProviderDescriptor,
   config: Config,
   cliToken?: string,
+  keyId?: string,
 ): Promise<AuthResult> {
   switch (descriptor.authFlow) {
     case 'none':
       return { shouldSave: false };
     case 'simple-prompt':
-      return ensureSimplePromptAuth(descriptor, config, cliToken);
+      return ensureSimplePromptAuth(descriptor, config, cliToken, keyId);
     case 'device-flow':
       return ensureCopilotAuth(config, cliToken);
     case 'oauth-or-key':
@@ -160,8 +161,9 @@ async function ensureSimplePromptAuth(
   descriptor: ProviderDescriptor,
   config: Config,
   cliToken?: string,
+  keyId?: string,
 ): Promise<AuthResult> {
-  const existing = resolveCredentialsFor(descriptor, config, cliToken);
+  const existing = resolveCredentialsFor(descriptor, config, cliToken, keyId);
   const haveToken = Boolean(existing.token);
   const needAccountId = Boolean(descriptor.needsAccountId);
   const haveAccountId = Boolean(existing.accountId);

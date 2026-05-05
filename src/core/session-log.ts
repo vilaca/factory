@@ -15,6 +15,8 @@ export interface SessionStartMeta {
   mcp?: { servers: string[]; toolCount: number };
   gitBranch?: string;
   gitDirty?: boolean | null;
+  /** Set when the session was opened against a specific saved key. */
+  keyId?: string;
 }
 
 export interface SessionLogger {
@@ -24,7 +26,7 @@ export interface SessionLogger {
   logUserInput(content: string): void;
   logAgentEvent(event: AgentEvent): void;
   logCommand(command: string, arg: string): void;
-  logModelChange(from: string, to: string): void;
+  logModelChange(from: string, to: string, keyId?: string): void;
   logSystemPrompt(prompt: string): void;
   logSystemPromptChange(reason: string): void;
   logPermissionChange(action: string, toolName?: string): void;
@@ -41,6 +43,10 @@ export interface SessionLogger {
 export interface LastSessionSelection {
   provider: string;
   model: string;
+  /** Set when the session was opened against a specific saved key. Older
+   *  logs predate the multi-key store and have no keyId — callers must
+   *  treat missing keyId as "use the default key for this provider". */
+  keyId?: string;
 }
 
 export type SessionErrorStatus = 'throttle' | 'quota' | 'permission' | 'error';
@@ -50,6 +56,8 @@ export interface RecentSession {
   model: string;
   startedAt: string;
   status?: SessionErrorStatus;
+  /** Same semantics as LastSessionSelection.keyId — optional, missing on old logs. */
+  keyId?: string;
 }
 
 export interface ProviderAuthMeta {
@@ -85,7 +93,7 @@ export function createSessionLogger(): SessionLogger {
     logProviderAuth(meta) { write({ type: 'provider-auth', ...meta }); },
     logUserInput(content) { write({ type: 'user-input', content }); },
     logCommand(command, arg) { write({ type: 'command', command, arg }); },
-    logModelChange(from, to) { write({ type: 'model-change', from, to }); },
+    logModelChange(from, to, keyId) { write({ type: 'model-change', from, to, ...(keyId ? { keyId } : {}) }); },
     logSystemPrompt(prompt) { write({ type: 'system-prompt', content: prompt }); },
     logSystemPromptChange(reason) { write({ type: 'system-prompt-change', reason }); },
     logPermissionChange(action, toolName) { write({ type: 'permission-change', action, toolName }); },
@@ -206,18 +214,30 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
       typeof entry.provider === 'string' &&
       typeof entry.model === 'string'
     ) {
-      if (entry.model !== STARTUP_MODEL_PLACEHOLDER) {
-        return { provider: entry.provider, model: entry.model };
-      }
+      const startKeyId = typeof entry.keyId === 'string' && entry.keyId ? entry.keyId : undefined;
+      // Find the latest model-change to capture both the final model and
+      // the final keyId (a mid-session /pick switch updates both).
+      let latestModel: string | undefined;
+      let latestKeyId: string | undefined = startKeyId;
       for (let i = lines.length - 1; i >= 1; i--) {
-        const candidate = JSON.parse(lines[i]);
-        if (
-          candidate.type === 'model-change' &&
-          typeof candidate.to === 'string' &&
-          candidate.to !== STARTUP_MODEL_PLACEHOLDER
-        ) {
-          return { provider: entry.provider, model: candidate.to };
+        try {
+          const candidate = JSON.parse(lines[i]);
+          if (candidate.type !== 'model-change') continue;
+          if (typeof candidate.to !== 'string' || candidate.to === STARTUP_MODEL_PLACEHOLDER) continue;
+          latestModel = candidate.to;
+          if (typeof candidate.keyId === 'string' && candidate.keyId) latestKeyId = candidate.keyId;
+          break;
+        } catch {
+          // skip malformed
         }
+      }
+      const finalModel = latestModel ?? (entry.model !== STARTUP_MODEL_PLACEHOLDER ? entry.model : undefined);
+      if (finalModel) {
+        return {
+          provider: entry.provider,
+          model: finalModel,
+          ...(latestKeyId ? { keyId: latestKeyId } : {}),
+        };
       }
     }
   } catch {
@@ -261,6 +281,7 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
     let provider = '';
     let model = '';
     let startedAt = '';
+    let keyId: string | undefined;
     let lastErrorMessage: string | null = null;
     let userInputCount = 0;
 
@@ -271,14 +292,15 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
       provider = first.provider;
       model = first.model;
       startedAt = typeof first.ts === 'string' ? first.ts : '';
+      if (typeof first.keyId === 'string' && first.keyId) keyId = first.keyId;
     } catch {
       continue;
     }
     if (!provider || !model) continue;
 
-    // The latest model swap wins for the model field; the latest error (if
-    // any) wins for status. Count user inputs to skip sessions that were
-    // started but never used.
+    // The latest model swap wins for the model and keyId fields; the
+    // latest error (if any) wins for status. Count user inputs to skip
+    // sessions that were started but never used.
     for (const line of lines.slice(1)) {
       try {
         const entry = JSON.parse(line);
@@ -286,6 +308,7 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
           userInputCount++;
         } else if (entry.type === 'model-change' && typeof entry.to === 'string' && entry.to !== STARTUP_MODEL_PLACEHOLDER) {
           model = entry.to;
+          if (typeof entry.keyId === 'string' && entry.keyId) keyId = entry.keyId;
         } else if (entry.type === 'agent-event' && entry.event?.type === 'error' && typeof entry.event.error?.message === 'string') {
           lastErrorMessage = entry.event.error.message;
         }
@@ -301,7 +324,11 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
     seen.add(key);
 
     const status = lastErrorMessage ? classifyErrorMessage(lastErrorMessage) : undefined;
-    out.push({ provider, model, startedAt, status });
+    out.push({
+      provider, model, startedAt,
+      ...(status ? { status } : {}),
+      ...(keyId ? { keyId } : {}),
+    });
   }
   out.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   return out;

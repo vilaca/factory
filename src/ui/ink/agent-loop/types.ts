@@ -123,7 +123,7 @@ export interface AgentLoopApi {
   /** Swap to another provider by name. The model can be set in one shot via
    * "providerName:modelName" — useful so the user doesn't end up on a
    * provider whose default model is invalid. */
-  setProviderByName(name: string, model?: string): Promise<void>;
+  setProviderByName(name: string, model?: string, keyId?: string): Promise<void>;
   recordHistory(text: string): void;
   historyUp(currentInput: string): string | null;
   historyDown(): string | null;
