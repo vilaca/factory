@@ -12,7 +12,7 @@ export type DisplayItem =
   | { kind: 'tool-result'; id: number; toolName: string; output: string; success: boolean; empty?: boolean }
   | { kind: 'tool-planned'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'notice'; id: number; text: string; level: 'info' | 'warn' | 'danger' | 'cyan' }
-  | { kind: 'notice-block'; id: number; lines: { text: string; level: 'info' | 'warn' | 'danger' | 'cyan' }[] }
+  | { kind: 'notice-block'; id: number; lines: { text: string; level: 'info' | 'warn' | 'danger' | 'cyan'; bold?: boolean }[] }
   | { kind: 'permission-prompt'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'status'; id: number; turnsUsed: number; usage?: { totalTokens: number } };
 

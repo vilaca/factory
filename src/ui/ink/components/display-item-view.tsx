@@ -49,8 +49,10 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
       return (
         <Box flexDirection="column">
           {item.lines.map((line, i) => {
-            if (line.level === 'info') return <Text key={i} dimColor>{line.text}</Text>;
-            return <Text key={i} color={colorMap[line.level]}>{line.text}</Text>;
+            if (line.level === 'info') {
+              return <Text key={i} dimColor={!line.bold} bold={line.bold}>{line.text}</Text>;
+            }
+            return <Text key={i} color={colorMap[line.level]} bold={line.bold}>{line.text}</Text>;
           })}
         </Box>
       );

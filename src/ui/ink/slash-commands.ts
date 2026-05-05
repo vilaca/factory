@@ -68,12 +68,15 @@ export async function dispatchSlashCommand(
         agent.addNotice('warn', 'Tabs not available.');
         return true;
       }
-      const lines: { level: 'cyan' | 'info'; text: string }[] = [
+      const lines: { level: 'cyan' | 'info'; text: string; bold?: boolean }[] = [
         { level: 'cyan', text: `Open tabs (${tabs.tabs.length}):` },
       ];
       tabs.tabs.forEach((tab, i) => {
-        const marker = tab.id === tabs.activeId ? '●' : '○';
-        lines.push({ level: 'info', text: `  ${marker} ${i + 1}: ${tab.label}` });
+        lines.push({
+          level: 'info',
+          text: `  ${i + 1}: ${tab.label}`,
+          bold: tab.id === tabs.activeId,
+        });
       });
       lines.push({ level: 'info', text: 'Switch with /switch <n|label>, Ctrl+N (next), Ctrl+P (prev). Open with /new or Ctrl+T.' });
       agent.addNoticeBlock(lines);
