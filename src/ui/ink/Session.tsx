@@ -41,6 +41,7 @@ export function Session(props: SessionProps): React.ReactElement {
   const [input, setInput] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerRecents, setPickerRecents] = useState<RecentPair[]>([]);
+  const [pickerRecentsLoading, setPickerRecentsLoading] = useState(false);
   const agent = useAgentLoop(props);
 
   // Reload recents each time the picker opens so the freshest pairs are
@@ -49,6 +50,7 @@ export function Session(props: SessionProps): React.ReactElement {
   useEffect(() => {
     if (!pickerOpen) return;
     let cancelled = false;
+    setPickerRecentsLoading(true);
     void getRecentSessions(8).then((sessions) => {
       if (cancelled) return;
       const seen = new Set<string>();
@@ -60,6 +62,7 @@ export function Session(props: SessionProps): React.ReactElement {
         pairs.push({ provider: s.provider, model: s.model });
       }
       setPickerRecents(pairs);
+      setPickerRecentsLoading(false);
     });
     return () => { cancelled = true; };
   }, [pickerOpen]);
@@ -250,6 +253,7 @@ export function Session(props: SessionProps): React.ReactElement {
         <ProviderPicker
           providers={listProviderNames()}
           recents={pickerRecents}
+          recentsLoading={pickerRecentsLoading}
           initialProvider={providerName}
           initialModel={model}
           loadModels={async (name) => {
