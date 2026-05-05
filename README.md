@@ -42,6 +42,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
   - [Project instructions](#project-instructions)
 - [Advanced Features](#advanced-features)
   - [Multi-Tab Sessions](#multi-tab-sessions)
+  - [Provider/Model Picker](#providermodel-picker)
   - [Plan Mode](#plan-mode)
   - [Permission System](#permission-system)
   - [Auto-Correction](#auto-correction)
@@ -65,8 +66,9 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 - **Permission system**: approve, deny, or allow-all per tool type
 - **Multi-provider support**: Anthropic Claude, Cerebras, Cloudflare Workers AI, Codestral, Cohere, GitHub Copilot, Google AI Studio, Groq, HuggingFace, llama.cpp, Mistral, Ollama, OpenCode Zen, OpenRouter, Vercel AI Gateway
 - **Per-tab provider/model switching**: `/pick` (or `Ctrl+K`) for the interactive picker; `/model <provider>:<model>` for a one-shot switch — either path rebinds a single tab without affecting others
-- **Provider/model picker**: at startup or mid-session via `/pick` / `Ctrl+K`, with recently-used pairs at the top
-- **Resume on launch**: if a previous session is on file, factory skips the menu and starts on the same provider/model (override with `--pick`)
+- **Provider/model picker**: at startup or mid-session via `/pick` / `Ctrl+K`, with recently-used pairs at the top — same component for both
+- **Multiple API keys per provider**: save more than one key for any simple-API-key provider (Anthropic, Groq, Mistral, OpenRouter, Cerebras, Cohere, Vercel, OpenCode Zen, Codestral, Workers AI, HuggingFace), pick which one a tab uses, add new keys inline (validated via `listModels` with a 3 s timeout, with a "save anyway" override for transient failures), delete keys with confirmation. Keys show as `<label> · …<last4>` so the secret never appears in the UI.
+- **Resume on launch**: if a previous session is on file, factory skips the menu and starts on the same provider/model/key (override with `--pick`)
 - **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/pick`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), tuning (`/correct`, `/exp`)
 - **Cross-session history**: up-arrow recalls inputs from prior sessions, not just the current one
 - **Esc to abort**: stops the running agent immediately
@@ -154,7 +156,7 @@ Three layers, lowest to highest precedence: config files → environment variabl
 
 ### Environment variables
 
-Provider credentials. Set whichever ones you use; the picker also saves them to the config file the first time you enter them.
+Provider credentials. Set whichever ones you use; the picker also saves them to the config file the first time you enter them. Saved keys live in `keys[<provider>]` in the config file (each entry has an `id`, `token`, `createdAt`, optional `label`, and optional `extras` for things like Workers AI's `accountId`); the legacy flat `*Token` fields are migrated to a single default-labelled entry on first launch and kept in place for downgrade safety.
 
 | Variable | Purpose |
 |----------|---------|
@@ -252,6 +254,21 @@ Each tab is an independent agent: its own conversation, working directory, provi
 ```
 
 Other tabs keep their own provider/model/cwd. Aborting a turn (`Esc` / `Ctrl+C`) only affects the active tab.
+
+### Provider/Model Picker
+
+`/pick` (or `Ctrl+K`) opens an interactive panel above the prompt. Same component that appears at startup, just rendered inline. The flow:
+
+1. **Recent** — `<provider> / <model>` pairs from `~/.factory/sessions/*.jsonl`, sorted newest-first and deduped. Status badges (`(throttled)`, `(out of quota)`, `(permission denied)`, `(error)`) flag pairs whose last session ended on a model-side error. A trailing `Pick a different provider` entry jumps to the provider list (also bound to `p`).
+2. **Provider** — descriptor labels, dimmed `(offline)` for ones that didn't probe, jump shortcuts `0–9` / `A–Z`. Picking a single-credential provider (Copilot device-flow, Google AI Studio OAuth, Ollama, llama.cpp) hands off to the existing auth path. Picking a simple-API-key provider continues to:
+3. **Key** — list of saved keys for that provider as `<label> · …<last4>`, with trailing `Add new key…` and `Delete a key…` entries.
+   - **Add** prompts for the token in a masked input. Hitting `Enter` validates by calling `listModels` against the new token (3 s timeout). On success the key is persisted and the picker advances to the model list. On failure, you choose between `edit` (re-edit the typed token without retyping the whole thing) or `save anyway` (persist anyway — useful for transient quota/network failures).
+   - **Delete** is a two-step pick → confirm.
+4. **Model** — the chosen provider/key's model list, with display names and warnings via the provider's `getModelPickerInfo`. Number/letter shortcuts also work here.
+
+`Esc` always backs up one stage; `Esc` from the recent list cancels and closes the picker (mid-session) or exits factory (startup).
+
+A switch made via the picker is recorded in the session log alongside the keyId, so the next launch resumes on exactly the same provider/key/model. Pass `--pick` to force the menu when you want to choose differently.
 
 ### Plan Mode
 
