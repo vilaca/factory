@@ -2,6 +2,7 @@
   "name": "factory",
   "version": "0.1.0",
   "description": "Interactive terminal coding agent with tool use, plan mode, and pluggable LLM providers (local and cloud).",
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "bin": {
     "factory": "dist/index.js"

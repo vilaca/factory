@@ -1,55 +1,47 @@
 # 🏭 factory
 
-A coding agent for both interactive workflows and automation.
-
-Pick whichever fits your privacy, cost, and latency needs — local models ([llama.cpp](https://github.com/ggerganov/llama.cpp), [Ollama](https://ollama.ai)) or any of 13 cloud providers ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://codestral.mistral.ai), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)).
-
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)
+
+**A coding agent that runs anywhere — local or cloud, frontier or 7B — with the resilience to make smaller models actually useful.**
+
+- **Bring your own model.** 15 providers on equal footing — local-first ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://codestral.mistral.ai), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)). Pick what fits your privacy, cost, and latency.
+- **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a Claude refactor in one tab while a local Qwen explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
+- **Built for models that don't behave.** Text-tool fallback recovers tool calls from prose for models without native function calling. An LLM-based corrector retries malformed calls with a fixed signature. An imitation guard strips fabricated tool-result blocks. Bash dedup nudges the model out of spinning loops.
+- **Plan mode.** Read-only tools execute freely; writes are queued for review. Approve, cancel, or refine before anything touches disk.
+- **Human or headless.** Interactive TUI on a TTY; in scripts and CI it auto-detects no-TTY, reads stdin as a prompt, runs one turn, and streams the result to stdout — same agent, no UI.
+
+## Requirements
+
+- **Node.js >= 22**
+- At least one LLM provider — local ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) or cloud (see [Providers](#providers))
 
 ## Quick Start
 
 ```bash
-# Install from source
 git clone https://github.com/vilaca/factory.git
-cd factory
-npm install
-npm run build
-npm link
-```
 
-**Start with interactive provider & model picker (recommended!)**
-```bash
+cd factory
+npm install && npm run build && npm link
+
 factory
 ```
 
-The interactive picker will guide you through:
-1. Choosing a provider (Ollama, Anthropic, Copilot, etc.)
-2. Setting up API keys if needed (saved for future use)
-3. Selecting a model with rich metadata
-4. Starting the REPL
-
-**Already know what you want?** Skip the picker:
-```bash
-factory qwen2.5-coder           # Ollama (must be running)
-factory -p anthropic            # Will prompt for API key if needed
-```
+That's it. `factory` opens a picker for provider, model, and API key (saved for next time).
 
 ## Table of Contents
 
 - [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Interactive Provider & Model Selection](#interactive-provider--model-selection-recommended)
-  - [Direct Provider/Model Selection](#direct-providermodel-selection)
-  - [Providers](#providers)
-  - [Options](#options)
-  - [Slash Commands](#slash-commands)
-- [Tools](#tools)
+- [Slash Commands](#slash-commands)
+- [Hotkeys](#hotkeys)
+- [Experimental Flags](#experimental-flags)
 - [Configuration](#configuration)
-  - [Project Instructions](#project-instructions)
-  - [Experimental Flags](#experimental-flags)
+  - [Command-line flags](#command-line-flags)
+  - [Environment variables](#environment-variables)
+  - [Config files](#config-files)
+  - [Project instructions](#project-instructions)
 - [Advanced Features](#advanced-features)
+  - [Multi-Tab Sessions](#multi-tab-sessions)
   - [Plan Mode](#plan-mode)
   - [Permission System](#permission-system)
   - [Auto-Correction](#auto-correction)
@@ -59,6 +51,7 @@ factory -p anthropic            # Will prompt for API key if needed
 - [Development](#development)
   - [Testing](#testing)
   - [Contributing](#contributing)
+  - [Adding a Provider](#adding-a-provider)
   - [CI/CD](#cicd)
 - [Troubleshooting](#troubleshooting)
 - [Security Considerations](#security-considerations)
@@ -67,11 +60,13 @@ factory -p anthropic            # Will prompt for API key if needed
 ## Features
 
 - **Interactive REPL** with streaming markdown rendering
+- **Multi-tab sessions**: each tab carries its own conversation, working directory, provider, and model — switch with `Ctrl+N`/`Ctrl+P`, jump with `F1`–`F12`, manage with `/new`, `/close`, `/tabs`, `/switch`
 - **Built-in tools**: Read, Write, Edit, Bash, Glob, Grep
 - **Permission system**: approve, deny, or allow-all per tool type
 - **Multi-provider support**: Anthropic Claude, Cerebras, Cloudflare Workers AI, Codestral, Cohere, GitHub Copilot, Google AI Studio, Groq, HuggingFace, llama.cpp, Mistral, Ollama, OpenCode Zen, OpenRouter, Vercel AI Gateway
+- **Per-tab provider/model switching**: `/provider <name> [model]` and `/model <name>` rebind a single tab without affecting others
 - **Model picker**: select from installed models interactively
-- **Slash commands**: `/clear`, `/model`, `/help`, `/exit` (also `/q`), `/permissions`, `/plan`, `/queue`, `/approve`, `/cancel`, `/log`
+- **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/provider`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), tuning (`/correct`, `/exp`)
 - **Cross-session history**: up-arrow recalls inputs from prior sessions, not just the current one
 - **Esc to abort**: stops the running agent immediately
 - **Tool support detection**: queries provider APIs at startup; reports native vs. fallback support
@@ -82,198 +77,23 @@ factory -p anthropic            # Will prompt for API key if needed
 - **Bash deduplication**: detects three near-duplicate Bash commands and nudges the model to stop spinning (enable with `--bash-dedup`)
 - **Read cache**: stamps Read with mtime + SHA-256 so repeat reads short-circuit (on by default; `--no-read-cache` to disable)
 - **Plan mode**: queue write operations for review before execution (`/plan` or `--plan`)
-- **Project facts**: auto-extracts `package.json` and `tsconfig.json` into system prompt
+- **Project facts**: auto-detects the project's stack and injects key metadata into the system prompt — Node (`package.json` name/version/engines/scripts), TypeScript (`tsconfig.json` target/module/strict/outDir), Rust (`Cargo.toml` name/version/edition), Go (`go.mod` module + version), plus presence-only markers for Python, JVM (Java/Kotlin/Scala), Ruby, PHP, Elixir, and C/C++
 - **Fuzzy Edit fallback**: whitespace-normalized matching when exact string match fails
 - **Session logging**: every interaction logged to `~/.factory/sessions/*.jsonl`
 
-## Installation
-
-### Requirements
-
-- **Node.js >= 22**
-- One or more LLM providers (see [Providers](#providers) for setup)
-
-### From Source
-
-```bash
-git clone https://github.com/vilaca/factory.git
-cd factory
-npm install
-npm run build
-npm link
-```
-
-Now `factory` is available globally.
-
-## Usage
-
-### Interactive Provider & Model Selection (Recommended)
-
-The easiest way to use factory is with the **interactive picker**. Just run:
-
-```bash
-factory
-```
-
-You'll see:
-
-1. **Provider Picker** — Choose from available providers (Ollama, Anthropic, Copilot, etc.)
-   - Ollama shown only if reachable
-   - Other providers shown if API keys are configured or you want to set them up
-   - If you used factory before, press Enter to resume your last provider/model
-
-2. **Model Picker** — Browse models with rich metadata:
-   - ✅ Tool support, vision, reasoning capabilities
-   - 📊 Context window, max output tokens
-   - 🆓 Free models (OpenRouter) or preview/experimental warnings
-   - Press Enter to resume your previous model
-
-3. **REPL starts** — Begin coding!
-
-**First-time setup:** If you pick a provider without credentials, you'll be prompted to enter your API key. It's saved securely in `~/.factory/config.json` for future sessions.
-
-**Quick exit:** Type `0`, `q`, or `exit` in any picker to quit before starting the REPL.
-
-### Direct Provider/Model Selection
-
-If you already know what you want, skip the pickers:
-
-```bash
-# Specify model directly (uses Ollama by default)
-factory qwen2.5-coder
-factory --model llama3.1
-
-# Use a specific provider
-factory -p anthropic -m claude-sonnet-4-6
-factory -p copilot -m gpt-4.1
-
-# Start in plan mode (review changes before execution)
-factory --plan
-
-# Custom Ollama host
-factory --host http://remote-server:11434
-```
-
-### Providers
-
-factory supports 15+ LLM providers:
-
-| Provider | Flag | Default Host | Setup |
-|----------|------|--------------|-------|
-| **Anthropic Claude** | `anthropic`, `claude` | Anthropic API | `export ANTHROPIC_API_KEY=sk-ant-xxx` |
-| **Cerebras** | `cerebras` | `https://api.cerebras.ai/v1` | `export CEREBRAS_API_KEY=xxx` |
-| **Cloudflare Workers AI** | `workersai`, `workers-ai` | `https://api.cloudflare.com/client/v4/accounts/{id}/ai/v1` | `export CLOUDFLARE_API_TOKEN=xxx`<br>`export CLOUDFLARE_ACCOUNT_ID=xxx` |
-| **Codestral** | `codestral` | `https://codestral.mistral.ai/v1` | `export CODESTRAL_API_KEY=xxx` |
-| **Cohere** | `cohere` | `https://api.cohere.com` | `export COHERE_API_KEY=xxx` |
-| **GitHub Copilot** | `copilot`, `github-copilot` | `https://api.githubcopilot.com` | `export GITHUB_COPILOT_API_KEY=ghu_xxx` |
-| **Google AI Studio** | `googleaistudio`, `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai` | See [Google AI Setup](#google-ai-studio-setup) |
-| **Groq** | `groq` | `https://api.groq.com/openai/v1` | `export GROQ_API_KEY=xxx` |
-| **HuggingFace** | `huggingface`, `hf` | Inference API | `export HF_TOKEN=hf_xxx` |
-| **llama.cpp** | `llamacpp`, `llama.cpp` | `http://127.0.0.1:8080` | Run [llama-server](https://github.com/ggerganov/llama.cpp/blob/master/examples/server/README.md) |
-| **Mistral** | `mistral`, `mistral.ai` | `https://api.mistral.ai/v1` | `export MISTRAL_API_KEY=xxx` |
-| **Ollama** | `ollama` (default) | `http://127.0.0.1:11434` | Install [Ollama](https://ollama.ai) and run `ollama serve` |
-| **OpenCode Zen** | `opencodezen`, `zen` | `https://opencode.ai/zen/v1` | `export OPENCODE_ZEN_API_KEY=zen_xxx` |
-| **OpenRouter** | `openrouter`, `open-router`, `or` | `https://openrouter.ai/api/v1` | `export OPENROUTER_API_KEY=sk-or-v1-xxx` |
-| **Vercel AI Gateway** | `vercel`, `ai-gateway` | `https://ai-gateway.vercel.sh/v1` | `export AI_GATEWAY_API_KEY=agw_xxx` |
-
-#### Setting Up Providers
-
-**Using the Interactive Picker (Recommended):**
-
-Most providers can be set up directly through the picker. When you select a provider without credentials configured, factory will:
-1. Prompt you for the API key
-2. Save it securely in `~/.factory/config.json`
-3. Use it for all future sessions
-
-**Pre-configuring with Environment Variables:**
-
-If you prefer to set up credentials beforehand:
-
-```bash
-# Anthropic Claude
-export ANTHROPIC_API_KEY=sk-ant-xxx
-
-# GitHub Copilot
-export GITHUB_COPILOT_API_KEY=ghu_xxx
-
-# HuggingFace
-export HF_TOKEN=hf_your_token
-
-# OpenRouter
-export OPENROUTER_API_KEY=sk-or-v1-xxx
-
-# And so on for other providers...
-```
-
-Then just run `factory` and pick your provider from the list.
-
-**Direct CLI Usage (Skip Picker):**
-
-```bash
-factory -p anthropic -m claude-sonnet-4-6
-factory -p copilot -m gpt-4.1
-factory -p openrouter -m openai/gpt-4.1
-```
-
-#### Google AI Studio Setup
-
-Google AI Studio supports two authentication methods:
-
-**Option 1: API Key**
-```bash
-export GEMINI_API_KEY=your_api_key
-factory -p gemini -m gemini-2.5-pro
-```
-
-**Option 2: OAuth via Application Default Credentials (ADC)**
-```bash
-# Setup ADC
-gcloud auth application-default login \
-  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever
-
-# Or use a service account JSON
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
-
-factory -p gemini -m gemini-2.5-pro
-```
-
-### Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--model <name>` | `-m` | Model to use |
-| `--provider <name>` | `-p` | Provider (see table above) |
-| `--host <url>` | | Custom server host |
-| `--token <token>` | `-t` | API token (also reads from environment) |
-| `--no-log` | | Disable session JSONL logging |
-| `--plan` | | Start in plan mode |
-| `--no-auto-correct` | | Disable LLM tool-call corrector |
-| `--bash-dedup` | | Enable Bash near-duplicate detector |
-| `--no-read-cache` | | Disable Read mtime/hash cache |
-| `--no-line-count-hint` | | Drop cloc/scc system-prompt hint |
-| `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
-| `--no-clear` | | Do not clear the screen on startup |
-| `--help` | `-h` | Show help |
-
-### Debugging
-
-Set `FACTORY_DEBUG=1` to print startup checkpoints (picker selection, auth flow, provider creation, model listing, validation) to stderr. Useful when the app exits unexpectedly during startup — the last log line tells you which step failed.
-
-```bash
-FACTORY_DEBUG=1 factory 2>/tmp/factory-debug.log
-# then in another terminal:
-tail -f /tmp/factory-debug.log
-```
-
-The picker UI keeps writing to stdout, so redirecting only stderr keeps the interactive flow intact.
-
-### Slash Commands
+## Slash Commands
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Show available commands |
+| `/help` | Show available commands and hotkeys |
+| `/new [<label>]` | Open a new tab |
+| `/close` | Close the active tab |
+| `/tabs` | List open tabs |
+| `/switch <n\|label>` | Switch to a tab by index, label, or unique prefix |
 | `/clear` | Clear conversation history |
-| `/model [<name>]` | Switch model or show current |
+| `/model [<name>]` | Switch model or show current (accepts `<provider>:<model>`) |
+| `/provider [<name> [<model>]]` | Switch provider (and optionally model) for the active tab |
+| `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |
 | `/plan` | Toggle plan mode or show queued plan |
 | `/queue` | Show the queued plan |
@@ -282,44 +102,96 @@ The picker UI keeps writing to stdout, so redirecting only stderr keeps the inte
 | `/log` | Show current session log path |
 | `/correct on\|off` | Toggle LLM tool-call corrector |
 | `/exp [<name> on\|off]` | List or toggle experimental flags |
-| `/exit`, `/quit`, `/q` | Exit the REPL |
+| `/exit`, `/quit`, `/q` | Exit (or close the active tab if multiple are open) |
+
+## Hotkeys
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+T` | New tab |
+| `Ctrl+W` | Close active tab (or exit if last) |
+| `Ctrl+N` / `Ctrl+P` | Cycle to next / previous tab |
+| `F1`–`F12` | Jump directly to tab N |
+| `Ctrl+C` | Abort running turn (or exit when idle) |
 | `Esc` | Abort the current agent run |
+| `↑` / `↓` | Recall previous / next prompt |
 
-## Tools
+## Experimental Flags
 
-The assistant has access to 6 tools, matching Claude Code's capabilities:
+| Flag | Default | Description |
+|------|---------|-------------|
+| `bashDedup` | off | Tracks recent Bash commands. When the model runs three near-duplicate commands (token-level Jaccard ≥ 0.5), injects a system nudge to prevent spinning. |
+| `readCache` | on | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens. |
+| `lineCountHint` | on | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants. |
 
-| Tool | Description | Example |
-|------|-------------|---------|
-| **Read** | Read file contents with line numbers | `Read(file_path="src/index.ts")` |
-| **Write** | Create or overwrite files | `Write(file_path="config.json", content="...")` |
-| **Edit** | Exact string replacement in files | `Edit(file_path="app.ts", old_string="...", new_string="...")` |
-| **Bash** | Execute shell commands | `Bash(command="npm test")` |
-| **Glob** | Find files by pattern | `Glob(pattern="**/*.ts")` |
-| **Grep** | Search file contents with regex | `Grep(pattern="TODO", path="src/")` |
+Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
 
 ## Configuration
 
-### Project Instructions
+Three layers, lowest to highest precedence: config files → environment variables → CLI flags. The picker writes saved credentials and last-used provider/model to the user-level config file; you usually don't need to edit it by hand.
 
-Create `.factory/INSTRUCTIONS.md` in your repository root to add project-specific guidelines that are automatically included in every model's system prompt:
+### Command-line flags
 
-```markdown
-## Project Conventions
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--provider <name>` | `-p` | Provider name or alias (e.g. `anthropic`, `claude`, `gemini`, `or`) |
+| `--model <name>` | `-m` | Model to use; accepts `<provider>:<model>` |
+| `--host <url>` | | Override the provider's default host (e.g. remote Ollama, llama.cpp) |
+| `--token <token>` | `-t` | API token (overrides env var and saved credential) |
+| `--plan` | | Start in plan mode |
+| `--no-auto-correct` | | Disable LLM tool-call corrector |
+| `--bash-dedup` | | Enable Bash near-duplicate detector |
+| `--no-read-cache` | | Disable Read mtime/hash cache |
+| `--no-line-count-hint` | | Drop the cloc/scc system-prompt hint |
+| `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
+| `--no-log` | | Disable session JSONL logging |
+| `--no-clear` | | Do not clear the screen on startup |
+| `--help` | `-h` | Show help |
 
-- Use TypeScript strict mode
-- Prefer async/await over callbacks
-- Run tests before committing: npm test
-- Never modify files in dist/ directory
+### Environment variables
+
+Provider credentials. Set whichever ones you use; the picker also saves them to the config file the first time you enter them.
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic Claude |
+| `CEREBRAS_API_KEY` | Cerebras |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Workers AI |
+| `CODESTRAL_API_KEY` | Codestral |
+| `COHERE_API_KEY` | Cohere |
+| `GITHUB_COPILOT_API_KEY` (or `COPILOT_API_KEY`) | GitHub Copilot |
+| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google AI Studio |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Google AI Studio service-account JSON (alternative to API key) |
+| `GROQ_API_KEY` | Groq |
+| `HF_TOKEN` (or `HUGGING_FACE_HUB_TOKEN`) | HuggingFace |
+| `MISTRAL_API_KEY` | Mistral |
+| `OPENCODE_ZEN_API_KEY` (or `OPENCODE_API_KEY`) | OpenCode Zen |
+| `OPENROUTER_API_KEY` | OpenRouter |
+| `AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`) | Vercel AI Gateway |
+
+Behavioural overrides:
+
+| Variable | Purpose |
+|----------|---------|
+| `FACTORY_DEBUG=1` | Print startup checkpoints (picker, auth, provider, models, validation) to stderr |
+| `XDG_CONFIG_HOME` | Override config directory (defaults to `~/.config`) |
+| `FACTORY_GITHUB_LOGIN_BASE_URL` | Override GitHub OAuth host for Copilot auth |
+| `FACTORY_GITHUB_API_BASE_URL` | Override GitHub API host for Copilot auth |
+
+For Google AI Studio OAuth via ADC instead of an API key:
+
+```bash
+gcloud auth application-default login \
+  --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever
 ```
 
-This file is appended verbatim to the system prompt, making the model aware of your project's standards.
-
-### Config Files
+### Config files
 
 Configuration is read from:
 1. Project-level: `./.factory/config.json`
-2. User-level: `~/.factory/config.json`
+2. User-level: `~/.config/factory/config.json` (or `$XDG_CONFIG_HOME/factory/config.json`)
+
+Project values override user-level; CLI flags and env vars override both.
 
 Example `config.json`:
 
@@ -337,59 +209,44 @@ Example `config.json`:
 }
 ```
 
-Saved credentials are stored in the user-level config:
-- `anthropicToken`
-- `cerebrasToken`
-- `codestralToken`
-- `cohereToken`
-- `copilotToken`
-- `geminiToken`
-- `groqToken`
-- `huggingfaceToken`
-- `mistralToken`
-- `opencodeZenToken`
-- `openrouterToken`
-- `vercelToken`
-- `workersAiAccountId`
-- `workersAiToken`
+### Project instructions
 
-### Experimental Flags
+Create `.factory/INSTRUCTIONS.md` in your repository root for project-specific guidelines that get appended verbatim to the system prompt:
 
-Three experimental features targeting common failure modes:
+```markdown
+## Example Project Conventions
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `bashDedup` | off | Tracks recent Bash commands. When the model runs three near-duplicate commands (token-level Jaccard ≥ 0.5), injects a system nudge to prevent spinning on command variations. |
-| `readCache` | on | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens. |
-| `lineCountHint` | on | Adds system prompt hint: prefer `cloc`/`scc` when available and avoid running multiple line-counting variants. |
-
-**Enable/disable via CLI:**
-```bash
-factory --bash-dedup --no-read-cache --no-line-count-hint
-```
-
-**Enable/disable via config:**
-```json
-{
-  "agent": {
-    "experimental": {
-      "bashDedup": true,
-      "readCache": false,
-      "lineCountHint": false
-    }
-  }
-}
-```
-
-**Enable/disable at runtime:**
-```
-> /exp                       # list current state
-> /exp bashDedup on          # enable
-> /exp readCache off         # disable
-> /exp lineCountHint         # toggle
+- Use TypeScript strict mode
+- Prefer async/await over callbacks
+- Run tests before committing: npm test
+- Never modify files in dist/ directory
 ```
 
 ## Advanced Features
+
+### Multi-Tab Sessions
+
+Each tab is an independent agent: its own conversation, working directory, provider, and model. Open one tab against Claude Sonnet for a refactor, another against a local Ollama model for cheap exploration, and a third in a different repo entirely — they don't share state.
+
+**Managing tabs:**
+
+| Action | Command | Hotkey |
+|--------|---------|--------|
+| New tab | `/new [label]` | `Ctrl+T` |
+| Close active tab | `/close` | `Ctrl+W` |
+| List tabs | `/tabs` | — |
+| Switch by index/label/prefix | `/switch <n\|label>` | `F1`–`F12` (by index) |
+| Cycle | — | `Ctrl+N` / `Ctrl+P` |
+
+**Per-tab provider and model:**
+
+```
+> /provider anthropic claude-sonnet-4-6   # rebind this tab only
+> /model qwen2.5-coder                    # swap model, keep provider
+> /cwd ~/work/other-repo                  # change working directory
+```
+
+Other tabs keep their own provider/model/cwd. Aborting a turn (`Esc` / `Ctrl+C`) only affects the active tab.
 
 ### Plan Mode
 
@@ -475,12 +332,12 @@ Log events include:
 **View current log path:**
 ```
 > /log
-Session log: /Users/you/.factory/sessions/2025-01-10T12-34-56-abc123.jsonl
+Session log: /Users/you/.factory/sessions/2026-05-05T12-34-56-abc123.jsonl
 ```
 
 **Tail log in another terminal:**
 ```bash
-tail -f ~/.factory/sessions/2025-01-10T12-34-56-abc123.jsonl
+tail -f ~/.factory/sessions/2026-05-05T12-34-56-abc123.jsonl
 ```
 
 ⚠️ **Privacy Note:** Session logs may contain sensitive data including API responses, file contents, and command outputs. Review logs before sharing or storing in version control.
@@ -489,7 +346,7 @@ Disable with `--no-log`.
 
 ### Headless / Non-TTY Mode
 
-When stdin or stdout isn't a TTY (piped input, CI jobs, scripts), `factory` skips the interactive Ink UI and runs in headless mode: it reads stdin to EOF as a single user prompt, executes one agent turn, streams the assistant's text to stdout, and writes tool diagnostics to stderr.
+When stdin or stdout isn't a TTY (piped input, CI jobs, scripts), `factory` skips the interactive TUI and runs in headless mode: it reads stdin to EOF as a single user prompt, executes one agent turn, streams the assistant's text to stdout, and writes tool diagnostics to stderr.
 
 ```bash
 echo "what does src/index.ts do?" | factory -p ollama -m qwen2.5-coder
@@ -542,23 +399,32 @@ src/
 │       └── file-cache.ts          # Read mtime/hash cache
 ├── ui/
 │   ├── ink/
-│   │   ├── App.tsx                # Ink-based interactive UI (TTY mode)
+│   │   ├── App.tsx                # Top-level TUI app (tabs + global keys)
+│   │   ├── Session.tsx            # One tab's REPL session
 │   │   ├── index.tsx              # Render entry
 │   │   ├── types.ts               # Display item types
 │   │   ├── slash-commands.ts      # Slash command handling
 │   │   ├── format.ts              # Markdown + tool call rendering
 │   │   ├── use-agent-loop.ts      # Agent loop hook
-│   │   └── components/            # Ink UI components
+│   │   ├── agent-loop/            # Agent loop submodules (init, history, run-loop, ...)
+│   │   ├── tabs/                  # Multi-tab registry, context, hook
+│   │   └── components/            # TUI components
 │   ├── repl.ts                    # Line-based REPL (non-TTY fallback)
 │   ├── renderer.ts                # Markdown rendering
 │   ├── status-bar.ts              # Bottom status line
 │   └── spinner.ts                 # Activity indicator
+├── cli/
+│   ├── args.ts                    # CLI flag parsing
+│   ├── auth.ts                    # Provider credential bootstrap
+│   ├── picker.ts                  # Provider/model picker (line-based)
+│   ├── prompts.ts                 # Interactive prompts
+│   └── startup-menu.tsx           # TUI startup menu
 ├── providers/
 │   ├── types.ts                   # Provider interface
 │   ├── registry.ts                # Provider factory
+│   ├── descriptors.ts             # Provider metadata (display, env vars, defaults)
 │   ├── anthropic.ts               # Anthropic Claude provider
 │   ├── cerebras.ts                # Cerebras
-│   ├── codestral.ts               # Codestral
 │   ├── cohere.ts                  # Cohere
 │   ├── copilot.ts                 # GitHub Copilot
 │   ├── copilot-auth.ts            # GitHub Copilot auth
@@ -567,7 +433,7 @@ src/
 │   ├── groq.ts                    # Groq
 │   ├── huggingface.ts             # HuggingFace Inference API
 │   ├── llamacpp.ts                # llama.cpp server
-│   ├── mistral.ts                 # Mistral AI
+│   ├── mistral.ts                 # Mistral AI + Codestral
 │   ├── ollama.ts                  # Ollama provider
 │   ├── opencodezen.ts             # OpenCode Zen
 │   ├── openrouter.ts              # OpenRouter
@@ -586,21 +452,6 @@ src/
     ├── tokens.ts                  # Token estimation
     └── build-info.ts              # Build metadata
 ```
-
-### Adding a Provider
-
-Implement the `Provider` interface in `src/providers/types.ts`:
-
-```typescript
-interface Provider {
-  name: string;
-  listModels(): Promise<ModelInfo[]>;
-  chat(options: ChatOptions): Promise<ChatResponse>;
-  // ... see types.ts for full interface
-}
-```
-
-Register in `src/providers/registry.ts`.
 
 ## Development
 
@@ -650,17 +501,27 @@ We welcome contributions! Here's how to get started:
    git push origin feature/your-feature-name
    ```
 
-**Adding a new provider:**
-- Implement the `Provider` interface in `src/providers/types.ts`
-- Add to `src/providers/registry.ts`
-- Add tests in `test/unit/`
-- Update README provider table
-
 **Found a bug?** [Open an issue](https://github.com/vilaca/factory/issues) with:
 - Steps to reproduce
 - Expected vs actual behavior
 - Environment (OS, Node version, provider)
 - Session log excerpt if relevant
+
+### Adding a Provider
+
+1. Implement the `Provider` interface from `src/providers/types.ts`:
+   ```typescript
+   interface Provider {
+     name: string;
+     listModels(): Promise<ModelInfo[]>;
+     chat(options: ChatOptions): Promise<ChatResponse>;
+     // ... see types.ts for full interface
+   }
+   ```
+2. Add an entry to `src/providers/descriptors.ts` (label, aliases, env vars, default host).
+3. Wire up the factory in `src/providers/registry.ts`.
+4. Add tests under `test/unit/`.
+5. Update the env-var table in [Configuration → Environment variables](#environment-variables).
 
 ### CI/CD
 
@@ -733,7 +594,7 @@ Still stuck? Check the [session logs](#session-logs) or [open an issue](https://
 
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE).
 
 ---
 
