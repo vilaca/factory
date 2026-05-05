@@ -7,6 +7,7 @@ export interface SlashCommandContext {
   agent: AgentLoopApi;
   exit: () => void;
   tabs?: TabsContextValue;
+  openPicker?: () => void;
 }
 
 export async function dispatchSlashCommand(
@@ -207,6 +208,13 @@ export async function dispatchSlashCommand(
     case '/exp':
       handleExpCommand(agent, arg);
       return true;
+    case '/pick':
+      if (ctx.openPicker) {
+        ctx.openPicker();
+      } else {
+        agent.addNotice('warn', 'Picker not available in this context.');
+      }
+      return true;
   }
 
   agent.addNotice('info', `Unknown command: ${cmd}. Type /help for available commands.`);
@@ -223,6 +231,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/clear', 'Clear conversation history'],
     ['/model <name>', 'Switch model (or show current). Accepts <provider>:<model>.'],
     ['/provider <name> [model]', 'Switch provider for this tab (or show current)'],
+    ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
     ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],
     ['/plan', 'Toggle plan mode (or show queue if one exists)'],
@@ -235,6 +244,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/help', 'Show this help'],
   ];
   const hotkeys: [string, string][] = [
+    ['Ctrl+K', 'Open the provider/model picker'],
     ['Ctrl+T', 'New tab'],
     ['Ctrl+W', 'Close active tab (or exit if last tab)'],
     ['Ctrl+N / Ctrl+P', 'Cycle to next / previous tab'],

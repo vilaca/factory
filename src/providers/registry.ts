@@ -64,6 +64,10 @@ const PROVIDER_ALIASES: Record<string, string> = {
   'cloudflare-workers-ai': 'workersai',
 };
 
+export function listProviderNames(): string[] {
+  return Array.from(new Set(Object.values(PROVIDER_ALIASES))).sort();
+}
+
 export function createProvider(name: string, options: CreateProviderOptions = {}): Provider {
   const normalized = PROVIDER_ALIASES[name.toLowerCase()];
 
