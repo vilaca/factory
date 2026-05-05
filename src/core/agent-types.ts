@@ -5,6 +5,7 @@ import type { Conversation } from './conversation.js';
 import type { ContextManager } from './context-manager.js';
 import type { PermissionManager, PermissionDecision } from '../permissions.js';
 import type { FileCache } from './agent/file-cache.js';
+import type { ProviderKey } from './config-types.js';
 
 export type { PermissionDecision };
 
@@ -42,6 +43,14 @@ export type AgentEvent =
   | { type: 'empty-turn-warning'; completionTokens: number }
   | { type: 'output-cap-reached'; completionTokens: number }
   | { type: 'pre-turn-stats'; tokenEstimate: number; messageCount: number; percentOfWindow: number }
+  | {
+      type: 'key-rotation';
+      provider: string;
+      from: { keyId: string; fingerprint: string; label?: string } | null;
+      to: { keyId: string; fingerprint: string; label?: string };
+      reason: 'rate-limit' | 'auth';
+    }
+  | { type: 'key-rotation-exhausted'; provider: string; reason: 'rate-limit' | 'auth' }
   | { type: 'turn-complete'; stopReason: StopReason; turnsUsed: number; usage?: TokenUsage }
   | { type: 'error'; error: Error };
 
@@ -71,4 +80,29 @@ export interface AgentOptions {
    * RunRefs in sync. Optional — headless callers may omit it and tools fall
    * back to `process.cwd()`. */
   cwdRef?: { current: string };
+  /** When set, the runtime rotates among saved keys for the active provider
+   *  on rate-limit/auth failures before giving up. */
+  rotation?: RotationOptions;
+}
+
+export interface RotationOptions {
+  /** Saved keys for the active provider, in priority order. */
+  keys: ProviderKey[];
+  /** Active key id at call start; updated by the runtime as rotation
+   *  swaps keys. Pre-populated from RunRefs.activeKeyId. */
+  activeKeyId?: string;
+  /** Construct a Provider instance bound to the given key's token (and
+   *  any per-key extras like Workers AI's accountId). */
+  withKey: (key: ProviderKey) => Provider;
+  /** Called whenever rotation swaps keys so the host can keep RunRefs
+   *  in sync. Optional — tests may omit it. */
+  onActiveKeyChange?: (keyId: string) => void;
+  /** Called once per turn when rotation has produced a new Provider
+   *  instance. The host updates RunRefs.provider so subsequent turns
+   *  start from the rotated provider, not the stale one. */
+  onProviderChange?: (next: Provider) => void;
+  /** In-memory log of recent failures, keyed by `keyId`. Used to
+   *  deprioritise keys that 429'd in the last few minutes. The runtime
+   *  reads + writes this map; the host owns its lifetime. */
+  failureLog?: Map<string, number>;
 }

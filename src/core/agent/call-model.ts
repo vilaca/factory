@@ -5,7 +5,9 @@ import type {
   ToolCallMessage,
   ToolDefinition,
 } from '../../providers/types.js';
-import type { AgentEvent } from '../agent-types.js';
+import type { AgentEvent, RotationOptions } from '../agent-types.js';
+import { keyFingerprint, selectNextKey } from '../credentials.js';
+import { classifyForRotation } from '../provider-errors.js';
 import { RepeatDetector } from './repeat-detector.js';
 
 function sanitizeToolCalls(
@@ -37,6 +39,11 @@ export interface ModelCallResult {
   /** Provider-supplied stop reason from the final chunk (e.g. Ollama's
    * "length" when the response hit num_predict). */
   doneReason?: string;
+  /** When rotation swapped the provider mid-call, this is the final
+   *  provider used. Callers should adopt it for subsequent calls in the
+   *  same turn (otherwise compaction or follow-up turns would use the
+   *  stale, rate-limited provider). */
+  finalProvider?: Provider;
 }
 
 /**
@@ -50,12 +57,19 @@ export interface ModelCallResult {
  * how to surface them.
  */
 export async function* callModel(
-  provider: Provider,
+  initialProvider: Provider,
   model: string,
   messages: ChatMessage[],
   tools: ToolDefinition[] | undefined,
   signal: AbortSignal | undefined,
+  rotation?: RotationOptions,
 ): AsyncGenerator<AgentEvent, ModelCallResult> {
+  let provider = initialProvider;
+  // Per-call tried-set to prevent looping when every key 429s.
+  const triedKeyIds = new Set<string>();
+  if (rotation?.activeKeyId) triedKeyIds.add(rotation.activeKeyId);
+  let activeKeyId = rotation?.activeKeyId;
+
   let fullContent = '';
   let toolCalls: ToolCallMessage[] = [];
   let lastUsage: TokenUsage | undefined;
@@ -72,63 +86,117 @@ export async function* callModel(
   }
   const repeatDetector = new RepeatDetector();
 
-  try {
-    for await (const chunk of provider.chat(model, messages, tools, { signal: internal.signal })) {
-      if (signal?.aborted) {
-        const err = new Error('aborted');
-        err.name = 'AbortError';
-        throw err;
-      }
-      if (chunk.content) {
-        yield { type: 'text-chunk', content: chunk.content };
-        fullContent += chunk.content;
-        const repeat = repeatDetector.feed(chunk.content);
-        if (repeat) {
-          yield { type: 'repetition-detected', line: repeat.line, streak: repeat.streak };
-          internal.abort();
-          // Continue to the catch block via the next iteration's AbortError.
+  // Rotation loop: on a rate-limit/auth failure *before* any chunk has
+  // streamed, try the next saved key. Streaming losses still surface
+  // because retrying mid-stream would replay tokens the caller already
+  // committed to scrollback.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let streamedAnything = false;
+    try {
+      for await (const chunk of provider.chat(model, messages, tools, { signal: internal.signal })) {
+        if (signal?.aborted) {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          throw err;
+        }
+        if (chunk.content) {
+          yield { type: 'text-chunk', content: chunk.content };
+          fullContent += chunk.content;
+          streamedAnything = true;
+          const repeat = repeatDetector.feed(chunk.content);
+          if (repeat) {
+            yield { type: 'repetition-detected', line: repeat.line, streak: repeat.streak };
+            internal.abort();
+          }
+        }
+        if (chunk.tool_calls) {
+          toolCalls.push(...sanitizeToolCalls(chunk.tool_calls));
+          streamedAnything = true;
+        }
+        if (chunk.usage) {
+          lastUsage = chunk.usage;
+        }
+        if (chunk.doneReason) {
+          doneReason = chunk.doneReason;
         }
       }
-      if (chunk.tool_calls) {
-        toolCalls.push(...sanitizeToolCalls(chunk.tool_calls));
-      }
-      if (chunk.usage) {
-        lastUsage = chunk.usage;
-      }
-      if (chunk.doneReason) {
-        doneReason = chunk.doneReason;
-      }
-    }
-  } catch (err: any) {
-    if (signal?.aborted || internal.signal.aborted || err.name === 'AbortError') {
-      // Don't throw — return what we got so the caller can preserve any
-      // partial content (e.g. half-finished ASCII art the user wants kept).
-      // This covers both user aborts and internal aborts (e.g. repetition).
+      break; // success
+    } catch (err: any) {
+      if (signal?.aborted || internal.signal.aborted || err.name === 'AbortError') {
+        if (signal) signal.removeEventListener('abort', cascade);
         return { fullContent, toolCalls: sanitizeToolCalls(toolCalls), lastUsage, aborted: true, doneReason };
-    }
-    // Fall back to non-streaming for stream-only failures and for transient
-    // connection drops that may resolve on a second attempt (e.g. Ollama
-    // reloading the model after an idle timeout). Identified loosely so we
-    // don't have to enumerate every transport phrase.
-    const msg = err?.message ?? '';
-    const isStreamish = msg.includes('stream') || msg.includes('connection dropped') ||
-      msg.includes('socket hang up') || msg.includes('fetch failed');
-    if (isStreamish) {
-      const response = await provider.chatNoStream(model, messages, tools, { signal });
-      fullContent = response.content ?? '';
-      toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
-      if (response.usage) {
-        lastUsage = response.usage;
       }
-      if (fullContent) {
-        yield { type: 'text-chunk', content: fullContent };
+      // Tier 1 rotation: only meaningful when no tokens have streamed yet
+      // (otherwise we'd duplicate output on retry) and when we know which
+      // key is currently active (otherwise we can't tell which keys we've
+      // already tried).
+      if (rotation && rotation.activeKeyId && !streamedAnything) {
+        const reason = classifyForRotation(err);
+        if (reason !== 'other') {
+          if (rotation.failureLog && activeKeyId) {
+            rotation.failureLog.set(activeKeyId, Date.now());
+          }
+          const next = selectNextKey(rotation.keys, triedKeyIds, {
+            failureLog: rotation.failureLog,
+          });
+          if (next) {
+            const fromKey = activeKeyId
+              ? rotation.keys.find(k => k.id === activeKeyId)
+              : undefined;
+            yield {
+              type: 'key-rotation',
+              provider: provider.name,
+              from: fromKey
+                ? { keyId: fromKey.id, fingerprint: keyFingerprint(fromKey.token), ...(fromKey.label ? { label: fromKey.label } : {}) }
+                : null,
+              to: { keyId: next.id, fingerprint: keyFingerprint(next.token), ...(next.label ? { label: next.label } : {}) },
+              reason,
+            };
+            triedKeyIds.add(next.id);
+            activeKeyId = next.id;
+            rotation.activeKeyId = next.id;
+            rotation.onActiveKeyChange?.(next.id);
+            provider = rotation.withKey(next);
+            // Reset accumulators — the failed call yielded nothing usable.
+            fullContent = '';
+            toolCalls = [];
+            lastUsage = undefined;
+            doneReason = undefined;
+            continue;
+          }
+          // Pool exhausted — surface a final notice and let the original
+          // error propagate below.
+          yield { type: 'key-rotation-exhausted', provider: provider.name, reason };
+        }
       }
-    } else {
+      // Existing isStreamish fallback: stream-only failures and transient
+      // connection drops retry non-streamed once on the same provider.
+      const msg = err?.message ?? '';
+      const isStreamish = msg.includes('stream') || msg.includes('connection dropped') ||
+        msg.includes('socket hang up') || msg.includes('fetch failed');
+      if (isStreamish) {
+        const response = await provider.chatNoStream(model, messages, tools, { signal });
+        fullContent = response.content ?? '';
+        toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
+        if (response.usage) {
+          lastUsage = response.usage;
+        }
+        if (fullContent) {
+          yield { type: 'text-chunk', content: fullContent };
+        }
+        break;
+      }
+      if (signal) signal.removeEventListener('abort', cascade);
       throw err;
     }
-  } finally {
-    if (signal) signal.removeEventListener('abort', cascade);
   }
-
-  return { fullContent, toolCalls: sanitizeToolCalls(toolCalls), lastUsage, doneReason };
+  if (signal) signal.removeEventListener('abort', cascade);
+  return {
+    fullContent,
+    toolCalls: sanitizeToolCalls(toolCalls),
+    lastUsage,
+    doneReason,
+    ...(provider !== initialProvider ? { finalProvider: provider } : {}),
+  };
 }

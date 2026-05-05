@@ -348,6 +348,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel, keyId);
     refs.current.provider = nextProvider;
     refs.current.model = nextModel;
+    refs.current.activeKeyId = keyId;
     refs.current.useTextToolFallback = validation.mode === 'fallback';
     refs.current.nativeToolSupport = validation.mode === 'native';
     setProviderName(nextProvider.name);

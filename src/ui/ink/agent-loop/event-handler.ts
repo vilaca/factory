@@ -179,6 +179,22 @@ export function handleAgentEvent(
       deps.addNotice('info', `⤳ Read cache hit: ${event.path} unchanged`);
       break;
     }
+    case 'key-rotation': {
+      const fromLabel = event.from
+        ? (event.from.label ? `${event.from.label} · …${event.from.fingerprint}` : `…${event.from.fingerprint}`)
+        : '<unknown>';
+      const toLabel = event.to.label
+        ? `${event.to.label} · …${event.to.fingerprint}`
+        : `…${event.to.fingerprint}`;
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      deps.addNotice('warn', `⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}`);
+      break;
+    }
+    case 'key-rotation-exhausted': {
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      deps.addNotice('warn', `⟲ no more keys for ${event.provider} (${reasonLabel}); surfacing error`);
+      break;
+    }
     case 'bash-dedup-nudge': {
       deps.addNotice('warn',
         `↻ Near-duplicate Bash pattern (${event.recentCommands.length} recent commands) — nudge injected.`,
