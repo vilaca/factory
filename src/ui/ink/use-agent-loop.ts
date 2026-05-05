@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ContextManager } from '../../core/context-manager.js';
 import { validateModelToolSupport } from '../../core/model-validation.js';
 import { createProvider } from '../../providers/registry.js';
+import { descriptorByAlias } from '../../providers/descriptors.js';
+import { loadGlobalConfig } from '../../core/config.js';
+import { getKey } from '../../core/credentials.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ExperimentalFlags } from '../../core/config-types.js';
@@ -282,21 +285,43 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   // hint. If a model is supplied (via `/provider <name> <model>` or as
   // `provider:model` from /model), validate and apply it; otherwise fall
   // back to a sensible default by listing the new provider's models.
-  async function setProviderByName(name: string, requestedModel?: string): Promise<void> {
+  async function setProviderByName(name: string, requestedModel?: string, keyId?: string): Promise<void> {
     if (!refs.current) return;
     const trimmed = name.trim();
     if (!trimmed) {
       addNotice('info', `Current provider: ${refs.current.provider.name}`);
       return;
     }
-    if (trimmed === refs.current.provider.name) {
+    if (trimmed === refs.current.provider.name && !keyId) {
       if (requestedModel) await setModelByName(requestedModel);
       else addNotice('info', `Already on ${trimmed}.`);
       return;
     }
+    // Resolve credentials from the multi-key store. Without this the
+    // mid-session switch would call createProvider({}) and the provider
+    // would have to fall back to env vars, which most users don't have set
+    // (their token lives only in factory's config). With keyId, target
+    // that specific saved key; without, take the first key (matches the
+    // post-migration "default" entry).
+    const descriptor = descriptorByAlias(trimmed);
+    const createOpts: Parameters<typeof createProvider>[1] = {};
+    if (descriptor) {
+      try {
+        const cfg = await loadGlobalConfig();
+        const key = getKey(cfg, descriptor.name, keyId);
+        if (key) {
+          createOpts.token = key.token;
+          if (descriptor.needsAccountId && key.extras?.accountId) {
+            createOpts.accountId = key.extras.accountId;
+          }
+        }
+      } catch {
+        // Fall through with empty opts; provider may still pick up env vars.
+      }
+    }
     let nextProvider: Provider;
     try {
-      nextProvider = createProvider(trimmed, {});
+      nextProvider = createProvider(trimmed, createOpts);
     } catch (err) {
       addNotice('danger', `Cannot switch to ${trimmed}: ${(err as Error).message}`);
       return;
@@ -320,7 +345,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       addNotice('danger', validation.reason);
       return;
     }
-    refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel);
+    refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel, keyId);
     refs.current.provider = nextProvider;
     refs.current.model = nextModel;
     refs.current.useTextToolFallback = validation.mode === 'fallback';

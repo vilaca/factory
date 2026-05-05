@@ -76,6 +76,7 @@ async function main(): Promise<void> {
 
   let providerName: string;
   let resumeModel: string | null = null;
+  let resumeKeyId: string | undefined;
 
   if (config.provider) {
     providerName = config.provider;
@@ -85,11 +86,12 @@ async function main(): Promise<void> {
     canResumeLastSession(lastSession, probedModels)
   ) {
     // Fast path: jump straight into the prompt with the same provider/model
-    // the user finished on. Use /pick or Ctrl+K mid-session to change, or
-    // pass --pick to force the startup menu.
-    dbg(`resuming last session: ${lastSession.provider}/${lastSession.model}`);
+    // (and key) the user finished on. Use /pick or Ctrl+K mid-session to
+    // change, or pass --pick to force the startup menu.
+    dbg(`resuming last session: ${lastSession.provider}/${lastSession.model}${lastSession.keyId ? ` (key=${lastSession.keyId})` : ''}`);
     providerName = lastSession.provider;
     resumeModel = lastSession.model;
+    resumeKeyId = lastSession.keyId;
   } else {
     const recentSessions = await getRecentSessions(10).catch(() => []);
     const startupOptions = buildPickerOptions(probedModels);
@@ -109,9 +111,9 @@ async function main(): Promise<void> {
   let availableModels: string[] | null = descriptor ? probedModels.get(descriptor.name) ?? null : null;
 
   try {
-    dbg(`ensureAuth flow=${descriptor?.authFlow ?? 'no-descriptor'}`);
+    dbg(`ensureAuth flow=${descriptor?.authFlow ?? 'no-descriptor'}${resumeKeyId ? ` keyId=${resumeKeyId}` : ''}`);
     const auth: AuthResult = descriptor
-      ? await ensureAuth(descriptor, config, cliArgs.token)
+      ? await ensureAuth(descriptor, config, cliArgs.token, resumeKeyId)
       : { shouldSave: false };
     dbg(`ensureAuth ok shouldSave=${auth.shouldSave}`);
 

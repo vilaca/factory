@@ -9,12 +9,27 @@ import { StatusBar } from './components/status-bar.js';
 import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
 import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
 import { ProviderPicker, type ProviderEntry, type RecentPair } from './components/provider-picker.js';
-import { DESCRIPTORS } from '../../providers/descriptors.js';
 import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
 import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
 import { listProviderNames, createProvider } from '../../providers/registry.js';
 import { getRecentSessions } from '../../core/session-log.js';
+import { loadGlobalConfig } from '../../core/config.js';
+import {
+  addKey as addCredentialKey,
+  deleteKey as deleteCredentialKey,
+  keyFingerprint,
+  listKeys,
+} from '../../core/credentials.js';
+import { descriptorByAlias, DESCRIPTORS, DESCRIPTOR_LIST } from '../../providers/descriptors.js';
+
+// Providers whose auth flow is `simple-prompt` are the ones the picker
+// drives multi-key selection for. Others (Copilot device flow, Google AI
+// Studio OAuth, ollama/llamacpp no-auth) keep their single-credential
+// path.
+const SIMPLE_PROMPT_PROVIDERS = new Set(
+  DESCRIPTOR_LIST.filter(d => d.authFlow === 'simple-prompt').map(d => d.name),
+);
 
 export interface SessionProps {
   model: string;
@@ -288,14 +303,73 @@ export function Session(props: SessionProps): React.ReactElement {
           recentsLoading={pickerRecentsLoading}
           initialProvider={providerName}
           initialModel={model}
-          loadModels={async (name) => {
-            const p = createProvider(name, {});
+          multiKeyProviders={SIMPLE_PROMPT_PROVIDERS}
+          loadModels={async (name, keyId) => {
+            const cfg = keyId ? await loadGlobalConfig() : null;
+            const descriptor = descriptorByAlias(name);
+            const opts: Parameters<typeof createProvider>[1] = {};
+            if (cfg && descriptor && keyId) {
+              const list = listKeys(cfg, descriptor.name);
+              const key = list.find(k => k.id === keyId);
+              if (key) {
+                opts.token = key.token;
+                if (descriptor.needsAccountId && key.extras?.accountId) {
+                  opts.accountId = key.extras.accountId;
+                }
+              }
+            }
+            const p = createProvider(name, opts);
             return p.listModels();
           }}
+          loadKeysForProvider={async (name) => {
+            const cfg = await loadGlobalConfig();
+            const descriptor = descriptorByAlias(name);
+            if (!descriptor) return [];
+            return listKeys(cfg, descriptor.name).map(k => ({
+              id: k.id,
+              ...(k.label ? { label: k.label } : {}),
+              fingerprint: keyFingerprint(k.token),
+            }));
+          }}
+          validateKey={async (name, token) => {
+            try {
+              const descriptor = descriptorByAlias(name);
+              const opts: Parameters<typeof createProvider>[1] = { token };
+              if (descriptor?.needsAccountId) {
+                // For workersAi we'd need the accountId too. The picker
+                // doesn't ask for it yet — fall back to whatever's in
+                // the config. Documented limitation.
+                const cfg = await loadGlobalConfig();
+                opts.accountId = cfg.workersAiAccountId;
+              }
+              const p = createProvider(name, opts);
+              const models = await p.listModels();
+              return { ok: true, models };
+            } catch (err) {
+              return { ok: false, error: (err as Error).message };
+            }
+          }}
+          saveKey={async (name, token) => {
+            const descriptor = descriptorByAlias(name);
+            if (!descriptor) throw new Error(`Unknown provider: ${name}`);
+            // workersAi accountId is not asked from the picker yet — pull
+            // from existing config so the saved key still works.
+            const cfg = descriptor.needsAccountId ? await loadGlobalConfig() : null;
+            const extras = descriptor.needsAccountId && cfg?.workersAiAccountId
+              ? { accountId: cfg.workersAiAccountId }
+              : undefined;
+            const entry = await addCredentialKey(descriptor.name, token, { ...(extras ? { extras } : {}) });
+            return entry.id;
+          }}
+          deleteKey={async (name, keyId) => {
+            const descriptor = descriptorByAlias(name);
+            if (!descriptor) return;
+            await deleteCredentialKey(descriptor.name, keyId);
+          }}
           onCancel={() => setPickerOpen(false)}
-          onCommit={(provider, chosenModel) => {
+          onCommit={(provider, chosenModel, keyId) => {
             setPickerOpen(false);
-            void agent.setProviderByName(provider, chosenModel);
+            void agent.setProviderByName(provider, chosenModel, keyId);
           }}
         />
       )}

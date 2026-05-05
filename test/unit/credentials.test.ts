@@ -36,6 +36,14 @@ describe('keyFingerprint', () => {
     assert.strictEqual(keyFingerprint('abc'), 'abc');
     assert.strictEqual(keyFingerprint('abcd'), 'abcd');
   });
+
+  it('returns the last 4 code units, even for non-ASCII tokens', () => {
+    // Trailing 4 BMP chars — keys are usually ASCII but the helper
+    // shouldn't mis-handle a stray unicode in the middle.
+    assert.strictEqual(keyFingerprint('🚀wxyz1234'), '1234');
+    // Leading-only ASCII variant.
+    assert.strictEqual(keyFingerprint('1234abcd-εφγη'), 'εφγη');
+  });
 });
 
 describe('describeKey', () => {
