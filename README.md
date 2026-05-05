@@ -374,6 +374,7 @@ Session logs are written exactly as in interactive mode, so headless runs are st
 src/
 ├── index.ts                       # Entry point, CLI args, model selection
 ├── permissions.ts                 # Tool permission management
+├── types.d.ts                     # Top-level type declarations
 ├── core/
 │   ├── agent.ts                   # Agent loop (streaming + tool dispatch)
 │   ├── agent-types.ts             # Agent event/option types
@@ -409,10 +410,8 @@ src/
 │   │   ├── agent-loop/            # Agent loop submodules (init, history, run-loop, ...)
 │   │   ├── tabs/                  # Multi-tab registry, context, hook
 │   │   └── components/            # TUI components
-│   ├── repl.ts                    # Line-based REPL (non-TTY fallback)
-│   ├── renderer.ts                # Markdown rendering
-│   ├── status-bar.ts              # Bottom status line
-│   └── spinner.ts                 # Activity indicator
+│   ├── headless.ts                # Headless / non-TTY runner
+│   └── renderer.ts                # Markdown rendering
 ├── cli/
 │   ├── args.ts                    # CLI flag parsing
 │   ├── auth.ts                    # Provider credential bootstrap
@@ -423,6 +422,7 @@ src/
 │   ├── types.ts                   # Provider interface
 │   ├── registry.ts                # Provider factory
 │   ├── descriptors.ts             # Provider metadata (display, env vars, defaults)
+│   ├── _openai/                   # Shared OpenAI-compatible adapter (SSE, streaming, tool calls, usage)
 │   ├── anthropic.ts               # Anthropic Claude provider
 │   ├── cerebras.ts                # Cerebras
 │   ├── cohere.ts                  # Cohere
@@ -442,7 +442,8 @@ src/
 ├── tools/
 │   ├── read.ts, write.ts, edit.ts, bash.ts, glob.ts, grep.ts
 │   ├── types.ts                   # Tool interface
-│   └── registry.ts                # Tool registry
+│   ├── registry.ts                # Tool registry
+│   └── index.ts                   # Barrel export
 ├── mcp/                           # MCP server integration
 │   ├── types.ts                   # MCP types
 │   ├── client.ts                  # MCP client
@@ -518,6 +519,7 @@ We welcome contributions! Here's how to get started:
      // ... see types.ts for full interface
    }
    ```
+   For OpenAI-compatible APIs (most cloud inference services), reuse the shared adapter in `src/providers/_openai/` — it handles SSE, streaming, tool calls, and usage parsing. See `cerebras.ts` or `groq.ts` for thin examples.
 2. Add an entry to `src/providers/descriptors.ts` (label, aliases, env vars, default host).
 3. Wire up the factory in `src/providers/registry.ts`.
 4. Add tests under `test/unit/`.
