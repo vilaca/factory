@@ -77,6 +77,21 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     planMode: input.initialPlanMode,
     enableCorrector: opts.enableCorrector ?? true,
     experimental: input.initialExperimental,
+    rotation: {
+      keysEnabled: opts.agentConfig?.rotation?.keys ?? true,
+      modelsEnabled: opts.agentConfig?.rotation?.models ?? true,
+      default: opts.agentConfig?.rotation?.default
+        ? opts.agentConfig.rotation.default.map(e => ({ ...e }))
+        : [],
+      overrides: opts.agentConfig?.rotation?.overrides
+        ? Object.fromEntries(
+            Object.entries(opts.agentConfig.rotation.overrides).map(
+              ([k, v]) => [k, v.map(e => ({ ...e }))],
+            ),
+          )
+        : {},
+      probeAfterTurns: opts.agentConfig?.rotation?.probeAfterTurns ?? 10,
+    },
     gitBranch: opts.gitBranch,
     gitDirty: input.initialGitDirty,
     // Each tab snapshots process.cwd() at session start; subsequent tabs

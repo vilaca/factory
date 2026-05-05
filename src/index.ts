@@ -67,6 +67,46 @@ async function main(): Promise<void> {
     token: cliArgs.token,
   });
 
+  // Apply CLI rotation overrides to the in-memory config before everything
+  // else reads from it. --save-rotate also writes the parsed chain through
+  // to global config so the next launch keeps it.
+  if (cliArgs.rotate !== undefined || cliArgs.saveRotate
+      || cliArgs.noRotate || cliArgs.noRotateKeys || cliArgs.noRotateModels) {
+    const { parseRotationChain } = await import('./cli/parse-rotation.js');
+    const existing = config.agent?.rotation ?? {};
+    const next = { ...existing };
+    if (cliArgs.rotate !== undefined) {
+      try {
+        next.default = parseRotationChain(cliArgs.rotate);
+      } catch (err: any) {
+        console.log(renderError(err.message));
+        process.exit(1);
+      }
+    }
+    if (cliArgs.noRotate) {
+      next.keys = false;
+      next.models = false;
+    }
+    if (cliArgs.noRotateKeys) next.keys = false;
+    if (cliArgs.noRotateModels) next.models = false;
+    config.agent = { ...config.agent, rotation: next };
+    if (cliArgs.saveRotate) {
+      try {
+        // saveGlobalConfig does top-level shallow merge — preserve the rest
+        // of `agent` by reading the existing global agent block and only
+        // overriding the rotation field.
+        const { loadGlobalConfig, saveGlobalConfig } = await import('./core/config.js');
+        const global = await loadGlobalConfig();
+        await saveGlobalConfig({
+          agent: { ...global.agent, rotation: next },
+        });
+      } catch (err: any) {
+        console.log(renderError(`Failed to save rotation config: ${err.message}`));
+        process.exit(1);
+      }
+    }
+  }
+
   const lastSession = await getLastSessionSelection().catch(() => null);
 
   const credentials = new Map<StartupProviderName, StartupCredentials>(

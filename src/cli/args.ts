@@ -18,6 +18,13 @@ interface CliArgs {
   turnTimeoutSec?: number;
   noClear?: boolean;
   pick?: boolean;
+  /** Comma-separated `<provider>:<model>` entries for the rotation default
+   *  chain. Session-only unless `--save-rotate` is also set. */
+  rotate?: string;
+  saveRotate?: boolean;
+  noRotate?: boolean;
+  noRotateKeys?: boolean;
+  noRotateModels?: boolean;
 }
 
 export function parseArgs(args: string[]): CliArgs {
@@ -57,6 +64,16 @@ export function parseArgs(args: string[]): CliArgs {
       result.noClear = true;
     } else if (arg === '--pick') {
       result.pick = true;
+    } else if (arg === '--rotate') {
+      result.rotate = args[++i];
+    } else if (arg === '--save-rotate') {
+      result.saveRotate = true;
+    } else if (arg === '--no-rotate') {
+      result.noRotate = true;
+    } else if (arg === '--no-rotate-keys') {
+      result.noRotateKeys = true;
+    } else if (arg === '--no-rotate-models') {
+      result.noRotateModels = true;
     } else if (arg === '--turn-timeout') {
       const n = Number(args[++i]);
       if (!isFinite(n) || n <= 0) {
@@ -94,6 +111,11 @@ export function printUsage(): void {
     '    --turn-timeout <sec>     Auto-abort the agent after N seconds per user prompt (default: off)',
     '    --no-clear               Do not clear the screen on startup',
     '    --pick                   Force the startup picker even when a previous session is on file',
+    '    --rotate <a:b,c:d>       Default rotation chain (comma-separated <provider>:<model> entries; session-only unless --save-rotate)',
+    '    --save-rotate            Persist --rotate to global config',
+    '    --no-rotate              Disable both key rotation and model rotation',
+    '    --no-rotate-keys         Disable key rotation (still rotate (provider, model) entries)',
+    '    --no-rotate-models       Disable model rotation (still rotate keys within the same model)',
     '    --help, -h               Show this help',
     '',
     chalk.bold('  Examples:'),

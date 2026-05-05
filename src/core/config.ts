@@ -82,6 +82,51 @@ function validateConfig(data: unknown, filePath: string): Config {
         throw new Error(`${filePath}: "agent.turnTimeoutSec" must be a positive number`);
       }
     }
+    if (agent.rotation !== undefined) {
+      if (agent.rotation === null || typeof agent.rotation !== 'object' || Array.isArray(agent.rotation)) {
+        throw new Error(`${filePath}: "agent.rotation" must be an object`);
+      }
+      const rot = agent.rotation as Record<string, unknown>;
+      for (const flag of ['keys', 'models'] as const) {
+        if (rot[flag] !== undefined && typeof rot[flag] !== 'boolean') {
+          throw new Error(`${filePath}: "agent.rotation.${flag}" must be a boolean`);
+        }
+      }
+      if (rot.probeAfterTurns !== undefined) {
+        if (typeof rot.probeAfterTurns !== 'number' || rot.probeAfterTurns < 0 || !Number.isInteger(rot.probeAfterTurns)) {
+          throw new Error(`${filePath}: "agent.rotation.probeAfterTurns" must be a non-negative integer`);
+        }
+      }
+      const validateChain = (chain: unknown, path: string): void => {
+        if (!Array.isArray(chain)) {
+          throw new Error(`${filePath}: "${path}" must be an array`);
+        }
+        chain.forEach((entry, i) => {
+          if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+            throw new Error(`${filePath}: "${path}[${i}]" must be an object`);
+          }
+          const e = entry as Record<string, unknown>;
+          if (typeof e.provider !== 'string' || !e.provider) {
+            throw new Error(`${filePath}: "${path}[${i}].provider" must be a non-empty string`);
+          }
+          if (typeof e.model !== 'string' || !e.model) {
+            throw new Error(`${filePath}: "${path}[${i}].model" must be a non-empty string`);
+          }
+        });
+      };
+      if (rot.default !== undefined) {
+        validateChain(rot.default, 'agent.rotation.default');
+      }
+      if (rot.overrides !== undefined) {
+        if (rot.overrides === null || typeof rot.overrides !== 'object' || Array.isArray(rot.overrides)) {
+          throw new Error(`${filePath}: "agent.rotation.overrides" must be an object`);
+        }
+        for (const [scope, chain] of Object.entries(rot.overrides as Record<string, unknown>)) {
+          validateChain(chain, `agent.rotation.overrides.${JSON.stringify(scope)}`);
+        }
+      }
+    }
+
     if (agent.experimental !== undefined) {
       if (agent.experimental === null || typeof agent.experimental !== 'object' || Array.isArray(agent.experimental)) {
         throw new Error(`${filePath}: "agent.experimental" must be an object`);
@@ -264,10 +309,28 @@ function mergeConfigs(...configs: Config[]): Config {
       const mergedExperimental = config.agent.experimental || result.agent?.experimental
         ? { ...result.agent?.experimental, ...config.agent.experimental }
         : undefined;
+      const mergedRotation = config.agent.rotation || result.agent?.rotation
+        ? {
+            ...result.agent?.rotation,
+            ...config.agent.rotation,
+            // Override map merges shallowly per scope so a project config
+            // can override only specific scopes from global without wiping
+            // the rest.
+            ...(config.agent.rotation?.overrides || result.agent?.rotation?.overrides
+              ? {
+                  overrides: {
+                    ...result.agent?.rotation?.overrides,
+                    ...config.agent.rotation?.overrides,
+                  },
+                }
+              : {}),
+          }
+        : undefined;
       result.agent = {
         ...result.agent,
         ...config.agent,
         ...(mergedExperimental ? { experimental: mergedExperimental } : {}),
+        ...(mergedRotation ? { rotation: mergedRotation } : {}),
       };
     }
     if (config.permissions) {

@@ -9,6 +9,34 @@ export interface AgentConfig {
    * this many seconds. Default: unset (no timeout). */
   turnTimeoutSec?: number;
   experimental?: ExperimentalFlags;
+  /** Automatic rotation across saved keys (tier 1) and a chain of
+   *  `(provider, model)` entries (tier 2) when the active selection
+   *  returns 429/401/403. Edited via `/rotate` and `--rotate`. */
+  rotation?: RotationConfig;
+}
+
+/** One step in a rotation chain — provider + model. */
+export interface RotationEntry {
+  provider: string;
+  model: string;
+}
+
+export interface RotationConfig {
+  /** Tier 1: rotate among saved keys for the active (provider, model)
+   *  before advancing to the chain. Default: true. */
+  keys?: boolean;
+  /** Tier 2: walk the rotation chain when keys are exhausted.
+   *  Default: true. */
+  models?: boolean;
+  /** Fallback chain used when the current selection has no specific
+   *  override below. */
+  default?: RotationEntry[];
+  /** Per-(provider, model) override chains. Key shape: `<provider>:<model>`,
+   *  matched against the active selection at rotation time. */
+  overrides?: Record<string, RotationEntry[]>;
+  /** When sticky-rotation is on a fallback for this many turns, factory
+   *  probes the primary again. Default: 10. */
+  probeAfterTurns?: number;
 }
 
 export interface ExperimentalFlags {
