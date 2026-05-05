@@ -52,10 +52,13 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
   const tupleKey = `${refs.provider.name}:${refs.model}`;
   const chain = refs.rotation.overrides[tupleKey] ?? refs.rotation.default;
 
-  // Skip context build entirely when neither tier has any work to do.
+  // Skip context build entirely when neither tier has any work to do AND
+  // there's no requestFallback bridge to ask the user. With the bridge,
+  // even an unconfigured provider gets the "set one up?" prompt.
   const tier1Possible = keysEnabled && keys.length >= 2;
   const tier2Possible = modelsEnabled && chain.length > 0;
-  if (!tier1Possible && !tier2Possible) return undefined;
+  const promptPossible = Boolean(refs.requestFallback) && modelsEnabled;
+  if (!tier1Possible && !tier2Possible && !promptPossible) return undefined;
 
   return {
     keys,
@@ -92,6 +95,7 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
       }
       return createProvider(providerName, opts);
     },
+    ...(refs.requestFallback ? { promptForFallback: refs.requestFallback } : {}),
   };
 }
 

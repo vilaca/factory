@@ -93,6 +93,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
       probeAfterTurns: opts.agentConfig?.rotation?.probeAfterTurns ?? 10,
     },
     keyFailureLog: new Map(),
+    rotationPromptDeclined: false,
     gitBranch: opts.gitBranch,
     gitDirty: input.initialGitDirty,
     // Each tab snapshots process.cwd() at session start; subsequent tabs

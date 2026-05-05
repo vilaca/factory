@@ -291,6 +291,67 @@ describe('callModel rotation (tier 1)', () => {
     assert.ok(caught instanceof Error);
   });
 
+  it('falls back via promptForFallback when chain is empty', async () => {
+    const initial = buildSequencedProvider('anthropic', [
+      Object.assign(new Error('429'), { status: 429 }),
+    ]);
+    const replacement = buildSequencedProvider('groq', [
+      [{ content: 'prompted reply', usage: undefined }],
+    ]);
+    let promptCalledWith: { provider: string; model: string; reason: string } | null = null;
+    const rotation: RotationOptions = {
+      keys: [key('a', 'tok-a')],
+      activeKeyId: 'a',
+      withKey: () => initial,
+      modelsEnabled: true,
+      chain: [],
+      loadKeysForProvider: async () => [key('g', 'tok-g')],
+      withTuple: () => replacement,
+      promptForFallback: async (ctx) => {
+        promptCalledWith = ctx;
+        return { provider: 'groq', model: 'llama-3.3-70b' };
+      },
+    };
+
+    const { events, result } = await collect(
+      callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
+    );
+
+    assert.ok(promptCalledWith);
+    assert.strictEqual(promptCalledWith!.provider, 'anthropic');
+    assert.strictEqual(promptCalledWith!.model, 'claude-sonnet');
+    assert.strictEqual(promptCalledWith!.reason, 'rate-limit');
+    const tup = events.find(e => e.type === 'tuple-rotation');
+    assert.ok(tup);
+    assert.strictEqual(tup.type === 'tuple-rotation' && tup.to.provider, 'groq');
+    assert.strictEqual((result as { fullContent: string }).fullContent, 'prompted reply');
+  });
+
+  it('skips prompt-driven advance when promptForFallback returns null', async () => {
+    const err = Object.assign(new Error('429'), { status: 429 });
+    const initial = buildSequencedProvider('anthropic', [err]);
+    const rotation: RotationOptions = {
+      keys: [key('a', 'tok-a')],
+      activeKeyId: 'a',
+      withKey: () => initial,
+      modelsEnabled: true,
+      chain: [],
+      loadKeysForProvider: async () => [],
+      withTuple: () => initial,
+      promptForFallback: async () => null,
+    };
+    let caught: unknown;
+    try {
+      const gen = callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation);
+      while (true) {
+        const n = await gen.next();
+        if (n.done) break;
+      }
+    } catch (e) { caught = e; }
+    assert.ok(caught instanceof Error);
+    assert.match((caught as Error).message, /429/);
+  });
+
   it('updates failureLog when rotating', async () => {
     const initial = buildSequencedProvider('anthropic', [
       Object.assign(new Error('429'), { status: 429 }),

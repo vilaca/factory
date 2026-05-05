@@ -9,6 +9,9 @@ import { StatusBar } from './components/status-bar.js';
 import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
 import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
 import { ProviderPicker, type ProviderEntry, type RecentPair } from './components/provider-picker.js';
+import { RotationPromptPanel, parseRotationPromptInput } from './components/rotation-prompt-panel.js';
+import type { RotationEntry } from '../../core/config-types.js';
+import { saveGlobalConfig } from '../../core/config.js';
 import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
 import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
@@ -59,6 +62,21 @@ export function Session(props: SessionProps): React.ReactElement {
   const [pickerRecents, setPickerRecents] = useState<RecentPair[]>([]);
   const [pickerRecentsLoading, setPickerRecentsLoading] = useState(false);
   const [showFullOutput, setShowFullOutput] = useState(false);
+  // Two rotation-prompt-related pieces of state:
+  // 1. `rotationPrompt` — the y/n panel above the input. Resolves the host's
+  //    promptForFallback promise when the user answers.
+  // 2. `fallbackPickerResolver` — set when the picker is open in rotation-
+  //    fallback mode (after the user said yes). The picker's onCommit/
+  //    onCancel route through this resolver instead of agent.setProviderByName.
+  const [rotationPrompt, setRotationPrompt] = useState<{
+    provider: string;
+    model: string;
+    reason: 'rate-limit' | 'auth';
+    resolve: (decision: 'set-up' | 'decline') => void;
+  } | null>(null);
+  const [fallbackPickerResolver, setFallbackPickerResolver] = useState<
+    ((entry: RotationEntry | null) => void) | null
+  >(null);
   // Capture the latest value in a ref so the slash dispatch context's
   // toggle closure stays current without re-creating the dispatch arg
   // every render.
@@ -119,11 +137,69 @@ export function Session(props: SessionProps): React.ReactElement {
   // Report whether this tab is blocked on user input so other tabs can
   // surface a "N waiting" hint in their prompt area.
   const isWaiting = !!agent.permissionRequest
+    || !!rotationPrompt
     || (agent.planMode && agent.plannedCalls.length > 0 && agent.state === 'idle');
   useEffect(() => {
     if (!tabs || tabId === undefined) return;
     tabs.setWaiting(tabId, isWaiting);
   }, [tabs, tabId, isWaiting]);
+
+  // Bridge the rotation runtime → React state. The rotation runtime calls
+  // refs.current.requestFallback when both tiers exhaust; we drive the y/n
+  // panel and (on yes) the picker in fallback mode, then resolve the
+  // promise with the chosen entry (or null on cancel/decline).
+  useEffect(() => {
+    if (!agent.refs.current) return;
+    agent.refs.current.requestFallback = async (context) => {
+      if (!agent.refs.current) return null;
+      if (agent.refs.current.rotationPromptDeclined) return null;
+
+      // Step 1: y/n panel.
+      const decision = await new Promise<'set-up' | 'decline'>((resolve) => {
+        setRotationPrompt({ ...context, resolve });
+      });
+      setRotationPrompt(null);
+      if (decision === 'decline') {
+        if (agent.refs.current) agent.refs.current.rotationPromptDeclined = true;
+        return null;
+      }
+
+      // Step 2: picker in select-rotation-entry mode.
+      const entry = await new Promise<RotationEntry | null>((resolve) => {
+        setFallbackPickerResolver(() => (chosen: RotationEntry | null) => {
+          resolve(chosen);
+        });
+        setPickerOpen(true);
+      });
+      setFallbackPickerResolver(null);
+      setPickerOpen(false);
+      if (!entry) return null;
+
+      // Step 3: persist as an override for the active tuple.
+      try {
+        const tupleKey = `${context.provider}:${context.model}`;
+        const cfg = await loadGlobalConfig();
+        const existing = cfg.agent?.rotation?.overrides?.[tupleKey] ?? [];
+        // Skip persistence if the entry is already in the override list.
+        const dup = existing.some(e => e.provider === entry.provider && e.model === entry.model);
+        const nextOverrides = dup
+          ? cfg.agent?.rotation?.overrides ?? {}
+          : { ...(cfg.agent?.rotation?.overrides ?? {}), [tupleKey]: [...existing, entry] };
+        await saveGlobalConfig({
+          agent: {
+            ...cfg.agent,
+            rotation: { ...cfg.agent?.rotation, overrides: nextOverrides },
+          },
+        });
+        if (agent.refs.current && !dup) {
+          agent.refs.current.rotation.overrides[tupleKey] = [...existing, entry];
+        }
+      } catch (err) {
+        agent.addNotice('warn', `⚠ couldn't persist fallback: ${(err as Error).message}`);
+      }
+      return entry;
+    };
+  }, [agent]);
 
   const {
     items,
@@ -165,6 +241,7 @@ export function Session(props: SessionProps): React.ReactElement {
       return;
     }
     if (!pickerOpen && key.ctrl && inputChar === 'k') {
+      if (refs.current) refs.current.rotationPromptDeclined = false;
       setPickerOpen(true);
       return;
     }
@@ -192,13 +269,29 @@ export function Session(props: SessionProps): React.ReactElement {
     agent.recordHistory(trimmed);
     if (!trimmed) return;
 
+    // The rotation prompt panel takes priority over every other input
+    // route — y/n decides whether to keep the user staring at a 429 or
+    // open the picker in fallback mode. Slash commands still pass through
+    // (so the user can /q out without answering the prompt first).
+    if (rotationPrompt) {
+      if (trimmed.startsWith('/')) {
+        const [cmd, ...rest] = trimmed.split(' ');
+        refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+        return;
+      }
+      const decision = parseRotationPromptInput(trimmed);
+      rotationPrompt.resolve(decision);
+      return;
+    }
+
     if (state === 'running') {
       // Slash commands always fire immediately — they are UI/state ops,
       // not prompts for the agent. Only plain text gets queued.
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true), toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
         return;
       }
       agent.queueInput(trimmed);
@@ -212,7 +305,7 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true), toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
         return;
       }
       const decision = parsePermissionInput(trimmed);
@@ -252,7 +345,7 @@ export function Session(props: SessionProps): React.ReactElement {
     if (trimmed.startsWith('/')) {
       const [cmd, ...rest] = trimmed.split(' ');
       refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
-      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => setPickerOpen(true), toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
       if (handled) return;
     }
 
@@ -366,11 +459,30 @@ export function Session(props: SessionProps): React.ReactElement {
             if (!descriptor) return;
             await deleteCredentialKey(descriptor.name, keyId);
           }}
-          onCancel={() => setPickerOpen(false)}
-          onCommit={(provider, chosenModel, keyId) => {
-            setPickerOpen(false);
-            void agent.setProviderByName(provider, chosenModel, keyId);
+          purpose={fallbackPickerResolver ? 'select-rotation-entry' : 'select-active'}
+          onCancel={() => {
+            if (fallbackPickerResolver) {
+              fallbackPickerResolver(null);
+            } else {
+              setPickerOpen(false);
+            }
           }}
+          onCommit={(provider, chosenModel, keyId) => {
+            if (fallbackPickerResolver) {
+              fallbackPickerResolver({ provider, model: chosenModel });
+            } else {
+              setPickerOpen(false);
+              void agent.setProviderByName(provider, chosenModel, keyId);
+            }
+          }}
+        />
+      )}
+
+      {rotationPrompt && (
+        <RotationPromptPanel
+          provider={rotationPrompt.provider}
+          model={rotationPrompt.model}
+          reason={rotationPrompt.reason}
         />
       )}
 

@@ -130,4 +130,18 @@ export interface RotationOptions {
    *  used when tier 2 hops between providers. Required when `chain` is
    *  non-empty. */
   withTuple?: (provider: string, key: ProviderKey) => Provider;
+
+  /**
+   * Last-chance hook called after both tiers exhaust (or when the chain is
+   * empty). The host typically prompts the user — yes opens the picker in
+   * select-rotation-entry mode, no sets a session-level decline flag and
+   * returns `null`. When the host returns a {provider, model} entry, the
+   * runtime treats it as a one-shot chain advance: persists the entry,
+   * builds a fresh provider, and retries.
+   */
+  promptForFallback?: (context: {
+    provider: string;
+    model: string;
+    reason: 'rate-limit' | 'auth';
+  }) => Promise<RotationEntry | null>;
 }
