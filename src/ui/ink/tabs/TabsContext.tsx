@@ -68,16 +68,21 @@ export function TabsProvider(props: TabsProviderProps): React.ReactElement {
     });
   }, []);
 
+  // Read both tabs and activeId via the functional setter form so rapid
+  // sequential cycles within a single React batch don't re-read a stale
+  // activeId from closure.
   const cycle = useCallback((direction: 1 | -1): void => {
-    setTabs(prev => {
-      if (prev.length <= 1) return prev;
-      const idx = prev.findIndex(t => t.id === activeId);
-      if (idx === -1) return prev;
-      const nextIdx = (idx + direction + prev.length) % prev.length;
-      setActiveId(prev[nextIdx]!.id);
-      return prev;
+    setTabs(prevTabs => {
+      if (prevTabs.length <= 1) return prevTabs;
+      setActiveId(prevActive => {
+        const idx = prevTabs.findIndex(t => t.id === prevActive);
+        if (idx === -1) return prevActive;
+        const nextIdx = (idx + direction + prevTabs.length) % prevTabs.length;
+        return prevTabs[nextIdx]!.id;
+      });
+      return prevTabs;
     });
-  }, [activeId]);
+  }, []);
 
   const setLabel = useCallback((id: number, label: string): void => {
     setTabs(prev => prev.map(t => t.id === id ? { ...t, label } : t));

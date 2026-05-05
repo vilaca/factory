@@ -144,6 +144,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     void loadInitialHistory(refs, addNotice);
 
     return () => {
+      // Closing a tab while its agent is still running: signal abort so the
+      // run-loop unwinds promptly instead of writing to React state on the
+      // unmounted Session and continuing to spawn tools.
+      refs.current?.abort?.abort();
       sessionLogger?.logSessionEnd();
       sessionLogger?.close();
     };
@@ -331,6 +335,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       compactionThreshold: opts.agentConfig?.compactionThreshold,
       recencyWindow: opts.agentConfig?.recencyWindow,
     });
+    refreshTokenEstimate();
     addNotice('info', `Provider → ${nextProvider.name}, model → ${nextModel}`);
   }
 

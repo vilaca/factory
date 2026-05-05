@@ -1,10 +1,11 @@
 import { spawn } from 'child_process';
+import { randomBytes } from 'crypto';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 
-// Marker that the wrapped command emits on stdout so we can extract the
-// post-run $PWD without polluting the user-visible output. Random-ish prefix
-// to avoid colliding with anything a real command might emit.
-const CWD_SENTINEL = '__FACTORY_CWD_AFTER__';
+// Static prefix for the post-run $PWD marker. A random nonce (per invocation)
+// is appended so a user command echoing the literal prefix cannot be confused
+// with the wrapper's marker.
+const CWD_SENTINEL_PREFIX = '__FACTORY_CWD_AFTER__';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -43,8 +44,12 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   // `$PWD`. We use a leading newline before the bookkeeping so commands that
   // don't end in a newline (or that emit incomplete lines) still get a clean
   // separator. Variable names use a `__factory_` prefix to avoid colliding
-  // with anything the user's command might set.
-  const wrapped = `${command}\n__factory_rc=$?\nprintf '\\n%s%s\\n' '${CWD_SENTINEL}:' "$PWD"\nexit $__factory_rc`;
+  // with anything the user's command might set. The sentinel includes a
+  // per-invocation nonce so a user command that legitimately prints the
+  // static prefix can't be misparsed as the wrapper's marker.
+  const nonce = randomBytes(8).toString('hex');
+  const sentinel = `${CWD_SENTINEL_PREFIX}${nonce}`;
+  const wrapped = `${command}\n__factory_rc=$?\nprintf '\\n%s%s\\n' '${sentinel}:' "$PWD"\nexit $__factory_rc`;
 
   return new Promise((resolve) => {
     const proc = spawn('sh', ['-c', wrapped], {
@@ -81,7 +86,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       // the very tail (\\n SENTINEL : path \\n?) to avoid eating earlier text
       // that might coincidentally contain the sentinel string.
       let cwdAfter: string | undefined;
-      const sentinelRe = new RegExp(`\\n${CWD_SENTINEL}:([^\\n]*)\\n?$`);
+      const sentinelRe = new RegExp(`\\n${sentinel}:([^\\n]*)\\n?$`);
       const m = stdout.match(sentinelRe);
       if (m) {
         cwdAfter = m[1];
