@@ -29,6 +29,32 @@ export interface PermissionConfig {
   allowAll?: string[];
 }
 
+/**
+ * One saved credential for a provider. Pre-multi-key configs migrate their
+ * single `<provider>Token` field into a one-element array on first save
+ * under the new schema; the legacy field is left in place for downgrade
+ * safety. The picker shows last-4 + optional label to identify the entry.
+ */
+export interface ProviderKey {
+  /** Stable id, minted via crypto.randomUUID(). Recent-session payloads
+   *  and the picker reference this when targeting a specific key. */
+  id: string;
+  /** Optional, user-supplied. Distinct keys can share a label. */
+  label?: string;
+  /** The secret. Always full-length on disk; UI shows last-4 only. */
+  token: string;
+  /** ISO timestamp (when the entry was added). */
+  createdAt: string;
+  /** Provider-specific extras. WorkersAI: `{ accountId }`. Reserved for
+   *  future per-key fields without growing the top-level schema. */
+  extras?: Record<string, string>;
+}
+
+/** Keyed by canonical provider name (the value side of PROVIDER_ALIASES). */
+export interface ConfigKeys {
+  [providerName: string]: ProviderKey[];
+}
+
 export interface McpConfig {
   servers?: McpServerConfig[];
 }
@@ -54,6 +80,9 @@ export interface Config {
   cohereToken?: string;
   workersAiToken?: string;
   workersAiAccountId?: string;
+  /** Multi-key credential store. Source of truth once migrated; legacy
+   *  `*Token` fields above remain readable as a fallback. */
+  keys?: ConfigKeys;
   agent?: AgentConfig;
   permissions?: PermissionConfig;
   mcp?: McpConfig;

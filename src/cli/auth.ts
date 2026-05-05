@@ -4,6 +4,7 @@ import type { ProviderDescriptor, StartupProviderName } from '../providers/descr
 import { DESCRIPTOR_LIST, noModelsMessageFor, resolveToken, saveSuccessMessageFor } from '../providers/descriptors.js';
 import { createProvider, type CreateProviderOptions } from '../providers/registry.js';
 import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../core/config.js';
+import { addKey, getKey } from '../core/credentials.js';
 import { appendProviderLog } from '../core/session-log.js';
 import { getCopilotAuthStorageNote, CopilotAuthManager } from '../providers/copilot-auth.js';
 import {
@@ -26,6 +27,9 @@ export interface AuthResult {
   authMode?: GoogleAiStudioAuthMode;
   githubToken?: string;
   shouldSave: boolean;
+  /** Optional label captured at prompt time. Carried to `addKey` when
+   *  `shouldSave` is true. Phase 1 always leaves this unset. */
+  keyLabel?: string;
 }
 
 function resolveGoogleAiStudioAuthMode(config: Config, cliToken?: string): GoogleAiStudioAuthMode | undefined {
@@ -42,6 +46,7 @@ export function resolveCredentialsFor(
   descriptor: ProviderDescriptor,
   config: Config,
   cliToken?: string,
+  keyId?: string,
 ): StartupCredentials {
   if (descriptor.name === 'googleaistudio') {
     const authMode = resolveGoogleAiStudioAuthMode(config, cliToken);
@@ -58,6 +63,34 @@ export function resolveCredentialsFor(
         ?? process.env.COPILOT_API_KEY,
       githubToken: config.githubToken,
     };
+  }
+  // Simple-prompt providers: prefer the multi-key store (with synthetic
+  // legacy fallback), but cliToken still wins, and env still wins for
+  // env-precedes-config descriptors (Vercel). When nothing is stored or
+  // exposed, fall through to resolveToken so env-only setups keep working.
+  if (descriptor.authFlow === 'simple-prompt' && !cliToken) {
+    const key = getKey(config, descriptor.name, keyId);
+    if (key) {
+      if (descriptor.envPrecedesConfig) {
+        for (const envVar of descriptor.envVars ?? []) {
+          const fromEnv = process.env[envVar];
+          if (fromEnv) {
+            return {
+              token: fromEnv,
+              accountId: descriptor.needsAccountId
+                ? key.extras?.accountId ?? config.workersAiAccountId
+                : undefined,
+            };
+          }
+        }
+      }
+      return {
+        token: key.token,
+        accountId: descriptor.needsAccountId
+          ? key.extras?.accountId ?? config.workersAiAccountId
+          : undefined,
+      };
+    }
   }
   return {
     token: resolveToken(descriptor, config, cliToken),
@@ -338,14 +371,28 @@ export async function saveCredentialsAfterModelDiscovery(
     return;
   }
 
-  const update: Record<string, unknown> = { [descriptor.configTokenKey]: auth.token };
-  if (descriptor.needsAccountId && auth.accountId) {
-    update.workersAiAccountId = auth.accountId;
+  // For simple-prompt providers we now write into the multi-key store so
+  // adding a second key later doesn't overwrite the first. Copilot and
+  // Google AI Studio keep their existing single-credential persistence —
+  // their auth flows aren't multi-key-aware (device flow / OAuth).
+  if (descriptor.authFlow === 'simple-prompt' && auth.token) {
+    const extras = descriptor.needsAccountId && auth.accountId
+      ? { accountId: auth.accountId }
+      : undefined;
+    await addKey(descriptor.name, auth.token, {
+      label: auth.keyLabel,
+      extras,
+    });
+  } else {
+    const update: Record<string, unknown> = { [descriptor.configTokenKey]: auth.token };
+    if (descriptor.needsAccountId && auth.accountId) {
+      update.workersAiAccountId = auth.accountId;
+    }
+    if (descriptor.name === 'googleaistudio' && auth.authMode === 'api-key') {
+      update.googleAiStudioAuthMode = 'api-key';
+    }
+    await saveGlobalConfig(update);
   }
-  if (descriptor.name === 'googleaistudio' && auth.authMode === 'api-key') {
-    update.googleAiStudioAuthMode = 'api-key';
-  }
-  await saveGlobalConfig(update);
   appendProviderLog({
     provider: descriptor.name, category: 'auth', action: 'save-credentials',
     outcome: 'success', detail: successDetail,

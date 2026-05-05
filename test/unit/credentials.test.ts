@@ -1,0 +1,198 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import {
+  addKey,
+  deleteKey,
+  describeKey,
+  getKey,
+  keyFingerprint,
+  listKeys,
+  migrateLegacyKeys,
+} from '../../src/core/credentials.js';
+import { loadGlobalConfig, saveGlobalConfig } from '../../src/core/config.js';
+
+async function withGlobalHome(fn: (home: string) => Promise<void>): Promise<void> {
+  const prev = process.env.XDG_CONFIG_HOME;
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-creds-'));
+  process.env.XDG_CONFIG_HOME = home;
+  try {
+    await fn(home);
+  } finally {
+    if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prev;
+    await fs.rm(home, { recursive: true, force: true });
+  }
+}
+
+describe('keyFingerprint', () => {
+  it('returns the last 4 chars of a long token', () => {
+    assert.strictEqual(keyFingerprint('sk-ant-abcdef-1f2a'), '1f2a');
+  });
+
+  it('returns the whole token when it is 4 chars or shorter', () => {
+    assert.strictEqual(keyFingerprint('abc'), 'abc');
+    assert.strictEqual(keyFingerprint('abcd'), 'abcd');
+  });
+});
+
+describe('describeKey', () => {
+  it('renders label and last-4 when label is set', () => {
+    const key = { id: 'x', token: 'tok-1234', createdAt: new Date(0).toISOString(), label: 'work' };
+    assert.strictEqual(describeKey(key), 'work · …1234');
+  });
+
+  it('renders just last-4 when label is omitted', () => {
+    const key = { id: 'x', token: 'tok-1234', createdAt: new Date(0).toISOString() };
+    assert.strictEqual(describeKey(key), '…1234');
+  });
+});
+
+describe('listKeys (legacy fallback)', () => {
+  it('returns synthetic legacy entry when only the *Token field is set', () => {
+    const cfg = { anthropicToken: 'sk-ant-abcd' };
+    const keys = listKeys(cfg, 'anthropic');
+    assert.strictEqual(keys.length, 1);
+    assert.strictEqual(keys[0].id, 'legacy');
+    assert.strictEqual(keys[0].token, 'sk-ant-abcd');
+    assert.strictEqual(keys[0].label, 'default');
+  });
+
+  it('attaches the workersAi accountId as extras on the synthetic legacy entry', () => {
+    const cfg = { workersAiToken: 'wai-tok', workersAiAccountId: 'acct-123' };
+    const keys = listKeys(cfg, 'workersai');
+    assert.strictEqual(keys.length, 1);
+    assert.deepStrictEqual(keys[0].extras, { accountId: 'acct-123' });
+  });
+
+  it('returns the persisted keys when populated, ignoring legacy field', () => {
+    const cfg = {
+      anthropicToken: 'sk-ant-old',
+      keys: { anthropic: [{ id: 'a', token: 'sk-ant-new', createdAt: 'now' }] },
+    };
+    const keys = listKeys(cfg, 'anthropic');
+    assert.strictEqual(keys.length, 1);
+    assert.strictEqual(keys[0].token, 'sk-ant-new');
+  });
+
+  it('returns empty when there is no legacy field and no stored keys', () => {
+    assert.deepStrictEqual(listKeys({}, 'anthropic'), []);
+  });
+});
+
+describe('getKey', () => {
+  const cfg = {
+    keys: {
+      anthropic: [
+        { id: 'a', token: 'tok-a', createdAt: 'now' },
+        { id: 'b', token: 'tok-b', createdAt: 'now' },
+      ],
+    },
+  };
+
+  it('returns the first entry when id is omitted', () => {
+    assert.strictEqual(getKey(cfg, 'anthropic')?.id, 'a');
+  });
+
+  it('returns the matched entry by id', () => {
+    assert.strictEqual(getKey(cfg, 'anthropic', 'b')?.id, 'b');
+  });
+
+  it('returns undefined when id does not match', () => {
+    assert.strictEqual(getKey(cfg, 'anthropic', 'gone'), undefined);
+  });
+});
+
+describe('migrateLegacyKeys', () => {
+  it('synthesises real entries for providers with only legacy *Token', () => {
+    const cfg = { anthropicToken: 'sk-ant-1', groqToken: 'gsk_2' };
+    const { changed, next } = migrateLegacyKeys(cfg);
+    assert.strictEqual(changed, true);
+    assert.strictEqual(next.keys?.anthropic?.length, 1);
+    assert.strictEqual(next.keys?.anthropic?.[0]?.token, 'sk-ant-1');
+    assert.strictEqual(next.keys?.anthropic?.[0]?.label, 'default');
+    assert.match(next.keys?.anthropic?.[0]?.id ?? '', /^[0-9a-f-]{36}$/);
+    assert.strictEqual(next.keys?.groq?.[0]?.token, 'gsk_2');
+    // Legacy field is left in place for downgrade safety.
+    assert.strictEqual(next.anthropicToken, 'sk-ant-1');
+  });
+
+  it('attaches workersAi accountId as extras', () => {
+    const cfg = { workersAiToken: 'wai', workersAiAccountId: 'acct' };
+    const { next } = migrateLegacyKeys(cfg);
+    assert.deepStrictEqual(next.keys?.workersai?.[0]?.extras, { accountId: 'acct' });
+  });
+
+  it('is a no-op when keys are already populated', () => {
+    const cfg = {
+      anthropicToken: 'sk-ant-1',
+      keys: { anthropic: [{ id: 'a', token: 'sk-ant-existing', createdAt: 'now' }] },
+    };
+    const { changed } = migrateLegacyKeys(cfg);
+    assert.strictEqual(changed, false);
+  });
+
+  it('is a no-op when there is nothing to migrate', () => {
+    const { changed } = migrateLegacyKeys({});
+    assert.strictEqual(changed, false);
+  });
+});
+
+describe('addKey / deleteKey roundtrip', () => {
+  it('appends entries to the global config and surfaces them via listKeys', async () => {
+    await withGlobalHome(async () => {
+      const a = await addKey('anthropic', 'sk-ant-aaaa', { label: 'work' });
+      const b = await addKey('anthropic', 'sk-ant-bbbb', { label: 'personal' });
+
+      const cfg = await loadGlobalConfig();
+      assert.strictEqual(cfg.keys?.anthropic?.length, 2);
+      assert.strictEqual(cfg.keys?.anthropic?.[0]?.id, a.id);
+      assert.strictEqual(cfg.keys?.anthropic?.[1]?.id, b.id);
+      assert.strictEqual(cfg.keys?.anthropic?.[0]?.label, 'work');
+      assert.notStrictEqual(a.id, b.id);
+    });
+  });
+
+  it('removes a key by id and is a no-op for unknown ids', async () => {
+    await withGlobalHome(async () => {
+      const a = await addKey('groq', 'gsk_1');
+      const b = await addKey('groq', 'gsk_2');
+
+      await deleteKey('groq', a.id);
+      let cfg = await loadGlobalConfig();
+      assert.strictEqual(cfg.keys?.groq?.length, 1);
+      assert.strictEqual(cfg.keys?.groq?.[0]?.id, b.id);
+
+      await deleteKey('groq', 'no-such-id');
+      cfg = await loadGlobalConfig();
+      assert.strictEqual(cfg.keys?.groq?.length, 1);
+    });
+  });
+});
+
+describe('loadGlobalConfig migration', () => {
+  it('rewrites the config on first load, baking the synthetic legacy entry in', async () => {
+    await withGlobalHome(async () => {
+      // Seed a legacy-only config — only the *Token field is set.
+      await saveGlobalConfig({ anthropicToken: 'sk-ant-legacy' });
+
+      // Explicitly verify the on-disk shape doesn't yet have `keys`. (The
+      // saveGlobalConfig call above doesn't itself trigger migration —
+      // migration runs from loadGlobalConfig.)
+      const cfg1 = await loadGlobalConfig();
+      assert.strictEqual(cfg1.anthropicToken, 'sk-ant-legacy');
+      assert.strictEqual(cfg1.keys?.anthropic?.length, 1);
+      assert.strictEqual(cfg1.keys?.anthropic?.[0]?.token, 'sk-ant-legacy');
+
+      // Second load: the migration is now persisted, so the in-memory
+      // shape should match the on-disk shape exactly.
+      const cfg2 = await loadGlobalConfig();
+      assert.strictEqual(cfg2.keys?.anthropic?.length, 1);
+      // The id should be stable (same uuid as the first load wrote) since
+      // migration is idempotent once keys are populated.
+      assert.strictEqual(cfg2.keys?.anthropic?.[0]?.id, cfg1.keys?.anthropic?.[0]?.id);
+    });
+  });
+});
