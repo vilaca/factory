@@ -10,12 +10,15 @@ export interface TabsContextValue {
   tabs: Tab[];
   activeId: number;
   registry: TabsRegistry;
+  /** Tab ids that are currently blocked on user input (permission, plan approval). */
+  waitingTabs: ReadonlySet<number>;
   openTab(label?: string): number;
   closeTab(id: number): void;
   switchTo(id: number): void;
   switchToIndex(index: number): void;
   cycle(direction: 1 | -1): void;
   setLabel(id: number, label: string): void;
+  setWaiting(id: number, waiting: boolean): void;
 }
 
 export const TabsContext = createContext<TabsContextValue | null>(null);
@@ -31,6 +34,7 @@ export function TabsProvider(props: TabsProviderProps): React.ReactElement {
   const initialLabel = props.initialLabel ?? 'main';
   const [tabs, setTabs] = useState<Tab[]>([{ id: 1, label: initialLabel }]);
   const [activeId, setActiveId] = useState<number>(1);
+  const [waitingTabs, setWaitingTabs] = useState<ReadonlySet<number>>(() => new Set());
   const nextId = useRef<number>(2);
   const registryRef = useRef<TabsRegistry>(new TabsRegistry());
 
@@ -56,6 +60,29 @@ export function TabsProvider(props: TabsProviderProps): React.ReactElement {
       return next;
     });
     registryRef.current.unregister(id);
+    setWaitingTabs(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const setWaiting = useCallback((id: number, waiting: boolean): void => {
+    setWaitingTabs(prev => {
+      const has = prev.has(id);
+      if (waiting && !has) {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      }
+      if (!waiting && has) {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }
+      return prev;
+    });
   }, []);
 
   const switchTo = useCallback((id: number): void => {
@@ -95,14 +122,16 @@ export function TabsProvider(props: TabsProviderProps): React.ReactElement {
       tabs,
       activeId,
       registry: registryRef.current,
+      waitingTabs,
       openTab,
       closeTab,
       switchTo,
       switchToIndex,
       cycle,
       setLabel,
+      setWaiting,
     }),
-    [tabs, activeId, openTab, closeTab, switchTo, switchToIndex, cycle, setLabel],
+    [tabs, activeId, waitingTabs, openTab, closeTab, switchTo, switchToIndex, cycle, setLabel, setWaiting],
   );
 
   return <TabsContext.Provider value={value}>{props.children}</TabsContext.Provider>;
