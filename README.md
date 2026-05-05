@@ -14,7 +14,7 @@
 ## Requirements
 
 - **Node.js >= 22**
-- At least one LLM provider — local ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) or cloud (see [Providers](#providers))
+- At least one LLM provider — local ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) or cloud (see [Environment variables](#environment-variables) for the credential each provider expects)
 
 ## Quick Start
 
