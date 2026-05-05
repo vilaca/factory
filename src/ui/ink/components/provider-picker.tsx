@@ -39,6 +39,8 @@ export interface KeySummary {
   label?: string;
   /** Last-4 fingerprint of the saved token. */
   fingerprint: string;
+  /** Optional usage counters for the picker's compact stat column. */
+  stats?: { ok: number; warn: number };
 }
 
 export interface ValidateResult {
@@ -732,7 +734,9 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
 }
 
 function describeKeyRow(k: KeySummary): string {
-  return k.label ? `${k.label} · …${k.fingerprint}` : `…${k.fingerprint}`;
+  const base = k.label ? `${k.label} · …${k.fingerprint}` : `…${k.fingerprint}`;
+  if (!k.stats || (k.stats.ok === 0 && k.stats.warn === 0)) return base;
+  return `${base}  · ${k.stats.ok} ok / ${k.stats.warn} ⚠`;
 }
 
 function renderProviderList(items: ProviderEntry[], selected: number): React.ReactElement {

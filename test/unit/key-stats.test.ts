@@ -1,0 +1,85 @@
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import {
+  flushKeyStats,
+  getStats,
+  listStatsForProvider,
+  recordFailure,
+  recordSuccess,
+  _resetKeyStatsForTests,
+} from '../../src/core/key-stats.js';
+
+async function withTempHome(fn: (home: string) => Promise<void>): Promise<void> {
+  const prev = os.homedir;
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-keystats-'));
+  // os.homedir() is what key-stats reads — patch it for the test.
+  (os as unknown as { homedir: () => string }).homedir = () => home;
+  _resetKeyStatsForTests();
+  try {
+    await fn(home);
+  } finally {
+    (os as unknown as { homedir: () => string }).homedir = prev;
+    _resetKeyStatsForTests();
+    await fs.rm(home, { recursive: true, force: true });
+  }
+}
+
+describe('key-stats', () => {
+  beforeEach(_resetKeyStatsForTests);
+
+  it('records a success and persists across cache reset', async () => {
+    await withTempHome(async () => {
+      await recordSuccess('anthropic', 'k1');
+      await flushKeyStats();
+      _resetKeyStatsForTests();
+      const stat = await getStats('anthropic', 'k1');
+      assert.strictEqual(stat?.successCount, 1);
+      assert.ok(stat?.lastSuccessAt);
+    });
+  });
+
+  it('separates rate-limit from auth failures', async () => {
+    await withTempHome(async () => {
+      await recordFailure('anthropic', 'k1', 'rate-limit');
+      await recordFailure('anthropic', 'k1', 'rate-limit');
+      await recordFailure('anthropic', 'k1', 'auth');
+      await flushKeyStats();
+
+      const stat = await getStats('anthropic', 'k1');
+      assert.strictEqual(stat?.rateLimitCount, 2);
+      assert.strictEqual(stat?.authErrorCount, 1);
+      assert.ok(stat?.lastFailureAt);
+    });
+  });
+
+  it('keeps stats for different keys independent', async () => {
+    await withTempHome(async () => {
+      await recordSuccess('anthropic', 'k1');
+      await recordFailure('anthropic', 'k2', 'rate-limit');
+      await flushKeyStats();
+
+      const all = await listStatsForProvider('anthropic');
+      assert.strictEqual(all.k1?.successCount, 1);
+      assert.strictEqual(all.k1?.rateLimitCount, 0);
+      assert.strictEqual(all.k2?.successCount, 0);
+      assert.strictEqual(all.k2?.rateLimitCount, 1);
+    });
+  });
+
+  it('returns undefined for an unknown key', async () => {
+    await withTempHome(async () => {
+      const stat = await getStats('anthropic', 'unknown');
+      assert.strictEqual(stat, undefined);
+    });
+  });
+
+  it('returns an empty map for an unknown provider', async () => {
+    await withTempHome(async () => {
+      const all = await listStatsForProvider('nonexistent');
+      assert.deepStrictEqual(all, {});
+    });
+  });
+});

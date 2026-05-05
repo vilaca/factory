@@ -231,6 +231,8 @@ async function main(): Promise<void> {
 
   const cleanup = async () => {
     if (mcpManager) await mcpManager.disconnect().catch(() => {});
+    const { flushKeyStats } = await import('./core/key-stats.js');
+    await flushKeyStats().catch(() => {});
   };
   process.on('SIGINT', () => { void cleanup().finally(() => process.exit(130)); });
   process.on('SIGTERM', () => { void cleanup().finally(() => process.exit(0)); });

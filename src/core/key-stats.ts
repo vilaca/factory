@@ -1,0 +1,157 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+/**
+ * Per-key usage analytics. Stored separately from the credentials file so
+ * that frequent updates (every successful turn / rotation) don't keep
+ * touching the secrets file. The stats file is plain JSON, mode 0o600,
+ * lives at `~/.factory/key-stats.json`. Lossy by design — a session crash
+ * may lose up to ~30s of buffered counter increments, which is acceptable
+ * for "is this key healthy?" reporting.
+ */
+
+export interface KeyStat {
+  successCount: number;
+  rateLimitCount: number;
+  authErrorCount: number;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+}
+
+export interface AllKeyStats {
+  [provider: string]: { [keyId: string]: KeyStat };
+}
+
+function statsFilePath(): string {
+  return path.join(os.homedir(), '.factory', 'key-stats.json');
+}
+
+function emptyStat(): KeyStat {
+  return { successCount: 0, rateLimitCount: 0, authErrorCount: 0 };
+}
+
+let cache: AllKeyStats | null = null;
+let dirty = false;
+let flushTimer: NodeJS.Timeout | null = null;
+const FLUSH_DEBOUNCE_MS = 30_000;
+
+async function readFromDisk(): Promise<AllKeyStats> {
+  try {
+    const raw = await fs.promises.readFile(statsFilePath(), 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as AllKeyStats;
+    }
+  } catch {
+    // Missing / unreadable / bad JSON — start fresh.
+  }
+  return {};
+}
+
+async function flush(): Promise<void> {
+  if (!dirty || !cache) return;
+  dirty = false;
+  const filePath = statsFilePath();
+  const dir = path.dirname(filePath);
+  try {
+    await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
+    // Atomic temp + rename so a crash mid-write can't corrupt prior stats.
+    const tmp = `${filePath}.tmp-${process.pid}`;
+    await fs.promises.writeFile(tmp, JSON.stringify(cache, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
+    await fs.promises.rename(tmp, filePath);
+  } catch {
+    // Stats persistence is best-effort. Re-flag dirty so the next flush
+    // tries again — if stats are *consistently* unwritable (read-only fs)
+    // we'll keep retrying, but that's harmless.
+    dirty = true;
+  }
+}
+
+function scheduleFlush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    void flush();
+  }, FLUSH_DEBOUNCE_MS);
+  // Don't keep the event loop alive just for stats persistence.
+  flushTimer.unref?.();
+}
+
+async function ensureCache(): Promise<AllKeyStats> {
+  if (cache) return cache;
+  cache = await readFromDisk();
+  return cache;
+}
+
+function getOrCreate(stats: AllKeyStats, provider: string, keyId: string): KeyStat {
+  let perProvider = stats[provider];
+  if (!perProvider) {
+    perProvider = {};
+    stats[provider] = perProvider;
+  }
+  let entry = perProvider[keyId];
+  if (!entry) {
+    entry = emptyStat();
+    perProvider[keyId] = entry;
+  }
+  return entry;
+}
+
+/** Increment successCount and stamp lastSuccessAt. */
+export async function recordSuccess(provider: string, keyId: string): Promise<void> {
+  const stats = await ensureCache();
+  const entry = getOrCreate(stats, provider, keyId);
+  entry.successCount++;
+  entry.lastSuccessAt = new Date().toISOString();
+  dirty = true;
+  scheduleFlush();
+}
+
+/** Increment the appropriate failure bucket and stamp lastFailureAt. */
+export async function recordFailure(
+  provider: string,
+  keyId: string,
+  reason: 'rate-limit' | 'auth',
+): Promise<void> {
+  const stats = await ensureCache();
+  const entry = getOrCreate(stats, provider, keyId);
+  if (reason === 'rate-limit') entry.rateLimitCount++;
+  else entry.authErrorCount++;
+  entry.lastFailureAt = new Date().toISOString();
+  dirty = true;
+  scheduleFlush();
+}
+
+/** Read-only snapshot for UI rendering. */
+export async function getStats(provider: string, keyId: string): Promise<KeyStat | undefined> {
+  const stats = await ensureCache();
+  return stats[provider]?.[keyId];
+}
+
+/** Read-only snapshot of every key's stats for a given provider. */
+export async function listStatsForProvider(provider: string): Promise<{ [keyId: string]: KeyStat }> {
+  const stats = await ensureCache();
+  return { ...(stats[provider] ?? {}) };
+}
+
+/** Force an immediate flush. Call on session-end so the user doesn't lose
+ *  the last few minutes of counters when shutting down. */
+export async function flushKeyStats(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  await flush();
+}
+
+/** Test-only — drop the in-memory cache and timer. Mirrors the credentials
+ *  test pattern. */
+export function _resetKeyStatsForTests(): void {
+  cache = null;
+  dirty = false;
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+}
