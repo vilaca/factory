@@ -4,7 +4,13 @@ import type { DisplayItem } from '../types.js';
 import { summarizeToolArgs } from '../format.js';
 import { AssistantText } from './assistant-text.js';
 
-export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactElement {
+export function DisplayItemView({
+  item,
+  showFullOutput = false,
+}: {
+  item: DisplayItem;
+  showFullOutput?: boolean;
+}): React.ReactElement {
   switch (item.kind) {
     case 'user-input':
       return <Text color="green" bold>{`> ${item.text}`}</Text>;
@@ -22,7 +28,8 @@ export function DisplayItemView({ item }: { item: DisplayItem }): React.ReactEle
       );
     }
     case 'tool-result': {
-      const lines = item.output.split('\n');
+      const body = showFullOutput && item.outputFull ? item.outputFull : item.output;
+      const lines = body.split('\n');
       // Empty success (e.g. Grep with zero matches) renders distinctly so it
       // doesn't look identical to a "found something" success.
       const icon = !item.success ? '  ✗' : item.empty ? '  ○' : '  ✓';

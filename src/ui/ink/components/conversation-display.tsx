@@ -20,6 +20,9 @@ export interface ConversationDisplayProps {
    * fall back to a plain map for all sessions. Single-tab keeps Static so the
    * existing scrollback UX is preserved. */
   useStatic?: boolean;
+  /** When on, tool-result items render the full output instead of the
+   * preview. Toggled via /full. */
+  showFullOutput?: boolean;
 }
 
 /**
@@ -43,6 +46,7 @@ export function ConversationDisplay({
   pendingToolCall,
   spinner,
   useStatic = true,
+  showFullOutput = false,
 }: ConversationDisplayProps): React.ReactElement {
   return (
     <Box flexDirection="column">
@@ -52,7 +56,7 @@ export function ConversationDisplay({
             <React.Fragment key={item.id}>
               {index > 0 && <Separator />}
               <PanelLine>
-                <DisplayItemView item={item} />
+                <DisplayItemView item={item} showFullOutput={showFullOutput} />
               </PanelLine>
             </React.Fragment>
           )}
@@ -62,7 +66,7 @@ export function ConversationDisplay({
           <React.Fragment key={item.id}>
             {index > 0 && <Separator />}
             <PanelLine>
-              <DisplayItemView item={item} />
+              <DisplayItemView item={item} showFullOutput={showFullOutput} />
             </PanelLine>
           </React.Fragment>
         ))

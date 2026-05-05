@@ -49,11 +49,17 @@ export function handleAgentEvent(
     case 'tool-call-result': {
       deps.setPendingToolCall(null);
       deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'ok' });
+      const preview = event.result.displayOutput ?? event.result.output;
+      // Only attach the full version when it actually differs from the
+      // preview, so the /full toggle has nothing to expand on tools that
+      // already show their entire output (Bash, Glob, Grep).
+      const full = event.result.output !== preview ? event.result.output : undefined;
       deps.addItem({
         kind: 'tool-result',
         id: deps.nextId(),
         toolName: event.toolName,
-        output: event.result.displayOutput ?? event.result.output,
+        output: preview,
+        outputFull: full,
         success: event.result.success,
         empty: event.result.empty,
       });

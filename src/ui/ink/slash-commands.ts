@@ -8,6 +8,7 @@ export interface SlashCommandContext {
   exit: () => void;
   tabs?: TabsContextValue;
   openPicker?: () => void;
+  toggleFullOutput?: () => boolean;
 }
 
 export async function dispatchSlashCommand(
@@ -204,6 +205,17 @@ export async function dispatchSlashCommand(
         agent.addNotice('warn', 'Picker not available in this context.');
       }
       return true;
+    case '/full': {
+      if (!ctx.toggleFullOutput) {
+        agent.addNotice('warn', 'Full-output toggle not available in this context.');
+        return true;
+      }
+      const next = ctx.toggleFullOutput();
+      agent.addNotice('info', next
+        ? 'Full tool output enabled (going forward).'
+        : 'Full tool output disabled — back to preview.');
+      return true;
+    }
   }
 
   agent.addNotice('info', `Unknown command: ${cmd}. Type /help for available commands.`);
@@ -220,6 +232,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/clear', 'Clear conversation history'],
     ['/model [<name>]', 'Show current provider/model, or switch model. Accepts <provider>:<model>.'],
     ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
+    ['/full', 'Toggle full vs preview tool output (going forward)'],
     ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],
     ['/plan', 'Toggle plan mode (or show queue if one exists)'],
