@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { Box, Text, useApp, useInput, render } from 'ink';
-import chalk from 'chalk';
-import type { RecentSession, SessionErrorStatus } from '../core/session-log.js';
+import React from 'react';
+import { useApp, render } from 'ink';
+import type { RecentSession } from '../core/session-log.js';
 import type { StartupProviderName } from '../providers/descriptors.js';
-import type { ModelPickerInfo, Provider } from '../providers/types.js';
+import type { Provider } from '../providers/types.js';
 import type { PickerOption } from './picker.js';
 import { exitStartupSelection } from './prompts.js';
+import {
+  ProviderPicker,
+  type ProviderEntry,
+  type RecentPair,
+} from '../ui/ink/components/provider-picker.js';
 
 export interface StartupSelection {
   provider: StartupProviderName;
@@ -13,235 +17,39 @@ export interface StartupSelection {
   model?: string;
 }
 
-function shortcutFor(index: number): string {
-  if (index < 10) return index.toString();
-  if (index < 36) return String.fromCharCode('A'.charCodeAt(0) + index - 10);
-  return '';
-}
-
-function indexForShortcut(input: string): number {
-  if (/^[0-9]$/.test(input)) return Number.parseInt(input, 10);
-  const upper = input.toUpperCase();
-  if (/^[A-Z]$/.test(upper)) return 10 + (upper.charCodeAt(0) - 'A'.charCodeAt(0));
-  return -1;
-}
-
-const STATUS_LABELS: Record<SessionErrorStatus, string> = {
-  throttle: 'throttled',
-  quota: 'out of quota',
-  permission: 'permission denied',
-  error: 'error',
-};
-const STATUS_COLORS: Record<SessionErrorStatus, (s: string) => string> = {
-  throttle: chalk.yellow,
-  quota: chalk.red,
-  permission: chalk.red,
-  error: chalk.red,
-};
-
-interface RowProps {
-  selected: boolean;
-  shortcut: string;
-  label: string;
-  suffix?: string;
-  dim?: boolean;
-}
-
-function Row({ selected, shortcut, label, suffix, dim }: RowProps): React.ReactElement {
-  const cursor = selected ? chalk.cyan('▸ ') : '  ';
-  const num = shortcut ? `${shortcut}. ` : '';
-  const text = selected ? chalk.cyan.bold(label) : label;
-  const line = `    ${cursor}${num}${text}${suffix ? '  ' + suffix : ''}`;
-  return <Text dimColor={dim && !selected}>{line}</Text>;
-}
-
-interface AppProps {
-  recentSessions: RecentSession[];
-  providerOptions: PickerOption[];
-  defaultProviderIndex: number;
-  onResolve: (sel: StartupSelection | null) => void;
-}
-
-function StartupMenuApp({
-  recentSessions,
-  providerOptions,
-  defaultProviderIndex,
-  onResolve,
-}: AppProps): React.ReactElement {
-  const recentRows = recentSessions.length;
-  // Last row of the recent menu is the "Pick a different provider" entry.
-  const recentLastIdx = recentRows;
-
-  // A recent session shares the offline state of its underlying provider — if
-  // the provider didn't probe successfully at startup, picking it would
-  // immediately fail downstream, so block selection at the menu level.
-  const offlineByProvider = new Map<string, boolean>(
-    providerOptions.map(o => [o.descriptor.name, !!o.offline]),
-  );
-  const isRecentOffline = (i: number): boolean =>
-    offlineByProvider.get(recentSessions[i]?.provider) === true;
-  const isProviderOffline = (i: number): boolean => !!providerOptions[i]?.offline;
-
-  // Initial cursor lands on the first non-offline row so Enter immediately
-  // works. If everything is offline (recent menu only), drop to the
-  // "Pick a different provider" entry; in the provider menu, fall back to 0.
-  const initialRecentIdx = (() => {
-    const i = recentSessions.findIndex(s => !offlineByProvider.get(s.provider));
-    return i >= 0 ? i : recentLastIdx;
-  })();
-  const initialProviderIdx = providerOptions[defaultProviderIndex]?.offline
-    ? Math.max(0, providerOptions.findIndex(o => !o.offline))
-    : defaultProviderIndex;
-
-  const [screen, setScreen] = useState<'recent' | 'provider'>(
-    recentRows > 0 ? 'recent' : 'provider',
-  );
-  const [recentIdx, setRecentIdx] = useState(initialRecentIdx);
-  const [providerIdx, setProviderIdx] = useState(initialProviderIdx);
-  const { exit } = useApp();
-
-  const finish = (sel: StartupSelection | null): void => {
-    onResolve(sel);
-    exit();
-  };
-
-  useInput((input, key) => {
-    if (key.ctrl && input === 'c') {
-      finish(null);
-      return;
-    }
-
-    if (screen === 'recent') {
-      if (key.escape) {
-        finish(null);
-        return;
-      }
-      if (key.upArrow) {
-        setRecentIdx(i => Math.max(0, i - 1));
-      } else if (key.downArrow) {
-        setRecentIdx(i => Math.min(recentLastIdx, i + 1));
-      } else if (key.return || input === ' ') {
-        if (recentIdx === recentLastIdx) {
-          setScreen('provider');
-        } else if (!isRecentOffline(recentIdx)) {
-          const s = recentSessions[recentIdx];
-          finish({ provider: s.provider as StartupProviderName, model: s.model });
-        }
-      } else if (input === 'p' || input === 'P') {
-        setScreen('provider');
-      } else {
-        const idx = indexForShortcut(input);
-        if (idx >= 0 && idx < recentRows && !isRecentOffline(idx)) {
-          finish({
-            provider: recentSessions[idx].provider as StartupProviderName,
-            model: recentSessions[idx].model,
-          });
-        }
-      }
-      return;
-    }
-
-    // provider screen
-    if (key.upArrow) {
-      setProviderIdx(i => Math.max(0, i - 1));
-    } else if (key.downArrow) {
-      setProviderIdx(i => Math.min(providerOptions.length - 1, i + 1));
-    } else if (key.return || input === ' ') {
-      if (!isProviderOffline(providerIdx)) {
-        finish({ provider: providerOptions[providerIdx].descriptor.name });
-      }
-    } else if (key.escape) {
-      if (recentRows > 0) {
-        setScreen('recent');
-      } else {
-        finish(null);
-      }
-    } else {
-      const idx = indexForShortcut(input);
-      if (idx >= 0 && idx < providerOptions.length && !isProviderOffline(idx)) {
-        finish({ provider: providerOptions[idx].descriptor.name });
-      }
-    }
-  });
-
-  if (screen === 'recent') {
-    return (
-      <Box flexDirection="column">
-        <Text bold>{'  Recent sessions:'}</Text>
-        <Text> </Text>
-        {recentSessions.map((s, i) => {
-          const offline = isRecentOffline(i);
-          const statusSuffix = s.status
-            ? STATUS_COLORS[s.status](`(${STATUS_LABELS[s.status]})`)
-            : '';
-          const offlineSuffix = offline ? chalk.dim('(offline)') : '';
-          const suffix = [statusSuffix, offlineSuffix].filter(Boolean).join('  ');
-          return (
-            <Row
-              key={i}
-              selected={i === recentIdx}
-              shortcut={shortcutFor(i)}
-              label={`${s.provider} / ${s.model}`}
-              suffix={suffix}
-              dim={offline}
-            />
-          );
-        })}
-        <Text> </Text>
-        <Row
-          selected={recentIdx === recentLastIdx}
-          shortcut="P"
-          label="Pick a different provider"
-        />
-        <Text> </Text>
-        <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 jump · Esc exit'}</Text>
-      </Box>
-    );
-  }
-
-  return (
-    <Box flexDirection="column">
-      <Text bold>{'  Select a provider:'}</Text>
-      <Text> </Text>
-      {providerOptions.map((opt, i) => (
-        <Row
-          key={opt.descriptor.name}
-          selected={i === providerIdx}
-          shortcut={shortcutFor(i)}
-          label={opt.descriptor.label}
-          suffix={opt.offline ? chalk.dim('(offline)') : ''}
-          dim={opt.offline}
-        />
-      ))}
-      <Text> </Text>
-      <Text dimColor>
-        {`     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · ${recentRows > 0 ? 'Esc back' : 'Esc exit'}`}
-      </Text>
-    </Box>
-  );
-}
-
 export async function selectStartupSession(
   recentSessions: RecentSession[],
   providerOptions: PickerOption[],
   defaultSelection?: { provider: StartupProviderName; model?: string },
 ): Promise<StartupSelection> {
-  const defaultProviderIndex = Math.max(
-    0,
-    providerOptions.findIndex(o => o.descriptor.name === defaultSelection?.provider),
-  );
-
   const debug = process.env.FACTORY_DEBUG === '1';
   const dbg = (msg: string): void => {
     if (debug) process.stderr.write(`[factory:debug] startup-menu: ${msg}\n`);
   };
 
+  const recents: RecentPair[] = recentSessions.map(s => ({
+    provider: s.provider,
+    model: s.model,
+    ...(s.status ? { status: s.status } : {}),
+  }));
+  const providers: ProviderEntry[] = providerOptions.map(o => ({
+    name: o.descriptor.name,
+    label: o.descriptor.label,
+    offline: o.offline,
+  }));
+
+  // The unified picker drives provider → loadModels → model. At startup
+  // we want to commit after the provider stage (so the main flow can
+  // run ensureAuth before model selection). The shim does that by
+  // converting the loadModels invocation into an immediate
+  // `{ provider, model: undefined }` resolution.
   let result: StartupSelection | null = null;
   const inkApp = render(
-    <StartupMenuApp
-      recentSessions={recentSessions}
-      providerOptions={providerOptions}
-      defaultProviderIndex={defaultProviderIndex}
+    <StartupShim
+      recents={recents}
+      providers={providers}
+      initialProvider={defaultSelection?.provider}
+      initialModel={defaultSelection?.model}
       onResolve={(sel) => { dbg(`onResolve sel=${JSON.stringify(sel)}`); result = sel; }}
     />,
   );
@@ -249,8 +57,6 @@ export async function selectStartupSession(
   await inkApp.waitUntilExit();
   dbg(`waitUntilExit resolved, result=${JSON.stringify(result)}`);
   inkApp.unmount();
-  // Ink keeps stdin in raw/paused state in some terminals; restore it
-  // explicitly so subsequent readline-based prompts (selectModel) work.
   if (process.stdin.isTTY && process.stdin.setRawMode) {
     process.stdin.setRawMode(false);
   }
@@ -260,61 +66,81 @@ export async function selectStartupSession(
   return result;
 }
 
-interface ModelMenuProps {
+interface StartupShimProps {
+  recents: RecentPair[];
+  providers: ProviderEntry[];
+  initialProvider?: string;
+  initialModel?: string;
+  onResolve: (sel: StartupSelection | null) => void;
+}
+
+function StartupShim({
+  recents, providers, initialProvider, initialModel, onResolve,
+}: StartupShimProps): React.ReactElement {
+  const { exit } = useApp();
+  const finish = (sel: StartupSelection | null): void => {
+    onResolve(sel);
+    exit();
+  };
+  return (
+    <ProviderPicker
+      providers={providers}
+      recents={recents}
+      initialProvider={initialProvider}
+      initialModel={initialModel}
+      loadModels={(name) => {
+        // The picker only invokes loadModels after a provider-stage
+        // Enter — that's our cue to commit and hand off to the main
+        // flow's ensureAuth + selectModelInk. Use a never-resolving
+        // promise so we don't race with Ink's unmount and trigger a
+        // setState on the loading stage after exit.
+        finish({ provider: name as StartupProviderName });
+        return new Promise<string[]>(() => { /* unmounted */ });
+      }}
+      onCommit={(provider, model) => {
+        // Reachable only when the user picked from the recent list.
+        finish({ provider: provider as StartupProviderName, model });
+      }}
+      onCancel={() => finish(null)}
+      bordered={false}
+    />
+  );
+}
+
+interface ModelMenuAppProps {
   models: string[];
   defaultModel: string | null;
   provider?: Provider;
+  providerName: string;
   onResolve: (model: string | null) => void;
 }
 
-function ModelMenuApp({ models, defaultModel, provider, onResolve }: ModelMenuProps): React.ReactElement {
-  const defaultIdx = Math.max(0, models.indexOf(defaultModel ?? ''));
-  const [idx, setIdx] = useState(defaultIdx);
+function ModelMenuApp(props: ModelMenuAppProps): React.ReactElement {
+  const { models, defaultModel, provider, providerName, onResolve } = props;
   const { exit } = useApp();
-
   const finish = (m: string | null): void => {
     onResolve(m);
     exit();
   };
-
-  useInput((input, key) => {
-    if (key.escape || (key.ctrl && input === 'c')) {
-      finish(null);
-      return;
-    }
-    if (key.upArrow) {
-      setIdx(i => Math.max(0, i - 1));
-    } else if (key.downArrow) {
-      setIdx(i => Math.min(models.length - 1, i + 1));
-    } else if (key.return || input === ' ') {
-      finish(models[idx]);
-    } else {
-      const num = indexForShortcut(input);
-      if (num >= 0 && num < models.length) finish(models[num]);
-    }
-  });
-
   return (
-    <Box flexDirection="column">
-      <Text bold>{'  Select a model:'}</Text>
-      <Text> </Text>
-      {models.map((m, i) => {
-        const info: ModelPickerInfo | undefined = provider?.getModelPickerInfo?.(m);
-        const label = info?.label ?? provider?.getDisplayModelName?.(m) ?? m;
-        const suffix = info?.warning ? chalk.yellow(`(${info.warning})`) : '';
-        return (
-          <Row
-            key={m}
-            selected={i === idx}
-            shortcut={shortcutFor(i)}
-            label={label}
-            suffix={suffix}
-          />
-        );
-      })}
-      <Text> </Text>
-      <Text dimColor>{'     ↑/↓ navigate · ↵ / space select · 0-9 / A-Z jump · Esc exit'}</Text>
-    </Box>
+    <ProviderPicker
+      providers={[]}
+      recents={[]}
+      models={models}
+      initialProvider={providerName}
+      initialModel={defaultModel ?? undefined}
+      startStage="model"
+      loadModels={async () => models}
+      getModelInfo={(_, m) => {
+        const info = provider?.getModelPickerInfo?.(m);
+        const label = info?.label ?? provider?.getDisplayModelName?.(m);
+        if (!label && !info?.warning) return undefined;
+        return { label, warning: info?.warning };
+      }}
+      onCommit={(_, model) => finish(model)}
+      onCancel={() => finish(null)}
+      bordered={false}
+    />
   );
 }
 
@@ -322,6 +148,7 @@ export async function selectModelInk(
   models: string[],
   defaultModel: string | null,
   provider?: Provider,
+  providerName: string = '',
 ): Promise<string> {
   if (models.length === 0) {
     throw new Error('No models available.');
@@ -339,6 +166,7 @@ export async function selectModelInk(
       models={models}
       defaultModel={defaultModel}
       provider={provider}
+      providerName={providerName}
       onResolve={(m) => { dbg(`onResolve model=${m ?? '<exit>'}`); result = m; }}
     />,
   );
