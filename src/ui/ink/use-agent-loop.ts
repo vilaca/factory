@@ -73,7 +73,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   function addNotice(level: NoticeLevel, text: string): void {
     addItem({ kind: 'notice', id: nextId(), text, level });
   }
-  function addNoticeBlock(lines: { level: NoticeLevel; text: string }[]): void {
+  function addNoticeBlock(lines: { level: NoticeLevel; text: string; bold?: boolean }[]): void {
     addItem({ kind: 'notice-block', id: nextId(), lines });
   }
   function refreshTokenEstimate(): void {
