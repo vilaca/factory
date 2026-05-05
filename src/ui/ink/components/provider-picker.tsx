@@ -17,6 +17,7 @@ type Stage =
 export interface ProviderPickerProps {
   providers: string[];
   recents: RecentPair[];
+  recentsLoading?: boolean;
   loadModels: (provider: string) => Promise<string[]>;
   initialProvider?: string;
   initialModel?: string;
@@ -27,12 +28,13 @@ export interface ProviderPickerProps {
 const VISIBLE_ROWS = 8;
 
 export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
-  const { providers, recents, loadModels, initialProvider, initialModel, onCommit, onCancel } = props;
+  const { providers, recents, recentsLoading, loadModels, initialProvider, initialModel, onCommit, onCancel } = props;
 
-  const startInRecent = recents.length > 0;
-  const [stage, setStage] = useState<Stage>(
-    startInRecent ? { kind: 'recent' } : { kind: 'provider' },
-  );
+  // Always start in the recent stage. It degrades gracefully when recents
+  // are still loading or empty (cursor lands on "Pick a different
+  // provider"), which avoids a race where async-loaded recents arrive after
+  // mount and silently strand the user in the provider list.
+  const [stage, setStage] = useState<Stage>({ kind: 'recent' });
   const [recentIdx, setRecentIdx] = useState(0);
   const [providerIndex, setProviderIndex] = useState(
     Math.max(0, initialProvider ? providers.indexOf(initialProvider) : 0),
@@ -157,6 +159,11 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   function renderBody(): React.ReactElement {
     if (stage.kind === 'recent') {
       const lastIdx = recents.length;
+      const placeholder = recentsLoading
+        ? 'Loading recent sessions…'
+        : recents.length === 0
+          ? '(no recent sessions yet)'
+          : null;
       return (
         <>
           <Text color="cyan" bold>Recent provider/model</Text>
@@ -168,6 +175,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
                 : `  ${p.provider} / ${p.model}`;
               return <Text key={`${p.provider}/${p.model}/${i}`}>{text}</Text>;
             })}
+            {placeholder && <Text dimColor>{`  ${placeholder}`}</Text>}
             <Text dimColor>{'  ─'}</Text>
             {(() => {
               const sel = recentIdx === lastIdx;
