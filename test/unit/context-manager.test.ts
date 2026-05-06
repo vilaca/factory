@@ -165,6 +165,151 @@ describe('ContextManager.compact (aggressive)', () => {
   });
 });
 
+describe('ContextManager — token-weighted recency window', () => {
+  it('expands the recency window past recencyWindow when messages are tiny', async () => {
+    const conv = new Conversation('SYSTEM');
+    // 30 short messages; recencyWindow=6 would normally keep just 6, but a
+    // 4000-token budget should expand to keep most/all of the conversation.
+    for (let i = 0; i < 30; i++) {
+      if (i % 2 === 0) conv.addUser(`q${i}`);
+      else conv.addAssistant(`a${i}`);
+    }
+    const cm = new ContextManager(conv, capabilities, {
+      compactionThreshold: 0.0001,
+      recencyWindow: 6,
+      recencyTokens: 4000,
+    });
+    const before = conv.getMessages().length;
+    await cm.compact(noopProvider(), 'm', undefined);
+    // With 30 tiny messages well under 4000 tokens, compact should have
+    // declined (kept all messages → no compaction).
+    const after = conv.getMessages().length;
+    assert.strictEqual(after, before);
+  });
+
+  it('keeps the recencyWindow floor when token budget is set to 0', async () => {
+    const conv = new Conversation('SYSTEM');
+    for (let i = 0; i < 30; i++) {
+      if (i % 2 === 0) conv.addUser(`q${i}`);
+      else conv.addAssistant(`a${i}`);
+    }
+    const cm = new ContextManager(conv, capabilities, {
+      compactionThreshold: 0.0001,
+      recencyWindow: 6,
+      recencyTokens: 0,
+    });
+    cm.updateUsage(undefined);
+    await cm.compact(noopProvider(), 'm', undefined);
+    // With token budget disabled, count-only behavior: 6 kept + 2 synthetic
+    // (summary user + ack assistant) = 8 total.
+    const msgs = conv.getMessages();
+    assert.strictEqual(msgs.length, 1 + 2 + 6); // system + summary pair + 6 kept
+  });
+});
+
+describe('ContextManager — summary routes to weak-tier when available', () => {
+  it('calls the provider summary on the mapped weak-tier model', async () => {
+    let summaryModelSeen: string | undefined;
+    const provider: Provider = {
+      name: 'anthropic',
+      async listModels() { return []; },
+      getCapabilities(model: string): ProviderCapabilities {
+        // Both strong-tier (sonnet) and weak-tier (haiku) report capabilities.
+        const isHaiku = model.includes('haiku');
+        return {
+          contextWindow: 200000,
+          maxOutputTokens: isHaiku ? 8192 : 16000,
+          toolSupport: 'native',
+          parallelToolCalls: true,
+          streaming: true,
+          tokenCounting: 'exact',
+          modelTier: isHaiku ? 'medium' : 'strong',
+        };
+      },
+      async *chat() { yield { done: true } as ChatChunk; },
+      async chatNoStream(model: string) {
+        summaryModelSeen = model;
+        return { content: 'a summary string', done: true } as ChatChunk;
+      },
+    };
+
+    const conv = new Conversation('SYSTEM');
+    for (let i = 0; i < 12; i++) {
+      conv.addUser(`q${i}`);
+      conv.addAssistant(`a${i}`);
+    }
+    const cm = new ContextManager(conv, provider.getCapabilities('claude-sonnet-4-6'), {
+      compactionThreshold: 0.0001,
+      recencyWindow: 4,
+      recencyTokens: 0,
+    });
+    cm.updateUsage(undefined);
+    await cm.compact(provider, 'claude-sonnet-4-6', undefined);
+
+    assert.strictEqual(summaryModelSeen, 'claude-haiku-4-5-20251001');
+  });
+
+  it('falls back to the primary model when no weak-tier mapping exists', async () => {
+    let summaryModelSeen: string | undefined;
+    const provider: Provider = {
+      name: 'cohere',
+      async listModels() { return []; },
+      getCapabilities() {
+        return {
+          contextWindow: 128000,
+          maxOutputTokens: 4096,
+          toolSupport: 'native',
+          parallelToolCalls: false,
+          streaming: true,
+          tokenCounting: 'estimated',
+          modelTier: 'strong',
+        };
+      },
+      async *chat() { yield { done: true } as ChatChunk; },
+      async chatNoStream(model: string) {
+        summaryModelSeen = model;
+        return { content: 'a summary string', done: true } as ChatChunk;
+      },
+    };
+
+    const conv = new Conversation('SYSTEM');
+    for (let i = 0; i < 12; i++) {
+      conv.addUser(`q${i}`);
+      conv.addAssistant(`a${i}`);
+    }
+    const cm = new ContextManager(conv, provider.getCapabilities('command-r-plus'), {
+      compactionThreshold: 0.0001,
+      recencyWindow: 4,
+      recencyTokens: 0,
+    });
+    cm.updateUsage(undefined);
+    await cm.compact(provider, 'command-r-plus', undefined);
+
+    assert.strictEqual(summaryModelSeen, 'command-r-plus');
+  });
+});
+
+describe('ContextManager — summary marks cacheBoundary', () => {
+  it('marks the assistant ack of the summary pair with cacheBoundary: true', async () => {
+    const conv = new Conversation('SYSTEM');
+    conv.addUser('first'); conv.addAssistant('reply 1');
+    conv.addUser('second'); conv.addAssistant('reply 2');
+    conv.addUser('third'); conv.addAssistant('reply 3');
+    conv.addUser('fourth'); conv.addAssistant('reply 4');
+
+    const cm = new ContextManager(conv, capabilities);
+    await cm.compact(noopProvider(), 'm', undefined, { aggressive: true });
+
+    const msgs = conv.getMessages();
+    // Layout: [system, user-summary, assistant-ack, ...kept]
+    assert.strictEqual(msgs[1].role, 'user');
+    assert.ok(msgs[1].content.startsWith('[Previous conversation summary]\n'));
+    assert.strictEqual(msgs[2].role, 'assistant');
+    assert.strictEqual(msgs[2].content, 'Continuing from the summary above.');
+    assert.strictEqual(msgs[2].cacheBoundary, true);
+  });
+});
+
 describe('ContextManager.ageOldToolResults', () => {
   it('drops the token estimate after aging old tool results', () => {
     const conv = new Conversation('SYSTEM');

@@ -378,6 +378,8 @@ Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel /
 
 **Tool-result aging.** Before each compaction check, tool results from turns older than `agent.toolResultAgingTurns` (default 6) are rewritten in place to elision stubs. Cheaper than full compaction and cache-friendlier — only old messages mutate, so the recent prefix stays warm for re-cache. The `tool_call_id` ↔ `tool_use` invariant Anthropic enforces stays intact: only the content changes.
 
+**Compaction.** Triggers at `agent.compactionThreshold` (default 75% of the model's context window). Keeps a token-weighted recency window — `agent.recencyTokens` (default 4000) sets the soft budget; `agent.recencyWindow` (default 6) is the hard floor. The summary call routes to a weak-tier model on the same provider when one is mapped (Anthropic → Haiku, OpenRouter → Haiku, Cerebras → 8B, Groq → 8B, Gemini → Flash, Mistral → Ministral) — strong-tier prompt cost for summaries was overkill. The synthetic assistant ack that opens the post-compaction conversation carries `cacheBoundary: true` so explicit-cache providers can re-anchor on the new prefix instead of starting cold.
+
 For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
 ### Session Logs

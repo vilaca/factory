@@ -1,5 +1,66 @@
 # Ideas
 
+## Milestones to a competitive production coding agent
+
+Staged plan, ordered by capability-per-unit-of-work. Most M1 items already exist on feature branches; the work there is landing, not designing.
+
+### M1 — Land the in-flight branches
+
+The structural gaps vs Claude Code are mostly already implemented. Order roughly as listed: `subagent-delegate` and `skills` first because they're the structural ones; everything else compounds on top.
+
+- **`feat/subagent-delegate`** — programmatic delegation with isolated context and summary-back. Single biggest gap closed once it lands. Follow-ups already noted on the branch: live event stream, named tab workers.
+- **`feat/skills`** — loadable capability bundles. Pairs with subagents (skill + delegated agent = specialized worker).
+- **`feat/hooks`** — pre/post tool-call hooks via settings. Same automation stories Claude Code's hooks enable.
+- **`feat/architect-mode`** — high-level planning pass before edits.
+- **`feat/repomap`** — repo map in system prompt; reduces blind grepping for small models especially.
+- **`feat/lsp`** — diagnostics surfaced in tool results. Unlocks the lint/test feedback loop.
+- **`feat/checkpoints`** — `/save`, `/restore`, `/list`. Foundation for `/undo`.
+- **`feat/auto-format-on-write-v2`**, **`feat-lint-test-feedback`**, **`feat/loop-detection-tool-agnostic`** — quality fixes that compound: formatted output → fewer diff churns → faster lint feedback → loop detector breaks pathological retries.
+- **`feat/apply-patch`** — unified-diff edits. Important escape hatch for models that struggle with the `Edit` signature.
+- **`feat/web-fetch`**, **`feat/workflows`**, **`feat/agents-md-fallback-v2`** — ecosystem fit; AGENTS.md/CLAUDE.md/.cursorrules loading makes factory drop-in for existing repos.
+- **`feat/bash-sandbox-tier1-2`**, **`feat/security-risk-field-v2`** — security baseline; gates destructive ops without adding friction to the common case.
+- **`moooar-tools`** — image/audio/fetch + wider `ChatMessage.content`. Multimodal table stakes.
+
+Pre-merge prep per branch: rebase on current main, conflict resolution, end-to-end regression across at least one frontier and one local provider.
+
+### M2 — Agent depth
+
+Capabilities the merged feature set still lacks but that frontier agents lean on heavily.
+
+- **Task-ledger tool** (TodoWrite-shaped). Persistent in-turn plan the model maintains itself; visible progress without prose. Materially changes how multi-step work proceeds.
+- **Parallel sub-agents.** Once delegate lands, fan-out: launch N delegates in one turn for independent queries, gather when all complete. Big wall-clock win on broad-search tasks.
+- **Background tasks + monitor.** Long-running shell (build, test suite, dev server) that doesn't block the turn; agent is notified on output/completion. Pairs with the lint/test feedback loop.
+- **`/run` and `/undo`** — both small once checkpoints lands. `/undo` becomes "restore the autosaved checkpoint from before the last edit batch."
+
+### M3 — Integration surfaces
+
+Get out of the terminal.
+
+- **ACP server mode** (already in IDEAS) — JSON-RPC surface so editor extensions drive the same core loop. VS Code extension as the reference client.
+- **Wider MCP support.** `src/mcp` is a basic adapter; expand resource/prompt surfaces, server lifecycle, and OAuth flows for hosted servers. Each well-supported server is leverage factory gets for free.
+- **Headless API surface for CI.** Structured (JSON-streaming) output, exit codes that distinguish "model declined" from "tool failed," and a bounded-cost mode.
+
+### M4 — Production hardening
+
+Separates a hobby tool from something teams ship to production.
+
+- **Eval harness.** Reproducible task suite (fix-this-bug, refactor-this, port-this-API) run nightly across the provider matrix. Without it, prompt and tool-reliability regressions go unnoticed; *with* it, the small-model-resilience claim becomes testable.
+- **Structured error taxonomy** (already in IDEAS) — codes like `STALE_REF`, `KEY_EXHAUSTED`, `RATE_LIMIT`, `TOOL_TIMEOUT`. Enables better automated recovery and cleaner UX.
+- **Session telemetry beyond cache.** Per-tool latency, error rate, retry counts, correction frequency. Drives the existing "mine session logs" idea.
+- **Crash recovery.** Mid-edit-batch terminal kill should leave a recoverable session. Pairs with checkpoints.
+
+### M5 — Ecosystem fit
+
+- **Scoped persistent memory** (already in IDEAS) — natural next layer once skills + hooks land.
+- **Plugin/skill manifest + trust model.** Even without a registry, fix the manifest shape, signing, and permission scoping so third-party skills can be safely shared.
+- **Team mode.** Shared skills/workflows/memory tracked in-repo; per-user keys and rotation chain stay local. Generalizes the personal-vs-shared split from the memory idea to all config.
+
+---
+
+Sequencing rationale: **M1** closes the perceived gap on most workflows; **M2** makes the agent feel comparably capable on hard tasks; **M3** makes adoption easy; **M4** keeps it; **M5** is what makes the bring-your-own-model story stick beyond solo users.
+
+---
+
 ## Hierarchical permission model
 
 Replace the flat allowlist in `src/permissions.ts` with a tree, e.g. `bash:git:read`, `bash:git:write`, `mcp:atlassian:*`. Grant once at a node, cascade to children; revoke at a node, cascade too.
@@ -29,6 +90,29 @@ One-shot rollback for the most recent edit set the agent made. Two plausible imp
 2. **In-memory**: keep the previous file contents per edit and restore on demand.
 
 Git-backed is more robust (survives crashes, multi-file batches) but requires a clean working tree or a dedicated shadow branch. Pairs naturally with `/run` — try a change, run tests, undo if red.
+
+## Task ledger tool — model-maintained todo list as structured state
+
+A first-class tool (call it `Todo`) that lets the model maintain a persistent, in-conversation plan as structured state rather than prose. Same shape as Claude Code's `TodoWrite`. The list is rendered as a live checkbox panel in the UI, updated in place as the model works.
+
+Shape:
+- One tool with either a `set` operation (replace the whole list) or granular `add`/`update`/`complete`. Granular is friendlier on tokens; `set` is harder for the model to get wrong.
+- Each item: a short imperative line + status (`pending` / `in_progress` / `completed`). Exactly one `in_progress` at a time. Mark `completed` the moment a step finishes, not batched at the end.
+- System-prompt nudge: "for any task with >3 discrete steps, maintain a `Todo` list and keep it current."
+
+Why it earns its keep:
+- **Forces planning before acting.** Writing the list surfaces missing steps and bad ordering earlier than diving into edits.
+- **Anchors long turns.** On a 15-tool-call task the model drifts; the ledger is a stable artifact it can re-read to stay aligned with the original ask.
+- **Replaces narration with state.** Collapses "now I'll do X… done… next…" prose into one structured artifact updated in place. Material token saving on multi-step turns.
+- **Survives compaction.** Compaction preserves structured state cleanly; prose summaries of progress get lossy-compressed and the model loses track.
+- **Recovery point.** Interrupted turn? Next turn resumes from the still-`in_progress`/`pending` items instead of re-deriving the plan.
+
+Risks to engineer around:
+- Models can over-use it on trivial tasks ("read this file" → 1-item list). The system-prompt threshold matters; tune empirically.
+- Stale items left `in_progress` after errors. The renderer should highlight them so the user notices, and the model should be prompted to reconcile at turn start.
+- Don't let it become a parallel narration. If the model writes both a ledger update *and* a prose "I just did X" sentence every step, you've doubled tokens. Style guidance in the system prompt has to push prose out, not add the ledger on top.
+
+Cheap to build (tool definition + renderer + prompt nudge), high leverage on hard tasks. Likely the first M2 item to ship.
 
 ## ACP server mode — expose the agent over JSON-RPC
 

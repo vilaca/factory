@@ -89,7 +89,11 @@ export class Conversation {
 
   /**
    * Replace all messages before the recency window with a summary message.
-   * Keeps the last `keepCount` messages intact.
+   * Keeps the last `keepCount` messages intact. The synthetic
+   * user/assistant pair that opens the post-compaction conversation is
+   * marked `cacheBoundary: true` on the assistant ack so explicit-cache
+   * providers (Anthropic) can reanchor — without this, every compaction
+   * would invalidate the cache for the rest of the session.
    */
   replaceWithSummary(summary: string, keepCount: number): { oldCount: number; newCount: number } {
     if (this.messages.length <= keepCount) {
@@ -109,7 +113,7 @@ export class Conversation {
     const kept = this.messages.slice(cutPoint);
     this.messages = [
       { role: 'user', content: `[Previous conversation summary]\n${summary}` },
-      { role: 'assistant', content: 'Continuing from the summary above.' },
+      { role: 'assistant', content: 'Continuing from the summary above.', cacheBoundary: true },
       ...kept,
     ];
 

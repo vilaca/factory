@@ -1,10 +1,15 @@
-import type { Provider, ProviderCapabilities, TokenUsage } from '../providers/types.js';
+import type { ChatMessage, Provider, ProviderCapabilities, TokenUsage } from '../providers/types.js';
 import type { Conversation } from './conversation.js';
 import { estimateMessagesTokens } from '../utils/tokens.js';
+import { selectWeakTier } from './agent/weak-tier.js';
 
 export interface ContextConfig {
   compactionThreshold: number; // 0-1, fraction of context window (default 0.75)
-  recencyWindow: number;       // messages to keep during compaction (default 6)
+  recencyWindow: number;       // floor on messages to keep during compaction (default 6)
+  /** Soft token budget for the recency window. The actual count of kept
+   * messages is whichever is larger — `recencyWindow` (count floor) or as
+   * many trailing messages as fit under `recencyTokens`. Default 4000. */
+  recencyTokens: number;
   /** Tool results from turns older than this are eligible for aging via
    * `ageOldToolResults`. Default 6. */
   toolResultAgingTurns: number;
@@ -13,6 +18,7 @@ export interface ContextConfig {
 const DEFAULT_CONFIG: ContextConfig = {
   compactionThreshold: 0.75,
   recencyWindow: 6,
+  recencyTokens: 4000,
   toolResultAgingTurns: 6,
 };
 
@@ -44,6 +50,7 @@ export class ContextManager {
     this.config = {
       compactionThreshold: config?.compactionThreshold ?? DEFAULT_CONFIG.compactionThreshold,
       recencyWindow: config?.recencyWindow ?? DEFAULT_CONFIG.recencyWindow,
+      recencyTokens: config?.recencyTokens ?? DEFAULT_CONFIG.recencyTokens,
       toolResultAgingTurns: config?.toolResultAgingTurns ?? DEFAULT_CONFIG.toolResultAgingTurns,
     };
   }
@@ -92,12 +99,15 @@ export class ContextManager {
     const fingerprints = opts?.fingerprints ?? [];
     if (!aggressive && !this.shouldCompact()) return null;
 
-    // Aggressive mode skips the model summary call (sending the to-summarize
-    // messages may itself overflow a small context window) and tightens the
-    // recency window down to AGGRESSIVE_RECENCY — enough to keep the latest
-    // user/assistant exchange so the active task survives.
-    const recencyWindow = aggressive ? AGGRESSIVE_RECENCY : this.config.recencyWindow;
+    // Aggressive mode tightens the recency window down to AGGRESSIVE_RECENCY
+    // — enough to keep the latest user/assistant exchange so the active
+    // task survives. Normal mode uses a token-weighted recency: keep at
+    // least `recencyWindow` messages, plus enough trailing messages to fill
+    // `recencyTokens` (whichever is more).
     const messages = this.conversation.getMessages();
+    const recencyWindow = aggressive
+      ? AGGRESSIVE_RECENCY
+      : this.computeRecencyKeepCount(messages);
     if (messages.length <= recencyWindow + 1) {
       return null;
     }
@@ -106,30 +116,23 @@ export class ContextManager {
     const toSummarize = messages.slice(1, summarizeEnd);
     if (toSummarize.length === 0) return null;
 
+    // For the summary call, route to a weak-tier model on the same provider
+    // when available — Haiku / Llama-3.1-8B / Gemini-Flash etc. The
+    // summarization workload doesn't need the strong tier, and routing the
+    // user's primary turn through this is explicitly NOT a goal (see
+    // selectWeakTier docs). Both aggressive and normal compaction benefit.
+    const summaryModel = selectWeakTier(provider, model) ?? model;
+
     let summary: string;
     if (aggressive) {
-      summary = this.buildMechanicalSummary(toSummarize);
+      // Try the weak-tier model first; fall back to mechanical only if the
+      // call fails (this is what the source plan calls out as "current
+      // skip-model-entirely path is overcautious").
+      summary = await this.buildModelSummary(provider, summaryModel, toSummarize, signal)
+        ?? this.buildMechanicalSummary(toSummarize);
     } else {
-      const summaryPrompt = [
-        {
-          role: 'system' as const,
-          content: 'Summarize the key context from this conversation. Include: files accessed, tools used, decisions made, and current task state. Be concise.',
-        },
-        ...toSummarize,
-        {
-          role: 'user' as const,
-          content: 'Provide a concise summary of the conversation above, focusing on context needed to continue the work.',
-        },
-      ];
-      try {
-        const response = await provider.chatNoStream(model, summaryPrompt, undefined, { maxTokens: 512, signal });
-        summary = response.content ?? this.buildMechanicalSummary(toSummarize);
-      } catch (err: any) {
-        // Don't swallow user aborts as a "model failed" — let the agent loop
-        // exit cleanly via its existing AbortError handler.
-        if (signal?.aborted || err?.name === 'AbortError') throw err;
-        summary = this.buildMechanicalSummary(toSummarize);
-      }
+      summary = await this.buildModelSummary(provider, summaryModel, toSummarize, signal)
+        ?? this.buildMechanicalSummary(toSummarize);
     }
 
     // Append known file fingerprints so the agent can re-Read post-compaction
@@ -146,6 +149,53 @@ export class ContextManager {
     const result = this.conversation.replaceWithSummary(summary, recencyWindow);
     this.tokenEstimate = estimateMessagesTokens(this.conversation.getMessages());
     return result;
+  }
+
+  /** Walk messages from the end, accumulating estimated tokens, until the
+   *  budget is met. Returns the count of trailing messages to keep. The
+   *  count is bounded below by `recencyWindow` so a small budget can't
+   *  drop the latest exchange. */
+  private computeRecencyKeepCount(messages: ChatMessage[]): number {
+    const budget = this.config.recencyTokens;
+    if (budget <= 0) return this.config.recencyWindow;
+    let acc = 0;
+    let count = 0;
+    for (let i = messages.length - 1; i >= 1; i--) { // skip system at [0]
+      const tokens = estimateMessagesTokens([messages[i]]);
+      acc += tokens;
+      count++;
+      if (acc >= budget) break;
+    }
+    return Math.max(count, this.config.recencyWindow);
+  }
+
+  /** Ask the model to produce a freeform summary of `toSummarize`. Returns
+   *  null on any non-abort failure (caller falls back to mechanical).
+   *  Re-throws aborts so the agent loop handles them as user-abort. */
+  private async buildModelSummary(
+    provider: Provider,
+    model: string,
+    toSummarize: ChatMessage[],
+    signal?: AbortSignal,
+  ): Promise<string | null> {
+    const summaryPrompt: ChatMessage[] = [
+      {
+        role: 'system',
+        content: 'Summarize the key context from this conversation. Include: files accessed, tools used, decisions made, and current task state. Be concise.',
+      },
+      ...toSummarize,
+      {
+        role: 'user',
+        content: 'Provide a concise summary of the conversation above, focusing on context needed to continue the work.',
+      },
+    ];
+    try {
+      const response = await provider.chatNoStream(model, summaryPrompt, undefined, { maxTokens: 512, signal });
+      return response.content ?? null;
+    } catch (err: any) {
+      if (signal?.aborted || err?.name === 'AbortError') throw err;
+      return null;
+    }
   }
 
   private buildMechanicalSummary(messages: Array<{ role: string; content: string; tool_calls?: any[] }>): string {
