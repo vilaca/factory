@@ -129,10 +129,18 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       // failing tests, grep miss). Don't treat as a tool failure; let the
       // model interpret the exit code in the output. Real tool failures only
       // come from the 'error' event below (spawn / system error).
+      // Set `important` on non-zero exit so the toolPreview gate surfaces
+      // the body to the user — without this, a `npm test` that exits 1
+      // renders only the call line and the user can't see the failure.
       // Only surface cwdAfter when the command actually changed the dir —
       // otherwise the agent loop wastefully re-renders refreshGitState etc.
       const dirChanged = cwdAfter !== undefined && cwdAfter !== cwd;
-      resolve({ success: true, output, cwdAfter: dirChanged ? cwdAfter : undefined });
+      resolve({
+        success: true,
+        output,
+        important: code !== 0,
+        cwdAfter: dirChanged ? cwdAfter : undefined,
+      });
     });
 
     proc.on('error', (err) => {
