@@ -4,11 +4,11 @@ import { getToolDefinitions, getTool, getAllTools } from '../../src/tools/index.
 import type { ToolCategory } from '../../src/tools/types.js';
 
 describe('Tool registry', () => {
-  const expectedTools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
+  const expectedTools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch'];
 
-  it('getAllTools returns all 6 tools', () => {
+  it('getAllTools returns all 7 tools', () => {
     const tools = getAllTools();
-    assert.strictEqual(tools.length, 6);
+    assert.strictEqual(tools.length, 7);
     const names = tools.map(t => t.name);
     for (const name of expectedTools) {
       assert.ok(names.includes(name), `Missing tool: ${name}`);
@@ -17,7 +17,7 @@ describe('Tool registry', () => {
 
   it('getToolDefinitions returns definitions for all tools', () => {
     const defs = getToolDefinitions();
-    assert.strictEqual(defs.length, 6);
+    assert.strictEqual(defs.length, 7);
     for (const def of defs) {
       assert.strictEqual(def.type, 'function');
       assert.ok(def.function.name, 'definition must have a name');

@@ -69,6 +69,9 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   if (opts.autoAllowTools) {
     for (const t of opts.autoAllowTools) permissions.allowAll(t);
   }
+  for (const host of opts.agentConfig?.web?.allowlist ?? []) {
+    permissions.allowDomain(host);
+  }
   const capabilities = opts.provider.getCapabilities(opts.model);
   const contextManager = new ContextManager(conversation, capabilities, {
     compactionThreshold: opts.agentConfig?.compactionThreshold,

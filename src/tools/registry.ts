@@ -5,6 +5,7 @@ import { editTool } from './edit.js';
 import { bashTool } from './bash.js';
 import { globTool } from './glob.js';
 import { grepTool } from './grep.js';
+import { webFetchTool } from './web-fetch.js';
 
 export class ToolRegistry {
   private tools: Map<string, ToolHandler> = new Map();
@@ -17,6 +18,7 @@ export class ToolRegistry {
     this.register(bashTool);
     this.register(globTool);
     this.register(grepTool);
+    this.register(webFetchTool);
   }
 
   register(handler: ToolHandler): void {

@@ -24,6 +24,18 @@ export interface AgentConfig {
    *  `(provider, model)` entries (tier 2) when the active selection
    *  returns 429/401/403. Edited via `/rotate` and `--rotate`. */
   rotation?: RotationConfig;
+  /** WebFetch tool configuration. Pre-seeded `allowlist` hostnames bypass
+   *  the per-fetch user prompt; useful for headless runs (where there is
+   *  no UI to prompt) and for trusted documentation domains the user
+   *  doesn't want to whitelist by hand each session. */
+  web?: WebConfig;
+}
+
+export interface WebConfig {
+  /** Hostnames pre-seeded into the WebFetch allowlist at session start.
+   *  Compared case-insensitively. Subdomain matching is exact (no wildcards
+   *  yet); list each subdomain you want to allow explicitly. */
+  allowlist?: string[];
 }
 
 /** One step in a rotation chain — provider + model. */
