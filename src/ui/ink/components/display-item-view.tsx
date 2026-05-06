@@ -36,10 +36,25 @@ export function DisplayItemView({
     case 'tool-result': {
       const body = showFullOutput && item.outputFull ? item.outputFull : item.output;
       const lines = body.split('\n');
-      // Empty success (e.g. Grep with zero matches) renders distinctly so it
-      // doesn't look identical to a "found something" success.
-      const icon = !item.success ? '  ✗' : item.empty ? '  ○' : '  ✓';
-      const color = !item.success ? 'red' : item.empty ? 'yellow' : 'green';
+      // Successful non-empty results don't get a standalone icon line — the
+      // preceding tool-call panel already shows the tool ran, so a bare ✓
+      // above its output was just visual noise. Edit/Write keep an inline
+      // ✅ prefix on the first body line so file-mutating successes still
+      // pop out at a glance.
+      // Failure (✗) and empty-success (○) keep the icon-only line — those
+      // are the cases where the body alone wouldn't carry the signal.
+      if (item.success && !item.empty) {
+        const isEdit = item.toolName === 'Edit' || item.toolName === 'Write';
+        return (
+          <Box flexDirection="column">
+            {lines.map((line, i) => (
+              <Text dimColor key={i}>{i === 0 && isEdit ? `  ✅ ${line}` : `    ${line}`}</Text>
+            ))}
+          </Box>
+        );
+      }
+      const icon = !item.success ? '  ✗' : '  ○';
+      const color = !item.success ? 'red' : 'yellow';
       return (
         <Box flexDirection="column">
           <Text color={color}>{icon}</Text>
