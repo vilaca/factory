@@ -31,3 +31,6 @@ Thumbs.db
 coverage/
 .nyc_output/
 .eslintcache
+
+# Local-only scratch
+IDEAS.md
