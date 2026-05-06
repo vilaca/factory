@@ -9,11 +9,16 @@ export function DisplayItemView({
   showFullOutput = false,
   emojiMode = false,
   userEmoji,
+  continuation = false,
 }: {
   item: DisplayItem;
   showFullOutput?: boolean;
   emojiMode?: boolean;
   userEmoji?: string;
+  /** When true and `item` is a tool-call, render only the args line (no
+   *  icon + tool name header). Set by ConversationDisplay when the previous
+   *  item was a tool-call of the same tool. */
+  continuation?: boolean;
 }): React.ReactElement {
   switch (item.kind) {
     case 'user-input': {
@@ -30,6 +35,7 @@ export function DisplayItemView({
           toolName={item.toolName}
           args={item.args}
           denied={denied}
+          continuation={continuation}
         />
       );
     }
@@ -100,14 +106,23 @@ export function ToolCallLine({
   toolName,
   args,
   denied,
+  continuation,
 }: {
   icon: string;
   toolName: string;
   args: Record<string, unknown>;
   denied?: boolean;
+  /** When true, suppress the icon + tool-name header and render only the
+   *  indented arg line. Used when the immediately previous item was a
+   *  tool-call of the same tool — three Glob calls in a row read as one
+   *  block instead of three repeated headers. */
+  continuation?: boolean;
 }): React.ReactElement {
   const summary = summarizeToolArgs(toolName, args);
   const nameColor = denied ? 'red' : 'cyan';
+  if (continuation && summary) {
+    return <Text color={denied ? 'red' : undefined}>{`    ${summary}`}</Text>;
+  }
   if (!summary) {
     return (
       <Text>
