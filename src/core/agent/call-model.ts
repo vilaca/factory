@@ -255,6 +255,61 @@ export async function* callModel(
             }
             yield { type: 'tuple-rotation-exhausted', reason };
           }
+
+          // ─── Last-chance prompt: ask the host (typically the UI) for
+          //  a brand-new chain entry. The host decides whether to involve
+          //  the user; we just await whatever entry it returns.
+          if (rotation.promptForFallback && rotation.loadKeysForProvider && rotation.withTuple) {
+            const promptedEntry = await rotation.promptForFallback({
+              provider: provider.name, model, reason,
+            });
+            if (promptedEntry) {
+              const promptedKey = `${promptedEntry.provider}:${promptedEntry.model}`;
+              // Treat as a virtual one-shot chain advance. Same wiring as
+              // tier 2: load the entry's keys, build a fresh provider,
+              // reset the tier-1 tried-set, retry.
+              if (!triedTuples.has(promptedKey)) {
+                let promptedKeys: import('../config-types.js').ProviderKey[] = [];
+                try {
+                  promptedKeys = await rotation.loadKeysForProvider(promptedEntry.provider);
+                } catch {
+                  // empty list — fall through to throw.
+                }
+                if (promptedKeys.length > 0) {
+                  const firstKey = promptedKeys[0]!;
+                  let nextProvider: Provider;
+                  try {
+                    nextProvider = rotation.withTuple(promptedEntry.provider, firstKey);
+                  } catch {
+                    // give up and let the original error propagate
+                    if (signal) signal.removeEventListener('abort', cascade);
+                    throw err;
+                  }
+                  yield {
+                    type: 'tuple-rotation',
+                    from: { provider: provider.name, model },
+                    to: { provider: promptedEntry.provider, model: promptedEntry.model },
+                    reason,
+                  };
+                  provider = nextProvider;
+                  model = promptedEntry.model;
+                  activeKeyId = firstKey.id;
+                  rotation.activeKeyId = firstKey.id;
+                  rotation.onActiveKeyChange?.(firstKey.id);
+                  rotation.onModelChange?.(promptedEntry.model);
+                  triedKeyIds = new Set<string>([firstKey.id]);
+                  rotation.keys = promptedKeys;
+                  triedTuples.add(promptedKey);
+                  tupleRotated = true;
+                  fullContent = '';
+                  toolCalls = [];
+                  lastUsage = undefined;
+                  doneReason = undefined;
+                  continue;
+                }
+              }
+            }
+          }
         }
       }
       // Existing isStreamish fallback: stream-only failures and transient

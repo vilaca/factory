@@ -58,6 +58,19 @@ export interface RunRefs {
   /** Per-tab in-memory failure log keyed by `keyId`. The rotation runtime
    *  reads + writes; reset on session restart. */
   keyFailureLog: Map<string, number>;
+  /** Set to true when the user declines the "set up a fallback?" prompt.
+   *  Subsequent rate-limit failures bypass the prompt for the rest of the
+   *  session. Cleared when the user opens the picker via /pick. */
+  rotationPromptDeclined: boolean;
+  /** UI bridge for the rotation prompt + fallback picker dance. Called by
+   *  the rotation runtime after both tiers exhaust; returns the chosen
+   *  entry or `null` if the user declined / cancelled. Set by Session.tsx
+   *  on mount; left undefined for headless callers. */
+  requestFallback?: (context: {
+    provider: string;
+    model: string;
+    reason: 'rate-limit' | 'auth';
+  }) => Promise<RotationEntry | null>;
   gitBranch: string | undefined;
   gitDirty: boolean | null;
   /** Per-tab working directory. Tools resolve relative paths against this and

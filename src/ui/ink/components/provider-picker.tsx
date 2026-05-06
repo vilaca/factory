@@ -103,6 +103,16 @@ export interface ProviderPickerProps {
    *  matches the in-prompt panel style. Disable for full-screen startup
    *  rendering. */
   bordered?: boolean;
+  /**
+   * Picker purpose. Default `'select-active'` — selecting a key + model
+   * commits both to the active session via onCommit(provider, model, keyId).
+   *
+   * `'select-rotation-entry'` skips the key stage entirely (rotation chain
+   * entries are just `(provider, model)`), and the heading text shifts so
+   * the user knows they're shaping a fallback list, not switching the
+   * active selection. Always commits with keyId=undefined.
+   */
+  purpose?: 'select-active' | 'select-rotation-entry';
 }
 
 const VISIBLE_ROWS = 8;
@@ -114,7 +124,9 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     multiKeyProviders,
     initialProvider, initialModel, initialKeyId, onCommit, onCancel,
     startStage = 'recent', models: preloadedModels, bordered = true,
+    purpose = 'select-active',
   } = props;
+  const isFallbackPicker = purpose === 'select-rotation-entry';
 
   const startsAtModel = startStage === 'model';
   const initialStage: Stage = startsAtModel
@@ -140,6 +152,9 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   });
 
   function isMultiKey(name: string): boolean {
+    // Fallback-picker mode never enters the key stage — rotation entries
+    // are just `(provider, model)` pairs, not key bindings.
+    if (isFallbackPicker) return false;
     return Boolean(loadKeysForProvider && multiKeyProviders?.has(name));
   }
 
