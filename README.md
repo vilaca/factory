@@ -372,6 +372,8 @@ Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel /
 
 **Anthropic explicit caching.** factory emits up to three `cache_control: { type: 'ephemeral' }` markers per call — at the end of the tools array, the end of the system prompt, and the end of the most recent completed assistant turn. Default 5-minute TTL. Any non-Anthropic provider ignores the boundary hint, so the same code path works everywhere; Anthropic's own `cache_read_input_tokens` and `cache_creation_input_tokens` flow back into the per-key stats and `/stats` so the savings are visible.
 
+**OpenRouter → Anthropic.** When OpenRouter routes to an `anthropic/...` model id, factory forwards the same `cache_control` blocks via the OpenAI envelope; OpenRouter passes them through to Anthropic untouched. Non-Anthropic upstreams on OpenRouter (`openai/gpt-*`, `google/gemini-*`, …) silently skip the markers so they never see unexpected fields.
+
 For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
 ### Session Logs

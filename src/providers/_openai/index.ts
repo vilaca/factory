@@ -8,6 +8,7 @@ export {
 export { extractUsage } from './usage.js';
 export {
   formatMessage,
+  formatMessageWithCacheControl,
   buildChatBody,
   type BuildChatBodyOptions,
 } from './messages.js';

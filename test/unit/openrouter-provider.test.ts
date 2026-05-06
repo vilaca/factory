@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
-import { OpenRouterProvider } from '../../src/providers/openrouter.js';
+import { OpenRouterProvider, routesToAnthropic } from '../../src/providers/openrouter.js';
 
 function withServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
@@ -239,5 +239,84 @@ describe('OpenRouterProvider', () => {
         totalTokens: 14,
       });
     });
+  });
+
+  it('emits cache_control fields on the request body when routed to Anthropic', async () => {
+    let capturedBody: any;
+    await withServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', c => chunks.push(typeof c === 'string' ? Buffer.from(c) : c));
+      req.on('end', () => {
+        capturedBody = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          id: 'r1',
+          choices: [{ message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    }, async (baseUrl) => {
+      const provider = new OpenRouterProvider({ token: 'test-token', host: baseUrl });
+      await provider.chatNoStream(
+        'anthropic/claude-sonnet-4-6',
+        [
+          { role: 'system', content: 'sys', cacheBoundary: true },
+          { role: 'user', content: 'hi' },
+        ],
+        [{ type: 'function', function: { name: 'Read', description: '', parameters: {} } }],
+        { cacheTools: true },
+      );
+
+      assert.ok(capturedBody);
+      const sys = capturedBody.messages[0];
+      assert.deepStrictEqual(sys.content, [
+        { type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } },
+      ]);
+      assert.deepStrictEqual(capturedBody.tools[0].cache_control, { type: 'ephemeral' });
+    });
+  });
+
+  it('omits cache_control fields entirely when the model is not Anthropic', async () => {
+    let capturedBody: any;
+    await withServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', c => chunks.push(typeof c === 'string' ? Buffer.from(c) : c));
+      req.on('end', () => {
+        capturedBody = JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          id: 'r1',
+          choices: [{ message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }));
+      });
+    }, async (baseUrl) => {
+      const provider = new OpenRouterProvider({ token: 'test-token', host: baseUrl });
+      await provider.chatNoStream(
+        'openai/gpt-4o',
+        [
+          { role: 'system', content: 'sys', cacheBoundary: true },
+          { role: 'user', content: 'hi' },
+        ],
+        [{ type: 'function', function: { name: 'Read', description: '', parameters: {} } }],
+        { cacheTools: true },
+      );
+
+      assert.ok(capturedBody);
+      assert.strictEqual(JSON.stringify(capturedBody).includes('cache_control'), false);
+    });
+  });
+});
+
+describe('routesToAnthropic', () => {
+  it('matches anthropic/* model ids', () => {
+    assert.strictEqual(routesToAnthropic('anthropic/claude-sonnet-4-6'), true);
+    assert.strictEqual(routesToAnthropic('anthropic/claude-haiku-4-5'), true);
+  });
+
+  it('does not match non-Anthropic ids', () => {
+    assert.strictEqual(routesToAnthropic('openai/gpt-4o'), false);
+    assert.strictEqual(routesToAnthropic('mistralai/mistral-large'), false);
+    assert.strictEqual(routesToAnthropic('google/gemini-2.5-pro'), false);
   });
 });
