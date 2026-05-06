@@ -92,11 +92,6 @@ function validateConfig(data: unknown, filePath: string): Config {
           throw new Error(`${filePath}: "agent.rotation.${flag}" must be a boolean`);
         }
       }
-      if (rot.probeAfterTurns !== undefined) {
-        if (typeof rot.probeAfterTurns !== 'number' || rot.probeAfterTurns < 0 || !Number.isInteger(rot.probeAfterTurns)) {
-          throw new Error(`${filePath}: "agent.rotation.probeAfterTurns" must be a non-negative integer`);
-        }
-      }
       const validateChain = (chain: unknown, path: string): void => {
         if (!Array.isArray(chain)) {
           throw new Error(`${filePath}: "${path}" must be an array`);

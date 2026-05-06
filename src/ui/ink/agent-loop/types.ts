@@ -24,7 +24,6 @@ export interface RotationRefs {
   modelsEnabled: boolean;
   default: RotationEntry[];
   overrides: Record<string, RotationEntry[]>;
-  probeAfterTurns: number;
 }
 
 export interface RunRefs {

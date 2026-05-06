@@ -90,7 +90,6 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
             ),
           )
         : {},
-      probeAfterTurns: opts.agentConfig?.rotation?.probeAfterTurns ?? 10,
     },
     keyFailureLog: new Map(),
     rotationPromptDeclined: false,

@@ -34,9 +34,6 @@ export interface RotationConfig {
   /** Per-(provider, model) override chains. Key shape: `<provider>:<model>`,
    *  matched against the active selection at rotation time. */
   overrides?: Record<string, RotationEntry[]>;
-  /** When sticky-rotation is on a fallback for this many turns, factory
-   *  probes the primary again. Default: 10. */
-  probeAfterTurns?: number;
 }
 
 export interface ExperimentalFlags {
