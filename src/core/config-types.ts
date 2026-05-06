@@ -60,9 +60,13 @@ export interface ExperimentalFlags {
   subagents?: boolean;
   /** Load skills from .factory/skills/*.md and inject them based on triggers. */
   skills?: boolean;
+  /** Run user-supplied shell scripts at lifecycle events
+   *  (~/.factory/hooks/<event>.sh and <cwd>/.factory/hooks/<event>.sh).
+   *  See README "Hooks" for the protocol. */
+  hooks?: boolean;
 }
 
-export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills'] as const;
+export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills', 'hooks'] as const;
 export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
 
 export interface PermissionConfig {

@@ -19,6 +19,7 @@ import { defaultRegistry } from '../tools/index.js';
 import { createSessionLogger, type SessionLogger } from '../core/session-log.js';
 import { getBuildInfo } from '../utils/build-info.js';
 import { buildEnvironmentMessage } from '../core/system-prompt.js';
+import { runHook } from '../core/hooks/index.js';
 
 export interface HeadlessOptions {
   model: string;
@@ -85,6 +86,28 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     }
   }
 
+  const hooksEnabled = options.agentConfig?.experimental?.hooks ?? false;
+  const cwd = process.cwd();
+  const onHookStderr = (hookPath: string, chunk: string): void => {
+    sessionLogger?.logWarning('hook-stderr', `${hookPath}: ${chunk.trim()}`);
+  };
+  const onHookError = (event: string, error: string): void => {
+    sessionLogger?.logWarning('hook-error', `${event}: ${error}`);
+  };
+
+  if (hooksEnabled) {
+    try {
+      const r = await runHook(
+        'SessionStart',
+        { provider: options.provider.name, model: options.model, cwd },
+        { cwd, onStderr: onHookStderr },
+      );
+      for (const e of r.errors) onHookError('SessionStart', e);
+    } catch (err: any) {
+      onHookError('SessionStart', err?.message ?? String(err));
+    }
+  }
+
   const conversation = new Conversation(options.systemPrompt, options.agentConfig?.maxToolResultTokens);
   // Match the TUI seeding so the prefix shape is identical across modes —
   // see buildEnvironmentMessage docs for why this lives outside the
@@ -122,8 +145,15 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       experimental: {
         bashDedup: options.agentConfig?.experimental?.bashDedup,
         readCache: options.agentConfig?.experimental?.readCache,
+        hooks: hooksEnabled,
       },
       fileCache: new FileCache(),
+      // Headless doesn't mutate cwd mid-turn (no Bash `cd` round-tripping in
+      // a one-shot run), so a static holder is sufficient. The TUI passes a
+      // live mutable holder updated by Bash; headless does not.
+      cwdRef: { current: cwd },
+      onHookStderr,
+      onHookError,
     })) {
       sessionLogger?.logAgentEvent(event);
 
@@ -163,6 +193,18 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         `Add '${permissionDeniedTool}' to permissions.allowAll in ~/.factory/config.json to allow it in headless mode.\n`,
       );
       exitCode = 3;
+    }
+    if (hooksEnabled) {
+      try {
+        const r = await runHook(
+          'SessionEnd',
+          { provider: options.provider.name, model: options.model, cwd },
+          { cwd, onStderr: onHookStderr },
+        );
+        for (const e of r.errors) onHookError('SessionEnd', e);
+      } catch (err: any) {
+        onHookError('SessionEnd', err?.message ?? String(err));
+      }
     }
     sessionLogger?.logSessionEnd();
     sessionLogger?.close();

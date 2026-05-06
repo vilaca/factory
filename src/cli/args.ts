@@ -13,10 +13,12 @@ interface CliArgs {
   readCache?: boolean;
   lineCountHint?: boolean;
   subagents?: boolean;
+  hooks?: boolean;
   noBashDedup?: boolean;
   noReadCache?: boolean;
   noLineCountHint?: boolean;
   noSubagents?: boolean;
+  noHooks?: boolean;
   skills?: boolean;
   noSkills?: boolean;
   turnTimeoutSec?: number;
@@ -72,6 +74,10 @@ export function parseArgs(args: string[]): CliArgs {
       result.skills = true;
     } else if (arg === '--no-skills') {
       result.noSkills = true;
+    } else if (arg === '--hooks') {
+      result.hooks = true;
+    } else if (arg === '--no-hooks') {
+      result.noHooks = true;
     } else if (arg === '--no-clear') {
       result.noClear = true;
     } else if (arg === '--pick') {
@@ -118,6 +124,7 @@ export function printUsage(): void {
     '    --plan                   Start in plan mode (writes are queued for approval)',
     '    --no-auto-correct        Disable LLM tool-call corrector (on by default)',
     '    --bash-dedup             Enable Bash near-duplicate detector (off by default)',
+    '    --no-hooks               Disable user-supplied lifecycle shell hooks (on by default)',
     '    --no-read-cache          Disable Read mtime/hash cache (on by default)',
     '    --no-line-count-hint     Drop the cloc/scc system-prompt hint (on by default)',
     '    --no-subagents           Disable the Delegate tool (on by default)',

@@ -93,7 +93,14 @@ export class ContextManager {
     provider: Provider,
     model: string,
     signal?: AbortSignal,
-    opts?: { aggressive?: boolean; fingerprints?: Array<{ path: string; hash: string }> },
+    opts?: {
+      aggressive?: boolean;
+      fingerprints?: Array<{ path: string; hash: string }>;
+      /** When set, the LLM summary call is skipped and this string is used
+       *  as the summary verbatim. Used by PreCompact hooks to override the
+       *  context that survives compaction. */
+      precomputedSummary?: string;
+    },
   ): Promise<{ oldCount: number; newCount: number } | null> {
     const aggressive = opts?.aggressive ?? false;
     const fingerprints = opts?.fingerprints ?? [];
@@ -124,13 +131,14 @@ export class ContextManager {
     const summaryModel = selectWeakTier(provider, model) ?? model;
 
     let summary: string;
-    if (aggressive) {
-      // Try the weak-tier model first; fall back to mechanical only if the
-      // call fails (this is what the source plan calls out as "current
-      // skip-model-entirely path is overcautious").
-      summary = await this.buildModelSummary(provider, summaryModel, toSummarize, signal)
-        ?? this.buildMechanicalSummary(toSummarize);
+    if (opts?.precomputedSummary !== undefined) {
+      // A PreCompact hook returned a custom summary — trust it and skip both
+      // the model and mechanical fallbacks. This is the only override path.
+      summary = opts.precomputedSummary;
     } else {
+      // Both aggressive and normal compaction try the weak-tier model first;
+      // mechanical is the fallback when the model call fails (per the source
+      // plan: "skip-model-entirely path is overcautious").
       summary = await this.buildModelSummary(provider, summaryModel, toSummarize, signal)
         ?? this.buildMechanicalSummary(toSummarize);
     }
