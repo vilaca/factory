@@ -17,8 +17,9 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import crypto, { randomBytes } from 'crypto';
+import crypto from 'crypto';
 import type { HooksConfig } from '../config-types.js';
+import { writeFileAtomic } from '../../utils/atomic-write.js';
 
 interface TrustEntry {
   fingerprint: string;
@@ -41,14 +42,21 @@ export function fingerprintHooks(hooks: HooksConfig): string {
 }
 
 function canonicalize(value: unknown): string {
+  // Mirror JSON.stringify's handling of undefined: it returns the raw
+  // value (not the string "undefined") for top-level undefined, becomes
+  // null inside arrays, and is omitted entirely from objects. Without
+  // this, `JSON.stringify(undefined)` would leak the literal `undefined`
+  // into our hash input — which then `+`-concatenates as the string
+  // "undefined", letting `{a: undefined}` and `{a: "undefined"}` collide.
+  if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) {
     return '[' + value.map(canonicalize).join(',') + ']';
   }
-  const keys = Object.keys(value as Record<string, unknown>).sort();
   const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
   return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
 }
 
@@ -74,18 +82,7 @@ async function writeDb(db: TrustDb): Promise<void> {
   const file = trustFile();
   const dir = path.dirname(file);
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  // Atomic write: write to a unique temp file (mode 0o600 from creation) and
-  // rename onto the target. A crash mid-write leaves either the old DB intact
-  // or the new one — never a half-written file.
-  const tmp = path.join(dir, `trusted-projects.json.tmp-${process.pid}-${randomBytes(6).toString('hex')}`);
-  const data = JSON.stringify(db, null, 2);
-  try {
-    await fs.writeFile(tmp, data, { encoding: 'utf-8', mode: 0o600 });
-    await fs.rename(tmp, file);
-  } catch (err) {
-    await fs.unlink(tmp).catch(() => { /* tmp may not exist if writeFile failed */ });
-    throw err;
-  }
+  await writeFileAtomic(file, JSON.stringify(db, null, 2));
 }
 
 export async function isProjectTrusted(projectDir: string, hooks: HooksConfig): Promise<boolean> {

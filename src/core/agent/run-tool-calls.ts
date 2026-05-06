@@ -304,7 +304,11 @@ async function* tryReadCacheHit(
   // can't refer back to it — skip the short-circuit and let the read happen.
   if (ctx.fileCache.wasReadBeforeCompaction(path)) return false;
 
-  const fp = await FileCache.stamp(path);
+  // Pass the cached fingerprint so stamp() can skip the body read + sha256
+  // when stat says the file is unchanged. The hash check below still rejects
+  // any false-positive fast-path returns; in the common case it confirms the
+  // already-cached hash without rehashing.
+  const fp = await FileCache.stamp(path, cached);
   if (!fp || fp.mtimeMs !== cached.mtimeMs || fp.hash !== cached.hash) return false;
 
   yield { type: 'tool-call-start', toolName: 'Read', args: args ?? {} };
@@ -330,7 +334,7 @@ async function maintainFileCache(toolCall: ToolCallMessage, cache: FileCache): P
     return;
   }
   if (fnName === 'Read') {
-    const fp = await FileCache.stamp(path);
+    const fp = await FileCache.stamp(path, cache.get(path));
     if (fp) cache.record(path, fp);
   }
 }

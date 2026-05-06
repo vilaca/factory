@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
 
 export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
@@ -131,10 +133,10 @@ export function getGoogleAiStudioOAuthErrorMessage(): string {
 }
 
 function hasAdcFile(): boolean {
-  const home = process.env.HOME;
+  const home = os.homedir();
   if (!home) return false;
   try {
-    return fs.existsSync(`${home}/.config/gcloud/application_default_credentials.json`);
+    return fs.existsSync(path.join(home, '.config', 'gcloud', 'application_default_credentials.json'));
   } catch {
     return false;
   }

@@ -38,10 +38,25 @@ export class FileCache {
     return this.entries.get(path);
   }
 
-  /** Stat + hash a path. Returns undefined for missing/unreadable files. */
-  static async stamp(path: string): Promise<{ mtimeMs: number; size: number; hash: string } | undefined> {
+  /** Stat + hash a path. Returns undefined for missing/unreadable files.
+   *
+   * Fast path: if `previous` is provided and its (mtimeMs, size) match the
+   * current stat, the file is treated as unchanged and the cached hash is
+   * returned without re-reading the body. This is the common case for the
+   * Read short-circuit — files don't move under most workflows. The slow
+   * path (read + sha256) only kicks in when stat differs, so a subtle
+   * "same mtime, same size, content swapped via in-place edit" still gets
+   * a fresh hash whenever the OS bumps mtime — which it does for any
+   * normal write. */
+  static async stamp(
+    path: string,
+    previous?: { mtimeMs: number; size: number; hash: string },
+  ): Promise<{ mtimeMs: number; size: number; hash: string } | undefined> {
     try {
       const stat = await fs.stat(path);
+      if (previous && previous.mtimeMs === stat.mtimeMs && previous.size === stat.size) {
+        return { mtimeMs: stat.mtimeMs, size: stat.size, hash: previous.hash };
+      }
       const buf = await fs.readFile(path);
       const hash = createHash('sha256').update(buf).digest('hex');
       return { mtimeMs: stat.mtimeMs, size: stat.size, hash };
