@@ -116,6 +116,8 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `/log` | Show current session log path |
 | `/correct on\|off` | Toggle LLM tool-call corrector |
 | `/exp [<name> on\|off]` | List or toggle experimental flags |
+| `/skills` | List loaded skills (when `skills` flag is on) |
+| `/skill <name>` | Print the body of a specific skill |
 | `/exit`, `/quit`, `/q` | Exit (or close the active tab if multiple are open) |
 
 ## Hotkeys
@@ -138,9 +140,10 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `bashDedup` | off | Tracks recent Bash commands. When the model runs three near-duplicate commands (token-level Jaccard ≥ 0.5), injects a system nudge to prevent spinning. |
 | `readCache` | on | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens. |
 | `lineCountHint` | on | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants. |
-| `subagents` | off | Registers the `Delegate` tool for spawning a read-only research subagent. See the [Subagents](#subagents-experimental) section below. |
+| `subagents` | on | Registers the `Delegate` tool for spawning a read-only research subagent. See the [Subagents](#subagents-experimental) section below. |
+| `skills` | off | Loads markdown skill files from `.factory/skills/` and conditionally injects them based on triggers. |
 
-Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--subagents`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
+Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--no-subagents`, `--skills`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
 
 ## Configuration
 
@@ -448,6 +451,49 @@ tail -f ~/.factory/sessions/2026-05-05T12-34-56-abc123.jsonl
 ⚠️ **Privacy Note:** Session logs may contain sensitive data including API responses, file contents, and command outputs. Review logs before sharing or storing in version control.
 
 Disable with `--no-log`.
+
+### Skills
+
+Skills are markdown files with YAML frontmatter that get conditionally injected into the model's context. They sit between always-on `.factory/INSTRUCTIONS.md` (everything, every turn) and one-shot system prompts (nothing, ever): each skill declares when it should fire — when the user mentions a topic, when a particular tool was just used, or always.
+
+This is gated behind the experimental `skills` flag (off by default). Enable with `--skills` or in config:
+
+```json
+{ "agent": { "experimental": { "skills": true } } }
+```
+
+**Locations** (project shadows global by skill name):
+
+- `~/.factory/skills/*.md` — global, available across projects
+- `<cwd>/.factory/skills/*.md` — project-local
+
+**Schema:**
+
+```markdown
+---
+name: docker-help        # required, kebab-case, used by /skill <name>
+description: Tips for working with Docker  # required, one-liner shown by /skills
+alwaysOn: false          # default false. true → appended to the system prompt at session start
+triggers:                # optional regex strings; OR semantics, case-insensitive
+  - "\\bdocker\\b"
+  - "\\bcontainer\\b"
+tools:                   # optional; only inject when one of these tools was recently used
+  - Bash
+---
+Use `docker compose`, not the legacy `docker-compose`.
+Prefer multi-stage builds for production images.
+```
+
+**Behavior:**
+
+- `alwaysOn: true` skills concatenate under a `## Skills` heading in the system prompt at session start.
+- Other skills evaluate at the start of each turn — if the user message matches a trigger (and any required tools have been used in the last 5 calls), the body is injected as a single synthetic system message before the prompt is sent. A skill triggered twice in a row is only injected once.
+- Malformed files are skipped with a warning in the session log; one bad skill won't crash startup.
+
+**Slash commands:**
+
+- `/skills` — list all loaded skills with their flags
+- `/skill <name>` — print the full body of a specific skill
 
 ### Headless / Non-TTY Mode
 

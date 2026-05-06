@@ -228,6 +228,12 @@ export async function dispatchSlashCommand(
         : 'Full tool output disabled — back to preview.');
       return true;
     }
+    case '/skills':
+      handleSkillsList(agent);
+      return true;
+    case '/skill':
+      handleSkillShow(agent, arg);
+      return true;
     // Easter egg — intentionally omitted from /help. `/emoji` toggles emoji
     // mode; `/emoji <glyph>` overrides the user prompt icon. Do not document.
     case '/emoji': {
@@ -265,6 +271,8 @@ function printHelp(agent: AgentLoopApi): void {
     ['/log', 'Show the current session log path'],
     ['/correct on|off', 'Toggle the LLM tool-call corrector'],
     ['/exp [name on|off]', 'List or toggle experimental flags'],
+    ['/skills', 'List loaded skills (when experimental.skills is on)'],
+    ['/skill <name>', 'Print the body of a loaded skill'],
     ['/help', 'Show this help'],
   ];
   const hotkeys: [string, string][] = [
@@ -327,6 +335,64 @@ function handleExpCommand(agent: AgentLoopApi, arg: string): void {
     return;
   }
   agent.setExperimentalFlag(name, next);
+}
+
+function handleSkillsList(agent: AgentLoopApi): void {
+  const refs = agent.refs;
+  if (!refs.current) return;
+  const reg = refs.current.skills;
+  if (!reg) {
+    agent.addNotice('info', 'Skills are not enabled. Toggle with /exp skills on.');
+    return;
+  }
+  const skills = reg.list();
+  if (skills.length === 0) {
+    agent.addNotice('info', 'No skills loaded. Drop .md files into .factory/skills/ (project) or ~/.factory/skills/ (global).');
+    return;
+  }
+  const lines: { level: 'info' | 'cyan'; text: string }[] = [
+    { level: 'cyan', text: `Loaded skills (${skills.length}):` },
+  ];
+  for (const s of skills) {
+    const flags = [
+      s.alwaysOn ? 'always-on' : null,
+      s.triggers.length > 0 ? `${s.triggers.length} trigger${s.triggers.length === 1 ? '' : 's'}` : null,
+      s.tools.length > 0 ? `tools=[${s.tools.join(',')}]` : null,
+      s.scope,
+    ].filter(Boolean).join(', ');
+    lines.push({ level: 'cyan', text: `  ${s.name}` });
+    lines.push({ level: 'info', text: `    ${s.description}` });
+    lines.push({ level: 'info', text: `    [${flags}]` });
+  }
+  agent.addNoticeBlock(lines);
+}
+
+function handleSkillShow(agent: AgentLoopApi, arg: string): void {
+  const refs = agent.refs;
+  if (!refs.current) return;
+  const reg = refs.current.skills;
+  if (!reg) {
+    agent.addNotice('info', 'Skills are not enabled. Toggle with /exp skills on.');
+    return;
+  }
+  const name = arg.trim();
+  if (!name) {
+    agent.addNotice('info', 'Usage: /skill <name>');
+    return;
+  }
+  const skill = reg.find(name);
+  if (!skill) {
+    agent.addNotice('warn', `No skill named "${name}". Use /skills to list loaded skills.`);
+    return;
+  }
+  const lines: { level: 'info' | 'cyan'; text: string }[] = [
+    { level: 'cyan', text: `${skill.name} — ${skill.description}` },
+    { level: 'info', text: `(source: ${skill.sourcePath}, scope: ${skill.scope}, alwaysOn: ${skill.alwaysOn})` },
+  ];
+  for (const line of skill.body.split('\n')) {
+    lines.push({ level: 'info', text: line });
+  }
+  agent.addNoticeBlock(lines);
 }
 
 function printPlanQueue(agent: AgentLoopApi): void {

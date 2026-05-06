@@ -242,6 +242,19 @@ export async function processInput(
     deps.refs.current.lastSubstantivePrompt = trimmed;
   }
 
+  // Evaluate conditional skills against the new prompt and inject any
+  // matched bodies as a single synthetic system message. Goes in *before*
+  // the user prompt so the model sees the skill context first.
+  const skills = deps.refs.current.skills;
+  if (skills) {
+    const matches = skills.evaluate(trimmed);
+    const text = skills.formatInjection(matches);
+    if (text) {
+      deps.refs.current.conversation.addUser(`[System: ${text}]`);
+      deps.refs.current.sessionLogger?.logWarning('skills', `injected: ${matches.map(m => m.skill.name).join(', ')}`);
+    }
+  }
+
   deps.setState('running');
   await runAgentLoopInternal(trimmed, deps);
 }

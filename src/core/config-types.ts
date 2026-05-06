@@ -58,9 +58,11 @@ export interface ExperimentalFlags {
   lineCountHint?: boolean;
   /** Enable the Delegate tool for spawning a read-only research subagent. */
   subagents?: boolean;
+  /** Load skills from .factory/skills/*.md and inject them based on triggers. */
+  skills?: boolean;
 }
 
-export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents'] as const;
+export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills'] as const;
 export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
 
 export interface PermissionConfig {

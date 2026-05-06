@@ -70,6 +70,9 @@ export function handleAgentEvent(
       });
       if (event.result.success) ss.addSuccessfulToolCall();
       deps.setSessionToolCalls((n) => n + 1);
+      // Skill matcher uses recent tool names to gate `tools:` constrained
+      // skills — track the call before the next user prompt evaluates.
+      deps.refs.current?.skills?.recordToolUsed(event.toolName);
       deps.setRunningTool(null);
       deps.setThinking(true);
       // Tool results add (often large) chunks to the conversation.

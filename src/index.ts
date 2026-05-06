@@ -272,6 +272,7 @@ async function main(): Promise<void> {
       readCache: true,
       lineCountHint: true,
       subagents: true,
+      skills: false,
       ...experimentalFromConfig,
       ...(cliArgs.bashDedup ? { bashDedup: true } : {}),
       ...(cliArgs.noBashDedup ? { bashDedup: false } : {}),
@@ -281,6 +282,8 @@ async function main(): Promise<void> {
       ...(cliArgs.noLineCountHint ? { lineCountHint: false } : {}),
       ...(cliArgs.subagents ? { subagents: true } : {}),
       ...(cliArgs.noSubagents ? { subagents: false } : {}),
+      ...(cliArgs.skills ? { skills: true } : {}),
+      ...(cliArgs.noSkills ? { skills: false } : {}),
     },
     ...(cliArgs.turnTimeoutSec !== undefined ? { turnTimeoutSec: cliArgs.turnTimeoutSec } : {}),
   };

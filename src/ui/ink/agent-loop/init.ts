@@ -2,6 +2,7 @@ import { Conversation } from '../../../core/conversation.js';
 import { ContextManager } from '../../../core/context-manager.js';
 import { PermissionManager } from '../../../permissions.js';
 import { FileCache } from '../../../core/agent/file-cache.js';
+import { loadSkills, SkillsRegistry } from '../../../core/skills/index.js';
 import {
   createSessionLogger,
   loadHistoryFromSessions,
@@ -119,6 +120,35 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     historyIndex: -1,
     historyDraft: '',
   };
+}
+
+/**
+ * Load skill files from disk when the experimental flag is on. Loader errors
+ * for malformed files are reported via the session log + a UI notice but
+ * never abort startup — a single broken skill must not brick the REPL.
+ */
+export async function initSkillsRegistry(
+  cwd: string,
+  enabled: boolean,
+  sessionLogger: SessionLogger | undefined,
+  addNotice: (level: NoticeLevel, text: string) => void,
+): Promise<SkillsRegistry | undefined> {
+  if (!enabled) return undefined;
+  try {
+    const { skills, warnings } = await loadSkills(cwd);
+    for (const w of warnings) {
+      sessionLogger?.logWarning('skills', w);
+      addNotice('warn', `skill skipped: ${w}`);
+    }
+    if (skills.length > 0) {
+      const alwaysOn = skills.filter(s => s.alwaysOn).length;
+      addNotice('info', `Loaded ${skills.length} skill${skills.length === 1 ? '' : 's'} (${alwaysOn} always-on).`);
+    }
+    return new SkillsRegistry(skills);
+  } catch (err) {
+    addNotice('warn', `skills disabled: ${(err as Error).message}`);
+    return new SkillsRegistry([]);
+  }
 }
 
 export async function loadInitialHistory(

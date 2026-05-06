@@ -17,6 +17,8 @@ interface CliArgs {
   noReadCache?: boolean;
   noLineCountHint?: boolean;
   noSubagents?: boolean;
+  skills?: boolean;
+  noSkills?: boolean;
   turnTimeoutSec?: number;
   noClear?: boolean;
   pick?: boolean;
@@ -66,6 +68,10 @@ export function parseArgs(args: string[]): CliArgs {
       result.subagents = true;
     } else if (arg === '--no-subagents') {
       result.noSubagents = true;
+    } else if (arg === '--skills') {
+      result.skills = true;
+    } else if (arg === '--no-skills') {
+      result.noSkills = true;
     } else if (arg === '--no-clear') {
       result.noClear = true;
     } else if (arg === '--pick') {
@@ -115,6 +121,7 @@ export function printUsage(): void {
     '    --no-read-cache          Disable Read mtime/hash cache (on by default)',
     '    --no-line-count-hint     Drop the cloc/scc system-prompt hint (on by default)',
     '    --no-subagents           Disable the Delegate tool (on by default)',
+    '    --skills                 Load .factory/skills/*.md and inject by trigger (off by default)',
     '    --turn-timeout <sec>     Auto-abort the agent after N seconds per user prompt (default: off)',
     '    --no-clear               Do not clear the screen on startup',
     '    --pick                   Force the startup picker even when a previous session is on file',
