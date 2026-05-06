@@ -42,30 +42,38 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
 
   let toolCalls: StreamingToolCallAcc | undefined;
 
-  for await (const parsed of parseSseStream(reader)) {
-    const p = parsed as any;
-    const delta = p.choices?.[0]?.delta;
+  // try/finally so an early exit (consumer break, downstream throw, signal
+  // abort propagating after fetch's body becomes unreadable) cancels the
+  // reader and releases its lock on the response body. Without this, an
+  // abandoned stream holds the underlying connection open until GC.
+  try {
+    for await (const parsed of parseSseStream(reader)) {
+      const p = parsed as any;
+      const delta = p.choices?.[0]?.delta;
 
-    if (delta?.content) {
-      yield { content: delta.content };
+      if (delta?.content) {
+        yield { content: delta.content };
+      }
+
+      if (delta?.tool_calls) {
+        if (!toolCalls) toolCalls = [];
+        mergeStreamedToolCalls(toolCalls, delta.tool_calls);
+      }
+
+      const finishReason = p.choices?.[0]?.finish_reason;
+      if (finishReason === 'stop' || finishReason === 'tool_calls') {
+        yield { done: true, usage: extractUsage(p) };
+      }
     }
 
-    if (delta?.tool_calls) {
-      if (!toolCalls) toolCalls = [];
-      mergeStreamedToolCalls(toolCalls, delta.tool_calls);
+    if (toolCalls && toolCalls.length > 0) {
+      const finalized = finalizeToolCalls(toolCalls);
+      if (finalized.length > 0) {
+        yield { tool_calls: finalized, done: true };
+      }
     }
-
-    const finishReason = p.choices?.[0]?.finish_reason;
-    if (finishReason === 'stop' || finishReason === 'tool_calls') {
-      yield { done: true, usage: extractUsage(p) };
-    }
-  }
-
-  if (toolCalls && toolCalls.length > 0) {
-    const finalized = finalizeToolCalls(toolCalls);
-    if (finalized.length > 0) {
-      yield { tool_calls: finalized, done: true };
-    }
+  } finally {
+    try { await reader.cancel(); } catch { /* already-cancelled or stream errored */ }
   }
 }
 
