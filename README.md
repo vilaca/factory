@@ -7,6 +7,7 @@
 
 - **Bring your own model.** 15 providers on equal footing — local-first ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://codestral.mistral.ai), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)). Pick what fits your privacy, cost, and latency.
 - **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a frontier LLM on a refactor in one tab while a local LLM explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
+- **Two-tier rotation.** When a key hits a rate limit or auth failure, factory swaps to the next saved key for the same model; when keys for a model are exhausted, it walks a configurable chain of `<provider>:<model>` fallbacks — frontier → fast → free, automatic. Configure with `/rotate`; per-key usage and rate-limit state surfaced via `/keys` and picker badges.
 - **Built for models that don't behave.** Text-tool fallback recovers tool calls from prose for models without native function calling. An LLM-based corrector retries malformed calls with a fixed signature. An imitation guard strips fabricated tool-result blocks. Bash dedup nudges the model out of spinning loops.
 - **Plan mode.** Read-only tools execute freely; writes are queued for review. Approve, cancel, or refine before anything touches disk.
 - **Human or headless.** Interactive TUI on a TTY; in scripts and CI it auto-detects no-TTY, reads stdin as a prompt, runs one turn, and streams the result to stdout — same agent, no UI.
@@ -28,6 +29,8 @@ factory
 ```
 
 That's it. `factory` opens a picker for provider, model, and API key the first time. Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
+
+> **`npm link` permission errors?** It writes a symlink into your npm global prefix; if that's a system path it needs sudo. Either set a user-writable prefix once (`npm config set prefix "$HOME/.npm-global"` and add `$HOME/.npm-global/bin` to your `PATH`), or skip linking and run `npx factory` from the repo, or invoke directly with `node /path/to/factory/dist/index.js`.
 
 ## Table of Contents
 
@@ -68,6 +71,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 - **Per-tab provider/model switching**: `/pick` (or `Ctrl+K`) for the interactive picker; `/model <provider>:<model>` for a one-shot switch — either path rebinds a single tab without affecting others
 - **Provider/model picker**: at startup or mid-session via `/pick` / `Ctrl+K`, with recently-used pairs at the top — same component for both
 - **Multiple API keys per provider**: save more than one key for any simple-API-key provider (Anthropic, Groq, Mistral, OpenRouter, Cerebras, Cohere, Vercel, OpenCode Zen, Codestral, Workers AI, HuggingFace), pick which one a tab uses, add new keys inline (validated via `listModels` with a 3 s timeout, with a "save anyway" override for transient failures), delete keys with confirmation. Keys show as `<label> · …<last4>` so the secret never appears in the UI.
+- **Two-tier rotation**: tier-1 swaps to the next saved key for the same model on 429/auth failure; tier-2 walks a configurable chain of `<provider>:<model>` fallbacks when all keys for the current model are exhausted. Configure with `/rotate`, override per-launch with `--rotate`/`--no-rotate`/`--no-rotate-keys`/`--no-rotate-models`. Per-key usage and rate-limit counters surface in `/keys` and the picker.
 - **Resume on launch**: if a previous session is on file, factory skips the menu and starts on the same provider/model/key (override with `--pick`)
 - **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/pick`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), tuning (`/correct`, `/exp`)
 - **Cross-session history**: up-arrow recalls inputs from prior sessions, not just the current one
@@ -96,9 +100,9 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `/clear` | Clear conversation history |
 | `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
 | `/pick` | Open the provider/model picker (recent pairs first) |
-| `/rotate` | Manage the rotation chain (provider/model fallbacks) |
+| `/rotate` | View the active rotation chain. Subcommands: `add`, `insert`, `remove`, `move`, `clear`, `refresh` (return to the head of the chain and reset the in-memory failure log) |
 | `/keys [<provider>]` | Show saved keys with usage / rate-limit counters |
-| `/full` | Toggle full vs preview tool output (applies going forward) |
+| `/full` | Show full Read output in the terminal instead of the 5-line preview (applies going forward; the model always sees the full text either way) |
 | `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |
 | `/plan` | Toggle plan mode or show queued plan |
@@ -411,6 +415,9 @@ src/
 │   ├── config-types.ts            # Config schema types
 │   ├── conversation.ts            # Message history
 │   ├── context-manager.ts         # Token tracking + compaction
+│   ├── credentials.ts             # Saved-key resolution + migration
+│   ├── key-stats.ts               # Per-key usage / rate-limit counters
+│   ├── provider-errors.ts         # Classify 429/auth/etc. for rotation
 │   ├── system-prompt.ts           # Dynamic system prompt generation
 │   ├── project-facts.ts           # Auto-extracted project metadata
 │   ├── model-validation.ts        # Tool-support validation
@@ -433,7 +440,8 @@ src/
 │   │   ├── Session.tsx            # One tab's REPL session
 │   │   ├── index.tsx              # Render entry
 │   │   ├── types.ts               # Display item types
-│   │   ├── slash-commands.ts      # Slash command handling
+│   │   ├── slash-commands.ts      # Slash command dispatch
+│   │   ├── slash/                 # Per-command handlers (rotate, keys, …)
 │   │   ├── format.ts              # Markdown + tool call rendering
 │   │   ├── use-agent-loop.ts      # Agent loop hook
 │   │   ├── agent-loop/            # Agent loop submodules (init, history, run-loop, ...)
@@ -444,6 +452,7 @@ src/
 ├── cli/
 │   ├── args.ts                    # CLI flag parsing
 │   ├── auth.ts                    # Provider credential bootstrap
+│   ├── parse-rotation.ts          # Parse `--rotate` chain syntax
 │   ├── picker.ts                  # Provider/model picker (line-based)
 │   ├── prompts.ts                 # Interactive prompts
 │   └── startup-menu.tsx           # TUI startup menu
