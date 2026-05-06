@@ -41,15 +41,22 @@ async function readCappedBody(
   res: Response,
   maxBytes: number,
 ): Promise<{ body: Uint8Array; truncated: boolean }> {
+  // Cheap pre-flight on Content-Length so a server that honestly advertises a
+  // huge response is rejected before we allocate anything for it. Servers can
+  // lie or omit the header; the streaming cap below still enforces the limit.
+  const contentLength = Number(res.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes * 8) {
+    try { await res.body?.cancel(); } catch { /* ignore */ }
+    throw new Error(`response advertises ${contentLength} bytes (cap ${maxBytes})`);
+  }
   const reader = res.body?.getReader();
   if (!reader) {
-    // No streaming body — fall back to text() with a length check.
-    const txt = await res.text();
-    const buf = new TextEncoder().encode(txt);
-    if (buf.byteLength > maxBytes) {
-      return { body: buf.slice(0, maxBytes), truncated: true };
-    }
-    return { body: buf, truncated: false };
+    // No streaming body. We refuse rather than fall through to res.text(),
+    // which would buffer the whole response into memory before any cap could
+    // help — a Content-Length=0 server with a non-empty body, or a polyfilled
+    // fetch, would OOM. Modern Node fetch always exposes a reader; tests
+    // that mock Response should provide one.
+    throw new Error('response has no streaming body — refusing to load uncapped');
   }
   const chunks: Uint8Array[] = [];
   let total = 0;

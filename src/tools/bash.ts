@@ -13,6 +13,7 @@ const CWD_SENTINEL_PREFIX = '__FACTORY_CWD_AFTER__';
 // short enough that a runaway command can't hold the agent loop hostage.
 // Callers can override per-call via the `timeout` parameter.
 const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_DESCRIPTION = `Timeout in milliseconds. Default: ${DEFAULT_TIMEOUT_MS} (${DEFAULT_TIMEOUT_MS / 60_000} minutes).`;
 
 // Cap on combined stdout+stderr we ship back as the tool result. Past this
 // point the model can't usefully consume more, and bigger buffers grow the
@@ -34,7 +35,7 @@ const definition: ToolDefinition = {
         },
         timeout: {
           type: 'number',
-          description: 'Timeout in milliseconds. Default: 120000 (2 minutes).',
+          description: DEFAULT_TIMEOUT_DESCRIPTION,
         },
       },
     },
