@@ -835,15 +835,46 @@ Still stuck? Check the [session logs](#session-logs) or [open an issue](https://
 
 ⚠️ **Important Security Notes:**
 
-1. **Bash Tool Execution**: The Bash tool executes arbitrary shell commands with your user permissions. Review commands carefully before approving, especially with models you don't trust.
+1. **Bash Tool Execution**: The Bash tool executes shell commands with your user permissions. A built-in deny list rejects obvious footguns (`rm -rf /`, fork bombs, `curl … | sh`, raw-device writes, force-push to protected branches) — these cannot be overridden by `allow-all`. Beyond that, review commands carefully before approving, especially with models you don't trust.
 
 2. **API Key Storage**: Credentials are stored in plaintext in `~/.config/factory/config.json` (or `$XDG_CONFIG_HOME/factory/config.json`). The file is created with mode `0o600` and the directory with mode `0o700`; factory also repairs looser permissions on the next save. Credentials are not encrypted at rest, so anyone with access to your user account can read them.
 
-3. **File System Access**: The Read, Write, Edit, Glob, and Grep tools can access any file your user can. Use plan mode (`--plan`) for untrusted models.
+3. **Bash Subprocess Environment**: The Bash subprocess receives a scrubbed environment — only a small allowlist of vars is forwarded (`PATH`, `HOME`, `USER`, `SHELL`, `LANG`, `LC_*`, `GIT_*`, `XDG_*`, …). Provider API keys, GitHub tokens, AWS credentials and similar secrets in your shell are NOT visible to model-driven commands. Extend the allowlist via `security.bashEnv` in `config.json` if a tool you run needs additional vars.
 
-4. **Network Requests**: Some providers make API calls to external services. Review privacy policies before using cloud-based providers.
+4. **File System Access**: Read/Write/Edit hard-deny known secret paths (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.kube`, `~/.netrc`, `~/.docker/config.json`, `/etc/shadow`, `/etc/sudoers`, …) before any I/O. Symlinks are resolved before the check. The deny list is extendable via `security.paths.deny` but built-ins cannot be removed. Beyond the deny list, the tools can still read or write any other path your user can — use plan mode (`--plan`) for untrusted models.
 
-5. **Project Instructions**: The `.factory/INSTRUCTIONS.md` file is injected into every prompt. Avoid storing sensitive information there.
+5. **Network Requests**: Some providers make API calls to external services. Review privacy policies before using cloud-based providers.
+
+6. **Project Instructions**: The `.factory/INSTRUCTIONS.md` file is injected into every prompt. Avoid storing sensitive information there.
+
+### Configuring the Bash policy
+
+Approve a Bash pattern once and it will run unprompted; deny one and it's rejected without a prompt. Built-in forbidden patterns (the ones in note 1) cannot be bypassed.
+
+```json
+{
+  "permissions": {
+    "bashRules": [
+      { "pattern": "git status*", "decision": "allow" },
+      { "pattern": "git diff*",   "decision": "allow" },
+      { "pattern": "npm test*",   "decision": "allow" },
+      { "pattern": "npm publish*", "decision": "deny",
+        "note": "publish only happens via CI" }
+    ]
+  },
+  "security": {
+    "bashEnv": {
+      "allow": ["MY_TOOL_CONFIG"],
+      "allowPrefixes": ["MY_APP_"]
+    },
+    "paths": {
+      "deny": ["~/work/secrets"]
+    }
+  }
+}
+```
+
+Patterns are simple shell-style globs (`*`, `?`) matched against the raw command string. Rules are evaluated in order, first match wins.
 
 ## License
 

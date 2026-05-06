@@ -1,4 +1,4 @@
-import type { AgentConfig, ExperimentalFlags, RotationEntry } from '../../../core/config-types.js';
+import type { AgentConfig, BashRuleConfig, ExperimentalFlags, RotationEntry } from '../../../core/config-types.js';
 import type { Conversation } from '../../../core/conversation.js';
 import type { ContextManager } from '../../../core/context-manager.js';
 import type { FileCache } from '../../../core/agent/file-cache.js';
@@ -105,6 +105,7 @@ export interface UseAgentLoopOptions {
   keyId?: string;
   agentConfig?: AgentConfig;
   autoAllowTools?: string[];
+  bashRules?: BashRuleConfig[];
   useTextToolFallback?: boolean;
   nativeToolSupport?: boolean;
   enableSessionLog?: boolean;

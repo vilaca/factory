@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { assertPathAllowed, PathDenied } from '../security/paths.js';
+import { getPathPolicy } from '../security/policy-state.js';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -37,7 +39,16 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   if (!oldString) return { success: false, output: 'old_string is required' };
   if (newString === undefined) return { success: false, output: 'new_string is required' };
 
-  const resolved = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
+  // Resolve relative paths against the per-tab cwd, then enforce the
+  // secret-path deny list — see src/tools/read.ts for the rationale.
+  const absPath = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
+  let resolved: string;
+  try {
+    resolved = await assertPathAllowed(absPath, getPathPolicy());
+  } catch (err) {
+    if (err instanceof PathDenied) return { success: false, output: err.message };
+    throw err;
+  }
 
   try {
     const content = await fs.readFile(resolved, 'utf-8');

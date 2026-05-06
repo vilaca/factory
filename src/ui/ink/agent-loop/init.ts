@@ -72,6 +72,9 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   for (const host of opts.agentConfig?.web?.allowlist ?? []) {
     permissions.allowDomain(host);
   }
+  if (opts.bashRules?.length) {
+    permissions.setBashRules(opts.bashRules);
+  }
   const capabilities = opts.provider.getCapabilities(opts.model);
   const contextManager = new ContextManager(conversation, capabilities, {
     compactionThreshold: opts.agentConfig?.compactionThreshold,

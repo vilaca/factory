@@ -393,6 +393,27 @@ async function* executeToolCall(
 
   yield { type: 'tool-call-start', toolName: tool.name, args };
 
+  // Bash policy: built-in forbidden patterns hard-deny here, before any
+  // permission prompt. allow-all on Bash cannot bypass these. User rules
+  // can also pre-resolve to allow/deny without prompting. See
+  // src/security/bash-rules.ts.
+  let bashPolicyAllowed = false;
+  if (tool.name === 'Bash') {
+    const command = typeof args.command === 'string' ? args.command : '';
+    if (command) {
+      const policyEval = permissions.evaluateBashCommand(command);
+      if (policyEval.kind === 'deny') {
+        recordResult(policyEval.reason, tool.name);
+        yield { type: 'tool-call-denied', toolName: tool.name, args };
+        return;
+      }
+      if (policyEval.kind === 'allow') {
+        bashPolicyAllowed = true;
+      }
+      // 'prompt' falls through to the standard permission flow.
+    }
+  }
+
   // WebFetch has a per-domain whitelist that gates *before* the standard
   // tool-level permission check. A pre-allowed hostname skips the prompt
   // for this URL even though `WebFetch` itself isn't in `allowedTools`.
@@ -413,7 +434,7 @@ async function* executeToolCall(
   }
 
   // Permission check — inline because async generators can't yield from callbacks
-  if (!webFetchAlreadyAllowed && !permissions.isAutoAllowed(tool.name)) {
+  if (!bashPolicyAllowed && !webFetchAlreadyAllowed && !permissions.isAutoAllowed(tool.name)) {
     let resolvePermission!: (d: PermissionDecision | 'abort') => void;
     const permissionPromise = new Promise<PermissionDecision | 'abort'>((resolve) => {
       resolvePermission = resolve;
