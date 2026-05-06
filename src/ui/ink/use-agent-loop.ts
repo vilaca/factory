@@ -270,6 +270,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     }
     refs.current.sessionLogger?.logModelChange(refs.current.model, name);
     refs.current.model = name;
+    refs.current.primary = { provider: refs.current.provider.name, model: name };
     setModel(name);
     const caps = provider.getCapabilities(name);
     refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
@@ -348,6 +349,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel, keyId);
     refs.current.provider = nextProvider;
     refs.current.model = nextModel;
+    refs.current.primary = { provider: nextProvider.name, model: nextModel };
     refs.current.activeKeyId = keyId;
     refs.current.useTextToolFallback = validation.mode === 'fallback';
     refs.current.nativeToolSupport = validation.mode === 'native';

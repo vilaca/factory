@@ -3,6 +3,7 @@ import type { RotationEntry } from '../../../core/config-types.js';
 import { parseRotationEntry } from '../../../cli/parse-rotation.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { loadGlobalConfig, saveGlobalConfig } from '../../../core/config.js';
+import { listKeys } from '../../../core/credentials.js';
 
 /**
  * Format `<provider>:<model>` exactly. Used as the override key in the
@@ -180,6 +181,7 @@ function showChain(agent: AgentLoopApi): void {
   }
   lines.push({ level: 'info', text: '  Add: /rotate add <provider:model> · Remove: /rotate remove <n>' });
   lines.push({ level: 'info', text: '  Edit default: /rotate add --default ... · Edit other scope: /rotate add --for <p:m> ...' });
+  lines.push({ level: 'info', text: '  Reset to the head of the chain: /rotate refresh' });
 
   agent.addNoticeBlock(lines);
 }
@@ -214,6 +216,42 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
   const rest = tokens.slice(1);
 
   switch (sub) {
+    case 'refresh': {
+      // Reset in-memory rotation state and return the tab to the head of the
+      // chain — i.e. the (provider, model) the user originally homed on for
+      // this tab, with its first saved key. Useful after rotation has drifted
+      // the tab to a fallback and the original is healthy again.
+      refs.keyFailureLog.clear();
+      refs.rotationPromptDeclined = false;
+      const { primary } = refs;
+      let firstKeyId: string | undefined;
+      try {
+        const cfg = await loadGlobalConfig();
+        const descriptor = descriptorByAlias(primary.provider);
+        if (descriptor) {
+          firstKeyId = listKeys(cfg, descriptor.name)[0]?.id;
+        }
+      } catch {
+        // No keys loadable — refresh stays on whatever credential the
+        // runtime resolves at the next call.
+      }
+      const drifted =
+        refs.provider.name !== primary.provider || refs.model !== primary.model;
+      const keyChanged =
+        firstKeyId !== undefined && firstKeyId !== refs.activeKeyId;
+      if (drifted || keyChanged) {
+        await agent.setProviderByName(primary.provider, primary.model, firstKeyId);
+        // setProviderByName re-set primary to the same tuple; the explicit
+        // assignment above (and any future user swaps) keep it accurate.
+      } else {
+        agent.addNotice(
+          'info',
+          `Rotation refreshed — failure log cleared (already on ${primary.provider} / ${primary.model}).`,
+        );
+      }
+      return;
+    }
+
     case 'clear': {
       const flags = parseFlags(rest);
       const target = resolveTargetChain(agent, flags);
@@ -360,6 +398,6 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
     }
 
     default:
-      agent.addNotice('warn', `Unknown /rotate subcommand "${sub}". Try: add, insert, remove, move, clear (or no args to view).`);
+      agent.addNotice('warn', `Unknown /rotate subcommand "${sub}". Try: add, insert, remove, move, clear, refresh (or no args to view).`);
   }
 }
