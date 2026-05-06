@@ -137,6 +137,37 @@ function validateConfig(data: unknown, filePath: string): Config {
       }
     }
 
+    if (agent.hooks !== undefined) {
+      if (agent.hooks === null || typeof agent.hooks !== 'object' || Array.isArray(agent.hooks)) {
+        throw new Error(`${filePath}: "agent.hooks" must be an object`);
+      }
+      const knownEvents = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PreCompact', 'SessionEnd', 'Stop', 'StopFailure'];
+      for (const [event, entries] of Object.entries(agent.hooks as Record<string, unknown>)) {
+        if (!knownEvents.includes(event)) {
+          throw new Error(`${filePath}: unknown hook event "agent.hooks.${event}". Known events: ${knownEvents.join(', ')}`);
+        }
+        if (!Array.isArray(entries)) {
+          throw new Error(`${filePath}: "agent.hooks.${event}" must be an array`);
+        }
+        entries.forEach((entry, i) => {
+          if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+            throw new Error(`${filePath}: "agent.hooks.${event}[${i}]" must be an object`);
+          }
+          const e = entry as Record<string, unknown>;
+          if (typeof e.command !== 'string' || !e.command) {
+            throw new Error(`${filePath}: "agent.hooks.${event}[${i}].command" must be a non-empty string`);
+          }
+          if (e.matcher !== undefined && typeof e.matcher !== 'string') {
+            throw new Error(`${filePath}: "agent.hooks.${event}[${i}].matcher" must be a string`);
+          }
+          if (e.timeoutMs !== undefined &&
+              (typeof e.timeoutMs !== 'number' || e.timeoutMs <= 0 || !Number.isFinite(e.timeoutMs))) {
+            throw new Error(`${filePath}: "agent.hooks.${event}[${i}].timeoutMs" must be a positive number`);
+          }
+        });
+      }
+    }
+
     if (agent.experimental !== undefined) {
       if (agent.experimental === null || typeof agent.experimental !== 'object' || Array.isArray(agent.experimental)) {
         throw new Error(`${filePath}: "agent.experimental" must be an object`);

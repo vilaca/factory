@@ -96,20 +96,22 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     sessionLogger?.logWarning('hook-error', `${event}: ${error}`);
   };
 
+  let sessionStartContext: string | undefined;
   if (hooksEnabled) {
     try {
       const r = await runHook(
         'SessionStart',
         { provider: options.provider.name, model: options.model, cwd },
-        { cwd, onStderr: onHookStderr },
+        { cwd, config: options.agentConfig?.hooks, onStderr: onHookStderr },
       );
       for (const e of r.errors) onHookError('SessionStart', e);
-      for (const hookPath of r.firedScripts) {
+      for (const hookPath of r.firedCommands) {
         sessionLogger?.logWarning(
           'hook-fired',
           `SessionStart: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`,
         );
       }
+      sessionStartContext = r.additionalContext;
     } catch (err: any) {
       onHookError('SessionStart', err?.message ?? String(err));
     }
@@ -121,6 +123,9 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   // system prompt now.
   conversation.addUser(buildEnvironmentMessage(process.cwd()));
   conversation.addAssistant('Got it.');
+  if (sessionStartContext) {
+    conversation.addUser(sessionStartContext);
+  }
   const permissions = new PermissionManager();
   for (const toolName of options.autoAllowTools ?? []) {
     permissions.allowAll(toolName);
@@ -169,6 +174,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       // a one-shot run), so a static holder is sufficient. The TUI passes a
       // live mutable holder updated by Bash; headless does not.
       cwdRef: { current: cwd },
+      hooksConfig: options.agentConfig?.hooks,
       onHookStderr,
       onHookError,
     })) {
@@ -216,7 +222,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         const r = await runHook(
           'SessionEnd',
           { provider: options.provider.name, model: options.model, cwd },
-          { cwd, onStderr: onHookStderr },
+          { cwd, config: options.agentConfig?.hooks, onStderr: onHookStderr },
         );
         for (const e of r.errors) onHookError('SessionEnd', e);
       } catch (err: any) {

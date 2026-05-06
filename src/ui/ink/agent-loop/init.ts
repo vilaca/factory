@@ -100,6 +100,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     planMode: input.initialPlanMode,
     enableCorrector: opts.enableCorrector ?? true,
     experimental: input.initialExperimental,
+    ...(opts.agentConfig?.hooks ? { hooksConfig: opts.agentConfig.hooks } : {}),
     rotation: {
       keysEnabled: opts.agentConfig?.rotation?.keys ?? true,
       modelsEnabled: opts.agentConfig?.rotation?.models ?? true,

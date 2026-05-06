@@ -6,6 +6,7 @@ import type { ProviderDescriptor, StartupProviderName } from './providers/descri
 import { DESCRIPTORS, DESCRIPTOR_LIST, descriptorByAlias } from './providers/descriptors.js';
 import { createProvider } from './providers/registry.js';
 import { loadConfig } from './core/config.js';
+import type { HookEntry } from './core/config-types.js';
 import { setEnvPolicy, setPathPolicy } from './security/policy-state.js';
 import { McpManager } from './mcp/client.js';
 import { defaultRegistry } from './tools/index.js';
@@ -269,6 +270,54 @@ async function main(): Promise<void> {
     console.log(chalk.yellow(`  ⚠ Could not check git dirty state: ${msg}`));
   }
 
+  // First-run trust check for project-local hooks. The merged config
+  // already folds project hooks into `config.agent.hooks`, but we need the
+  // project-only slice (without user-level entries) to fingerprint and
+  // prompt against — user hooks are implicitly trusted (the user wrote
+  // them in their own home dir).
+  const { loadProjectConfig } = await import('./core/config.js');
+  const projectOnly = await loadProjectConfig(cwd);
+  const projectHooks = projectOnly.agent?.hooks;
+  if (projectHooks && Object.keys(projectHooks).length > 0) {
+    const { isProjectTrusted, recordTrust } = await import('./core/hooks/trust.js');
+    if (!isProjectTrusted(cwd, projectHooks)) {
+      const { promptText } = await import('./cli/prompts.js');
+      console.log('');
+      console.log(chalk.yellow(' ⚠ This project declares hooks in .factory/config.json:'));
+      for (const [event, entries] of Object.entries(projectHooks)) {
+        for (const entry of entries ?? []) {
+          const matcher = entry.matcher ? ` [${entry.matcher}]` : '';
+          console.log(chalk.dim(`     ${event}${matcher}: ${entry.command}`));
+        }
+      }
+      console.log(chalk.yellow(' Hooks run shell commands automatically. Trust this project? [y/N]'));
+      const answer = process.stdout.isTTY && process.stdin.isTTY
+        ? (await promptText(' > ')).toLowerCase()
+        : 'n';
+      if (answer === 'y' || answer === 'yes') {
+        recordTrust(cwd, projectHooks);
+        console.log(chalk.dim(' Trusted. Will not prompt again unless the hook config changes.'));
+      } else {
+        // Strip the project hooks from the merged config. User hooks
+        // (from ~/.factory/config.json) survive — those came from a
+        // different file and aren't in question.
+        if (config.agent?.hooks) {
+          const userOnlyHooks: typeof config.agent.hooks = {};
+          for (const [event, entries] of Object.entries(config.agent.hooks) as Array<[string, HookEntry[] | undefined]>) {
+            const projectEntries = projectHooks[event as keyof typeof projectHooks] ?? [];
+            const projectCommands = new Set(projectEntries.map(e => e.command));
+            const filtered = (entries ?? []).filter(e => !projectCommands.has(e.command));
+            if (filtered.length > 0) {
+              (userOnlyHooks as Record<string, unknown>)[event] = filtered;
+            }
+          }
+          config.agent.hooks = userOnlyHooks;
+        }
+        console.log(chalk.dim(' Project hooks rejected. Run with --no-hooks to silence this prompt entirely.'));
+      }
+    }
+  }
+
   // Experimental flags default to on except for bashDedup, which is opt-in
   // for now. Config can override; CLI flags take final precedence.
   const experimentalFromConfig = config.agent?.experimental ?? {};
@@ -333,15 +382,18 @@ async function main(): Promise<void> {
     gitBranch,
   );
 
-  // Surface any hook scripts that will be active this session. With hooks
-  // default-on, a stale ~/.factory/hooks/SessionStart.sh from a prior
-  // experiment would otherwise spawn silently. Listing once per startup is
-  // cheap and prevents that footgun. Computed up front; printed below
-  // after the screen-clear so the notice survives.
-  let activeHookScripts: string[] = [];
+  // Surface any hooks that will be active this session. With hooks
+  // default-on, a stale entry in ~/.factory/config.json would otherwise
+  // spawn silently. Listing once per startup is cheap and prevents that
+  // footgun. Computed up front; printed below after the screen-clear so
+  // the notice survives.
+  let activeHookSummaries: string[] = [];
   if (mergedAgentConfig.experimental.hooks) {
-    const { discoverAllHooks } = await import('./core/hooks/discovery.js');
-    activeHookScripts = discoverAllHooks(cwd);
+    const { listAllHooks } = await import('./core/hooks/discovery.js');
+    activeHookSummaries = listAllHooks(mergedAgentConfig.hooks).map(({ event, entry }) => {
+      const matcher = entry.matcher ? ` [${entry.matcher}]` : '';
+      return `${event}${matcher}: ${entry.command}`;
+    });
   }
 
   const appOptions = {
@@ -371,15 +423,15 @@ async function main(): Promise<void> {
     process.stdout.write('\n');
     await animateLogo();
     console.log(welcomeText);
-    if (activeHookScripts.length > 0) {
-      console.log(chalk.dim(`  Hook scripts active: ${activeHookScripts.join(', ')}`));
+    if (activeHookSummaries.length > 0) {
+      console.log(chalk.dim(` Hooks active: ${activeHookSummaries.join(', ')}`));
     }
     const app = renderApp(appOptions);
     await app.waitUntilExit();
   } else {
     console.log(welcomeText);
-    if (activeHookScripts.length > 0) {
-      console.log(chalk.dim(`  Hook scripts active: ${activeHookScripts.join(', ')}`));
+    if (activeHookSummaries.length > 0) {
+      console.log(chalk.dim(` Hooks active: ${activeHookSummaries.join(', ')}`));
     }
     if (validationWarning) {
       console.log(chalk.yellow(`  ⚠ ${validationWarning}`));

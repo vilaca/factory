@@ -1,63 +1,67 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import type { HookEntry, HooksConfig } from '../config-types.js';
 
 export const HOOK_EVENTS = [
   'SessionStart',
   'UserPromptSubmit',
   'PreToolUse',
   'PostToolUse',
+  'PostToolUseFailure',
   'PreCompact',
   'SessionEnd',
+  'Stop',
+  'StopFailure',
 ] as const;
 
 export type HookEvent = typeof HOOK_EVENTS[number];
 
 /**
- * Returns absolute paths of every hook script the runtime would consider for
- * any event from the given cwd. Used at startup to surface "hook scripts on
- * disk that will fire this session" so the user is never surprised by a hook
- * inherited from a prior install or a sibling project.
+ * Resolve hook entries for `event` from the merged config, optionally
+ * filtered by `matchValue` (typically the tool name for Pre/PostToolUse).
+ *
+ * Filter rules:
+ *   - Entry has no `matcher` → always included.
+ *   - Entry has a `matcher` and `matchValue` is provided → include when
+ *     the matcher (shell glob) matches the value.
+ *   - Entry has a `matcher` but `matchValue` is undefined → excluded
+ *     (the event has no value to match against).
  */
-export function discoverAllHooks(cwd: string): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+export function resolveHooks(
+  event: HookEvent,
+  config: HooksConfig | undefined,
+  matchValue?: string,
+): HookEntry[] {
+  const entries = config?.[event] ?? [];
+  return entries.filter(entry => {
+    if (!entry.matcher) return true;
+    if (matchValue === undefined) return false;
+    return globMatch(entry.matcher, matchValue);
+  });
+}
+
+/**
+ * Returns every hook command configured across every event. Used at startup
+ * and by the `/hooks` slash command to surface what will fire this session
+ * so the user is never surprised by an inherited config.
+ */
+export function listAllHooks(config: HooksConfig | undefined): { event: HookEvent; entry: HookEntry }[] {
+  const out: { event: HookEvent; entry: HookEntry }[] = [];
+  if (!config) return out;
   for (const event of HOOK_EVENTS) {
-    for (const p of discoverHookScripts(event, cwd)) {
-      if (seen.has(p)) continue;
-      seen.add(p);
-      out.push(p);
+    for (const entry of config[event] ?? []) {
+      out.push({ event, entry });
     }
   }
   return out;
 }
 
-/**
- * Returns absolute paths of hook scripts that should fire for this event.
- *
- * Resolution order (both run, global first, project second):
- *   1. ~/.factory/hooks/<event>.sh
- *   2. <cwd>/.factory/hooks/<event>.sh
- *
- * A path appears in the list only if the file exists. Errors stat-ing a
- * candidate (permissions, symlink loop, etc.) are swallowed — hooks are
- * opt-in and must never break the agent.
- */
-export function discoverHookScripts(event: HookEvent, cwd: string): string[] {
-  const candidates = [
-    path.join(os.homedir(), '.factory', 'hooks', `${event}.sh`),
-    path.join(cwd, '.factory', 'hooks', `${event}.sh`),
-  ];
-  const found: string[] = [];
-  for (const candidate of candidates) {
-    try {
-      const stat = fs.statSync(candidate);
-      if (stat.isFile()) {
-        found.push(candidate);
-      }
-    } catch {
-      // missing or unreadable — skip silently
-    }
+/** Shell-style glob: `*` matches any run of characters, `?` matches one.
+ *  Other regex metacharacters in the pattern are escaped. */
+function globMatch(pattern: string, value: string): boolean {
+  let re = '';
+  for (const ch of pattern) {
+    if (ch === '*') re += '.*';
+    else if (ch === '?') re += '.';
+    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
-  return found;
+  return new RegExp('^' + re + '$').test(value);
 }

@@ -53,6 +53,11 @@ export function DisplayItemView({
           </Box>
         );
       }
+      // TODO: collapse the empty-success case to a single line — `❌ No
+      // matches found.` (or similar) instead of the current two-line
+      // "  ○\n     No matches found." render. Requires checking item.empty
+      // and either inlining the body alongside the icon or replacing the
+      // generic ○ with a body-aware glyph (❌ for grep/glob misses, etc.).
       const icon = !item.success ? '  ✗' : '  ○';
       const color = !item.success ? 'red' : 'yellow';
       return (

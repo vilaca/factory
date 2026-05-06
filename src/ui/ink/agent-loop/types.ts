@@ -52,6 +52,9 @@ export interface RunRefs {
   planMode: boolean;
   enableCorrector: boolean;
   experimental: ExperimentalFlags;
+  /** Configured hook commands keyed by event. Cloned from agent.hooks at
+   *  session init. Read by the agent loop and by the `/hooks` slash. */
+  hooksConfig?: import('../../../core/config-types.js').HooksConfig;
   /** Per-tab rotation snapshot, mutated by `/rotate`. Read by the runtime
    *  (commits A + B) on every provider call to decide which keys / chain
    *  entries are eligible. */

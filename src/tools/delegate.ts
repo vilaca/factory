@@ -93,6 +93,14 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
       // under a nested key. The parent TTY never sees these directly — they
       // are only for forensic analysis later. We use logWarning with a
       // distinct source so the existing schema doesn't need to change.
+      // TODO: subagent events are not actually being logged. `ctx.sessionLogger`
+      // is declared on the tool context interface but no caller threads it
+      // through — the agent loop builds tool ctx without a sessionLogger,
+      // so the `if (ctx.sessionLogger)` guard is always false and this whole
+      // block is dead code. Fix: wire sessionLogger from RunRefs (or from
+      // run-loop.ts deps) into the ToolContext built in run-tool-calls.ts so
+      // forensic logs of delegate runs actually land in the .jsonl session
+      // log alongside the rest of the agent events.
       if (ctx.sessionLogger) {
         for (const event of result.events) {
           try {
@@ -118,6 +126,15 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
       // agent knows the answer above is the last partial text, not a final
       // verdict. Lets the parent decide whether to re-delegate with a
       // narrower task.
+      // TODO: subagents hit this cap too often in practice. Investigate:
+      //   - is the default cap too low for the kinds of tasks parents
+      //     delegate (broad codebase searches, multi-file reads)?
+      //   - are subagents looping on retryable failures and burning the
+      //     budget on near-duplicate tool calls (loop detector applies)?
+      //   - should the cap be task-shape-aware (more for "find X across
+      //     repo", less for "read this one file and summarize")?
+      // Until fixed, parents see truncated answers and re-delegate, which
+      // doubles cost and latency.
       const capNote = result.stopReason === 'turn-limit'
         ? '\n\n[note: subagent hit its tool-call cap; the answer above is its last partial response]'
         : '';

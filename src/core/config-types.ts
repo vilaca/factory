@@ -29,6 +29,36 @@ export interface AgentConfig {
    *  no UI to prompt) and for trusted documentation domains the user
    *  doesn't want to whitelist by hand each session. */
   web?: WebConfig;
+  /** Lifecycle hook commands keyed by event. Each entry is `{matcher?,
+   *  command, timeoutMs?}`. `command` runs via `sh -c` with the project
+   *  cwd; the JSON event payload arrives on stdin and the hook may write
+   *  a JSON object back on stdout. See README "Hooks". */
+  hooks?: HooksConfig;
+}
+
+export interface HookEntry {
+  /** Shell-glob pattern matched against the event's match value (the tool
+   *  name for Pre/PostToolUse). Omit to match every invocation. Ignored
+   *  on events without a match value (SessionStart/End, UserPromptSubmit,
+   *  PreCompact, Stop). */
+  matcher?: string;
+  /** Shell command line. Runs via `sh -c "$command"` with the project's
+   *  cwd. Receives `{event, payload}` JSON on stdin. */
+  command: string;
+  /** Per-hook timeout in ms. Defaults to 5000. */
+  timeoutMs?: number;
+}
+
+export interface HooksConfig {
+  SessionStart?: HookEntry[];
+  UserPromptSubmit?: HookEntry[];
+  PreToolUse?: HookEntry[];
+  PostToolUse?: HookEntry[];
+  PostToolUseFailure?: HookEntry[];
+  PreCompact?: HookEntry[];
+  SessionEnd?: HookEntry[];
+  Stop?: HookEntry[];
+  StopFailure?: HookEntry[];
 }
 
 export interface WebConfig {
@@ -72,9 +102,9 @@ export interface ExperimentalFlags {
   subagents?: boolean;
   /** Load skills from .factory/skills/*.md and inject them based on triggers. */
   skills?: boolean;
-  /** Run user-supplied shell scripts at lifecycle events
-   *  (~/.factory/hooks/<event>.sh and <cwd>/.factory/hooks/<event>.sh).
-   *  See README "Hooks" for the protocol. */
+  /** Run user-supplied shell commands at lifecycle events. Hook commands
+   *  are configured under `agent.hooks.<EventName>` as `{matcher?,
+   *  command, timeoutMs?}` entries. See README "Hooks" for the protocol. */
   hooks?: boolean;
 }
 

@@ -9,7 +9,8 @@ export interface CompactionHookOptions {
   /** Live cwd holder; we dereference at each hook fire so PreCompact picks
    *  up project-local hooks even after Bash `cd`'d mid-turn. */
   cwdRef?: { current: string };
-  onHookStderr?: (hookPath: string, chunk: string) => void;
+  hooksConfig?: import('../config-types.js').HooksConfig;
+  onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
 }
 
@@ -97,7 +98,7 @@ export async function* maybeCompact(
 
 /**
  * Run the PreCompact hook (if enabled). The hook receives `{ aggressive }`
- * on stdin and may return `{ contextModification: "..." }` to override the
+ * on stdin and may return `{ additionalContext: "..." }` to override the
  * summary that compaction installs in place of the pruned messages. Errors
  * are surfaced as `hook-error` events but never block compaction.
  */
@@ -110,13 +111,17 @@ async function* runPreCompactHook(
     const result = await runHook(
       'PreCompact',
       { aggressive },
-      { cwd: hookOpts.cwdRef.current, onStderr: hookOpts.onHookStderr },
+      {
+        cwd: hookOpts.cwdRef.current,
+        config: hookOpts.hooksConfig,
+        onStderr: hookOpts.onHookStderr,
+      },
     );
     for (const e of result.errors) {
       hookOpts.onHookError?.('PreCompact', e);
       yield { type: 'hook-error', event: 'PreCompact', error: e };
     }
-    for (const hookPath of result.firedScripts) {
+    for (const hookPath of result.firedCommands) {
       yield {
         type: 'hook-fired',
         event: 'PreCompact',
@@ -124,7 +129,7 @@ async function* runPreCompactHook(
         ...(result.notice ? { notice: result.notice } : {}),
       };
     }
-    return result.contextModification;
+    return result.additionalContext;
   } catch (err: any) {
     const msg = err?.message ?? String(err);
     hookOpts.onHookError?.('PreCompact', msg);
