@@ -1,7 +1,8 @@
 import { spawn } from 'child_process';
-import { discoverHookScripts, type HookEvent } from './discovery.js';
+import { discoverHookScripts, discoverAllHooks, type HookEvent } from './discovery.js';
 
 export type { HookEvent };
+export { discoverAllHooks };
 
 /**
  * Result of running one or more hook scripts for a single event.
@@ -12,6 +13,13 @@ export type { HookEvent };
  *   (used as the user-facing reason when `cancel` is true).
  * - `contextModification`: the most recent non-empty contextModification
  *   string returned by any hook. Only PreCompact acts on this.
+ * - `notice`: the most recent non-empty notice string returned by any hook.
+ *   Surfaced as a user-visible info message at the call site so a hook can
+ *   say "Welcome back" or "policy v3 active" without abusing errorMessage.
+ * - `firedScripts`: scripts that actually ran end-to-end (spawned, parsed,
+ *   no timeout). Errored scripts are not included — they're already
+ *   represented in `errors`. Used by call sites to emit one notice per
+ *   successful fire so the user knows hooks executed.
  * - `errors`: per-hook execution errors (timeouts, malformed JSON, non-zero
  *   exits, spawn failures). Logged to the session log; never thrown.
  */
@@ -19,6 +27,8 @@ export interface HookResult {
   cancel: boolean;
   errorMessage?: string;
   contextModification?: string;
+  notice?: string;
+  firedScripts: string[];
   errors: string[];
 }
 
@@ -56,7 +66,7 @@ export async function runHook(
   opts: RunHookOptions,
 ): Promise<HookResult> {
   const scripts = opts.scripts ?? discoverHookScripts(event, opts.cwd);
-  const aggregate: HookResult = { cancel: false, errors: [] };
+  const aggregate: HookResult = { cancel: false, firedScripts: [], errors: [] };
   if (scripts.length === 0) return aggregate;
 
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -64,7 +74,11 @@ export async function runHook(
 
   for (const script of scripts) {
     const single = await runSingleHook(script, stdinJson, timeoutMs, opts);
-    if (single.error) aggregate.errors.push(`${script}: ${single.error}`);
+    if (single.error) {
+      aggregate.errors.push(`${script}: ${single.error}`);
+    } else {
+      aggregate.firedScripts.push(script);
+    }
     if (single.parsed) {
       if (single.parsed.cancel) aggregate.cancel = true;
       if (typeof single.parsed.errorMessage === 'string' && single.parsed.errorMessage) {
@@ -72,6 +86,9 @@ export async function runHook(
       }
       if (typeof single.parsed.contextModification === 'string' && single.parsed.contextModification) {
         aggregate.contextModification = single.parsed.contextModification;
+      }
+      if (typeof single.parsed.notice === 'string' && single.parsed.notice) {
+        aggregate.notice = single.parsed.notice;
       }
     }
     if (single.stderr && opts.onStderr) opts.onStderr(script, single.stderr);
@@ -85,6 +102,7 @@ interface SingleHookOutcome {
     cancel?: boolean;
     errorMessage?: string;
     contextModification?: string;
+    notice?: string;
   };
   stderr?: string;
   error?: string;

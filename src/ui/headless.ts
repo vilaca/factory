@@ -104,6 +104,12 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         { cwd, onStderr: onHookStderr },
       );
       for (const e of r.errors) onHookError('SessionStart', e);
+      for (const hookPath of r.firedScripts) {
+        sessionLogger?.logWarning(
+          'hook-fired',
+          `SessionStart: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`,
+        );
+      }
     } catch (err: any) {
       onHookError('SessionStart', err?.message ?? String(err));
     }

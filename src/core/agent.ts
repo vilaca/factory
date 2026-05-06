@@ -60,6 +60,14 @@ export async function* runAgent(
         options.onHookError?.('UserPromptSubmit', e);
         yield { type: 'hook-error', event: 'UserPromptSubmit', error: e };
       }
+      for (const hookPath of result.firedScripts) {
+        yield {
+          type: 'hook-fired',
+          event: 'UserPromptSubmit',
+          hookPath,
+          ...(result.notice ? { notice: result.notice } : {}),
+        };
+      }
     } catch (err: any) {
       yield { type: 'hook-error', event: 'UserPromptSubmit', error: err?.message ?? String(err) };
     }

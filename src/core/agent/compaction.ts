@@ -116,6 +116,14 @@ async function* runPreCompactHook(
       hookOpts.onHookError?.('PreCompact', e);
       yield { type: 'hook-error', event: 'PreCompact', error: e };
     }
+    for (const hookPath of result.firedScripts) {
+      yield {
+        type: 'hook-fired',
+        event: 'PreCompact',
+        hookPath,
+        ...(result.notice ? { notice: result.notice } : {}),
+      };
+    }
     return result.contextModification;
   } catch (err: any) {
     const msg = err?.message ?? String(err);

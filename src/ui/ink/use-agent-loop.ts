@@ -191,6 +191,12 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
         },
       ).then((r) => {
         for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
+        for (const hookPath of r.firedScripts) {
+          const name = hookPath.split('/').pop() ?? hookPath;
+          const suffix = r.notice ? ` — ${r.notice}` : '';
+          addNotice('info', `↪ SessionStart hook ran (${name})${suffix}`);
+          sessionLogger?.logWarning('hook-fired', `SessionStart: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`);
+        }
       }).catch((err) => {
         sessionLogger?.logWarning('hook-error', `SessionStart: ${err?.message ?? String(err)}`);
       });
@@ -213,6 +219,11 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
           },
         ).then((r) => {
           for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
+          // SessionEnd fires during tab teardown — UI is going away, so
+          // skip addNotice and just log. The session-log entry survives.
+          for (const hookPath of r.firedScripts) {
+            sessionLogger?.logWarning('hook-fired', `SessionEnd: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`);
+          }
         }).catch(() => { /* never block teardown */ });
       }
       sessionLogger?.logSessionEnd();
