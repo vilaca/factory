@@ -50,6 +50,14 @@ export interface RunRefs {
    *  (commits A + B) on every provider call to decide which keys / chain
    *  entries are eligible. */
   rotation: RotationRefs;
+  /** Key id of the credential the active provider was constructed with.
+   *  Updated by setProviderByName, by resume-from-recent at startup, and
+   *  by the rotation runtime after a key swap. Undefined when the active
+   *  token didn't come from the multi-key store (CLI override, env var). */
+  activeKeyId?: string;
+  /** Per-tab in-memory failure log keyed by `keyId`. The rotation runtime
+   *  reads + writes; reset on session restart. */
+  keyFailureLog: Map<string, number>;
   gitBranch: string | undefined;
   gitDirty: boolean | null;
   /** Per-tab working directory. Tools resolve relative paths against this and

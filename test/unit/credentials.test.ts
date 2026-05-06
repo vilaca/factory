@@ -11,7 +11,9 @@ import {
   keyFingerprint,
   listKeys,
   migrateLegacyKeys,
+  selectNextKey,
 } from '../../src/core/credentials.js';
+import type { ProviderKey } from '../../src/core/config-types.js';
 import { loadGlobalConfig, saveGlobalConfig } from '../../src/core/config.js';
 
 async function withGlobalHome(fn: (home: string) => Promise<void>): Promise<void> {
@@ -110,6 +112,52 @@ describe('getKey', () => {
 
   it('returns undefined when id does not match', () => {
     assert.strictEqual(getKey(cfg, 'anthropic', 'gone'), undefined);
+  });
+});
+
+describe('selectNextKey', () => {
+  const mk = (id: string, createdAt: string): ProviderKey => ({
+    id, token: `tok-${id}`, createdAt,
+  });
+  const a = mk('a', '2024-01-01T00:00:00Z');
+  const b = mk('b', '2024-02-01T00:00:00Z');
+  const c = mk('c', '2024-03-01T00:00:00Z');
+
+  it('returns the first never-tried key, ordered by createdAt', () => {
+    const next = selectNextKey([c, b, a], new Set());
+    assert.strictEqual(next?.id, 'a');
+  });
+
+  it('skips tried keys', () => {
+    const next = selectNextKey([a, b, c], new Set(['a']));
+    assert.strictEqual(next?.id, 'b');
+  });
+
+  it('returns undefined when all keys are tried', () => {
+    const next = selectNextKey([a, b], new Set(['a', 'b']));
+    assert.strictEqual(next, undefined);
+  });
+
+  it('deprioritises recently-failed keys but still returns them when fresh pool is empty', () => {
+    const now = 1_000_000;
+    const failureLog = new Map([['a', now - 1000]]); // failed 1s ago
+    // Only `a` is in the pool; even though it's recent, return it.
+    const next = selectNextKey([a], new Set(), { failureLog, now });
+    assert.strictEqual(next?.id, 'a');
+  });
+
+  it('prefers fresh over stale keys when both are available', () => {
+    const now = 1_000_000;
+    // `a` failed recently; `b` failed long ago; `c` never failed.
+    const failureLog = new Map([
+      ['a', now - 1000],          // fresh failure
+      ['b', now - 24 * 3600 * 1000], // very stale, treated as fresh
+    ]);
+    const next = selectNextKey([a, b, c], new Set(), { failureLog, now });
+    // c (never failed) wins, then b (stale failure), then a.
+    // Within fresh bucket, sorted by createdAt: b first (Feb), then c (Mar).
+    // But `b`'s failure is older than the 5-min window so it's "fresh".
+    assert.strictEqual(next?.id, 'b');
   });
 });
 

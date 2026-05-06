@@ -1,4 +1,9 @@
 import { runAgent } from '../../../core/agent.js';
+import type { RotationOptions } from '../../../core/agent-types.js';
+import { createProvider } from '../../../providers/registry.js';
+import { descriptorByAlias } from '../../../providers/descriptors.js';
+import { loadGlobalConfig } from '../../../core/config.js';
+import { listKeys } from '../../../core/credentials.js';
 import { defaultRegistry } from '../../../tools/index.js';
 import { handleAgentEvent } from './event-handler.js';
 import type { AgentLoopDeps } from './types.js';
@@ -12,6 +17,48 @@ const MAX_REPLAYS_PER_PROMPT = 2;
 function isSubstantivePrompt(s: string): boolean {
   if (s.length >= 25) return true;
   return !TRIVIAL_PROMPTS.has(s.toLowerCase());
+}
+
+/**
+ * Build the per-turn rotation context. Returns undefined when:
+ *  - rotation is disabled (`agent.rotation.keys === false`),
+ *  - the active provider has no descriptor (off-the-rails state),
+ *  - or the provider has fewer than two saved keys (nothing to rotate to).
+ *
+ * Reads the live config so newly-added keys (via /pick mid-session) take
+ * effect on the next turn without a restart.
+ */
+async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOptions | undefined> {
+  const refs = deps.refs.current;
+  if (!refs) return undefined;
+  if (!refs.rotation.keysEnabled) return undefined;
+  const descriptor = descriptorByAlias(refs.provider.name);
+  if (!descriptor) return undefined;
+  let cfg;
+  try {
+    cfg = await loadGlobalConfig();
+  } catch {
+    return undefined;
+  }
+  const keys = listKeys(cfg, descriptor.name);
+  if (keys.length < 2) return undefined;
+  return {
+    keys,
+    activeKeyId: refs.activeKeyId,
+    withKey: (key) => createProvider(refs.provider.name, {
+      token: key.token,
+      ...(descriptor.needsAccountId && key.extras?.accountId
+        ? { accountId: key.extras.accountId }
+        : {}),
+    }),
+    onActiveKeyChange: (id) => {
+      if (deps.refs.current) deps.refs.current.activeKeyId = id;
+    },
+    onProviderChange: (next) => {
+      if (deps.refs.current) deps.refs.current.provider = next;
+    },
+    failureLog: refs.keyFailureLog,
+  };
 }
 
 export async function runAgentLoopInternal(
@@ -41,6 +88,11 @@ export async function runAgentLoopInternal(
   // real time (subsequent tools in the same turn see the new directory).
   const cwdRef = { current: deps.refs.current.cwd };
 
+  // Build the rotation context for this turn. Loading global config here is
+  // a few-ms fs read and lets the runtime see the latest saved keys (the
+  // user may have added one via /pick mid-session).
+  const rotation = await buildRotationOptions(deps);
+
   const agent = runAgent(userInput, {
     provider: deps.refs.current.provider,
     model: deps.refs.current.model,
@@ -59,6 +111,7 @@ export async function runAgentLoopInternal(
     fileCache: deps.refs.current.fileCache,
     signal: deps.refs.current.abort.signal,
     cwdRef,
+    ...(rotation ? { rotation } : {}),
   });
 
   for await (const event of agent) {

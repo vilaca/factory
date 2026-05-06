@@ -27,6 +27,43 @@ export function keyFingerprint(token: string): string {
   return token.length <= 4 ? token : token.slice(-4);
 }
 
+/**
+ * Pick the next key to try when the active key has just failed. Skips
+ * already-tried keys, biases toward keys with no recent failure, and
+ * returns undefined when the eligible pool is empty.
+ *
+ * `failureLog` (when provided) maps keyId → last-failure timestamp (ms);
+ * keys whose last failure is within `recentFailureWindowMs` are
+ * deprioritised but not excluded — exhausting fresh keys still rotates
+ * to a recently-failed one before giving up.
+ */
+export function selectNextKey(
+  keys: ProviderKey[],
+  tried: ReadonlySet<string>,
+  options: {
+    failureLog?: ReadonlyMap<string, number>;
+    recentFailureWindowMs?: number;
+    now?: number;
+  } = {},
+): ProviderKey | undefined {
+  const now = options.now ?? Date.now();
+  const window = options.recentFailureWindowMs ?? 5 * 60 * 1000;
+  const eligible = keys.filter(k => !tried.has(k.id));
+  if (eligible.length === 0) return undefined;
+  const fresh: ProviderKey[] = [];
+  const stale: ProviderKey[] = [];
+  for (const k of eligible) {
+    const failedAt = options.failureLog?.get(k.id);
+    if (failedAt !== undefined && now - failedAt < window) stale.push(k);
+    else fresh.push(k);
+  }
+  const byCreatedAt = (a: ProviderKey, b: ProviderKey): number =>
+    a.createdAt.localeCompare(b.createdAt);
+  fresh.sort(byCreatedAt);
+  stale.sort(byCreatedAt);
+  return fresh[0] ?? stale[0];
+}
+
 /** Human label for the picker: `<label> · …<last4>` or just `…<last4>`. */
 export function describeKey(key: ProviderKey): string {
   const fp = keyFingerprint(key.token);
