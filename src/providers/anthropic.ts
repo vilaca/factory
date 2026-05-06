@@ -81,11 +81,7 @@ export class AnthropicProvider implements Provider {
     };
 
     if (tools && tools.length > 0) {
-      params.tools = tools.map(t => ({
-        name: t.function.name,
-        description: t.function.description ?? '',
-        input_schema: t.function.parameters,
-      }));
+      params.tools = buildAnthropicTools(tools, options?.cacheTools);
     }
 
     const stream = this.client.messages.stream(params);
@@ -157,11 +153,7 @@ export class AnthropicProvider implements Provider {
     };
 
     if (tools && tools.length > 0) {
-      params.tools = tools.map(t => ({
-        name: t.function.name,
-        description: t.function.description ?? '',
-        input_schema: t.function.parameters,
-      }));
+      params.tools = buildAnthropicTools(tools, options?.cacheTools);
     }
 
     const response = await this.client.messages.create(params);
@@ -201,20 +193,45 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  private splitMessages(messages: ChatMessage[]): { system: string | null; msgs: any[] } {
+  private splitMessages(messages: ChatMessage[]): { system: string | any[] | null; msgs: any[] } {
     return splitMessagesForAnthropic(messages);
   }
 }
 
+/** Anthropic accepts the `tools` array as either:
+ *  - `[{ name, description, input_schema }, ...]` (no caching), or
+ *  - `[..., { name, description, input_schema, cache_control: { type: 'ephemeral' } }]`
+ *    where the cache_control on the LAST tool entry marks "cache up to and
+ *    including all tool definitions". Default 5-min TTL. */
+export function buildAnthropicTools(
+  tools: ToolDefinition[],
+  cacheLast?: boolean,
+): any[] {
+  const out: any[] = tools.map(t => ({
+    name: t.function.name,
+    description: t.function.description ?? '',
+    input_schema: t.function.parameters,
+  }));
+  if (cacheLast && out.length > 0) {
+    out[out.length - 1] = {
+      ...out[out.length - 1],
+      cache_control: { type: 'ephemeral' },
+    };
+  }
+  return out;
+}
+
 export function splitMessagesForAnthropic(
   messages: ChatMessage[],
-): { system: string | null; msgs: any[] } {
-  let system: string | null = null;
+): { system: string | any[] | null; msgs: any[] } {
+  let systemContent: string | null = null;
+  let systemCacheBoundary = false;
   const msgs: any[] = [];
 
   for (const msg of messages) {
     if (msg.role === 'system') {
-      system = msg.content;
+      systemContent = msg.content;
+      if (msg.cacheBoundary) systemCacheBoundary = true;
     } else if (msg.role === 'assistant' && msg.tool_calls) {
       const content: any[] = [];
       if (msg.content) {
@@ -227,6 +244,12 @@ export function splitMessagesForAnthropic(
           name: tc.function.name,
           input: tc.function.arguments,
         });
+      }
+      if (msg.cacheBoundary && content.length > 0) {
+        content[content.length - 1] = {
+          ...content[content.length - 1],
+          cache_control: { type: 'ephemeral' },
+        };
       }
       msgs.push({ role: 'assistant', content });
     } else if (msg.role === 'tool') {
@@ -242,11 +265,14 @@ export function splitMessagesForAnthropic(
           'every tool_result must reference a tool_use from the prior assistant message',
         );
       }
-      const block = {
+      const block: any = {
         type: 'tool_result',
         tool_use_id: msg.tool_call_id,
         content: msg.content,
       };
+      if (msg.cacheBoundary) {
+        block.cache_control = { type: 'ephemeral' };
+      }
       // Anthropic requires all tool_results from one turn to share a single
       // user message that immediately follows the assistant's tool_use
       // blocks. Coalesce consecutive tool messages into one user message.
@@ -261,8 +287,27 @@ export function splitMessagesForAnthropic(
         msgs.push({ role: 'user', content: [block] });
       }
     } else {
-      msgs.push({ role: msg.role, content: msg.content });
+      // Plain user / plain assistant text. Convert to block array form when
+      // we need to attach cache_control; pass through as a string otherwise
+      // so existing snapshots / wire formats stay unchanged.
+      if (msg.cacheBoundary) {
+        msgs.push({
+          role: msg.role,
+          content: [{ type: 'text', text: msg.content, cache_control: { type: 'ephemeral' } }],
+        });
+      } else {
+        msgs.push({ role: msg.role, content: msg.content });
+      }
     }
+  }
+
+  let system: string | any[] | null;
+  if (systemContent === null) {
+    system = null;
+  } else if (systemCacheBoundary) {
+    system = [{ type: 'text', text: systemContent, cache_control: { type: 'ephemeral' } }];
+  } else {
+    system = systemContent;
   }
 
   return { system, msgs };

@@ -9,6 +9,7 @@ import type { AgentEvent, RotationOptions } from '../agent-types.js';
 import { keyFingerprint, selectNextKey } from '../credentials.js';
 import { classifyForRotation } from '../provider-errors.js';
 import { RepeatDetector } from './repeat-detector.js';
+import { applyCacheBoundaries } from './cache-boundaries.js';
 
 /**
  * Walk the rotation chain looking for the next entry that hasn't been tried
@@ -134,6 +135,13 @@ export async function* callModel(
   }
   const repeatDetector = new RepeatDetector();
 
+  // Annotate cache boundaries once per call. The marked array shares the
+  // same shape as `messages` — non-Anthropic providers ignore the
+  // cacheBoundary hint and Anthropic's splitMessagesForAnthropic
+  // translates it into cache_control blocks.
+  const annotated = applyCacheBoundaries(messages);
+  const callOpts = { signal: internal.signal, cacheTools: true };
+
   // Rotation loop: on a rate-limit/auth failure *before* any chunk has
   // streamed, try the next saved key. Streaming losses still surface
   // because retrying mid-stream would replay tokens the caller already
@@ -142,7 +150,7 @@ export async function* callModel(
   while (true) {
     let streamedAnything = false;
     try {
-      for await (const chunk of provider.chat(model, messages, tools, { signal: internal.signal })) {
+      for await (const chunk of provider.chat(model, annotated, tools, callOpts)) {
         if (signal?.aborted) {
           const err = new Error('aborted');
           err.name = 'AbortError';
@@ -318,7 +326,7 @@ export async function* callModel(
       const isStreamish = msg.includes('stream') || msg.includes('connection dropped') ||
         msg.includes('socket hang up') || msg.includes('fetch failed');
       if (isStreamish) {
-        const response = await provider.chatNoStream(model, messages, tools, { signal });
+        const response = await provider.chatNoStream(model, annotated, tools, { signal, cacheTools: true });
         fullContent = response.content ?? '';
         toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
         if (response.usage) {
