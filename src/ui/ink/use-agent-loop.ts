@@ -71,6 +71,8 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [gitBranch, setGitBranch] = useState<string | undefined>(opts.gitBranch);
   const [gitDirty, setGitDirtyState] = useState<boolean | null>(opts.gitDirty ?? null);
   const [cwd, setCwdState] = useState<string>(process.cwd());
+  const [emojiMode, setEmojiMode] = useState(false);
+  const [userEmoji, setUserEmojiState] = useState<string | undefined>(undefined);
 
   const idCounter = useRef(0);
   const nextId = useCallback(() => ++idCounter.current, []);
@@ -314,6 +316,12 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     // post-migration "default" entry).
     const descriptor = descriptorByAlias(trimmed);
     const createOpts: Parameters<typeof createProvider>[1] = {};
+    // Resolve the key id we actually built the provider with — even when
+    // the caller passed no explicit keyId, getKey returns the first stored
+    // entry. Tracking that id is what lets per-key stats land correctly
+    // after a /provider swap; otherwise refs.activeKeyId stays undefined
+    // and the success/failure recorders skip silently.
+    let resolvedKeyId: string | undefined = keyId;
     if (descriptor) {
       try {
         const cfg = await loadGlobalConfig();
@@ -323,6 +331,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
           if (descriptor.needsAccountId && key.extras?.accountId) {
             createOpts.accountId = key.extras.accountId;
           }
+          resolvedKeyId = key.id;
         }
       } catch {
         // Fall through with empty opts; provider may still pick up env vars.
@@ -354,11 +363,11 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       addNotice('danger', validation.reason);
       return;
     }
-    refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel, keyId);
+    refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel, resolvedKeyId);
     refs.current.provider = nextProvider;
     refs.current.model = nextModel;
     refs.current.primary = { provider: nextProvider.name, model: nextModel };
-    refs.current.activeKeyId = keyId;
+    refs.current.activeKeyId = resolvedKeyId;
     refs.current.useTextToolFallback = validation.mode === 'fallback';
     refs.current.nativeToolSupport = validation.mode === 'native';
     setProviderName(nextProvider.name);
@@ -392,6 +401,25 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     if (!refs.current) return;
     refs.current.enableCorrector = value;
     addNotice('info', `LLM tool-call corrector: ${value ? 'ON' : 'OFF'}.`);
+  }
+
+  function toggleEmojiMode(): void {
+    setEmojiMode((prev) => {
+      const next = !prev;
+      addNotice('info', `Emoji mode: ${next ? 'ON 🤖' : 'OFF'}.`);
+      return next;
+    });
+  }
+
+  function setUserEmoji(emoji: string): void {
+    const trimmed = emoji.trim();
+    if (!trimmed) {
+      addNotice('warn', 'Usage: /emoji <emoji>  (no arg toggles on/off)');
+      return;
+    }
+    setUserEmojiState(trimmed);
+    setEmojiMode(true);
+    addNotice('info', `User emoji: ${trimmed} (emoji mode ON).`);
   }
 
   function setExperimentalFlag(name: keyof ExperimentalFlags, value: boolean): void {
@@ -509,6 +537,8 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     gitBranch,
     gitDirty,
     cwd,
+    emojiMode,
+    userEmoji,
     refs,
     submitPrompt,
     queueInput,
@@ -530,6 +560,8 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     addNotice,
     addNoticeBlock,
     setIdle,
+    toggleEmojiMode,
+    setUserEmoji,
     getRunState,
   };
 }

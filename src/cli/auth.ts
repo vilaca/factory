@@ -19,6 +19,11 @@ export interface StartupCredentials {
   accountId?: string;
   authMode?: GoogleAiStudioAuthMode;
   githubToken?: string;
+  /** Id of the multi-key-store entry the token came from. Undefined when
+   *  the token came from CLI override / env var / a non-store auth flow
+   *  (Copilot, Google AI Studio OAuth). Carried so the agent loop can stamp
+   *  per-key usage stats from the very first turn. */
+  keyId?: string;
 }
 
 export interface AuthResult {
@@ -30,6 +35,9 @@ export interface AuthResult {
   /** Optional label captured at prompt time. Carried to `addKey` when
    *  `shouldSave` is true. Phase 1 always leaves this unset. */
   keyLabel?: string;
+  /** Id of the multi-key-store entry the token came from. Undefined when
+   *  no stored key matched (CLI/env/new prompt that hasn't been saved yet). */
+  keyId?: string;
 }
 
 function resolveGoogleAiStudioAuthMode(config: Config, cliToken?: string): GoogleAiStudioAuthMode | undefined {
@@ -75,6 +83,8 @@ export function resolveCredentialsFor(
         for (const envVar of descriptor.envVars ?? []) {
           const fromEnv = process.env[envVar];
           if (fromEnv) {
+            // Env wins over the stored token, so usage stats can't be
+            // attributed to the stored key — leave keyId unset.
             return {
               token: fromEnv,
               accountId: descriptor.needsAccountId
@@ -86,6 +96,7 @@ export function resolveCredentialsFor(
       }
       return {
         token: key.token,
+        keyId: key.id,
         accountId: descriptor.needsAccountId
           ? key.extras?.accountId ?? config.workersAiAccountId
           : undefined,
@@ -173,6 +184,9 @@ async function ensureSimplePromptAuth(
       provider: descriptor.name, category: 'auth', action: 'authenticate', outcome: 'success',
       detail: cliToken ? 'using token from --token' : 'using configured API key',
     });
+    // existing.keyId is set when the token came from the multi-key store —
+    // spreading it through to AuthResult lets the agent loop attribute the
+    // first turn's success/failure back to the right entry.
     return { ...existing, shouldSave: false };
   }
 
@@ -352,9 +366,9 @@ export async function saveCredentialsAfterModelDiscovery(
   descriptor: ProviderDescriptor,
   auth: AuthResult,
   modelsAvailable: boolean,
-): Promise<void> {
-  if (!auth.shouldSave) return;
-  if (!descriptor.configTokenKey) return;
+): Promise<string | undefined> {
+  if (!auth.shouldSave) return undefined;
+  if (!descriptor.configTokenKey) return undefined;
 
   const credentialsLabel = descriptor.needsAccountId ? 'credentials' : 'API key';
   const successDetail = descriptor.needsAccountId
@@ -370,21 +384,23 @@ export async function saveCredentialsAfterModelDiscovery(
       outcome: 'skipped', detail: skipDetail,
     });
     console.log(chalk.dim(`  ${noModelsMessageFor(descriptor)}`));
-    return;
+    return undefined;
   }
 
   // For simple-prompt providers we now write into the multi-key store so
   // adding a second key later doesn't overwrite the first. Copilot and
   // Google AI Studio keep their existing single-credential persistence —
   // their auth flows aren't multi-key-aware (device flow / OAuth).
+  let savedKeyId: string | undefined;
   if (descriptor.authFlow === 'simple-prompt' && auth.token) {
     const extras = descriptor.needsAccountId && auth.accountId
       ? { accountId: auth.accountId }
       : undefined;
-    await addKey(descriptor.name, auth.token, {
+    const saved = await addKey(descriptor.name, auth.token, {
       label: auth.keyLabel,
       extras,
     });
+    savedKeyId = saved.id;
   } else {
     const update: Record<string, unknown> = { [descriptor.configTokenKey]: auth.token };
     if (descriptor.needsAccountId && auth.accountId) {
@@ -400,4 +416,5 @@ export async function saveCredentialsAfterModelDiscovery(
     outcome: 'success', detail: successDetail,
   });
   console.log(chalk.dim(`  ${saveSuccessMessageFor(descriptor, getGlobalConfigDir())}`));
+  return savedKeyId;
 }

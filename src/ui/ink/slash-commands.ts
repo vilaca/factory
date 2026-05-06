@@ -228,6 +228,14 @@ export async function dispatchSlashCommand(
         : 'Full tool output disabled — back to preview.');
       return true;
     }
+    // Easter egg — intentionally omitted from /help. `/emoji` toggles emoji
+    // mode; `/emoji <glyph>` overrides the user prompt icon. Do not document.
+    case '/emoji': {
+      const trimmed = arg.trim();
+      if (trimmed) agent.setUserEmoji(trimmed);
+      else agent.toggleEmojiMode();
+      return true;
+    }
   }
 
   agent.addNotice('info', `Unknown command: ${cmd}. Type /help for available commands.`);

@@ -149,6 +149,11 @@ async function main(): Promise<void> {
   const descriptor = descriptorByAlias(providerName) ?? (DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[providerName];
   let provider: Provider;
   let availableModels: string[] | null = descriptor ? probedModels.get(descriptor.name) ?? null : null;
+  // The keyId of the multi-key-store entry the launch provider was built
+  // with. Threaded through to RunRefs.activeKeyId so per-key stats land
+  // under the right entry from turn 1; left undefined for non-store
+  // credentials (CLI override, env var, OAuth, device flow).
+  let activeKeyId: string | undefined;
 
   try {
     dbg(`ensureAuth flow=${descriptor?.authFlow ?? 'no-descriptor'}${resumeKeyId ? ` keyId=${resumeKeyId}` : ''}`);
@@ -172,8 +177,12 @@ async function main(): Promise<void> {
     }
     dbg(`availableModels.length=${availableModels?.length ?? 0}`);
 
+    activeKeyId = auth.keyId;
     if (descriptor) {
-      await saveCredentialsAfterModelDiscovery(descriptor, auth, availableModels.length > 0);
+      const savedKeyId = await saveCredentialsAfterModelDiscovery(descriptor, auth, availableModels.length > 0);
+      // First-time-save path: addKey just minted a fresh id. Adopt it so
+      // the first turn's stats land under the right key.
+      if (savedKeyId) activeKeyId = savedKeyId;
     }
   } catch (err: any) {
     dbg(`startup error: ${err.message}`);
@@ -285,6 +294,7 @@ async function main(): Promise<void> {
     model,
     systemPrompt,
     provider,
+    ...(activeKeyId ? { keyId: activeKeyId } : {}),
     agentConfig: mergedAgentConfig,
     autoAllowTools: config.permissions?.allowAll,
     useTextToolFallback,
