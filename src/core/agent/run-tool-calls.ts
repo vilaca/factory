@@ -6,6 +6,7 @@ import type { Conversation } from '../conversation.js';
 import type { PermissionManager } from '../../permissions.js';
 import { formatToolResultMessage } from '../tool-result-format.js';
 import { correctToolCall } from '../tool-call-corrector.js';
+import { selectWeakTier } from './weak-tier.js';
 import type { RecoveryState } from './recovery-state.js';
 import type { BashDedupTracker } from './bash-dedup.js';
 import { FileCache } from './file-cache.js';
@@ -122,6 +123,12 @@ export async function* runToolCalls(
       recovery.correctionsUsedThisRun++;
 
       const fileContent = await readFileForCorrector(toolCall);
+      // Tier-route the corrector: a malformed-call fix is a structural
+      // edit, not a reasoning task. Run it on the same provider's
+      // weak-tier model when one's mapped — same family, lower cost,
+      // no quality risk to the user's primary turn (which always uses
+      // ctx.model below). Falls back to ctx.model when no mapping exists.
+      const correctorModel = selectWeakTier(ctx.provider, ctx.model) ?? ctx.model;
       const correction = await correctToolCall(
         {
           originalCall: toolCall,
@@ -130,7 +137,7 @@ export async function* runToolCalls(
           fileContent,
         },
         ctx.provider,
-        ctx.model,
+        correctorModel,
         ctx.toolRegistry,
         ctx.signal,
       );

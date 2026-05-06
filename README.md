@@ -380,6 +380,8 @@ Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel /
 
 **Compaction.** Triggers at `agent.compactionThreshold` (default 75% of the model's context window). Keeps a token-weighted recency window — `agent.recencyTokens` (default 4000) sets the soft budget; `agent.recencyWindow` (default 6) is the hard floor. The summary call routes to a weak-tier model on the same provider when one is mapped (Anthropic → Haiku, OpenRouter → Haiku, Cerebras → 8B, Groq → 8B, Gemini → Flash, Mistral → Ministral) — strong-tier prompt cost for summaries was overkill. The synthetic assistant ack that opens the post-compaction conversation carries `cacheBoundary: true` so explicit-cache providers can re-anchor on the new prefix instead of starting cold.
 
+**Weak-tier routing for internal sub-calls.** The compaction summary and the LLM tool-call corrector both pay the lower tier when the active provider has a weak-tier mapping. **The user's primary turn is never routed through this** — strong-tier stays strong-tier for everything you actually see in chat. Adding a new provider to the map is a single line in `src/core/agent/weak-tier.ts`.
+
 For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
 ### Session Logs
