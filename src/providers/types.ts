@@ -72,6 +72,11 @@ export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /** Hint to providers that support explicit cache markers (Anthropic,
+   * OpenRouter→Anthropic) to cache the tool definitions. Vendor-neutral:
+   * other providers ignore. Pairs with `cacheBoundary` on ChatMessage so
+   * the agent layer has a single decision point for cache placement. */
+  cacheTools?: boolean;
 }
 
 export interface Provider {

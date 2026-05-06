@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { AnthropicProvider, splitMessagesForAnthropic } from '../../src/providers/anthropic.js';
+import {
+  AnthropicProvider,
+  buildAnthropicTools,
+  splitMessagesForAnthropic,
+} from '../../src/providers/anthropic.js';
 import type { ChatMessage } from '../../src/providers/types.js';
 
 describe('splitMessagesForAnthropic', () => {
@@ -101,6 +105,96 @@ describe('splitMessagesForAnthropic', () => {
       () => splitMessagesForAnthropic(messages),
       /tool message has no tool_call_id/,
     );
+  });
+});
+
+describe('splitMessagesForAnthropic — cache markers', () => {
+  it('returns system as a string when no cacheBoundary is set', () => {
+    const { system } = splitMessagesForAnthropic([
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'hi' },
+    ]);
+    assert.strictEqual(system, 'sys');
+  });
+
+  it('emits system as an array with cache_control when cacheBoundary is set', () => {
+    const { system } = splitMessagesForAnthropic([
+      { role: 'system', content: 'sys', cacheBoundary: true },
+      { role: 'user', content: 'hi' },
+    ]);
+    assert.deepStrictEqual(system, [
+      { type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  it('attaches cache_control to the last block of an assistant tool_call message', () => {
+    const { msgs } = splitMessagesForAnthropic([
+      { role: 'user', content: 'go' },
+      {
+        role: 'assistant',
+        content: 'doing it',
+        cacheBoundary: true,
+        tool_calls: [
+          { id: 'toolu_a', function: { name: 'X', arguments: {} } },
+          { id: 'toolu_b', function: { name: 'Y', arguments: {} } },
+        ],
+      },
+    ]);
+    const asst = msgs[1];
+    assert.strictEqual(asst.role, 'assistant');
+    assert.strictEqual(asst.content[asst.content.length - 1].cache_control.type, 'ephemeral');
+    assert.strictEqual(asst.content[0].cache_control, undefined);
+  });
+
+  it('converts plain text assistant content to a block array when cacheBoundary is set', () => {
+    const { msgs } = splitMessagesForAnthropic([
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply', cacheBoundary: true },
+      { role: 'user', content: 'second' },
+    ]);
+    assert.deepStrictEqual(msgs[1].content, [
+      { type: 'text', text: 'reply', cache_control: { type: 'ephemeral' } },
+    ]);
+    // The other plain-text user messages stay as strings.
+    assert.strictEqual(msgs[0].content, 'first');
+    assert.strictEqual(msgs[2].content, 'second');
+  });
+
+  it('emits no cache_control fields when no cacheBoundary is set anywhere', () => {
+    const { system, msgs } = splitMessagesForAnthropic([
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'ok' },
+    ]);
+    assert.strictEqual(system, 'sys');
+    for (const m of msgs) {
+      assert.strictEqual(JSON.stringify(m).includes('cache_control'), false);
+    }
+  });
+});
+
+describe('buildAnthropicTools', () => {
+  const tools = [
+    { type: 'function' as const, function: { name: 'A', description: 'a', parameters: {} } },
+    { type: 'function' as const, function: { name: 'B', description: 'b', parameters: {} } },
+  ];
+
+  it('returns tools without cache_control when cacheLast is false', () => {
+    const out = buildAnthropicTools(tools, false);
+    assert.strictEqual(out.length, 2);
+    for (const t of out) {
+      assert.strictEqual(t.cache_control, undefined);
+    }
+  });
+
+  it('attaches cache_control: ephemeral to the last tool when cacheLast is true', () => {
+    const out = buildAnthropicTools(tools, true);
+    assert.strictEqual(out[0].cache_control, undefined);
+    assert.deepStrictEqual(out[1].cache_control, { type: 'ephemeral' });
+  });
+
+  it('returns an empty array when no tools are passed', () => {
+    assert.deepStrictEqual(buildAnthropicTools([], true), []);
   });
 });
 
