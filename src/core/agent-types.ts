@@ -40,6 +40,7 @@ export type AgentEvent =
   | { type: 'bash-dedup-nudge'; recentCommands: string[] }
   | { type: 'hook-veto'; event: string; toolName: string; errorMessage?: string }
   | { type: 'hook-error'; event: string; error: string }
+  | { type: 'hook-fired'; event: string; hookPath: string; notice?: string }
   | { type: 'read-cache-hit'; path: string; afterCompaction: boolean }
   | { type: 'repetition-detected'; line: string; streak: number }
   | { type: 'empty-turn-warning'; completionTokens: number }

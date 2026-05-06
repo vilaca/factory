@@ -240,6 +240,12 @@ export function handleAgentEvent(
       deps.addNotice('warn', `⚠ Hook ${event.event}: ${event.error}`);
       break;
     }
+    case 'hook-fired': {
+      const name = event.hookPath.split('/').pop() ?? event.hookPath;
+      const suffix = event.notice ? ` — ${event.notice}` : '';
+      deps.addNotice('info', `↪ ${event.event} hook ran (${name})${suffix}`);
+      break;
+    }
     case 'compaction-start': {
       deps.setCompacting({ aggressive: event.aggressive });
       deps.setThinking(false);

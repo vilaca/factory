@@ -98,6 +98,14 @@ export async function* runToolCalls(
           ctx.onHookError?.('PreToolUse', e);
           yield { type: 'hook-error', event: 'PreToolUse', error: e };
         }
+        for (const hookPath of result.firedScripts) {
+          yield {
+            type: 'hook-fired',
+            event: 'PreToolUse',
+            hookPath,
+            ...(result.notice ? { notice: result.notice } : {}),
+          };
+        }
         if (result.cancel) {
           const reason = result.errorMessage ?? 'Tool call denied by PreToolUse hook.';
           const message = `Tool call "${fnName}" was denied by a PreToolUse hook: ${reason}`;
@@ -166,6 +174,14 @@ export async function* runToolCalls(
         for (const e of result.errors) {
           ctx.onHookError?.('PostToolUse', e);
           yield { type: 'hook-error', event: 'PostToolUse', error: e };
+        }
+        for (const hookPath of result.firedScripts) {
+          yield {
+            type: 'hook-fired',
+            event: 'PostToolUse',
+            hookPath,
+            ...(result.notice ? { notice: result.notice } : {}),
+          };
         }
       } catch (err: any) {
         ctx.onHookError?.('PostToolUse', err?.message ?? String(err));

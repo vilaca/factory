@@ -5,6 +5,7 @@ import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../core/con
 import { dispatchRotate } from './slash/rotate.js';
 import { dispatchKeys } from './slash/keys.js';
 import { dispatchStats } from './slash/stats.js';
+import { dispatchHooks } from './slash/hooks.js';
 
 export interface SlashCommandContext {
   agent: AgentLoopApi;
@@ -217,6 +218,9 @@ export async function dispatchSlashCommand(
     case '/stats':
       await dispatchStats(arg, agent);
       return true;
+    case '/hooks':
+      await dispatchHooks(agent, refs.current.cwd);
+      return true;
     case '/full': {
       if (!ctx.toggleFullOutput) {
         agent.addNotice('warn', 'Full-output toggle not available in this context.');
@@ -261,6 +265,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
     ['/keys [<provider>]', 'Show saved keys with usage / rate-limit / cache-hit counters'],
     ['/stats', 'Cache hit rate, compaction events, largest tool results for the current session'],
+    ['/hooks', 'List discovered hook scripts (project and global)'],
     ['/full', 'Toggle full vs preview tool output (going forward)'],
     ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],
