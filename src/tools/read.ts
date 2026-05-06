@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { assertPathAllowed, PathDenied } from '../security/paths.js';
+import { getPathPolicy } from '../security/policy-state.js';
 
 const definition: ToolDefinition = {
   type: 'function',
@@ -45,21 +47,19 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     return { success: false, output: 'file_path is required' };
   }
 
-  // TODO(security): path.resolve() does not jail to a project root, and
-  // fs operations follow symlinks. Same pattern in write.ts, edit.ts,
-  // glob.ts. To harden for untrusted models, add an opt-in jail:
-  //   1. Configurable allowed-roots list (cwd by default).
-  //   2. Resolve via fs.realpath() to collapse symlinks, then verify the
-  //      result startsWith() one of the allowed roots + path.sep.
-  //   3. Reject paths containing '..' segments before resolution as a
-  //      cheap pre-check (defense in depth, not a substitute for #2).
-  //   4. Apply uniformly across Read/Write/Edit/Glob/Grep — partial
-  //      coverage is worse than none because it implies safety.
-  // Detection (in addition to enforcement): log resolved paths that
-  // resolve outside the allowed roots and surface them to the user even
-  // when the call is permitted, so suspicious traversal attempts are
-  // visible in the session log.
-  const resolved = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
+  // Resolve relative paths against the per-tab cwd first; assertPathAllowed
+  // then enforces the secret-path deny list (~/.ssh, ~/.aws, ~/.factory,
+  // /etc/shadow, etc.) — see src/security/paths.ts. The remaining gap
+  // (positive jail to allowed roots, applied uniformly across Glob/Grep)
+  // is tracked separately.
+  const absPath = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
+  let resolved: string;
+  try {
+    resolved = await assertPathAllowed(absPath, getPathPolicy());
+  } catch (err) {
+    if (err instanceof PathDenied) return { success: false, output: err.message };
+    throw err;
+  }
 
   try {
     const stat = await fs.stat(resolved);
@@ -122,6 +122,20 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     return { success: false, output: `Error reading ${resolved}: ${err.message}` };
   }
 }
+
+// TODO(security): positive path jail.
+// The path-policy module hard-denies known secret paths but does not
+// constrain reads to a project root. To harden for untrusted models:
+//   1. Configurable allowed-roots list (cwd by default).
+//   2. Resolve via fs.realpath() to collapse symlinks, then verify the
+//      result startsWith() one of the allowed roots + path.sep.
+//   3. Reject paths containing '..' segments before resolution as a
+//      cheap pre-check (defense in depth, not a substitute for #2).
+//   4. Apply uniformly across Read/Write/Edit/Glob/Grep — partial
+//      coverage is worse than none because it implies safety.
+// Detection (in addition to enforcement): log resolved paths outside
+// the allowed roots even when permitted, so traversal attempts are
+// visible in the session log.
 
 export const readTool: ToolHandler = {
   name: 'Read',

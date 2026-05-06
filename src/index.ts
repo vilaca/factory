@@ -6,6 +6,7 @@ import type { ProviderDescriptor, StartupProviderName } from './providers/descri
 import { DESCRIPTORS, DESCRIPTOR_LIST, descriptorByAlias } from './providers/descriptors.js';
 import { createProvider } from './providers/registry.js';
 import { loadConfig } from './core/config.js';
+import { setEnvPolicy, setPathPolicy } from './security/policy-state.js';
 import { McpManager } from './mcp/client.js';
 import { defaultRegistry } from './tools/index.js';
 import { runHeadless } from './ui/headless.js';
@@ -106,6 +107,12 @@ async function main(): Promise<void> {
       }
     }
   }
+
+  // Apply security config to process-wide policy state. Tools read these
+  // singletons because ToolHandler.execute(args) has no context parameter
+  // — see src/security/policy-state.ts for rationale.
+  setEnvPolicy(config.security?.bashEnv ?? {});
+  setPathPolicy(config.security?.paths ?? {});
 
   const lastSession = await getLastSessionSelection().catch(() => null);
 
@@ -344,6 +351,7 @@ async function main(): Promise<void> {
     ...(activeKeyId ? { keyId: activeKeyId } : {}),
     agentConfig: mergedAgentConfig,
     autoAllowTools: config.permissions?.allowAll,
+    bashRules: config.permissions?.bashRules,
     useTextToolFallback,
     nativeToolSupport: validation.mode === 'native',
     enableSessionLog: !cliArgs.noLog,

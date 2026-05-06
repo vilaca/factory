@@ -83,6 +83,32 @@ export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
 
 export interface PermissionConfig {
   allowAll?: string[];
+  /** Ordered list of Bash command patterns. First match wins. Patterns
+   * are simple shell-style globs (`*`, `?`) matched against the raw
+   * command string. Cannot override built-in forbidden patterns. */
+  bashRules?: BashRuleConfig[];
+}
+
+export interface BashRuleConfig {
+  pattern: string;
+  decision: 'allow' | 'deny' | 'prompt';
+  note?: string;
+}
+
+export interface SecurityConfig {
+  /** Env-var policy for the Bash subprocess. Deny-by-default; these
+   * extend the small built-in allowlist. */
+  bashEnv?: {
+    allow?: string[];
+    allowPrefixes?: string[];
+    deny?: string[];
+    denyPrefixes?: string[];
+  };
+  /** Path policy for Read/Write/Edit. User entries extend the built-in
+   * deny list of secret paths but cannot remove from it. */
+  paths?: {
+    deny?: string[];
+  };
 }
 
 /**
@@ -141,5 +167,6 @@ export interface Config {
   keys?: ConfigKeys;
   agent?: AgentConfig;
   permissions?: PermissionConfig;
+  security?: SecurityConfig;
   mcp?: McpConfig;
 }
