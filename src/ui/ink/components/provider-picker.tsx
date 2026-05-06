@@ -569,7 +569,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
             <Text dimColor>{'  ─'}</Text>
             {(() => {
               const sel = recentIdx === lastIdx;
-              const label = ' Pick a different provider ';
+              const label = ' Pick a different provider/model ';
               return <Text>{sel ? chalk.inverse(label) : `  ${label.trim()}`}</Text>;
             })()}
           </Box>
