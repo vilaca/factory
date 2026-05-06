@@ -13,22 +13,42 @@ export function getGitStatusSnippet(dirty: boolean | null): string {
   return `## Git\n- Status: ${dirty ? 'dirty' : 'clean'}`;
 }
 
+/**
+ * Per-session environment fact text injected as the conversation's first user
+ * message at session start (paired with a synthetic assistant ack). Lives
+ * outside the system prompt so the system prompt stays byte-stable across
+ * turns — providers that auto-cache the prefix (OpenAI / Cerebras / Groq /
+ * Mistral / OpenRouter / Vercel / OpenCode Zen / Copilot / Cohere /
+ * llama.cpp) see a hit from turn 2 onward, and Anthropic's explicit cache
+ * markers (Phase 2) anchor cleanly. cwd here mirrors what tools resolve
+ * relative paths against; if the user changes it mid-session via /cwd or a
+ * Bash `cd`, this message goes stale just as the old in-prompt copy did, but
+ * the model can always run `pwd` for ground truth.
+ */
+export function buildEnvironmentMessage(cwd: string): string {
+  const platform = os.platform();
+  const shell = process.env.SHELL ?? 'bash';
+  return `## Environment
+- Working directory: ${cwd}
+- Platform: ${platform}
+- Shell: ${shell}`;
+}
+
 export async function buildSystemPrompt(
   cwd: string,
   modelTier: ModelTier = 'strong',
 ): Promise<string> {
-  const platform = os.platform();
-  const shell = process.env.SHELL ?? 'bash';
   const projectInstructions = await loadProjectInstructions(cwd);
 
   const sections: string[] = [];
 
   sections.push(getBasePrompt(modelTier));
 
-  sections.push(`## Environment
-- Working directory: ${cwd}
-- Platform: ${platform}
-- Shell: ${shell}`);
+  // ## Environment used to live here. Moved to buildEnvironmentMessage()
+  // (an initial user message) so the system prompt is byte-stable across
+  // turns and providers can cache it. cwd is still consumed below via
+  // extractProjectFacts / loadProjectInstructions, but those are file-based
+  // and yield identical bytes within a session.
 
   const projectFacts = await extractProjectFacts(cwd);
   if (projectFacts) {

@@ -18,6 +18,7 @@ import { FileCache } from '../core/agent/file-cache.js';
 import { defaultRegistry } from '../tools/index.js';
 import { createSessionLogger, type SessionLogger } from '../core/session-log.js';
 import { getBuildInfo } from '../utils/build-info.js';
+import { buildEnvironmentMessage } from '../core/system-prompt.js';
 
 export interface HeadlessOptions {
   model: string;
@@ -85,6 +86,11 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   }
 
   const conversation = new Conversation(options.systemPrompt);
+  // Match the TUI seeding so the prefix shape is identical across modes —
+  // see buildEnvironmentMessage docs for why this lives outside the
+  // system prompt now.
+  conversation.addUser(buildEnvironmentMessage(process.cwd()));
+  conversation.addAssistant('Got it.');
   const permissions = new PermissionManager();
   for (const toolName of options.autoAllowTools ?? []) {
     permissions.allowAll(toolName);
