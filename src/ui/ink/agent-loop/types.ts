@@ -40,6 +40,11 @@ export interface RunRefs {
    * are stateless per call. */
   provider: Provider;
   model: string;
+  /** The (provider, model) the user is "homed" on for this tab. Captured at
+   *  session start and updated only by user-driven swaps (setProviderByName /
+   *  setModelByName). Tier-2 rotation does *not* touch this — that's how
+   *  `/rotate refresh` knows where to return. */
+  primary: { provider: string; model: string };
   useTextToolFallback: boolean;
   nativeToolSupport: boolean;
   planMode: boolean;
