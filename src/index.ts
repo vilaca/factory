@@ -407,6 +407,7 @@ async function main(): Promise<void> {
     useTextToolFallback,
     nativeToolSupport: validation.mode === 'native',
     enableSessionLog: !cliArgs.noLog,
+    strictLogging: cliArgs.strictLog,
     planMode: cliArgs.plan,
     enableCorrector: !cliArgs.noAutoCorrect,
     mcpInfo,

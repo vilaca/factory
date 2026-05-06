@@ -31,6 +31,10 @@ export interface HeadlessOptions {
   useTextToolFallback?: boolean;
   nativeToolSupport?: boolean;
   enableSessionLog?: boolean;
+  /** When true, session-log failures (init or first write) terminate the run
+   *  with a dedicated exit code. For audit-grade workloads where a missing
+   *  log is unacceptable. Off by default — logging stays best-effort. */
+  strictLogging?: boolean;
   planMode?: boolean;
   enableCorrector?: boolean;
   mcpInfo?: { servers: string[]; toolCount: number };
@@ -64,10 +68,21 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     process.exit(2);
   }
 
+  // Dedicated exit code for log failures so callers can distinguish "agent
+  // ran fine but log was unavailable" from generic errors (1).
+  const STRICT_LOG_EXIT = 6;
+
   let sessionLogger: SessionLogger | undefined;
   if (options.enableSessionLog !== false) {
     try {
-      sessionLogger = createSessionLogger();
+      sessionLogger = createSessionLogger({
+        onWriteError: options.strictLogging
+          ? () => {
+              // Stderr surface fired in session-log.ts; just escalate.
+              process.exit(STRICT_LOG_EXIT);
+            }
+          : undefined,
+      });
       const build = getBuildInfo();
       sessionLogger.logSessionStart({
         model: options.model,
@@ -86,10 +101,12 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       // Logger init may fail (e.g. ~/.factory/sessions not writable, disk
       // full). Surface it on stderr — a piped run that thinks it's logging
       // when it isn't is a worse outcome than a noisy stderr line. Don't
-      // abort: the run can still produce useful stdout, and the session log
-      // is observability, not a hard dependency.
+      // abort by default: the run can still produce useful stdout, and the
+      // session log is observability, not a hard dependency. Strict-log
+      // callers (--strict-log) escalate to a dedicated exit code instead.
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`factory: session log unavailable — ${msg}\n`);
+      if (options.strictLogging) process.exit(STRICT_LOG_EXIT);
       sessionLogger = undefined;
     }
   }

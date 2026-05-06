@@ -47,6 +47,7 @@ export interface SessionProps {
   useTextToolFallback?: boolean;
   nativeToolSupport?: boolean;
   enableSessionLog?: boolean;
+  strictLogging?: boolean;
   planMode?: boolean;
   enableCorrector?: boolean;
   mcpInfo?: { servers: string[]; toolCount: number };

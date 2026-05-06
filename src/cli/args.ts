@@ -7,6 +7,10 @@ interface CliArgs {
   token?: string;
   help?: boolean;
   noLog?: boolean;
+  /** Treat session-log failures as fatal — exit non-zero on log init failure
+   *  or first write failure. For workloads where logs are auditable artifacts
+   *  (CI, scripted runs) and silent loss is unacceptable. */
+  strictLog?: boolean;
   plan?: boolean;
   noAutoCorrect?: boolean;
   bashDedup?: boolean;
@@ -50,6 +54,8 @@ export function parseArgs(args: string[]): CliArgs {
       result.help = true;
     } else if (arg === '--no-log') {
       result.noLog = true;
+    } else if (arg === '--strict-log') {
+      result.strictLog = true;
     } else if (arg === '--plan') {
       result.plan = true;
     } else if (arg === '--no-auto-correct') {
@@ -121,6 +127,7 @@ export function printUsage(): void {
     '    --host <url>             Server host (default varies by provider)',
     '    --token, -t <token>      API token (HF_TOKEN, HUGGING_FACE_HUB_TOKEN, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, AI_GATEWAY_API_KEY, VERCEL_OIDC_TOKEN, OPENCODE_ZEN_API_KEY, OPENCODE_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, MISTRAL_API_KEY, CODESTRAL_API_KEY, CEREBRAS_API_KEY, GROQ_API_KEY, COHERE_API_KEY, CLOUDFLARE_API_TOKEN, GITHUB_COPILOT_API_KEY, or COPILOT_API_KEY env vars also work; Google AI Studio also supports OAuth via ADC)',
     '    --no-log                 Disable session logging to ~/.factory/sessions/',
+    '    --strict-log             Exit non-zero if session logging fails (init or first write)',
     '    --plan                   Start in plan mode (writes are queued for approval)',
     '    --no-auto-correct        Disable LLM tool-call corrector (on by default)',
     '    --bash-dedup             Enable Bash near-duplicate detector (off by default)',

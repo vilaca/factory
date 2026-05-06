@@ -13,13 +13,24 @@ import { buildEnvironmentMessage } from '../../../core/system-prompt.js';
 import type { ExperimentalFlags } from '../../../core/config-types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './types.js';
 
+// Dedicated exit code for log failures so callers can distinguish from
+// generic errors (1). Mirrors src/ui/headless.ts.
+const STRICT_LOG_EXIT = 6;
+
 export function startSessionLogger(
   opts: UseAgentLoopOptions,
   addNotice: (level: NoticeLevel, text: string) => void,
 ): SessionLogger | undefined {
   if (opts.enableSessionLog === false) return undefined;
   try {
-    const sessionLogger = createSessionLogger();
+    const sessionLogger = createSessionLogger({
+      onWriteError: opts.strictLogging
+        ? () => {
+            // Stderr surface fired in session-log.ts; just escalate.
+            process.exit(STRICT_LOG_EXIT);
+          }
+        : undefined,
+    });
     const build = getBuildInfo();
     sessionLogger.logSessionStart({
       model: opts.model,
@@ -35,7 +46,12 @@ export function startSessionLogger(
     });
     return sessionLogger;
   } catch (err) {
-    addNotice('warn', `(session logging disabled: ${(err as Error).message})`);
+    const msg = (err as Error).message;
+    addNotice('warn', `(session logging disabled: ${msg})`);
+    if (opts.strictLogging) {
+      process.stderr.write(`factory: session log unavailable — ${msg}\n`);
+      process.exit(STRICT_LOG_EXIT);
+    }
     return undefined;
   }
 }
