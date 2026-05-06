@@ -8,6 +8,7 @@ import {
   type SessionLogger,
 } from '../../../core/session-log.js';
 import { getBuildInfo } from '../../../utils/build-info.js';
+import { buildEnvironmentMessage } from '../../../core/system-prompt.js';
 import type { ExperimentalFlags } from '../../../core/config-types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './types.js';
 
@@ -52,6 +53,17 @@ export interface InitialRefsInput {
 export function createInitialRefs(input: InitialRefsInput): RunRefs {
   const { opts, sessionLogger, initialSystemPrompt } = input;
   const conversation = new Conversation(initialSystemPrompt);
+  // Each tab snapshots process.cwd() at session start; subsequent tabs
+  // inherit it, but each tab can diverge via `cd` in Bash or `/cwd`.
+  const cwd = process.cwd();
+  // Seed the conversation with environment facts as the first user message
+  // (paired with a synthetic assistant ack to maintain user/assistant
+  // alternation that Anthropic requires). The system prompt stays
+  // byte-stable across turns this way — auto-cache providers hit from turn
+  // 2 onward instead of paying full tokenization every time cwd or shell
+  // would have shifted in the prefix.
+  conversation.addUser(buildEnvironmentMessage(cwd));
+  conversation.addAssistant('Got it.');
   const permissions = new PermissionManager();
   if (opts.autoAllowTools) {
     for (const t of opts.autoAllowTools) permissions.allowAll(t);
@@ -96,9 +108,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     rotationPromptDeclined: false,
     gitBranch: opts.gitBranch,
     gitDirty: input.initialGitDirty,
-    // Each tab snapshots process.cwd() at session start; subsequent tabs
-    // inherit it, but each tab can diverge via `cd` in Bash or `/cwd`.
-    cwd: process.cwd(),
+    cwd,
     lastSubstantivePrompt: null,
     replayCounts: new Map(),
     tokenLimitReplayCounts: new Map(),
