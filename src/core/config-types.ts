@@ -8,6 +8,13 @@ export interface AgentConfig {
   /** Hard ceiling per turn. When set, the runtime aborts the agent run after
    * this many seconds. Default: unset (no timeout). */
   turnTimeoutSec?: number;
+  /** Hard ceiling per tool result, as approximate tokens (≈4 chars/token).
+   * Tool results larger than this are stored elided at insertion time —
+   * see Conversation.addToolResult. Default 6000. */
+  maxToolResultTokens?: number;
+  /** Tool results from turns older than this many turns are eligible for
+   * aging (see ContextManager.ageOldToolResults). Default 6. */
+  toolResultAgingTurns?: number;
   experimental?: ExperimentalFlags;
   /** Automatic rotation across saved keys (tier 1) and a chain of
    *  `(provider, model)` entries (tier 2) when the active selection

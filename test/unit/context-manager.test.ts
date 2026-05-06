@@ -164,3 +164,36 @@ describe('ContextManager.compact (aggressive)', () => {
     assert.strictEqual(result, null);
   });
 });
+
+describe('ContextManager.ageOldToolResults', () => {
+  it('drops the token estimate after aging old tool results', () => {
+    const conv = new Conversation('SYSTEM');
+    // 8 turns, each with a sizeable tool result. Aging the older 5 should
+    // shrink the estimate noticeably.
+    for (let i = 1; i <= 8; i++) {
+      conv.addUser(`prompt ${i}`);
+      conv.addAssistant('', [{ id: `c${i}`, function: { name: 'Read', arguments: {} } }]);
+      conv.addToolResult('A'.repeat(2000), `c${i}`, 'Read');
+      conv.addAssistant(`reply ${i}`);
+    }
+    const cm = new ContextManager(conv, capabilities, { toolResultAgingTurns: 3 });
+    cm.updateUsage(undefined);
+    const before = cm.getTokenEstimate();
+    const aged = cm.ageOldToolResults();
+    assert.strictEqual(aged, 5);
+    const after = cm.getTokenEstimate();
+    assert.ok(after < before, `expected token estimate to drop, got ${before} → ${after}`);
+  });
+
+  it('returns 0 and leaves estimate untouched when there are too few turns', () => {
+    const conv = new Conversation('SYSTEM');
+    conv.addUser('a');
+    conv.addAssistant('b');
+    const cm = new ContextManager(conv, capabilities, { toolResultAgingTurns: 6 });
+    cm.updateUsage(undefined);
+    const before = cm.getTokenEstimate();
+    const aged = cm.ageOldToolResults();
+    assert.strictEqual(aged, 0);
+    assert.strictEqual(cm.getTokenEstimate(), before);
+  });
+});

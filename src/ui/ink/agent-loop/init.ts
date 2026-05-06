@@ -52,7 +52,7 @@ export interface InitialRefsInput {
 
 export function createInitialRefs(input: InitialRefsInput): RunRefs {
   const { opts, sessionLogger, initialSystemPrompt } = input;
-  const conversation = new Conversation(initialSystemPrompt);
+  const conversation = new Conversation(initialSystemPrompt, opts.agentConfig?.maxToolResultTokens);
   // Each tab snapshots process.cwd() at session start; subsequent tabs
   // inherit it, but each tab can diverge via `cd` in Bash or `/cwd`.
   const cwd = process.cwd();
@@ -72,6 +72,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   const contextManager = new ContextManager(conversation, capabilities, {
     compactionThreshold: opts.agentConfig?.compactionThreshold,
     recencyWindow: opts.agentConfig?.recencyWindow,
+    toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
   });
 
   return {

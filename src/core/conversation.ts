@@ -1,9 +1,29 @@
 import type { ChatMessage, ToolCallMessage } from '../providers/types.js';
 
+/** Approximate char-to-token ratio used to enforce the per-message cap.
+ *  Char count is the cheapest available proxy; provider tokenizers vary
+ *  but ~4 chars/token holds for English text and code well enough for a
+ *  guardrail. */
+const CHARS_PER_TOKEN = 4;
+
+const DEFAULT_MAX_TOOL_RESULT_TOKENS = 6_000;
+
+/** Marker emitted in place of the original content when a tool result is
+ *  larger than the cap. Keep the shape stable — `ageOldToolResults`
+ *  produces the same template, and tooling that greps session JSONL for
+ *  elisions matches on this prefix. */
+export function elisionStub(toolName: string, byteLength: number): string {
+  const kb = Math.max(1, Math.round(byteLength / 1024));
+  return `[elided: tool=${toolName} size=${kb}kB — too large for context, ask again or narrow the call]`;
+}
+
 export class Conversation {
   private messages: ChatMessage[] = [];
 
-  constructor(private systemPrompt: string) {}
+  constructor(
+    private systemPrompt: string,
+    private maxToolResultTokens: number = DEFAULT_MAX_TOOL_RESULT_TOKENS,
+  ) {}
 
   getMessages(): ChatMessage[] {
     return [
@@ -32,8 +52,12 @@ export class Conversation {
     this.messages.push(msg);
   }
 
-  addToolResult(content: string, toolCallId?: string): void {
-    const msg: ChatMessage = { role: 'tool', content };
+  addToolResult(content: string, toolCallId?: string, toolName?: string): void {
+    const cap = this.maxToolResultTokens * CHARS_PER_TOKEN;
+    const finalContent = content.length > cap
+      ? elisionStub(toolName ?? '<tool>', content.length)
+      : content;
+    const msg: ChatMessage = { role: 'tool', content: finalContent };
     if (toolCallId) {
       msg.tool_call_id = toolCallId;
     }
@@ -90,6 +114,46 @@ export class Conversation {
     ];
 
     return { oldCount, newCount: this.messages.length };
+  }
+
+  /**
+   * Replace tool results from turns older than `turnsToKeep` with elision
+   * stubs. Counts user messages from the end as turn boundaries; the
+   * `turnsToKeep`-th most recent user message anchors the cut. Tool
+   * messages strictly before that index are aged. Preserves tool_call_id
+   * so the tool_use ↔ tool_result invariant Anthropic enforces stays
+   * intact. Already-elided messages are skipped (idempotent). Returns the
+   * number of messages that were rewritten.
+   */
+  ageOldToolResults(turnsToKeep: number): number {
+    if (turnsToKeep <= 0) return 0;
+    let userCount = 0;
+    let boundaryIdx = -1;
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'user') {
+        userCount++;
+        if (userCount === turnsToKeep) {
+          boundaryIdx = i;
+          break;
+        }
+      }
+    }
+    if (boundaryIdx <= 0) return 0;
+
+    let aged = 0;
+    for (let i = 0; i < boundaryIdx; i++) {
+      const m = this.messages[i];
+      if (m.role !== 'tool') continue;
+      if (m.content.startsWith('[elided:')) continue;
+      const replacement: ChatMessage = {
+        role: 'tool',
+        content: elisionStub('<tool>', m.content.length),
+      };
+      if (m.tool_call_id) replacement.tool_call_id = m.tool_call_id;
+      this.messages[i] = replacement;
+      aged++;
+    }
+    return aged;
   }
 
   clear(): void {

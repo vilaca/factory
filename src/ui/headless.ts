@@ -85,7 +85,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     }
   }
 
-  const conversation = new Conversation(options.systemPrompt);
+  const conversation = new Conversation(options.systemPrompt, options.agentConfig?.maxToolResultTokens);
   // Match the TUI seeding so the prefix shape is identical across modes —
   // see buildEnvironmentMessage docs for why this lives outside the
   // system prompt now.
@@ -100,6 +100,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   const contextManager = new ContextManager(conversation, capabilities, {
     compactionThreshold: options.agentConfig?.compactionThreshold,
     recencyWindow: options.agentConfig?.recencyWindow,
+    toolResultAgingTurns: options.agentConfig?.toolResultAgingTurns,
   });
 
   let exitCode = 0;

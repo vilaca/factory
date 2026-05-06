@@ -5,11 +5,15 @@ import { estimateMessagesTokens } from '../utils/tokens.js';
 export interface ContextConfig {
   compactionThreshold: number; // 0-1, fraction of context window (default 0.75)
   recencyWindow: number;       // messages to keep during compaction (default 6)
+  /** Tool results from turns older than this are eligible for aging via
+   * `ageOldToolResults`. Default 6. */
+  toolResultAgingTurns: number;
 }
 
 const DEFAULT_CONFIG: ContextConfig = {
   compactionThreshold: 0.75,
   recencyWindow: 6,
+  toolResultAgingTurns: 6,
 };
 
 // Aggressive mode used to drop the recency window entirely. That nuked the
@@ -34,7 +38,14 @@ export class ContextManager {
     config?: Partial<ContextConfig>,
   ) {
     this.contextWindow = capabilities.contextWindow;
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    // Build the merged config with explicit `??` fallbacks so callers passing
+    // `{ compactionThreshold: undefined }` don't clobber the default. (Object
+    // spread copies undefined values verbatim.)
+    this.config = {
+      compactionThreshold: config?.compactionThreshold ?? DEFAULT_CONFIG.compactionThreshold,
+      recencyWindow: config?.recencyWindow ?? DEFAULT_CONFIG.recencyWindow,
+      toolResultAgingTurns: config?.toolResultAgingTurns ?? DEFAULT_CONFIG.toolResultAgingTurns,
+    };
   }
 
   updateUsage(usage?: TokenUsage): void {
@@ -56,6 +67,19 @@ export class ContextManager {
 
   shouldCompact(): boolean {
     return this.getUsagePercent() > this.config.compactionThreshold;
+  }
+
+  /** Age tool results from turns older than the configured threshold. Runs
+   *  before compaction in the agent's pre-flight pass — cheaper than full
+   *  compaction and cache-friendly because only old messages mutate, so
+   *  the prefix of recent turns stays byte-stable for re-cache. Returns
+   *  the number of messages aged. */
+  ageOldToolResults(): number {
+    const aged = this.conversation.ageOldToolResults(this.config.toolResultAgingTurns);
+    if (aged > 0) {
+      this.tokenEstimate = estimateMessagesTokens(this.conversation.getMessages());
+    }
+    return aged;
   }
 
   async compact(

@@ -90,3 +90,111 @@ describe('Conversation', () => {
     ]);
   });
 });
+
+describe('Conversation — per-message tool result cap', () => {
+  it('elides tool result content larger than the threshold', () => {
+    // 1k token budget = ~4000 chars. Pass content beyond that.
+    const conv = new Conversation('sys', 1_000);
+    const big = 'A'.repeat(20_000);
+    conv.addUser('go');
+    conv.addAssistant('', [{ function: { name: 'Bash', arguments: {} } }]);
+    conv.addToolResult(big, 'call_1', 'Bash');
+
+    const msgs = conv.getMessages();
+    const tool = msgs[msgs.length - 1];
+    assert.strictEqual(tool.role, 'tool');
+    assert.match(tool.content, /^\[elided: tool=Bash size=\d+kB/);
+    assert.strictEqual(tool.tool_call_id, 'call_1');
+  });
+
+  it('passes through small tool results unchanged', () => {
+    const conv = new Conversation('sys', 1_000);
+    conv.addUser('go');
+    conv.addAssistant('', [{ function: { name: 'Read', arguments: {} } }]);
+    conv.addToolResult('small content', 'call_1', 'Read');
+
+    const msgs = conv.getMessages();
+    assert.strictEqual(msgs[msgs.length - 1].content, 'small content');
+  });
+
+  it('uses a generic <tool> label when no tool name is given', () => {
+    const conv = new Conversation('sys', 1_000);
+    const big = 'A'.repeat(20_000);
+    conv.addToolResult(big, 'call_1');
+    const tool = conv.getMessages()[1];
+    assert.match(tool.content, /tool=<tool>/);
+  });
+});
+
+describe('Conversation — ageOldToolResults', () => {
+  function buildTurn(conv: Conversation, label: string, withTool = true): void {
+    conv.addUser(`prompt-${label}`);
+    if (withTool) {
+      conv.addAssistant('', [{ function: { name: 'Read', arguments: {} } }]);
+      conv.addToolResult(`output for ${label}`, `call_${label}`, 'Read');
+      conv.addAssistant(`reply ${label}`);
+    } else {
+      conv.addAssistant(`reply ${label}`);
+    }
+  }
+
+  it('elides tool results from turns older than the threshold and preserves recent ones', () => {
+    const conv = new Conversation('sys');
+    for (let i = 1; i <= 8; i++) buildTurn(conv, String(i));
+
+    const aged = conv.ageOldToolResults(3);
+    // 8 turns, keep last 3 → ages tool results for turns 1..5 (5 total).
+    assert.strictEqual(aged, 5);
+
+    const msgs = conv.getMessages();
+    const oldTools = msgs.filter((m, idx) => {
+      if (m.role !== 'tool') return false;
+      // Find the user index that follows this tool message; if it's beyond
+      // the last 3 user messages, it's "old".
+      let usersAfter = 0;
+      for (let j = idx + 1; j < msgs.length; j++) {
+        if (msgs[j].role === 'user') usersAfter++;
+      }
+      return usersAfter >= 3;
+    });
+    for (const t of oldTools) {
+      assert.match(t.content, /^\[elided:/);
+    }
+
+    // Recent tool results untouched.
+    const lastTool = msgs.filter(m => m.role === 'tool').slice(-1)[0];
+    assert.strictEqual(lastTool.content, 'output for 8');
+  });
+
+  it('preserves tool_call_id when aging', () => {
+    const conv = new Conversation('sys');
+    for (let i = 1; i <= 8; i++) buildTurn(conv, String(i));
+
+    conv.ageOldToolResults(3);
+
+    const msgs = conv.getMessages();
+    for (const m of msgs) {
+      if (m.role === 'tool' && m.content.startsWith('[elided')) {
+        assert.ok(m.tool_call_id, 'tool_call_id should be preserved');
+      }
+    }
+  });
+
+  it('is idempotent (already-elided messages are not re-rewritten)', () => {
+    const conv = new Conversation('sys');
+    for (let i = 1; i <= 8; i++) buildTurn(conv, String(i));
+
+    const first = conv.ageOldToolResults(3);
+    const second = conv.ageOldToolResults(3);
+    assert.ok(first > 0);
+    assert.strictEqual(second, 0);
+  });
+
+  it('returns 0 when fewer turns exist than the threshold', () => {
+    const conv = new Conversation('sys');
+    buildTurn(conv, '1');
+    buildTurn(conv, '2');
+    const aged = conv.ageOldToolResults(6);
+    assert.strictEqual(aged, 0);
+  });
+});
