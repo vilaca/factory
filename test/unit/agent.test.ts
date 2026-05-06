@@ -708,6 +708,80 @@ describe('Agent loop', () => {
       }
     });
 
+    it('routes the corrector call to the weak-tier model on the same provider when available', async () => {
+      // Anthropic strong-tier (sonnet) + WEAK_TIER_MAP[anthropic] = haiku.
+      // The primary turn must keep using sonnet; only the corrector
+      // sub-call hops to haiku.
+      const permissions = new PermissionManager();
+      permissions.allowAll('Read');
+
+      const tmpFp = path.join(os.tmpdir(), `oc-tier-${crypto.randomUUID()}.txt`);
+      fs.writeFileSync(tmpFp, 'corrected content');
+
+      const primaryModelCalls: string[] = [];
+      const correctorModelCalls: string[] = [];
+      const provider: Provider = {
+        name: 'anthropic',
+        async listModels() { return ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001']; },
+        getCapabilities(model: string): ProviderCapabilities {
+          const isHaiku = model.includes('haiku');
+          return {
+            contextWindow: 200000,
+            maxOutputTokens: isHaiku ? 8192 : 16000,
+            toolSupport: 'native',
+            parallelToolCalls: true,
+            streaming: true,
+            tokenCounting: 'exact',
+            modelTier: isHaiku ? 'medium' : 'strong',
+          };
+        },
+        async *chat(model: string): AsyncGenerator<ChatChunk> {
+          primaryModelCalls.push(model);
+          // Two streaming chunks across the two primary turns.
+          if (primaryModelCalls.length === 1) {
+            yield { tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/definitely-does-not-exist-zzz' } } }] };
+            yield { done: true };
+          } else {
+            yield { content: 'Done.', done: true };
+          }
+        },
+        async chatNoStream(model: string) {
+          // Only the corrector goes through chatNoStream.
+          correctorModelCalls.push(model);
+          return { content: `{"name":"Read","arguments":{"file_path":${JSON.stringify(tmpFp)}}}`, done: true };
+        },
+      };
+
+      try {
+        const conversation = new Conversation('You are a test assistant.');
+        const events: AgentEvent[] = [];
+        const agent = runAgent('read it', {
+          provider,
+          model: 'claude-sonnet-4-6',
+          conversation,
+          permissions,
+          toolRegistry: defaultRegistry,
+          enableCorrector: true,
+        });
+        for await (const ev of agent) {
+          events.push(ev);
+          if (ev.type === 'permission-request') ev.respond('allow');
+        }
+
+        const corrected = findEvents(events, 'tool-call-corrected');
+        assert.strictEqual(corrected.length, 1, 'expected the corrector to fire');
+        // Primary stream calls used sonnet on every turn.
+        for (const m of primaryModelCalls) {
+          assert.strictEqual(m, 'claude-sonnet-4-6');
+        }
+        // Corrector chatNoStream went to haiku (the weak-tier mapping).
+        assert.strictEqual(correctorModelCalls.length, 1);
+        assert.strictEqual(correctorModelCalls[0], 'claude-haiku-4-5-20251001');
+      } finally {
+        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+      }
+    });
+
     it('records exactly one tool_result keyed to the original tool_use id after correction', async () => {
       // Anthropic rejects requests where a tool_result has no matching
       // tool_use in the previous assistant message. Before the fix, the
