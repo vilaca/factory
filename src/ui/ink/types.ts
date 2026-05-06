@@ -28,7 +28,13 @@ export interface AppState {
   model: string;
   sessionTurns: number;
   sessionToolCalls: number;
-  lastUsage?: { totalTokens?: number; completionTokens?: number };
+  lastUsage?: {
+    totalTokens?: number;
+    completionTokens?: number;
+    cachedPromptTokens?: number;
+    cacheCreationTokens?: number;
+    promptTokens?: number;
+  };
   contextWindow: number;
   permissionRequest?: {
     toolName: string;

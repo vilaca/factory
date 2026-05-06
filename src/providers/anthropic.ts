@@ -126,14 +126,16 @@ export class AnthropicProvider implements Provider {
       } else if (event.type === 'message_delta') {
         const delta = event as any;
         if (delta.usage) {
-          yield {
-            done: true,
-            usage: {
-              promptTokens: delta.usage.input_tokens ?? 0,
-              completionTokens: delta.usage.output_tokens ?? 0,
-              totalTokens: (delta.usage.input_tokens ?? 0) + (delta.usage.output_tokens ?? 0),
-            },
+          const cacheRead = delta.usage.cache_read_input_tokens;
+          const cacheCreation = delta.usage.cache_creation_input_tokens;
+          const usage: any = {
+            promptTokens: delta.usage.input_tokens ?? 0,
+            completionTokens: delta.usage.output_tokens ?? 0,
+            totalTokens: (delta.usage.input_tokens ?? 0) + (delta.usage.output_tokens ?? 0),
           };
+          if (typeof cacheRead === 'number') usage.cachedPromptTokens = cacheRead;
+          if (typeof cacheCreation === 'number') usage.cacheCreationTokens = cacheCreation;
+          yield { done: true, usage };
         }
       }
     }
@@ -181,15 +183,21 @@ export class AnthropicProvider implements Provider {
       }
     }
 
+    const respUsage = (response as any).usage ?? {};
+    const cacheRead = respUsage.cache_read_input_tokens;
+    const cacheCreation = respUsage.cache_creation_input_tokens;
+    const usage: any = {
+      promptTokens: respUsage.input_tokens ?? 0,
+      completionTokens: respUsage.output_tokens ?? 0,
+      totalTokens: (respUsage.input_tokens ?? 0) + (respUsage.output_tokens ?? 0),
+    };
+    if (typeof cacheRead === 'number') usage.cachedPromptTokens = cacheRead;
+    if (typeof cacheCreation === 'number') usage.cacheCreationTokens = cacheCreation;
     return {
       content: content || undefined,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       done: true,
-      usage: {
-        promptTokens: (response as any).usage?.input_tokens ?? 0,
-        completionTokens: (response as any).usage?.output_tokens ?? 0,
-        totalTokens: ((response as any).usage?.input_tokens ?? 0) + ((response as any).usage?.output_tokens ?? 0),
-      },
+      usage,
     };
   }
 

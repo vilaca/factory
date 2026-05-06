@@ -18,6 +18,26 @@ function relativeAge(ts: string | undefined): string {
   return `${day}d ago`;
 }
 
+/** Cache hit rate as a 0-100 integer percent, or null if no input tokens
+ *  have been recorded yet. */
+function cacheHitRate(s: { cachedInputTokens?: number; uncachedInputTokens?: number } | undefined): number | null {
+  if (!s) return null;
+  const cached = s.cachedInputTokens ?? 0;
+  const uncached = s.uncachedInputTokens ?? 0;
+  const total = cached + uncached;
+  if (total === 0) return null;
+  return Math.round((cached / total) * 100);
+}
+
+/** Anthropic's default cache TTL is 5 minutes. A `lastCacheReadAt` newer
+ *  than that means the key is "warm" — the next turn is likely to hit. */
+const CACHE_WARM_TTL_MS = 5 * 60 * 1000;
+function isWarm(ts: string | undefined): boolean {
+  if (!ts) return false;
+  const ms = Date.now() - new Date(ts).getTime();
+  return Number.isFinite(ms) && ms >= 0 && ms < CACHE_WARM_TTL_MS;
+}
+
 export async function dispatchKeys(arg: string, agent: AgentLoopApi): Promise<void> {
   const refs = agent.refs.current;
   if (!refs) return;
@@ -48,9 +68,11 @@ export async function dispatchKeys(arg: string, agent: AgentLoopApi): Promise<vo
     const usagePart = okCount === 0 && warnCount === 0
       ? 'never used'
       : `${okCount} ok / ${warnCount} ⚠`;
+    const hit = cacheHitRate(s);
+    const cachePart = hit === null ? '' : `cache: ${hit}%${isWarm(s?.lastCacheReadAt) ? ' 🔥' : ''}`;
     const lastOk = s?.lastSuccessAt ? `last ok: ${relativeAge(s.lastSuccessAt)}` : '';
     const lastFail = s?.lastFailureAt ? `last ⚠: ${relativeAge(s.lastFailureAt)}` : '';
-    const tail = [lastOk, lastFail].filter(Boolean).join('  ');
+    const tail = [cachePart, lastOk, lastFail].filter(Boolean).join('  ');
     const text = `  ${labelPart.padEnd(40)}  ${usagePart.padEnd(18)}${tail ? '  ' + tail : ''}`;
     lines.push({ level: warnCount > 0 ? 'warn' : 'info', text });
   }

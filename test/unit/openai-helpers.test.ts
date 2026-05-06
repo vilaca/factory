@@ -124,6 +124,28 @@ describe('extractUsage', () => {
       promptTokens: 5, completionTokens: 0, totalTokens: 0,
     });
   });
+
+  it('extracts cached_tokens from prompt_tokens_details', () => {
+    const usage = extractUsage({
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        total_tokens: 120,
+        prompt_tokens_details: { cached_tokens: 80 },
+      },
+    });
+    assert.deepStrictEqual(usage, {
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+      cachedPromptTokens: 80,
+    });
+  });
+
+  it('omits cachedPromptTokens when prompt_tokens_details is absent', () => {
+    const usage = extractUsage({ usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } });
+    assert.strictEqual((usage as any).cachedPromptTokens, undefined);
+  });
 });
 
 describe('formatMessage', () => {

@@ -1,6 +1,10 @@
 import type { AgentEvent } from '../../../core/agent-types.js';
 import type { AgentLoopDeps } from './types.js';
-import { recordFailure as recordKeyFailure, recordSuccess as recordKeySuccess } from '../../../core/key-stats.js';
+import {
+  recordFailure as recordKeyFailure,
+  recordSuccess as recordKeySuccess,
+  recordTokenUsage as recordKeyTokenUsage,
+} from '../../../core/key-stats.js';
 
 export interface StreamingState {
   getStreamingBuffer: () => string;
@@ -266,6 +270,9 @@ export function handleAgentEvent(
         const refs = deps.refs.current;
         if (refs?.activeKeyId) {
           void recordKeySuccess(refs.provider.name, refs.activeKeyId);
+          if (event.usage) {
+            void recordKeyTokenUsage(refs.provider.name, refs.activeKeyId, event.usage);
+          }
         }
       }
       break;

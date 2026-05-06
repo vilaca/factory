@@ -7,6 +7,10 @@ export interface ChatMessage {
   content: string;
   tool_calls?: ToolCallMessage[];
   tool_call_id?: string;
+  /** Hint to providers that this message is the last one in a stable prefix
+   * worth caching. Vendor-neutral: providers that support explicit cache
+   * markers (Anthropic) translate to their native blocks; others ignore. */
+  cacheBoundary?: boolean;
 }
 
 export interface ToolCallMessage {
@@ -21,6 +25,12 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** Input tokens served from the provider's prompt cache. Optional —
+   * providers that don't surface a cache split leave this undefined. */
+  cachedPromptTokens?: number;
+  /** Input tokens written into the cache on this turn (Anthropic-style
+   * explicit caching). Optional. */
+  cacheCreationTokens?: number;
 }
 
 export interface ChatChunk {

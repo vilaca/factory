@@ -15,7 +15,15 @@ function buildSequencedProvider(name: string, plan: Array<Error | ChatChunk[]>):
   return {
     name,
     listModels: async () => [],
-    getCapabilities: (): ProviderCapabilities => ({ contextWindow: 8192, modelTier: 'medium' }),
+    getCapabilities: (): ProviderCapabilities => ({
+      contextWindow: 8192,
+      maxOutputTokens: 4096,
+      toolSupport: 'native',
+      parallelToolCalls: false,
+      streaming: true,
+      tokenCounting: 'estimated',
+      modelTier: 'medium',
+    }),
     chat: async function* (_model, _messages, _tools, _opts) {
       const step = plan[i++];
       if (step instanceof Error) throw step;
@@ -298,7 +306,10 @@ describe('callModel rotation (tier 1)', () => {
     const replacement = buildSequencedProvider('groq', [
       [{ content: 'prompted reply', usage: undefined }],
     ]);
-    let promptCalledWith: { provider: string; model: string; reason: string } | null = null;
+    // Wrapper object: TS narrows `let x: T | null = null` back to `null`
+    // because closure assignments aren't tracked by control-flow analysis.
+    // Object-property access stays at the declared type, so this works.
+    const captured: { value: { provider: string; model: string; reason: string } | null } = { value: null };
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
@@ -308,7 +319,7 @@ describe('callModel rotation (tier 1)', () => {
       loadKeysForProvider: async () => [key('g', 'tok-g')],
       withTuple: () => replacement,
       promptForFallback: async (ctx) => {
-        promptCalledWith = ctx;
+        captured.value = ctx;
         return { provider: 'groq', model: 'llama-3.3-70b' };
       },
     };
@@ -317,10 +328,10 @@ describe('callModel rotation (tier 1)', () => {
       callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
     );
 
-    assert.ok(promptCalledWith);
-    assert.strictEqual(promptCalledWith!.provider, 'anthropic');
-    assert.strictEqual(promptCalledWith!.model, 'claude-sonnet');
-    assert.strictEqual(promptCalledWith!.reason, 'rate-limit');
+    assert.ok(captured.value);
+    assert.strictEqual(captured.value.provider, 'anthropic');
+    assert.strictEqual(captured.value.model, 'claude-sonnet');
+    assert.strictEqual(captured.value.reason, 'rate-limit');
     const tup = events.find(e => e.type === 'tuple-rotation');
     assert.ok(tup);
     assert.strictEqual(tup.type === 'tuple-rotation' && tup.to.provider, 'groq');

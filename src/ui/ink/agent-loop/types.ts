@@ -193,7 +193,13 @@ export interface AgentLoopDeps {
   setCompacting(c: { aggressive: boolean } | null): void;
   setSessionTurns(updater: (n: number) => number): void;
   setSessionToolCalls(updater: (n: number) => number): void;
-  setLastUsage(u: { totalTokens?: number } | undefined): void;
+  setLastUsage(u: {
+    totalTokens?: number;
+    completionTokens?: number;
+    cachedPromptTokens?: number;
+    cacheCreationTokens?: number;
+    promptTokens?: number;
+  } | undefined): void;
   setPermissionRequest(r: PermissionRequestState | undefined): void;
   setPendingToolCall(v: ToolCallSummary | null): void;
   setPlannedCalls(updater: (prev: ToolCallSummary[]) => ToolCallSummary[]): void;

@@ -53,7 +53,13 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [providerName, setProviderName] = useState(opts.provider.name);
   const [sessionTurns, setSessionTurns] = useState(0);
   const [sessionToolCalls, setSessionToolCalls] = useState(0);
-  const [lastUsage, setLastUsage] = useState<{ totalTokens?: number } | undefined>();
+  const [lastUsage, setLastUsage] = useState<{
+    totalTokens?: number;
+    completionTokens?: number;
+    cachedPromptTokens?: number;
+    cacheCreationTokens?: number;
+    promptTokens?: number;
+  } | undefined>();
   const [estimatedTokens, setEstimatedTokens] = useState<number | undefined>();
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequestState | undefined>();
   const [pendingToolCall, setPendingToolCall] = useState<ToolCallSummary | null>(null);

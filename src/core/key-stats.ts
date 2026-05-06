@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import type { TokenUsage } from '../providers/types.js';
 
 /**
  * Per-key usage analytics. Stored separately from the credentials file so
@@ -17,6 +18,15 @@ export interface KeyStat {
   authErrorCount: number;
   lastSuccessAt?: string;
   lastFailureAt?: string;
+  /** Cumulative input tokens served from cache for this key. */
+  cachedInputTokens?: number;
+  /** Cumulative input tokens NOT served from cache (raw - cached). */
+  uncachedInputTokens?: number;
+  /** Cumulative cache-creation tokens billed for this key (Anthropic). */
+  cacheCreationTokens?: number;
+  /** ISO timestamp of the last turn that read >0 tokens from cache. Used as
+   * a cheap "warm" badge in /keys without a rolling-window decay. */
+  lastCacheReadAt?: string;
 }
 
 export interface AllKeyStats {
@@ -104,6 +114,31 @@ export async function recordSuccess(provider: string, keyId: string): Promise<vo
   const entry = getOrCreate(stats, provider, keyId);
   entry.successCount++;
   entry.lastSuccessAt = new Date().toISOString();
+  dirty = true;
+  scheduleFlush();
+}
+
+/** Accumulate cache-aware token counters for a successful turn. Called
+ *  alongside recordSuccess from the agent loop. Lossy on crash like the
+ *  rest of this file — same 30s debounce, same atomic flush. */
+export async function recordTokenUsage(
+  provider: string,
+  keyId: string,
+  usage: TokenUsage,
+): Promise<void> {
+  const stats = await ensureCache();
+  const entry = getOrCreate(stats, provider, keyId);
+  const cached = usage.cachedPromptTokens ?? 0;
+  const total = usage.promptTokens ?? 0;
+  const uncached = Math.max(0, total - cached);
+  entry.cachedInputTokens = (entry.cachedInputTokens ?? 0) + cached;
+  entry.uncachedInputTokens = (entry.uncachedInputTokens ?? 0) + uncached;
+  if (typeof usage.cacheCreationTokens === 'number') {
+    entry.cacheCreationTokens = (entry.cacheCreationTokens ?? 0) + usage.cacheCreationTokens;
+  }
+  if (cached > 0) {
+    entry.lastCacheReadAt = new Date().toISOString();
+  }
   dirty = true;
   scheduleFlush();
 }
