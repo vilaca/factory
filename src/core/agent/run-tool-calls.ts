@@ -33,7 +33,8 @@ export interface ToolLoopContext {
    * skip it. */
   cwdRef?: { current: string };
   hooksEnabled?: boolean;
-  onHookStderr?: (hookPath: string, chunk: string) => void;
+  hooksConfig?: import('../config-types.js').HooksConfig;
+  onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
 }
 
@@ -92,13 +93,13 @@ export async function* runToolCalls(
         const result = await runHook(
           'PreToolUse',
           { toolName: fnName, args: fnArgs },
-          { cwd, onStderr: ctx.onHookStderr },
+          { cwd, config: ctx.hooksConfig, matchValue: fnName, onStderr: ctx.onHookStderr },
         );
         for (const e of result.errors) {
           ctx.onHookError?.('PreToolUse', e);
           yield { type: 'hook-error', event: 'PreToolUse', error: e };
         }
-        for (const hookPath of result.firedScripts) {
+        for (const hookPath of result.firedCommands) {
           yield {
             type: 'hook-fired',
             event: 'PreToolUse',
@@ -154,38 +155,43 @@ export async function* runToolCalls(
       yield event;
     }
 
-    // PostToolUse hook — informational; return value is logged but not acted
-    // on. Fired even on failure so hook authors can observe the full lifecycle.
+    // PostToolUse / PostToolUseFailure hook — informational; return value is
+    // logged but not acted on. Split on success so hook authors can scope a
+    // matcher to only failures (e.g. auto-bisect when Bash fails) without
+    // branching inside their script.
     if (ctx.hooksEnabled && lastResultForPostHook) {
-      // PostToolUse fires after Bash, which may have updated cwdRef via
-      // `cd`. Re-resolve here so this hook sees the post-`cd` directory.
+      // Fires after Bash, which may have updated cwdRef via `cd`. Re-resolve
+      // here so the hook sees the post-`cd` directory.
       const cwd = ctx.cwdRef?.current ?? process.cwd();
+      const postEvent: 'PostToolUse' | 'PostToolUseFailure' = lastResultForPostHook.success
+        ? 'PostToolUse'
+        : 'PostToolUseFailure';
       try {
         const result = await runHook(
-          'PostToolUse',
+          postEvent,
           {
             toolName: toolCall.function?.name ?? '',
             args: toolCall.function?.arguments ?? {},
             success: lastResultForPostHook.success,
             output: lastResultForPostHook.output,
           },
-          { cwd, onStderr: ctx.onHookStderr },
+          { cwd, config: ctx.hooksConfig, matchValue: toolCall.function?.name ?? '', onStderr: ctx.onHookStderr },
         );
         for (const e of result.errors) {
-          ctx.onHookError?.('PostToolUse', e);
-          yield { type: 'hook-error', event: 'PostToolUse', error: e };
+          ctx.onHookError?.(postEvent, e);
+          yield { type: 'hook-error', event: postEvent, error: e };
         }
-        for (const hookPath of result.firedScripts) {
+        for (const hookPath of result.firedCommands) {
           yield {
             type: 'hook-fired',
-            event: 'PostToolUse',
+            event: postEvent,
             hookPath,
             ...(result.notice ? { notice: result.notice } : {}),
           };
         }
       } catch (err: any) {
-        ctx.onHookError?.('PostToolUse', err?.message ?? String(err));
-        yield { type: 'hook-error', event: 'PostToolUse', error: err?.message ?? String(err) };
+        ctx.onHookError?.(postEvent, err?.message ?? String(err));
+        yield { type: 'hook-error', event: postEvent, error: err?.message ?? String(err) };
       }
     }
 

@@ -40,6 +40,8 @@ function cliArgs(extra: string[] = []): string[] {
 // ─── CLI flags ──────────────────────────────────────────────────────────
 
 describe('CLI flags', () => {
+  // TODO: convert to unit test — call printUsage() from src/cli/args.ts and
+  // assert on the captured output. No process spawn needed.
   it('--help shows usage information', async () => {
     const cli = spawnCli(['--help']);
     try {
@@ -52,6 +54,8 @@ describe('CLI flags', () => {
     }
   });
 
+  // TODO: convert to unit test — same as above, just a different assertion on
+  // printUsage() output.
   it('--help shows huggingface examples', async () => {
     const cli = spawnCli(['--help']);
     try {
@@ -62,6 +66,8 @@ describe('CLI flags', () => {
     }
   });
 
+  // TODO: convert to unit test — same as above, just a different assertion on
+  // printUsage() output.
   it('--help shows copilot examples', async () => {
     const cli = spawnCli(['--help']);
     try {
@@ -204,6 +210,8 @@ describe('Error handling', () => {
     }
   });
 
+  // TODO: convert to unit test — assert that createProvider('foobar') from
+  // src/providers/registry.ts throws with "Unknown provider".
   it('shows error for unknown provider', async () => {
     const cli = spawnCli(['--provider', 'foobar']);
     try {

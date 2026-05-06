@@ -95,12 +95,15 @@ export interface AgentOptions {
   /** When set, the runtime rotates among saved keys for the active provider
    *  on rate-limit/auth failures before giving up. */
   rotation?: RotationOptions;
-  /** Optional sink invoked when a hook script writes to stderr; the host
+  /** Optional sink invoked when a hook command writes to stderr; the host
    *  wires this to the session log. */
-  onHookStderr?: (hookPath: string, chunk: string) => void;
+  onHookStderr?: (command: string, chunk: string) => void;
   /** Optional sink invoked with errors raised while running a hook
    *  (timeout, malformed JSON, non-zero exit, spawn failure). */
   onHookError?: (event: string, error: string) => void;
+  /** Resolved hook config; absent or empty when no hooks are configured.
+   *  Read from `config.agent.hooks` at session start. */
+  hooksConfig?: import('./config-types.js').HooksConfig;
 }
 
 export interface RotationOptions {

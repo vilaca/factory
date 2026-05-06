@@ -1,97 +1,126 @@
 import { spawn } from 'child_process';
-import { discoverHookScripts, discoverAllHooks, type HookEvent } from './discovery.js';
+import type { HookEntry, HooksConfig } from '../config-types.js';
+import { resolveHooks, listAllHooks, type HookEvent } from './discovery.js';
+import { sanitizeEnv } from '../../security/env.js';
+import { getEnvPolicy } from '../../security/policy-state.js';
+import { checkForbidden } from '../../security/bash-rules.js';
 
 export type { HookEvent };
-export { discoverAllHooks };
+export { resolveHooks, listAllHooks };
 
 /**
- * Result of running one or more hook scripts for a single event.
+ * Result of running one or more hooks for a single event.
  *
  * - `cancel`: at least one hook returned `cancel: true`. For PreToolUse this
  *   denies the tool call. For other events it is informational.
  * - `errorMessage`: the most recent non-empty errorMessage seen across hooks
  *   (used as the user-facing reason when `cancel` is true).
- * - `contextModification`: the most recent non-empty contextModification
- *   string returned by any hook. Only PreCompact acts on this.
+ * - `additionalContext`: the most recent non-empty additionalContext string
+ *   returned by any hook. Per-event semantics:
+ *     - PreCompact:        replaces the compaction summary text.
+ *     - SessionStart:      appended to the conversation as a user message
+ *                          before the next model call.
+ *     - UserPromptSubmit:  appended to the conversation right after the
+ *                          user's prompt, before the model is called.
+ *     - Other events:      ignored (no defined injection point yet).
  * - `notice`: the most recent non-empty notice string returned by any hook.
  *   Surfaced as a user-visible info message at the call site so a hook can
  *   say "Welcome back" or "policy v3 active" without abusing errorMessage.
- * - `firedScripts`: scripts that actually ran end-to-end (spawned, parsed,
- *   no timeout). Errored scripts are not included — they're already
- *   represented in `errors`. Used by call sites to emit one notice per
- *   successful fire so the user knows hooks executed.
+ *   Plain-text stdout (not JSON) is also captured as a notice automatically.
+ * - `firedCommands`: commands that ran end-to-end without spawn/timeout/
+ *   parse error. Errored runs aren't included — they're already in `errors`.
+ *   Used by call sites to emit one notice per successful fire.
  * - `errors`: per-hook execution errors (timeouts, malformed JSON, non-zero
  *   exits, spawn failures). Logged to the session log; never thrown.
  */
 export interface HookResult {
   cancel: boolean;
   errorMessage?: string;
-  contextModification?: string;
+  additionalContext?: string;
   notice?: string;
-  firedScripts: string[];
+  firedCommands: string[];
   errors: string[];
 }
 
 export interface RunHookOptions {
-  /** Working directory used both as cwd for the spawned hook and to find
-   *  project-local hooks under `<cwd>/.factory/hooks/`. */
+  /** Working directory used as cwd for the spawned hook. */
   cwd: string;
-  /** Hard timeout per hook script. Defaults to 5000 ms. */
+  /** Hook config to resolve entries from. Ignored when `entries` is supplied
+   *  directly (test seam). */
+  config?: HooksConfig;
+  /** Pre-resolved entries (test seam). When provided, `config` and
+   *  `matchValue` are ignored. */
+  entries?: HookEntry[];
+  /** Filter for matcher-bearing entries. Typically the tool name for
+   *  Pre/PostToolUse. Events without a match value (SessionStart etc.)
+   *  pass undefined; matcher-bearing entries are skipped in that case. */
+  matchValue?: string;
+  /** Default timeout per hook (ms). An entry's `timeoutMs` overrides.
+   *  Defaults to 5000. */
   timeoutMs?: number;
-  /** Optional sink for stderr lines emitted by hook scripts. */
-  onStderr?: (hookPath: string, chunk: string) => void;
-  /** Override hook discovery (test seam). When provided, `cwd`-based
-   *  discovery is skipped and these scripts are used verbatim. */
-  scripts?: string[];
+  /** Optional sink for stderr lines emitted by hook commands. */
+  onStderr?: (command: string, chunk: string) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
- * Run every hook registered for `event`, piping the JSON payload to stdin
- * and parsing the JSON object the hook prints to stdout. Hooks that don't
- * exist are a silent no-op. Spawn failures, non-zero exits, malformed
- * stdout, and timeouts are captured as `errors` rather than thrown — the
- * agent must never crash because a user wrote a flaky shell script.
+ * Run every hook configured for `event`, piping the JSON payload to stdin
+ * and parsing the JSON object the hook prints to stdout. No-op if nothing
+ * is configured. Spawn failures, non-zero exits, malformed JSON, and
+ * timeouts are captured as `errors` rather than thrown — the agent must
+ * never crash because a user wrote a flaky shell command.
  *
- * Multiple hooks for the same event are run sequentially in discovery
- * order (global before project). The aggregate result merges `cancel` (any
- * `true` wins) and keeps the last non-empty `errorMessage` /
- * `contextModification`, so the project-local hook can override the
- * global one if both fire.
+ * Multiple entries for the same event run sequentially in config order.
+ * The aggregate merges `cancel` (any `true` wins) and keeps the last
+ * non-empty `errorMessage` / `additionalContext` / `notice`, so a later
+ * entry can override an earlier one.
  */
 export async function runHook(
   event: HookEvent,
   payload: unknown,
   opts: RunHookOptions,
 ): Promise<HookResult> {
-  const scripts = opts.scripts ?? discoverHookScripts(event, opts.cwd);
-  const aggregate: HookResult = { cancel: false, firedScripts: [], errors: [] };
-  if (scripts.length === 0) return aggregate;
+  const entries = opts.entries ?? resolveHooks(event, opts.config, opts.matchValue);
+  const aggregate: HookResult = { cancel: false, firedCommands: [], errors: [] };
+  if (entries.length === 0) return aggregate;
 
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const defaultTimeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const stdinJson = JSON.stringify({ event, payload });
 
-  for (const script of scripts) {
-    const single = await runSingleHook(script, stdinJson, timeoutMs, opts);
+  for (const entry of entries) {
+    // Same hard-deny list the Bash tool enforces — applies regardless of who
+    // wrote the hook. A hostile project's `.factory/config.json` shouldn't
+    // get a free pass to `rm -rf /` or `curl | sh` just because a config
+    // file said so. User rules from permissions.bashRules are NOT consulted
+    // here: those are for model-issued commands, not user-owned hooks.
+    const forbidden = checkForbidden(entry.command);
+    if (forbidden) {
+      aggregate.errors.push(
+        `${entry.command}: blocked by built-in safety policy (${forbidden.reason})`,
+      );
+      continue;
+    }
+    const timeoutMs = entry.timeoutMs ?? defaultTimeoutMs;
+    const single = await runSingleHook(event, entry.command, stdinJson, timeoutMs, opts);
     if (single.error) {
-      aggregate.errors.push(`${script}: ${single.error}`);
+      aggregate.errors.push(`${entry.command}: ${single.error}`);
     } else {
-      aggregate.firedScripts.push(script);
+      aggregate.firedCommands.push(entry.command);
     }
     if (single.parsed) {
       if (single.parsed.cancel) aggregate.cancel = true;
       if (typeof single.parsed.errorMessage === 'string' && single.parsed.errorMessage) {
         aggregate.errorMessage = single.parsed.errorMessage;
       }
-      if (typeof single.parsed.contextModification === 'string' && single.parsed.contextModification) {
-        aggregate.contextModification = single.parsed.contextModification;
+      if (typeof single.parsed.additionalContext === 'string' && single.parsed.additionalContext) {
+        aggregate.additionalContext = single.parsed.additionalContext;
       }
       if (typeof single.parsed.notice === 'string' && single.parsed.notice) {
         aggregate.notice = single.parsed.notice;
       }
     }
-    if (single.stderr && opts.onStderr) opts.onStderr(script, single.stderr);
+    if (single.stderr && opts.onStderr) opts.onStderr(entry.command, single.stderr);
   }
 
   return aggregate;
@@ -101,7 +130,7 @@ interface SingleHookOutcome {
   parsed?: {
     cancel?: boolean;
     errorMessage?: string;
-    contextModification?: string;
+    additionalContext?: string;
     notice?: string;
   };
   stderr?: string;
@@ -109,7 +138,8 @@ interface SingleHookOutcome {
 }
 
 function runSingleHook(
-  script: string,
+  event: HookEvent,
+  command: string,
   stdinJson: string,
   timeoutMs: number,
   opts: RunHookOptions,
@@ -117,7 +147,27 @@ function runSingleHook(
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn('sh', [script], { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+      // Same env scrubbing the Bash tool uses (deny-by-default; see
+      // src/security/env.ts). Hooks are typically project-owned config a
+      // user may not have audited; passing the full process.env would let a
+      // hostile `.factory/config.json` exfil ANTHROPIC_API_KEY / GH_TOKEN /
+      // AWS_* on the very first session-start.
+      const { env } = sanitizeEnv(process.env, getEnvPolicy());
+      // Inject hook-context vars on top of the scrubbed allowlist so shell
+      // scripts can read them without parsing the JSON payload. The
+      // sanitizer denies the FACTORY_ prefix on the way IN (process.env
+      // → child); we set them OUT-of-band, after sanitize, so the deny
+      // doesn't apply.
+      env.FACTORY_PROJECT_DIR = opts.cwd;
+      env.FACTORY_EVENT = event;
+      if (opts.matchValue !== undefined) {
+        env.FACTORY_TOOL_NAME = opts.matchValue;
+      }
+      child = spawn('sh', ['-c', command], {
+        cwd: opts.cwd,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
     } catch (err: any) {
       resolve({ error: `spawn failed: ${err?.message ?? String(err)}` });
       return;
@@ -134,7 +184,7 @@ function runSingleHook(
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
       // Resolve immediately on timeout — don't wait for the child's `close`
       // event, which may be delayed by orphaned descendants (e.g. `sleep` in
-      // the script outliving the parent `sh`).
+      // the command outliving the parent `sh`).
       if (!settled) {
         settled = true;
         const stderr = Buffer.concat(stderrChunks).toString('utf-8');
@@ -179,11 +229,25 @@ function runSingleHook(
         return;
       }
       const parsed = tryParseHookStdout(stdout);
-      if (!parsed) {
+      if (parsed) {
+        resolve({ parsed, stderr });
+        return;
+      }
+      // Stdout looks like attempted JSON (starts with `{` or `[`) but failed
+      // to parse → real error, surface it. Otherwise treat the raw stdout as
+      // a plain-text `notice` so a hook can `echo "Welcome back"` without
+      // having to construct JSON. Capped at 200 chars so a runaway hook
+      // can't flood the UI.
+      const looksLikeJson = stdout.startsWith('{') || stdout.startsWith('[');
+      if (looksLikeJson) {
         resolve({ error: `malformed JSON on stdout`, stderr });
         return;
       }
-      resolve({ parsed, stderr });
+      const NOTICE_CAP = 200;
+      const notice = stdout.length > NOTICE_CAP
+        ? stdout.slice(0, NOTICE_CAP) + '…'
+        : stdout;
+      resolve({ parsed: { notice }, stderr });
     });
 
     try {

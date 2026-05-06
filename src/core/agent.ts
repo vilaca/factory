@@ -11,6 +11,44 @@ import { runHook } from './hooks/index.js';
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
 
+/** Fire the Stop or StopFailure hook before each turn-complete yield. Stop
+ *  fires on `stopReason: 'completed'`; StopFailure fires on every other
+ *  reason (error, token-limit, user-abort) so hook authors can scope a
+ *  matcher to "the run actually finished" vs "it bailed". Yields
+ *  hook-fired/error events for the host. */
+async function* fireStopHook(
+  options: AgentOptions,
+  turnsUsed: number,
+  stopReason: string,
+): AsyncGenerator<AgentEvent> {
+  if (!options.experimental?.hooks) return;
+  const event: 'Stop' | 'StopFailure' = stopReason === 'completed' ? 'Stop' : 'StopFailure';
+  const cwd = options.cwdRef?.current ?? process.cwd();
+  try {
+    const result = await runHook(
+      event,
+      { turnsUsed, stopReason },
+      { cwd, config: options.hooksConfig, onStderr: options.onHookStderr },
+    );
+    for (const e of result.errors) {
+      options.onHookError?.(event, e);
+      yield { type: 'hook-error', event, error: e };
+    }
+    for (const hookPath of result.firedCommands) {
+      yield {
+        type: 'hook-fired',
+        event,
+        hookPath,
+        ...(result.notice ? { notice: result.notice } : {}),
+      };
+    }
+  } catch (err: any) {
+    const msg = err?.message ?? String(err);
+    options.onHookError?.(event, msg);
+    yield { type: 'hook-error', event, error: msg };
+  }
+}
+
 export async function* runAgent(
   userInput: string,
   options: AgentOptions,
@@ -54,19 +92,25 @@ export async function* runAgent(
       const result = await runHook(
         'UserPromptSubmit',
         { userInput, model, provider: provider.name },
-        { cwd, onStderr: options.onHookStderr },
+        { cwd, config: options.hooksConfig, onStderr: options.onHookStderr },
       );
       for (const e of result.errors) {
         options.onHookError?.('UserPromptSubmit', e);
         yield { type: 'hook-error', event: 'UserPromptSubmit', error: e };
       }
-      for (const hookPath of result.firedScripts) {
+      for (const hookPath of result.firedCommands) {
         yield {
           type: 'hook-fired',
           event: 'UserPromptSubmit',
           hookPath,
           ...(result.notice ? { notice: result.notice } : {}),
         };
+      }
+      // Inject the hook's additionalContext as a follow-up user message so
+      // the model sees it before answering. Distinct from the original user
+      // input so a transcript still shows what the user actually typed.
+      if (result.additionalContext) {
+        conversation.addUser(result.additionalContext);
       }
     } catch (err: any) {
       yield { type: 'hook-error', event: 'UserPromptSubmit', error: err?.message ?? String(err) };
@@ -75,6 +119,7 @@ export async function* runAgent(
 
   while (true) {
     if (signal?.aborted) {
+      yield* fireStopHook(options, turnsUsed, 'user-abort');
       yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
       return;
     }
@@ -87,19 +132,23 @@ export async function* runAgent(
       compaction = yield* maybeCompact(contextManager, provider, model, signal, fileCache, {
         hooksEnabled,
         cwdRef: options.cwdRef,
+        hooksConfig: options.hooksConfig,
         onHookStderr: options.onHookStderr,
         onHookError: options.onHookError,
       });
     } catch (err: any) {
       if (signal?.aborted || err?.name === 'AbortError') {
+        yield* fireStopHook(options, turnsUsed, 'user-abort');
         yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
         return;
       }
       yield { type: 'error', error: err };
+      yield* fireStopHook(options, turnsUsed, 'error');
       yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
       return;
     }
     if (compaction.halt) {
+      yield* fireStopHook(options, turnsUsed, 'token-limit');
       yield { type: 'turn-complete', stopReason: 'token-limit', turnsUsed, usage: lastUsage };
       return;
     }
@@ -146,6 +195,7 @@ export async function* runAgent(
           yield { type: 'text-done', fullContent };
           conversation.addAssistant(fullContent);
         }
+        yield* fireStopHook(options, turnsUsed, 'user-abort');
         yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
         return;
       }
@@ -208,6 +258,7 @@ export async function* runAgent(
         if (recovery.lastFailureMessage) {
           yield { type: 'auto-retry-exhausted' };
         }
+        yield* fireStopHook(options, turnsUsed, 'completed');
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
       }
@@ -238,6 +289,7 @@ export async function* runAgent(
           userInput,
           cwdRef: options.cwdRef,
           hooksEnabled,
+          hooksConfig: options.hooksConfig,
           onHookStderr: options.onHookStderr,
           onHookError: options.onHookError,
         },
@@ -249,21 +301,25 @@ export async function* runAgent(
       // direction; don't keep prompting the model — halt and let them speak.
       if (!planMode && toolCalls.length > 0 && deniedCount === toolCalls.length) {
         yield { type: 'all-denied-halt', count: deniedCount };
+        yield* fireStopHook(options, turnsUsed, 'completed');
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
       }
 
       if (recovery.consecutiveSameFailures >= 2 && recovery.lastFailureMessage) {
         yield { type: 'auto-retry-exhausted' };
+        yield* fireStopHook(options, turnsUsed, 'completed');
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
       }
     } catch (err: any) {
       if (signal?.aborted || err.name === 'AbortError') {
+        yield* fireStopHook(options, turnsUsed, 'user-abort');
         yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
         return;
       }
       yield { type: 'error', error: err };
+      yield* fireStopHook(options, turnsUsed, 'error');
       yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
       return;
     }

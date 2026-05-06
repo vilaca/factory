@@ -157,8 +157,9 @@ export async function runAgentLoopInternal(
     fileCache: deps.refs.current.fileCache,
     signal: deps.refs.current.abort.signal,
     cwdRef,
-    onHookStderr: (hookPath, chunk) =>
-      deps.refs.current?.sessionLogger?.logWarning('hook-stderr', `${hookPath}: ${chunk.trim()}`),
+    hooksConfig: deps.agentConfig?.hooks,
+    onHookStderr: (command, chunk) =>
+      deps.refs.current?.sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
     onHookError: (event, error) =>
       deps.refs.current?.sessionLogger?.logWarning('hook-error', `${event}: ${error}`),
     ...(rotation ? { rotation } : {}),

@@ -219,7 +219,7 @@ export async function dispatchSlashCommand(
       await dispatchStats(arg, agent);
       return true;
     case '/hooks':
-      await dispatchHooks(agent, refs.current.cwd);
+      await dispatchHooks(agent, refs.current.hooksConfig);
       return true;
     case '/full': {
       if (!ctx.toggleFullOutput) {
@@ -265,7 +265,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
     ['/keys [<provider>]', 'Show saved keys with usage / rate-limit / cache-hit counters'],
     ['/stats', 'Cache hit rate, compaction events, largest tool results for the current session'],
-    ['/hooks', 'List discovered hook scripts (project and global)'],
+    ['/hooks', 'List configured hooks from agent.hooks config'],
     ['/full', 'Toggle full vs preview tool output (going forward)'],
     ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],
