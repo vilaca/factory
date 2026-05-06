@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { loadGlobalConfig, loadProjectConfig, saveGlobalConfig } from '../../src/core/config.js';
+import { loadGlobalConfig, loadProjectConfig, loadProjectInstructions, saveGlobalConfig } from '../../src/core/config.js';
 
 async function withTempProject(
   configContent: string | null,
@@ -138,6 +138,68 @@ describe('loadProjectConfig', () => {
       const cfg = await loadProjectConfig(cwd);
       assert.strictEqual(cfg.provider, 'ollama');
     });
+  });
+});
+
+describe('loadProjectInstructions', () => {
+  it('returns null when no instruction sources exist', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
+    try {
+      assert.strictEqual(await loadProjectInstructions(cwd), null);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('reads .factory/INSTRUCTIONS.md with a path-prefixed header', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
+    try {
+      await fs.mkdir(path.join(cwd, '.factory'), { recursive: true });
+      await fs.writeFile(path.join(cwd, '.factory/INSTRUCTIONS.md'), 'be tidy');
+      const out = await loadProjectInstructions(cwd);
+      assert.ok(out !== null);
+      assert.match(out, /^## From \.factory\/INSTRUCTIONS\.md\n\nbe tidy/);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('concatenates AGENTS.md, CLAUDE.md, .cursorrules in priority order', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
+    try {
+      await fs.writeFile(path.join(cwd, 'AGENTS.md'), 'agents-body');
+      await fs.writeFile(path.join(cwd, 'CLAUDE.md'), 'claude-body');
+      await fs.writeFile(path.join(cwd, '.cursorrules'), 'cursor-body');
+      const out = await loadProjectInstructions(cwd);
+      assert.ok(out !== null);
+      const idxA = out.indexOf('## From AGENTS.md');
+      const idxC = out.indexOf('## From CLAUDE.md');
+      const idxR = out.indexOf('## From .cursorrules');
+      assert.ok(idxA >= 0 && idxC > idxA && idxR > idxC, 'sources concatenated in expected order');
+      assert.match(out, /agents-body/);
+      assert.match(out, /claude-body/);
+      assert.match(out, /cursor-body/);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('truncates with a note once the size cap is exceeded', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
+    try {
+      // First two sources together exceed 16 KB; later sources should be skipped.
+      const big = 'x'.repeat(10 * 1024);
+      await fs.mkdir(path.join(cwd, '.factory'), { recursive: true });
+      await fs.writeFile(path.join(cwd, '.factory/INSTRUCTIONS.md'), big);
+      await fs.writeFile(path.join(cwd, 'AGENTS.md'), big);
+      await fs.writeFile(path.join(cwd, 'CLAUDE.md'), 'should-not-appear');
+      const out = await loadProjectInstructions(cwd);
+      assert.ok(out !== null);
+      assert.match(out, /truncated at 16384 bytes/);
+      assert.ok(!out.includes('should-not-appear'), 'over-cap source is dropped');
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
   });
 });
 

@@ -9,6 +9,21 @@ const PROJECT_CONFIG_DIR = '.factory';
 const PROJECT_CONFIG_FILE = 'config.json';
 const PROJECT_INSTRUCTIONS_FILE = 'INSTRUCTIONS.md';
 
+// Repo-root files we'll pick up as project instructions, in priority order.
+// `.factory/INSTRUCTIONS.md` is the canonical source; the others are
+// cross-tool conventions (AGENTS.md, Claude Code, Cursor) that we read so
+// users don't need to duplicate guidance.
+const PROJECT_INSTRUCTION_SOURCES = [
+  `${PROJECT_CONFIG_DIR}/${PROJECT_INSTRUCTIONS_FILE}`,
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.cursorrules',
+] as const;
+
+// Cap on the total injected size to keep the system prompt bounded. Sources
+// past the cap are dropped with a truncation note rather than streamed in.
+const PROJECT_INSTRUCTIONS_MAX_BYTES = 16 * 1024;
+
 function getGlobalConfigFile(): string {
   return path.join(getGlobalConfigDir(), 'config.json');
 }
@@ -264,9 +279,42 @@ export async function loadProjectConfig(cwd: string): Promise<Config> {
   return validateConfig(data, configPath);
 }
 
+/**
+ * Loads project instructions from the repo root. Reads
+ * `.factory/INSTRUCTIONS.md` plus the cross-tool conventions
+ * (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`) in priority order, concatenating
+ * everything that exists with a `## From <relative-path>` header per source.
+ *
+ * Read errors are swallowed (treated as "not present") so a transient
+ * permission glitch never crashes startup. Total size is capped at
+ * ~16KB; sources that don't fit are dropped with a truncation note.
+ */
 export async function loadProjectInstructions(cwd: string): Promise<string | null> {
-  const instructionsPath = path.join(cwd, PROJECT_CONFIG_DIR, PROJECT_INSTRUCTIONS_FILE);
-  return readTextFile(instructionsPath);
+  const parts: string[] = [];
+  let totalBytes = 0;
+  let truncated = false;
+
+  for (const rel of PROJECT_INSTRUCTION_SOURCES) {
+    const content = await readTextFile(path.join(cwd, rel));
+    if (content === null || content.length === 0) continue;
+
+    const block = `## From ${rel}\n\n${content}\n\n`;
+    const blockBytes = Buffer.byteLength(block, 'utf-8');
+    if (totalBytes + blockBytes > PROJECT_INSTRUCTIONS_MAX_BYTES) {
+      truncated = true;
+      break;
+    }
+    parts.push(block);
+    totalBytes += blockBytes;
+  }
+
+  if (parts.length === 0) return null;
+
+  let result = parts.join('').trimEnd();
+  if (truncated) {
+    result += `\n\n_(Project instructions truncated at ${PROJECT_INSTRUCTIONS_MAX_BYTES} bytes; remaining sources were skipped.)_`;
+  }
+  return result;
 }
 
 function mergeConfigs(...configs: Config[]): Config {

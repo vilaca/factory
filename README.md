@@ -250,6 +250,15 @@ Create `.factory/INSTRUCTIONS.md` in your repository root for project-specific g
 - Never modify files in dist/ directory
 ```
 
+If you already keep agent guidance in another well-known file, factory picks it up too. Repo-root files are loaded in this order and concatenated under a `## From <path>` header per source:
+
+1. `.factory/INSTRUCTIONS.md` (canonical)
+2. `AGENTS.md` (cross-tool convention)
+3. `CLAUDE.md` (Claude Code)
+4. `.cursorrules` (Cursor)
+
+Total size is capped at ~16 KB; sources past the cap are dropped with a truncation note. Only repo-root files are checked — nested instruction files are ignored.
+
 ## Advanced Features
 
 ### Multi-Tab Sessions
