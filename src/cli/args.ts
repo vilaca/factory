@@ -12,9 +12,11 @@ interface CliArgs {
   bashDedup?: boolean;
   readCache?: boolean;
   lineCountHint?: boolean;
+  subagents?: boolean;
   noBashDedup?: boolean;
   noReadCache?: boolean;
   noLineCountHint?: boolean;
+  noSubagents?: boolean;
   turnTimeoutSec?: number;
   noClear?: boolean;
   pick?: boolean;
@@ -60,6 +62,10 @@ export function parseArgs(args: string[]): CliArgs {
       result.lineCountHint = true;
     } else if (arg === '--no-line-count-hint') {
       result.noLineCountHint = true;
+    } else if (arg === '--subagents') {
+      result.subagents = true;
+    } else if (arg === '--no-subagents') {
+      result.noSubagents = true;
     } else if (arg === '--no-clear') {
       result.noClear = true;
     } else if (arg === '--pick') {
@@ -108,6 +114,7 @@ export function printUsage(): void {
     '    --bash-dedup             Enable Bash near-duplicate detector (off by default)',
     '    --no-read-cache          Disable Read mtime/hash cache (on by default)',
     '    --no-line-count-hint     Drop the cloc/scc system-prompt hint (on by default)',
+    '    --no-subagents           Disable the Delegate tool (on by default)',
     '    --turn-timeout <sec>     Auto-abort the agent after N seconds per user prompt (default: off)',
     '    --no-clear               Do not clear the screen on startup',
     '    --pick                   Force the startup picker even when a previous session is on file',

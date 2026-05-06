@@ -71,6 +71,11 @@ Once you have proposed all the changes, give a brief 2-3 sentence summary of the
 You may not actually modify any file or run any state-changing command in plan mode. Trying to do so still queues the call; do not retry as if it failed.`;
 }
 
+export function getSubagentsPrompt(): string {
+  return `## Delegate (experimental)
+You have a \`Delegate\` tool. It spawns a read-only research subagent with its own Read/Glob/Grep/(allow-listed)Bash. Use it to farm out a self-contained investigation — "find every place X is referenced", "summarize the call graph rooted at Y" — when the answer would otherwise force you to read many files into your own context. The subagent returns a single text answer; if it doesn't help, fall back to investigating yourself. Do not delegate code changes: the subagent cannot edit or write.`;
+}
+
 export function getLineCountHintPrompt(): string {
   return `## Codebase statistics
 For "how many lines of code / comments / tests" questions, prefer \`cloc\` or \`scc\` if available — they handle multi-line comments, blank lines, and language detection correctly. If neither is installed, a single \`find … -name '*.ts' | xargs wc -l\` is enough — do not run multiple variants of the same query trying to refine an already-good answer.`;

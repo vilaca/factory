@@ -48,6 +48,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
   - [Multi-Tab Sessions](#multi-tab-sessions)
   - [Provider/Model Picker](#providermodel-picker)
   - [Plan Mode](#plan-mode)
+  - [Subagents (experimental)](#subagents-experimental)
   - [Permission System](#permission-system)
   - [Auto-Correction](#auto-correction)
   - [Cost & Token Management](#cost--token-management)
@@ -137,8 +138,9 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `bashDedup` | off | Tracks recent Bash commands. When the model runs three near-duplicate commands (token-level Jaccard ≥ 0.5), injects a system nudge to prevent spinning. |
 | `readCache` | on | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens. |
 | `lineCountHint` | on | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants. |
+| `subagents` | off | Registers the `Delegate` tool for spawning a read-only research subagent. See the [Subagents](#subagents-experimental) section below. |
 
-Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
+Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--subagents`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
 
 ## Configuration
 
@@ -157,6 +159,7 @@ Three layers, lowest to highest precedence: config files → environment variabl
 | `--bash-dedup` | | Enable Bash near-duplicate detector |
 | `--no-read-cache` | | Disable Read mtime/hash cache |
 | `--no-line-count-hint` | | Drop the cloc/scc system-prompt hint |
+| `--subagents` | | Register the `Delegate` tool for spawning a read-only research subagent |
 | `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
 | `--no-log` | | Disable session JSONL logging |
 | `--no-clear` | | Do not clear the screen on startup |
@@ -320,6 +323,25 @@ Execute plan? (y=approve, n=cancel, or type to refine): y
 
 Plan executed successfully.
 ```
+
+### Subagents (experimental)
+
+Off by default. When enabled, the agent gains a `Delegate(task, model?)` tool that spawns a **read-only research subagent** for an isolated investigation:
+
+- **Subagent toolset:** `Read`, `Glob`, `Grep`, and a hardened `Bash` that only accepts a strict prefix allow-list (`ls`, `cat`, `head`, `tail`, `wc`, `find`, `grep`, `rg`, `git log`, `git diff`, `git show`, `git status`, `git branch`, `git ls-files`, `npm ls`, `node --version`, `which`, `file`, `awk`, `sed -n`). Anything outside the list is rejected before `spawn` runs. Compound shells (`&&`, `;`, `|`, `$()`, redirection) are rejected unconditionally.
+- **No write path:** `Edit` and `Write` are not registered for the subagent — the constraint is enforced by the registry, not just the prompt.
+- **Cap:** 8 turns by default. If the subagent runs out without finishing, whatever it produced last is returned with a `[note: subagent hit the N-turn cap]` marker.
+- **Model:** uses the explicit `model` argument first, then the parent's "weak" tier model if registered, then the parent's current model.
+- **Logging:** the subagent's events are written to the parent session log under the `subagent` source. The TTY does not show them by default — your main scrollback stays focused on what your direct agent is doing.
+
+**Enable:**
+```bash
+factory --subagents
+# or at runtime:
+> /exp subagents on
+```
+
+**Example use case:** the parent agent is mid-refactor and needs to know every place a particular config key is referenced. Instead of reading 30 files into its own context, it calls `Delegate(task: "List every file under src/ that references the FACTORY_DEBUG env var, with one-line context for each match.")`. The subagent runs Grep/Read on its own turn budget and returns a compact summary; the parent's context grows by one tool-result message instead of thirty.
 
 ### Permission System
 

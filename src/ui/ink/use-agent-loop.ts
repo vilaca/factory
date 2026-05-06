@@ -100,6 +100,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       useTextToolFallback: refs.current.useTextToolFallback,
       planMode: refs.current.planMode,
       lineCountHint: refs.current.experimental.lineCountHint ?? false,
+      subagents: refs.current.experimental.subagents ?? false,
       gitDirty: refs.current.gitDirty,
     });
   }
@@ -119,6 +120,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       useTextToolFallback,
       planMode: initialPlanMode,
       lineCountHint: initialExperimental.lineCountHint ?? false,
+      subagents: initialExperimental.subagents ?? false,
       gitDirty: initialGitDirty,
     });
 
@@ -425,11 +427,12 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   function setExperimentalFlag(name: keyof ExperimentalFlags, value: boolean): void {
     if (!refs.current) return;
     refs.current.experimental = { ...refs.current.experimental, [name]: value };
-    // System prompt depends on lineCountHint, so refresh it on toggle.
-    if (name === 'lineCountHint') {
+    // System prompt depends on lineCountHint and subagents, so refresh it
+    // when either toggles.
+    if (name === 'lineCountHint' || name === 'subagents') {
       const sp = composeSystemPrompt();
       refs.current.conversation.updateSystemPrompt(sp);
-      refs.current.sessionLogger?.logSystemPromptChange(`lineCountHint=${value}`);
+      refs.current.sessionLogger?.logSystemPromptChange(`${name}=${value}`);
       refs.current.sessionLogger?.logSystemPrompt(sp);
     }
     addNotice('info', `Experimental ${name}: ${value ? 'on' : 'off'}.`);
