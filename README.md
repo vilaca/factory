@@ -373,6 +373,36 @@ Responses:
 
 Reset permissions with `/permissions` to return to prompt-per-call mode.
 
+### WebFetch
+
+The `WebFetch` tool lets the model pull a URL when it needs to read documentation, an error page, a CI log, or any other reference material. Bounded by design: 1 MiB body cap (streamed, aborts mid-read), 15 s timeout, 5 redirects max, 16 KiB cap on the text returned to the model. HTML is stripped of boilerplate (scripts, styles, nav, footers) and converted to markdown via a hand-rolled converter — no external deps.
+
+Per-fetch permission prompt with a fourth option:
+
+```
+🔧 WebFetch(url="https://docs.example.com/api/foo")
+Allow WebFetch to docs.example.com? [y]es / [n]o / [w]hitelist docs.example.com / [a]llow all WebFetch
+```
+
+- **y** — fetch this URL once, no whitelisting
+- **w** — fetch + add `docs.example.com` to the session whitelist (no further prompts for that hostname)
+- **a** — auto-approve all future WebFetch calls regardless of hostname (use sparingly)
+- **n** — deny; model receives an error and decides what to do next
+
+Pre-seed trusted hostnames in config to skip prompts on launch (and to enable WebFetch in headless mode, where there's no UI to prompt):
+
+```json
+{
+  "agent": {
+    "web": {
+      "allowlist": ["docs.python.org", "developer.mozilla.org", "nodejs.org"]
+    }
+  }
+}
+```
+
+Subdomain matching is exact — list each subdomain explicitly. The whitelist is per-session in memory plus the config seed; closing factory clears the in-memory entries.
+
 ### Auto-Correction
 
 When a tool call fails (e.g., `old_string` not found in Edit), the corrector LLM:

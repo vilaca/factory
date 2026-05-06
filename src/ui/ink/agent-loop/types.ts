@@ -10,7 +10,8 @@ import type { DisplayItem, ToolCallSummary } from '../types.js';
 
 export type RunState = 'idle' | 'running' | 'awaiting-permission';
 export type NoticeLevel = 'info' | 'warn' | 'danger' | 'cyan';
-export type PermissionDecision = 'allow' | 'deny' | 'allow-all';
+export type { PermissionDecision } from '../../../permissions.js';
+import type { PermissionDecision } from '../../../permissions.js';
 
 export interface PermissionRequestState {
   toolName: string;

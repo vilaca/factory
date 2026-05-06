@@ -1,7 +1,11 @@
-export type PermissionDecision = 'allow' | 'deny' | 'allow-all';
+export type PermissionDecision = 'allow' | 'deny' | 'allow-all' | 'allow-domain';
 
 export class PermissionManager {
   private allowedTools: Set<string> = new Set();
+  /** Hostnames the user has whitelisted for WebFetch this session. Distinct
+   *  from `allowedTools`: a hostname here doesn't auto-allow the WebFetch
+   *  tool overall; it just suppresses the prompt for matching URLs. */
+  private allowedDomains: Set<string> = new Set();
 
   isAutoAllowed(toolName: string): boolean {
     return this.allowedTools.has(toolName.toLowerCase());
@@ -11,8 +15,26 @@ export class PermissionManager {
     this.allowedTools.add(toolName.toLowerCase());
   }
 
+  /** True when `hostname` is in the per-session WebFetch whitelist.
+   *  Compares case-insensitively; pass an already-parsed URL.hostname. */
+  isDomainAllowed(hostname: string): boolean {
+    return this.allowedDomains.has(hostname.toLowerCase());
+  }
+
+  /** Add a hostname to the per-session WebFetch whitelist. Idempotent. */
+  allowDomain(hostname: string): void {
+    this.allowedDomains.add(hostname.toLowerCase());
+  }
+
+  /** Read-only snapshot of the WebFetch whitelist. Used at startup to log
+   *  pre-seeded domains so the user can audit what's allowed. */
+  listAllowedDomains(): string[] {
+    return Array.from(this.allowedDomains).sort();
+  }
+
   reset(): void {
     this.allowedTools.clear();
+    this.allowedDomains.clear();
   }
 
   // TODO: pattern-based allow/deny for Bash (and possibly Write/Edit

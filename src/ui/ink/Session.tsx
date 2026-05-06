@@ -314,7 +314,7 @@ export function Session(props: SessionProps): React.ReactElement {
         void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
         return;
       }
-      const decision = parsePermissionInput(trimmed);
+      const decision = parsePermissionInput(trimmed, permissionRequest?.toolName);
       agent.respondToPermission(decision);
       return;
     }
@@ -388,7 +388,7 @@ export function Session(props: SessionProps): React.ReactElement {
         userEmoji={userEmoji}
       />
 
-      {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} />}
+      {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} args={permissionRequest.args} />}
 
       {planMode && plannedCalls.length > 0 && state === 'idle' && (
         <PlanApprovalPanel count={plannedCalls.length} />

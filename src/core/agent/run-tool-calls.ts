@@ -393,8 +393,27 @@ async function* executeToolCall(
 
   yield { type: 'tool-call-start', toolName: tool.name, args };
 
+  // WebFetch has a per-domain whitelist that gates *before* the standard
+  // tool-level permission check. A pre-allowed hostname skips the prompt
+  // for this URL even though `WebFetch` itself isn't in `allowedTools`.
+  let webFetchHostname: string | undefined;
+  let webFetchAlreadyAllowed = false;
+  if (tool.name === 'WebFetch') {
+    const rawUrl = typeof args.url === 'string' ? args.url : '';
+    try {
+      webFetchHostname = new URL(rawUrl).hostname.toLowerCase();
+      if (permissions.isDomainAllowed(webFetchHostname)) {
+        webFetchAlreadyAllowed = true;
+      }
+    } catch {
+      // Malformed URL: let the tool's own validation produce the error
+      // (no prompt; tool returns success: false immediately).
+      webFetchAlreadyAllowed = true;
+    }
+  }
+
   // Permission check — inline because async generators can't yield from callbacks
-  if (!permissions.isAutoAllowed(tool.name)) {
+  if (!webFetchAlreadyAllowed && !permissions.isAutoAllowed(tool.name)) {
     let resolvePermission!: (d: PermissionDecision | 'abort') => void;
     const permissionPromise = new Promise<PermissionDecision | 'abort'>((resolve) => {
       resolvePermission = resolve;
@@ -429,6 +448,11 @@ async function* executeToolCall(
       return;
     } else if (decision === 'allow-all') {
       permissions.allowAll(tool.name);
+    } else if (decision === 'allow-domain') {
+      // WebFetch-only: remember this hostname for the rest of the session.
+      // Other tools won't see this decision because the prompt UI only
+      // exposes the option for WebFetch.
+      if (webFetchHostname) permissions.allowDomain(webFetchHostname);
     } else if (decision === 'deny') {
       recordResult(`Tool call "${tool.name}" was denied by the user.`, tool.name);
       yield { type: 'tool-call-denied', toolName: tool.name, args };

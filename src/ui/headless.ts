@@ -118,6 +118,13 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   for (const toolName of options.autoAllowTools ?? []) {
     permissions.allowAll(toolName);
   }
+  // Headless runs have no UI to prompt for WebFetch; pre-seed the allowlist
+  // from config so trusted domains skip the prompt and resolve to a fetch.
+  // Anything not pre-allowed is auto-denied by the headless permission
+  // handler below.
+  for (const host of options.agentConfig?.web?.allowlist ?? []) {
+    permissions.allowDomain(host);
+  }
 
   const capabilities = options.provider.getCapabilities(options.model);
   const contextManager = new ContextManager(conversation, capabilities, {
