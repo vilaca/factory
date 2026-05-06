@@ -10,6 +10,7 @@
 - **Two-tier rotation.** When a key hits a rate limit or auth failure, factory swaps to the next saved key for the same model; when keys for a model are exhausted, it walks a configurable chain of `<provider>:<model>` fallbacks — frontier → fast → free, automatic. Configure with `/rotate`; per-key usage and rate-limit state surfaced via `/keys` and picker badges.
 - **Built for models that don't behave.** Text-tool fallback recovers tool calls from prose for models without native function calling. An LLM-based corrector retries malformed calls with a fixed signature. An imitation guard strips fabricated tool-result blocks. Bash dedup nudges the model out of spinning loops.
 - **Plan mode.** Read-only tools execute freely; writes are queued for review. Approve, cancel, or refine before anything touches disk.
+- **Cache-aware by default.** Surfaces prompt-cache hit rate per turn and per key for providers that report it. `/stats` reports session totals, per-turn hit-rate sparkline, compaction events, and the largest tool results. See [Cost & Token Management](#cost--token-management).
 - **Human or headless.** Interactive TUI on a TTY; in scripts and CI it auto-detects no-TTY, reads stdin as a prompt, runs one turn, and streams the result to stdout — same agent, no UI.
 
 ## Requirements
@@ -49,6 +50,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
   - [Plan Mode](#plan-mode)
   - [Permission System](#permission-system)
   - [Auto-Correction](#auto-correction)
+  - [Cost & Token Management](#cost--token-management)
   - [Session Logs](#session-logs)
   - [Headless / Non-TTY Mode](#headless--non-tty-mode)
 - [Architecture](#architecture)
@@ -73,7 +75,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 - **Multiple API keys per provider**: save more than one key for any simple-API-key provider (Anthropic, Groq, Mistral, OpenRouter, Cerebras, Cohere, Vercel, OpenCode Zen, Codestral, Workers AI, HuggingFace), pick which one a tab uses, add new keys inline (validated via `listModels` with a 3 s timeout, with a "save anyway" override for transient failures), delete keys with confirmation. Keys show as `<label> · …<last4>` so the secret never appears in the UI.
 - **Two-tier rotation**: tier-1 swaps to the next saved key for the same model on 429/auth failure; tier-2 walks a configurable chain of `<provider>:<model>` fallbacks when all keys for the current model are exhausted. Configure with `/rotate`, override per-launch with `--rotate`/`--no-rotate`/`--no-rotate-keys`/`--no-rotate-models`. Per-key usage and rate-limit counters surface in `/keys` and the picker.
 - **Resume on launch**: if a previous session is on file, factory skips the menu and starts on the same provider/model/key (override with `--pick`)
-- **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/pick`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), tuning (`/correct`, `/exp`)
+- **Slash commands**: tabs (`/new`, `/close`, `/tabs`, `/switch`), session (`/clear`, `/model`, `/pick`, `/cwd`, `/help`, `/exit`/`/quit`/`/q`, `/permissions`, `/log`), plan mode (`/plan`, `/queue`, `/approve`, `/cancel`), observability (`/keys`, `/stats`), tuning (`/correct`, `/exp`)
 - **Cross-session history**: up-arrow recalls inputs from prior sessions, not just the current one
 - **Esc to abort**: stops the running agent immediately
 - **Tool support detection**: queries provider APIs at startup; reports native vs. fallback support
@@ -101,7 +103,8 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
 | `/pick` | Open the provider/model picker (recent pairs first) |
 | `/rotate` | View the active rotation chain. Subcommands: `add`, `insert`, `remove`, `move`, `clear`, `refresh` (return to the head of the chain and reset the in-memory failure log) |
-| `/keys [<provider>]` | Show saved keys with usage / rate-limit counters |
+| `/keys [<provider>]` | Show saved keys with usage / rate-limit / cache-hit counters |
+| `/stats` | Cache hit rate, compaction events, and largest tool results for the current session |
 | `/full` | Show full Read output in the terminal instead of the 5-line preview (applies going forward; the model always sees the full text either way) |
 | `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |
@@ -350,6 +353,24 @@ factory --no-auto-correct
 # or at runtime:
 > /correct off
 ```
+
+### Cost & Token Management
+
+Long sessions get expensive because the agent re-sends the full conversation prefix every turn — system prompt, tool definitions, and every prior message. Most providers offer some form of prompt caching that turns those repeated prefix tokens into cheap cache reads. factory tracks the split per turn and per key so you can see whether caching is actually working.
+
+**Per-key stats.** `/keys` shows cumulative cached vs. uncached input tokens, hit rate, and a 🔥 marker on keys whose last cache read landed within the last 5 minutes (Anthropic's default cache TTL). The picker uses the same data to flag warm keys.
+
+**`/stats`.** Reports for the current session:
+
+- Total input tokens split into cached / fresh and the resulting hit rate
+- Cumulative cache-creation tokens (relevant for explicit caching providers)
+- A per-turn hit-rate sparkline so you can spot which turn killed the cache
+- Compaction events with the turns they fired on
+- The five largest tool results by approximate token count
+
+Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel / OpenCode Zen / Copilot / Cohere / llama.cpp) return cache splits in their `prompt_tokens_details.cached_tokens` field, so hit rate lights up immediately without any client-side configuration.
+
+For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
 ### Session Logs
 

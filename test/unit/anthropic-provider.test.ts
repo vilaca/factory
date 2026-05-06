@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { splitMessagesForAnthropic } from '../../src/providers/anthropic.js';
+import { AnthropicProvider, splitMessagesForAnthropic } from '../../src/providers/anthropic.js';
 import type { ChatMessage } from '../../src/providers/types.js';
 
 describe('splitMessagesForAnthropic', () => {
@@ -101,5 +101,119 @@ describe('splitMessagesForAnthropic', () => {
       () => splitMessagesForAnthropic(messages),
       /tool message has no tool_call_id/,
     );
+  });
+});
+
+describe('AnthropicProvider — cache token plumbing', () => {
+  it('populates cachedPromptTokens and cacheCreationTokens from chatNoStream response', async () => {
+    const provider = new AnthropicProvider('test-key');
+    (provider as any).client = {
+      messages: {
+        create: async () => ({
+          content: [{ type: 'text', text: 'hi' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 20,
+            cache_read_input_tokens: 80,
+            cache_creation_input_tokens: 5,
+          },
+        }),
+      },
+    };
+
+    const result = await provider.chatNoStream('claude-sonnet-4-6', [
+      { role: 'user', content: 'hi' },
+    ]);
+
+    assert.strictEqual(result.usage?.promptTokens, 100);
+    assert.strictEqual(result.usage?.completionTokens, 20);
+    assert.strictEqual(result.usage?.cachedPromptTokens, 80);
+    assert.strictEqual(result.usage?.cacheCreationTokens, 5);
+  });
+
+  it('chatNoStream omits cache fields when the response lacks them', async () => {
+    const provider = new AnthropicProvider('test-key');
+    (provider as any).client = {
+      messages: {
+        create: async () => ({
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { input_tokens: 50, output_tokens: 10 },
+        }),
+      },
+    };
+
+    const result = await provider.chatNoStream('claude-sonnet-4-6', [
+      { role: 'user', content: 'hi' },
+    ]);
+
+    assert.strictEqual(result.usage?.promptTokens, 50);
+    assert.strictEqual((result.usage as any)?.cachedPromptTokens, undefined);
+    assert.strictEqual((result.usage as any)?.cacheCreationTokens, undefined);
+  });
+
+  it('populates cache fields from streaming message_delta usage', async () => {
+    const provider = new AnthropicProvider('test-key');
+
+    async function* mockEvents(): AsyncGenerator<any> {
+      yield { type: 'content_block_start', content_block: { type: 'text' } };
+      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } };
+      yield { type: 'content_block_stop' };
+      yield { type: 'message_stop' };
+      yield {
+        type: 'message_delta',
+        usage: {
+          input_tokens: 200,
+          output_tokens: 30,
+          cache_read_input_tokens: 150,
+          cache_creation_input_tokens: 10,
+        },
+      };
+    }
+
+    (provider as any).client = {
+      messages: { stream: () => mockEvents() },
+    };
+
+    const chunks: any[] = [];
+    for await (const chunk of provider.chat('claude-sonnet-4-6', [
+      { role: 'user', content: 'hi' },
+    ])) {
+      chunks.push(chunk);
+    }
+
+    const withUsage = chunks.find((c) => c.usage);
+    assert.ok(withUsage, 'expected a chunk to carry usage');
+    assert.strictEqual(withUsage.usage.promptTokens, 200);
+    assert.strictEqual(withUsage.usage.completionTokens, 30);
+    assert.strictEqual(withUsage.usage.cachedPromptTokens, 150);
+    assert.strictEqual(withUsage.usage.cacheCreationTokens, 10);
+  });
+
+  it('streaming usage omits cache fields when the response lacks them', async () => {
+    const provider = new AnthropicProvider('test-key');
+
+    async function* mockEvents(): AsyncGenerator<any> {
+      yield { type: 'content_block_start', content_block: { type: 'text' } };
+      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } };
+      yield { type: 'content_block_stop' };
+      yield { type: 'message_stop' };
+      yield { type: 'message_delta', usage: { input_tokens: 40, output_tokens: 10 } };
+    }
+
+    (provider as any).client = {
+      messages: { stream: () => mockEvents() },
+    };
+
+    const chunks: any[] = [];
+    for await (const chunk of provider.chat('claude-sonnet-4-6', [
+      { role: 'user', content: 'hi' },
+    ])) {
+      chunks.push(chunk);
+    }
+
+    const withUsage = chunks.find((c) => c.usage);
+    assert.ok(withUsage);
+    assert.strictEqual(withUsage.usage.cachedPromptTokens, undefined);
+    assert.strictEqual(withUsage.usage.cacheCreationTokens, undefined);
   });
 });

@@ -9,6 +9,7 @@ import {
   listStatsForProvider,
   recordFailure,
   recordSuccess,
+  recordTokenUsage,
   _resetKeyStatsForTests,
 } from '../../src/core/key-stats.js';
 
@@ -80,6 +81,68 @@ describe('key-stats', () => {
     await withTempHome(async () => {
       const all = await listStatsForProvider('nonexistent');
       assert.deepStrictEqual(all, {});
+    });
+  });
+
+  it('accumulates cached vs uncached input tokens across turns', async () => {
+    await withTempHome(async () => {
+      await recordTokenUsage('anthropic', 'k1', {
+        promptTokens: 100,
+        completionTokens: 20,
+        totalTokens: 120,
+        cachedPromptTokens: 80,
+        cacheCreationTokens: 10,
+      });
+      await recordTokenUsage('anthropic', 'k1', {
+        promptTokens: 50,
+        completionTokens: 10,
+        totalTokens: 60,
+        cachedPromptTokens: 50,
+      });
+      await flushKeyStats();
+      _resetKeyStatsForTests();
+
+      const stat = await getStats('anthropic', 'k1');
+      // 80 + 50 cached
+      assert.strictEqual(stat?.cachedInputTokens, 130);
+      // (100 - 80) + (50 - 50) = 20 fresh
+      assert.strictEqual(stat?.uncachedInputTokens, 20);
+      // 10 + 0 creation
+      assert.strictEqual(stat?.cacheCreationTokens, 10);
+      assert.ok(stat?.lastCacheReadAt);
+    });
+  });
+
+  it('does not stamp lastCacheReadAt when cached tokens are zero', async () => {
+    await withTempHome(async () => {
+      await recordTokenUsage('anthropic', 'k1', {
+        promptTokens: 40,
+        completionTokens: 10,
+        totalTokens: 50,
+      });
+      await flushKeyStats();
+
+      const stat = await getStats('anthropic', 'k1');
+      assert.strictEqual(stat?.cachedInputTokens, 0);
+      assert.strictEqual(stat?.uncachedInputTokens, 40);
+      assert.strictEqual(stat?.lastCacheReadAt, undefined);
+    });
+  });
+
+  it('treats cached > prompt as zero uncached (does not go negative)', async () => {
+    await withTempHome(async () => {
+      // Defensive: providers should never report cached > prompt, but if they
+      // do, uncached must clamp to 0 instead of subtracting into negatives.
+      await recordTokenUsage('anthropic', 'k1', {
+        promptTokens: 50,
+        completionTokens: 5,
+        totalTokens: 55,
+        cachedPromptTokens: 100,
+      });
+      await flushKeyStats();
+
+      const stat = await getStats('anthropic', 'k1');
+      assert.strictEqual(stat?.uncachedInputTokens, 0);
     });
   });
 });
