@@ -100,6 +100,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   const contextManager = new ContextManager(conversation, capabilities, {
     compactionThreshold: options.agentConfig?.compactionThreshold,
     recencyWindow: options.agentConfig?.recencyWindow,
+    recencyTokens: options.agentConfig?.recencyTokens,
     toolResultAgingTurns: options.agentConfig?.toolResultAgingTurns,
   });
 

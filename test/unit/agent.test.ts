@@ -946,6 +946,10 @@ describe('Agent loop', () => {
       const cm = new ContextManager(conversation, provider.getCapabilities('mock-model'), {
         compactionThreshold: 0.0001, // force shouldCompact=true
         recencyWindow: 2,
+        // Disable the token-weighted expansion so the test's tiny messages
+        // don't expand the keep window past the conversation length and
+        // skip compaction entirely.
+        recencyTokens: 0,
       });
 
       const permissions = new PermissionManager();

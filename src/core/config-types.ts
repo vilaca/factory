@@ -5,6 +5,10 @@ export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
 export interface AgentConfig {
   compactionThreshold?: number;
   recencyWindow?: number;
+  /** Soft token budget for the recency window during compaction. Whichever
+   * is larger — `recencyWindow` (count floor) or as many trailing messages
+   * as fit under this budget — wins. Default 4000. */
+  recencyTokens?: number;
   /** Hard ceiling per turn. When set, the runtime aborts the agent run after
    * this many seconds. Default: unset (no timeout). */
   turnTimeoutSec?: number;

@@ -72,6 +72,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   const contextManager = new ContextManager(conversation, capabilities, {
     compactionThreshold: opts.agentConfig?.compactionThreshold,
     recencyWindow: opts.agentConfig?.recencyWindow,
+    recencyTokens: opts.agentConfig?.recencyTokens,
     toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
   });
 
