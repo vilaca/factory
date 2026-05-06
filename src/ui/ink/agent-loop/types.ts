@@ -1,4 +1,4 @@
-import type { AgentConfig, ExperimentalFlags } from '../../../core/config-types.js';
+import type { AgentConfig, ExperimentalFlags, RotationEntry } from '../../../core/config-types.js';
 import type { Conversation } from '../../../core/conversation.js';
 import type { ContextManager } from '../../../core/context-manager.js';
 import type { FileCache } from '../../../core/agent/file-cache.js';
@@ -15,6 +15,16 @@ export interface PermissionRequestState {
   toolName: string;
   args: Record<string, unknown>;
   resolve: (d: PermissionDecision) => void;
+}
+
+/** Live rotation state owned by RunRefs; mirrors `agent.rotation` from the
+ *  config but mutable for `/rotate`. The runtime reads this on each call. */
+export interface RotationRefs {
+  keysEnabled: boolean;
+  modelsEnabled: boolean;
+  default: RotationEntry[];
+  overrides: Record<string, RotationEntry[]>;
+  probeAfterTurns: number;
 }
 
 export interface RunRefs {
@@ -36,6 +46,10 @@ export interface RunRefs {
   planMode: boolean;
   enableCorrector: boolean;
   experimental: ExperimentalFlags;
+  /** Per-tab rotation snapshot, mutated by `/rotate`. Read by the runtime
+   *  (commits A + B) on every provider call to decide which keys / chain
+   *  entries are eligible. */
+  rotation: RotationRefs;
   gitBranch: string | undefined;
   gitDirty: boolean | null;
   /** Per-tab working directory. Tools resolve relative paths against this and

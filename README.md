@@ -96,6 +96,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `/clear` | Clear conversation history |
 | `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
 | `/pick` | Open the provider/model picker (recent pairs first) |
+| `/rotate` | Manage the rotation chain (provider/model fallbacks) |
 | `/full` | Toggle full vs preview tool output (applies going forward) |
 | `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |
@@ -152,6 +153,11 @@ Three layers, lowest to highest precedence: config files → environment variabl
 | `--no-log` | | Disable session JSONL logging |
 | `--no-clear` | | Do not clear the screen on startup |
 | `--pick` | | Force the startup picker even when a previous session is on file |
+| `--rotate <a:b,c:d>` | | Default rotation chain (comma-separated `<provider>:<model>`); session-only unless `--save-rotate` |
+| `--save-rotate` | | Persist `--rotate` to global config |
+| `--no-rotate` | | Disable both key rotation and model rotation |
+| `--no-rotate-keys` | | Disable key rotation (still rotate provider/model entries) |
+| `--no-rotate-models` | | Disable model rotation (still rotate keys within the same model) |
 | `--help` | `-h` | Show help |
 
 ### Environment variables
