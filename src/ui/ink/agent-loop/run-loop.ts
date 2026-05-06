@@ -31,7 +31,12 @@ function isSubstantivePrompt(s: string): boolean {
 async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOptions | undefined> {
   const refs = deps.refs.current;
   if (!refs) return undefined;
-  if (!refs.rotation.keysEnabled) return undefined;
+  // The rotation context is built when *either* tier is enabled.
+  // callModel decides per-call whether a given tier fires.
+  const keysEnabled = refs.rotation.keysEnabled;
+  const modelsEnabled = refs.rotation.modelsEnabled;
+  if (!keysEnabled && !modelsEnabled) return undefined;
+
   const descriptor = descriptorByAlias(refs.provider.name);
   if (!descriptor) return undefined;
   let cfg;
@@ -41,7 +46,17 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
     return undefined;
   }
   const keys = listKeys(cfg, descriptor.name);
-  if (keys.length < 2) return undefined;
+
+  // Resolve the chain for the active tuple: per-(provider, model) override
+  // beats the default. Empty when neither is set.
+  const tupleKey = `${refs.provider.name}:${refs.model}`;
+  const chain = refs.rotation.overrides[tupleKey] ?? refs.rotation.default;
+
+  // Skip context build entirely when neither tier has any work to do.
+  const tier1Possible = keysEnabled && keys.length >= 2;
+  const tier2Possible = modelsEnabled && chain.length > 0;
+  if (!tier1Possible && !tier2Possible) return undefined;
+
   return {
     keys,
     activeKeyId: refs.activeKeyId,
@@ -57,7 +72,26 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
     onProviderChange: (next) => {
       if (deps.refs.current) deps.refs.current.provider = next;
     },
+    onModelChange: (m) => {
+      if (deps.refs.current) deps.refs.current.model = m;
+    },
     failureLog: refs.keyFailureLog,
+    modelsEnabled,
+    chain,
+    loadKeysForProvider: async (providerName) => {
+      const desc = descriptorByAlias(providerName);
+      if (!desc) return [];
+      const c = await loadGlobalConfig();
+      return listKeys(c, desc.name);
+    },
+    withTuple: (providerName, key) => {
+      const desc = descriptorByAlias(providerName);
+      const opts: Parameters<typeof createProvider>[1] = { token: key.token };
+      if (desc?.needsAccountId && key.extras?.accountId) {
+        opts.accountId = key.extras.accountId;
+      }
+      return createProvider(providerName, opts);
+    },
   };
 }
 

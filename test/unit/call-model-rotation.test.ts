@@ -151,6 +151,146 @@ describe('callModel rotation (tier 1)', () => {
     assert.match((caught as Error).message, /429/);
   });
 
+  it('falls back to the next chain entry when keys exhaust on the current tuple', async () => {
+    // First call (anthropic, sonnet) throws. No more keys to rotate.
+    // Tier 2 advances to (groq, llama). New provider yields a clean reply.
+    const initial = buildSequencedProvider('anthropic', [
+      Object.assign(new Error('429'), { status: 429 }),
+    ]);
+    const fallback = buildSequencedProvider('groq', [
+      [{ content: 'fallback reply', usage: undefined }],
+    ]);
+    let loadKeysCalledFor: string | undefined;
+    let withTupleCalledFor: string | undefined;
+    const rotation: RotationOptions = {
+      keys: [key('a', 'tok-a')], // single key, no tier-1 alternative
+      activeKeyId: 'a',
+      withKey: () => initial, // tier-1 has no fallback
+      modelsEnabled: true,
+      chain: [{ provider: 'groq', model: 'llama-3.3-70b' }],
+      loadKeysForProvider: async (p) => {
+        loadKeysCalledFor = p;
+        return [key('g', 'tok-g')];
+      },
+      withTuple: (p, _k) => {
+        withTupleCalledFor = p;
+        return fallback;
+      },
+    };
+
+    const { events, result } = await collect(
+      callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
+    );
+
+    // Should see key-rotation-exhausted (tier 1 had nothing), then
+    // tuple-rotation (tier 2), then content from the fallback.
+    assert.ok(events.find(e => e.type === 'key-rotation-exhausted'), 'expected key-rotation-exhausted');
+    const tupEvent = events.find(e => e.type === 'tuple-rotation');
+    assert.ok(tupEvent, 'expected tuple-rotation');
+    assert.strictEqual(tupEvent.type === 'tuple-rotation' && tupEvent.from.provider, 'anthropic');
+    assert.strictEqual(tupEvent.type === 'tuple-rotation' && tupEvent.to.provider, 'groq');
+    assert.strictEqual(tupEvent.type === 'tuple-rotation' && tupEvent.to.model, 'llama-3.3-70b');
+    assert.strictEqual(loadKeysCalledFor, 'groq');
+    assert.strictEqual(withTupleCalledFor, 'groq');
+    const r = result as { fullContent: string; finalProvider?: Provider; finalModel?: string };
+    assert.strictEqual(r.fullContent, 'fallback reply');
+    assert.strictEqual(r.finalModel, 'llama-3.3-70b');
+    assert.notStrictEqual(r.finalProvider, initial);
+  });
+
+  it('exhausts the chain when every entry also fails', async () => {
+    const err = Object.assign(new Error('429'), { status: 429 });
+    const initial = buildSequencedProvider('anthropic', [err]);
+    const fallback1 = buildSequencedProvider('groq', [err]);
+    const fallback2 = buildSequencedProvider('cerebras', [err]);
+    const tupleProviders: Record<string, Provider> = {
+      groq: fallback1,
+      cerebras: fallback2,
+    };
+    const rotation: RotationOptions = {
+      keys: [key('a', 'tok-a')],
+      activeKeyId: 'a',
+      withKey: () => initial,
+      modelsEnabled: true,
+      chain: [
+        { provider: 'groq', model: 'llama-3.3-70b' },
+        { provider: 'cerebras', model: 'gpt-oss-120b' },
+      ],
+      loadKeysForProvider: async () => [key('x', 'tok-x')],
+      withTuple: (p) => tupleProviders[p]!,
+    };
+
+    let caught: unknown;
+    const events: AgentEvent[] = [];
+    try {
+      const gen = callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation);
+      while (true) {
+        const next = await gen.next();
+        if (next.done) break;
+        events.push(next.value as AgentEvent);
+      }
+    } catch (e) {
+      caught = e;
+    }
+
+    // Saw two tuple-rotations (sonnet → llama → cerebras), then a final
+    // tuple-rotation-exhausted, then the error propagated.
+    assert.strictEqual(events.filter(e => e.type === 'tuple-rotation').length, 2);
+    assert.strictEqual(events.filter(e => e.type === 'tuple-rotation-exhausted').length, 1);
+    assert.ok(caught instanceof Error);
+  });
+
+  it('skips chain entries with no saved keys', async () => {
+    const err = Object.assign(new Error('429'), { status: 429 });
+    const initial = buildSequencedProvider('anthropic', [err]);
+    const fallback = buildSequencedProvider('cerebras', [
+      [{ content: 'ok', usage: undefined }],
+    ]);
+    const rotation: RotationOptions = {
+      keys: [key('a', 'tok-a')],
+      activeKeyId: 'a',
+      withKey: () => initial,
+      modelsEnabled: true,
+      chain: [
+        { provider: 'groq', model: 'llama-3.3-70b' },     // empty keys, skipped
+        { provider: 'cerebras', model: 'gpt-oss-120b' },  // valid
+      ],
+      loadKeysForProvider: async (p) => p === 'groq' ? [] : [key('x', 'tok-x')],
+      withTuple: (p) => p === 'cerebras' ? fallback : initial,
+    };
+
+    const { events, result } = await collect(
+      callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
+    );
+    const tupEvent = events.find(e => e.type === 'tuple-rotation');
+    assert.ok(tupEvent);
+    assert.strictEqual(tupEvent.type === 'tuple-rotation' && tupEvent.to.provider, 'cerebras');
+    assert.strictEqual((result as { fullContent: string }).fullContent, 'ok');
+  });
+
+  it('does not advance when modelsEnabled is false even with a chain present', async () => {
+    const err = Object.assign(new Error('429'), { status: 429 });
+    const initial = buildSequencedProvider('anthropic', [err]);
+    const rotation: RotationOptions = {
+      keys: [key('a', 'tok-a')],
+      activeKeyId: 'a',
+      withKey: () => initial,
+      modelsEnabled: false, // <-- disabled
+      chain: [{ provider: 'groq', model: 'llama-3.3-70b' }],
+      loadKeysForProvider: async () => [key('x', 'tok-x')],
+      withTuple: () => initial,
+    };
+    let caught: unknown;
+    try {
+      const gen = callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation);
+      while (true) {
+        const n = await gen.next();
+        if (n.done) break;
+      }
+    } catch (e) { caught = e; }
+    assert.ok(caught instanceof Error);
+  });
+
   it('updates failureLog when rotating', async () => {
     const initial = buildSequencedProvider('anthropic', [
       Object.assign(new Error('429'), { status: 429 }),

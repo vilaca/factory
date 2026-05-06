@@ -5,7 +5,7 @@ import type { Conversation } from './conversation.js';
 import type { ContextManager } from './context-manager.js';
 import type { PermissionManager, PermissionDecision } from '../permissions.js';
 import type { FileCache } from './agent/file-cache.js';
-import type { ProviderKey } from './config-types.js';
+import type { ProviderKey, RotationEntry } from './config-types.js';
 
 export type { PermissionDecision };
 
@@ -51,6 +51,13 @@ export type AgentEvent =
       reason: 'rate-limit' | 'auth';
     }
   | { type: 'key-rotation-exhausted'; provider: string; reason: 'rate-limit' | 'auth' }
+  | {
+      type: 'tuple-rotation';
+      from: { provider: string; model: string };
+      to: { provider: string; model: string };
+      reason: 'rate-limit' | 'auth';
+    }
+  | { type: 'tuple-rotation-exhausted'; reason: 'rate-limit' | 'auth' }
   | { type: 'turn-complete'; stopReason: StopReason; turnsUsed: number; usage?: TokenUsage }
   | { type: 'error'; error: Error };
 
@@ -101,8 +108,26 @@ export interface RotationOptions {
    *  instance. The host updates RunRefs.provider so subsequent turns
    *  start from the rotated provider, not the stale one. */
   onProviderChange?: (next: Provider) => void;
+  /** Called once per turn when tier-2 rotation has swapped to a new
+   *  (provider, model) pair. The host updates RunRefs.model. */
+  onModelChange?: (model: string) => void;
   /** In-memory log of recent failures, keyed by `keyId`. Used to
    *  deprioritise keys that 429'd in the last few minutes. The runtime
    *  reads + writes this map; the host owns its lifetime. */
   failureLog?: Map<string, number>;
+
+  // ─── Tier 2 (chain rotation) ─────────────────────────────────────────
+  /** When false, tier 2 is a no-op even when the chain has entries. */
+  modelsEnabled?: boolean;
+  /** Fallback chain to walk after tier 1 exhausts for the active tuple.
+   *  Entries are tried in order; entries already tried in this call are
+   *  skipped. Empty/undefined means tier 2 won't fire. */
+  chain?: RotationEntry[];
+  /** Load saved keys for a different provider when tier 2 advances.
+   *  Required when `chain` is non-empty. */
+  loadKeysForProvider?: (provider: string) => Promise<ProviderKey[]>;
+  /** Build a Provider instance for an arbitrary `(provider, key)` pair —
+   *  used when tier 2 hops between providers. Required when `chain` is
+   *  non-empty. */
+  withTuple?: (provider: string, key: ProviderKey) => Provider;
 }
