@@ -271,6 +271,7 @@ async function main(): Promise<void> {
       bashDedup: false,
       readCache: true,
       lineCountHint: true,
+      subagents: true,
       ...experimentalFromConfig,
       ...(cliArgs.bashDedup ? { bashDedup: true } : {}),
       ...(cliArgs.noBashDedup ? { bashDedup: false } : {}),
@@ -278,9 +279,38 @@ async function main(): Promise<void> {
       ...(cliArgs.noReadCache ? { readCache: false } : {}),
       ...(cliArgs.lineCountHint ? { lineCountHint: true } : {}),
       ...(cliArgs.noLineCountHint ? { lineCountHint: false } : {}),
+      ...(cliArgs.subagents ? { subagents: true } : {}),
+      ...(cliArgs.noSubagents ? { subagents: false } : {}),
     },
     ...(cliArgs.turnTimeoutSec !== undefined ? { turnTimeoutSec: cliArgs.turnTimeoutSec } : {}),
   };
+
+  // The Delegate tool spawns a read-only research subagent. Default-on
+  // since 7882677; flip off via --no-subagents or `experimental.subagents:
+  // false`. Wire weakModel from selectWeakTier so the subagent runs on the
+  // provider's cheap tier (Haiku / Llama-3.1-8B / Gemini-Flash) instead of
+  // the parent's strong-tier model — investigations don't need frontier
+  // capacity, and the cost saving compounds quickly when the parent fans
+  // out delegate calls.
+  //
+  // sessionLogger isn't wired here because each tab owns its own logger
+  // (created per-tab in createInitialRefs); a global registry-level
+  // registration can't reach the right one. Subagent events still land in
+  // the per-tab session log via the parent's recordHistory path; what's
+  // missing is the *nested* `subagent` source tag in the JSONL. Tracked as
+  // a follow-up — needs per-tab tool registration to fix properly.
+  if (mergedAgentConfig.experimental.subagents) {
+    const [{ createDelegateTool }, { selectWeakTier }] = await Promise.all([
+      import('./tools/delegate.js'),
+      import('./core/agent/weak-tier.js'),
+    ]);
+    const weakModel = selectWeakTier(provider, model);
+    defaultRegistry.register(createDelegateTool({
+      provider,
+      parentModel: model,
+      ...(weakModel ? { weakModel } : {}),
+    }));
+  }
 
   const welcomeText = renderWelcome(
     model,

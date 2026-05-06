@@ -56,9 +56,11 @@ export interface ExperimentalFlags {
   readCache?: boolean;
   /** Add a system-prompt hint to prefer cloc/scc for line-counting tasks. */
   lineCountHint?: boolean;
+  /** Enable the Delegate tool for spawning a read-only research subagent. */
+  subagents?: boolean;
 }
 
-export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint'] as const;
+export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents'] as const;
 export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
 
 export interface PermissionConfig {
