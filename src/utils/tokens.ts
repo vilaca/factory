@@ -1,6 +1,12 @@
 import type { ChatMessage } from '../providers/types.js';
 
-const CHARS_PER_TOKEN = 3.5;
+/** Approximate char-to-token ratio. Char count is the cheapest available
+ *  proxy; provider tokenizers vary but ~4 chars/token holds for English
+ *  text and code well enough for the heuristics that depend on this — pre-
+ *  turn compaction triggering, recency-window budgeting, and the per-tool-
+ *  result size cap in Conversation.addToolResult. Real usage from the
+ *  provider replaces the estimate as soon as the first turn returns. */
+export const CHARS_PER_TOKEN = 4;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);

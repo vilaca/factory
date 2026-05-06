@@ -1,10 +1,5 @@
 import type { ChatMessage, ToolCallMessage } from '../providers/types.js';
-
-/** Approximate char-to-token ratio used to enforce the per-message cap.
- *  Char count is the cheapest available proxy; provider tokenizers vary
- *  but ~4 chars/token holds for English text and code well enough for a
- *  guardrail. */
-const CHARS_PER_TOKEN = 4;
+import { CHARS_PER_TOKEN } from '../utils/tokens.js';
 
 const DEFAULT_MAX_TOOL_RESULT_TOKENS = 6_000;
 
@@ -71,12 +66,18 @@ export class Conversation {
    * appending a second tool_result would have no matching tool_use and the
    * Anthropic API rejects the request.
    *
+   * Applies the same size cap as `addToolResult`; otherwise the corrector
+   * path is a backdoor for oversized output to bypass the per-result cap.
    * Falls back to appending if no prior tool result exists.
    */
-  replaceLastToolResult(content: string, toolCallId?: string): void {
+  replaceLastToolResult(content: string, toolCallId?: string, toolName?: string): void {
+    const cap = this.maxToolResultTokens * CHARS_PER_TOKEN;
+    const finalContent = content.length > cap
+      ? elisionStub(toolName ?? '<tool>', content.length)
+      : content;
     for (let i = this.messages.length - 1; i >= 0; i--) {
       if (this.messages[i].role === 'tool') {
-        const msg: ChatMessage = { role: 'tool', content };
+        const msg: ChatMessage = { role: 'tool', content: finalContent };
         if (toolCallId) {
           msg.tool_call_id = toolCallId;
         }
@@ -84,7 +85,7 @@ export class Conversation {
         return;
       }
     }
-    this.addToolResult(content, toolCallId);
+    this.addToolResult(content, toolCallId, toolName);
   }
 
   /**

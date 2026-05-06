@@ -39,17 +39,27 @@ export async function getGitBranch(cwd: string): Promise<string | undefined> {
   return ref ? ref[1] : 'HEAD';
 }
 
+/** Cap `git status` so a hanging/locked repo doesn't block startup or the
+ *  per-turn refresh. Local `git status` returns in <100ms for sane working
+ *  trees; >2s means something is wrong (network filesystem stall, long
+ *  hook, index lock contention) and we'd rather show no git state than
+ *  freeze the UI. */
+const GIT_STATUS_TIMEOUT_MS = 2_000;
+/** Bound on porcelain output. Dense format, but a very dirty tree (or a
+ *  rogue `git status -s -uall`) could push past Node's default 1 MiB. */
+const GIT_STATUS_MAX_BUFFER = 4 * 1024 * 1024;
+
 /**
  * Returns whether the working tree has uncommitted changes, or `null` when
  * `cwd` is not a git repo root. Throws on unexpected fs/git failures
- * (permission errors, missing `git` binary) — callers should warn rather
- * than silently dropping the Git section.
+ * (permission errors, missing `git` binary, timeout) — callers should warn
+ * rather than silently dropping the Git section.
  */
 export async function isGitDirty(cwd: string): Promise<boolean | null> {
   if (!(await isGitRepo(cwd))) return null;
   const { stdout } = await execFileAsync(
     'git', ['status', '--porcelain'],
-    { cwd }
+    { cwd, timeout: GIT_STATUS_TIMEOUT_MS, maxBuffer: GIT_STATUS_MAX_BUFFER },
   );
   return stdout.trim().length > 0;
 }

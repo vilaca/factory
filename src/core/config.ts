@@ -334,13 +334,26 @@ export async function loadGlobalConfig(): Promise<Config> {
   return validated;
 }
 
-export async function saveGlobalConfig(config: Partial<Config>): Promise<Config> {
-  const filePath = getGlobalConfigFile();
-  const existingRaw = await readJsonFile(filePath) ?? {};
-  // Spread order: existingRaw first (preserves unknown/future keys), then config
-  // (applies our updates). Validate only to catch type errors, then write the
-  // merged raw object so unknown keys are not silently dropped.
-  const merged = { ...existingRaw, ...config };
+// In-process serialization for config writes. Without this, two concurrent
+// `addKey()` calls (e.g., user adds a key in one tab while another tab
+// races a credential migration) interleave: each reads the same baseline,
+// each writes its own merged result, and one write clobbers the other.
+// The mutex covers both saveGlobalConfig and updateGlobalConfig so they
+// can't interleave with each other either. Cross-process safety still
+// requires file locking — out of scope here, but the same-process case is
+// the dominant one (multiple TUI tabs, background promises).
+let configMutex: Promise<unknown> = Promise.resolve();
+
+function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = configMutex.then(fn, fn);
+  // Swallow rejections on the chain so one failed write doesn't poison
+  // every subsequent call. Each caller still observes its own rejection
+  // through the returned promise.
+  configMutex = next.catch(() => undefined);
+  return next;
+}
+
+async function writeMergedConfig(filePath: string, merged: Record<string, unknown>): Promise<Config> {
   const validated = validateConfig(merged, filePath);
   const dir = getGlobalConfigDir();
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
@@ -361,6 +374,43 @@ export async function saveGlobalConfig(config: Partial<Config>): Promise<Config>
     await fs.chmod(dir, 0o700).catch(() => {});
   }
   return validated;
+}
+
+export async function saveGlobalConfig(config: Partial<Config>): Promise<Config> {
+  return withConfigLock(async () => {
+    const filePath = getGlobalConfigFile();
+    const existingRaw = await readJsonFile(filePath) ?? {};
+    // Spread order: existingRaw first (preserves unknown/future keys), then config
+    // (applies our updates). Validate only to catch type errors, then write the
+    // merged raw object so unknown keys are not silently dropped.
+    const merged = { ...existingRaw, ...config };
+    return writeMergedConfig(filePath, merged);
+  });
+}
+
+/**
+ * Atomically read-modify-write the global config. The transformer receives
+ * the latest validated on-disk config and returns a partial that's spread
+ * over the on-disk raw the same way `saveGlobalConfig` handles its input.
+ * The read, transform, and write all happen under the in-process mutex,
+ * so concurrent updates serialise instead of racing on stale baselines.
+ *
+ * Use this (not load + save) whenever the new value depends on the prior
+ * value — e.g., appending a credential to `keys[provider]`. Plain
+ * `saveGlobalConfig` is fine for unconditional updates that don't depend
+ * on what's already there.
+ */
+export async function updateGlobalConfig(
+  mutate: (current: Config) => Partial<Config> | Promise<Partial<Config>>,
+): Promise<Config> {
+  return withConfigLock(async () => {
+    const filePath = getGlobalConfigFile();
+    const existingRaw = await readJsonFile(filePath) ?? {};
+    const validated = validateConfig(existingRaw, filePath);
+    const updates = await mutate(validated);
+    const merged = { ...existingRaw, ...updates };
+    return writeMergedConfig(filePath, merged);
+  });
 }
 
 export async function loadProjectConfig(cwd: string): Promise<Config> {
