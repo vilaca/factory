@@ -3,6 +3,7 @@ import type { AgentLoopApi } from './use-agent-loop.js';
 import type { TabsContextValue } from './tabs/TabsContext.js';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../core/config-types.js';
 import { dispatchRotate } from './slash/rotate.js';
+import { dispatchKeys } from './slash/keys.js';
 
 export interface SlashCommandContext {
   agent: AgentLoopApi;
@@ -209,6 +210,9 @@ export async function dispatchSlashCommand(
     case '/rotate':
       await dispatchRotate(arg, agent);
       return true;
+    case '/keys':
+      await dispatchKeys(arg, agent);
+      return true;
     case '/full': {
       if (!ctx.toggleFullOutput) {
         agent.addNotice('warn', 'Full-output toggle not available in this context.');
@@ -237,6 +241,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/model [<name>]', 'Show current provider/model, or switch model. Accepts <provider>:<model>.'],
     ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
     ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
+    ['/keys [<provider>]', 'Show saved keys with usage / rate-limit counters'],
     ['/full', 'Toggle full vs preview tool output (going forward)'],
     ['/cwd [dir]', 'Show or change this tab\'s working directory'],
     ['/permissions', 'Reset tool permissions'],

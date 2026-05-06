@@ -97,6 +97,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
 | `/pick` | Open the provider/model picker (recent pairs first) |
 | `/rotate` | Manage the rotation chain (provider/model fallbacks) |
+| `/keys [<provider>]` | Show saved keys with usage / rate-limit counters |
 | `/full` | Toggle full vs preview tool output (applies going forward) |
 | `/cwd [<dir>]` | Show or change the active tab's working directory |
 | `/permissions` | Reset tool permissions |

@@ -418,11 +418,19 @@ export function Session(props: SessionProps): React.ReactElement {
             const cfg = await loadGlobalConfig();
             const descriptor = descriptorByAlias(name);
             if (!descriptor) return [];
-            return listKeys(cfg, descriptor.name).map(k => ({
-              id: k.id,
-              ...(k.label ? { label: k.label } : {}),
-              fingerprint: keyFingerprint(k.token),
-            }));
+            const { listStatsForProvider } = await import('../../core/key-stats.js');
+            const stats = await listStatsForProvider(descriptor.name);
+            return listKeys(cfg, descriptor.name).map(k => {
+              const s = stats[k.id];
+              const ok = s?.successCount ?? 0;
+              const warn = (s?.rateLimitCount ?? 0) + (s?.authErrorCount ?? 0);
+              return {
+                id: k.id,
+                ...(k.label ? { label: k.label } : {}),
+                fingerprint: keyFingerprint(k.token),
+                ...(ok > 0 || warn > 0 ? { stats: { ok, warn } } : {}),
+              };
+            });
           }}
           validateKey={async (name, token) => {
             try {

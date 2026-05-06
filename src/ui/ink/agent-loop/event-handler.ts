@@ -1,5 +1,6 @@
 import type { AgentEvent } from '../../../core/agent-types.js';
 import type { AgentLoopDeps } from './types.js';
+import { recordFailure as recordKeyFailure, recordSuccess as recordKeySuccess } from '../../../core/key-stats.js';
 
 export interface StreamingState {
   getStreamingBuffer: () => string;
@@ -188,11 +189,20 @@ export function handleAgentEvent(
         : `…${event.to.fingerprint}`;
       const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
       deps.addNotice('warn', `⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}`);
+      if (event.from?.keyId) {
+        void recordKeyFailure(event.provider, event.from.keyId, event.reason);
+      }
       break;
     }
     case 'key-rotation-exhausted': {
       const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
       deps.addNotice('warn', `⟲ no more keys for ${event.provider} (${reasonLabel})`);
+      // The active key at this moment is the one that just exhausted the
+      // pool — record its failure so the user sees it in /keys.
+      const refs = deps.refs.current;
+      if (refs?.activeKeyId) {
+        void recordKeyFailure(event.provider, refs.activeKeyId, event.reason);
+      }
       break;
     }
     case 'tuple-rotation': {
@@ -249,6 +259,14 @@ export function handleAgentEvent(
       }
       if (event.stopReason === 'token-limit') {
         ss.markTokenLimitHalt();
+      }
+      // Record success for whichever (provider, key) the turn ended on.
+      // refs.activeKeyId reflects post-rotation state by this point.
+      if (event.stopReason === 'completed') {
+        const refs = deps.refs.current;
+        if (refs?.activeKeyId) {
+          void recordKeySuccess(refs.provider.name, refs.activeKeyId);
+        }
       }
       break;
     }
