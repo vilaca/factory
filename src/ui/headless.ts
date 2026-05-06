@@ -258,6 +258,43 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           process.stderr.write(`  ⟲ rotation chain exhausted (${reasonLabel})\n`);
           break;
         }
+        case 'auto-retry-exhausted':
+          // Model bailed after a tool failure and couldn't recover. Piped
+          // output may be truncated mid-task — surface so CI doesn't treat
+          // a partial response as a successful one.
+          process.stderr.write('  ⚠ auto-retry exhausted — model couldn\'t recover\n');
+          break;
+        case 'all-denied-halt':
+          process.stderr.write(
+            `  ⏸ all ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting\n`,
+          );
+          break;
+        case 'output-cap-reached':
+          // Response was truncated at the provider's completion-token cap.
+          // The caller's piped stdout is incomplete — flag it so `factory <
+          // prompt > out.md` doesn't silently produce a half-document.
+          process.stderr.write(
+            `  ⚠ output cap reached (${event.completionTokens} tokens) — response truncated\n`,
+          );
+          break;
+        case 'empty-turn-warning':
+          process.stderr.write(
+            `  ⚠ ${event.completionTokens} tokens of internal reasoning, no visible output\n`,
+          );
+          break;
+        case 'repetition-detected':
+          process.stderr.write(
+            `  ⚠ runaway repetition (${event.streak} identical lines) — turn aborted\n`,
+          );
+          break;
+        case 'tool-result-imitation-stripped':
+          // Security signal: the model fabricated tool result blocks in the
+          // stream. The fakes are stripped before storing, but a piped run
+          // shouldn't trust the output without knowing this happened.
+          process.stderr.write(
+            `  ⚠ stripped ${event.count} fabricated tool-result block${event.count === 1 ? '' : 's'} from response\n`,
+          );
+          break;
         case 'error':
           process.stderr.write(`factory: ${event.error.message}\n`);
           exitCode = 1;
