@@ -45,6 +45,22 @@ function PanelLine({ children }: { children: React.ReactNode }): React.ReactElem
   );
 }
 
+/** True when `items[index]` is a tool-call whose immediate predecessor is a
+ *  tool-call of the same tool — i.e. nothing else (text, result panel,
+ *  notice) has interrupted the run. The renderer uses this to suppress the
+ *  repeated `🔧 ToolName:` header. */
+function isToolCallContinuation(items: DisplayItem[], index: number): boolean {
+  if (index === 0) return false;
+  const cur = items[index];
+  const prev = items[index - 1];
+  if (!cur || !prev) return false;
+  return (
+    cur.kind === 'tool-call' &&
+    prev.kind === 'tool-call' &&
+    prev.toolName === cur.toolName
+  );
+}
+
 export function ConversationDisplay({
   items,
   streamingText,
@@ -59,24 +75,41 @@ export function ConversationDisplay({
     <Box flexDirection="column">
       {useStatic ? (
         <Static items={items}>
-          {(item, index) => (
-            <React.Fragment key={item.id}>
-              {index > 0 && <Separator />}
-              <PanelLine>
-                <DisplayItemView item={item} showFullOutput={showFullOutput} emojiMode={emojiMode} userEmoji={userEmoji} />
-              </PanelLine>
-            </React.Fragment>
-          )}
+          {(item, index) => {
+            const continuation = isToolCallContinuation(items, index);
+            return (
+              <React.Fragment key={item.id}>
+                {index > 0 && !continuation && <Separator />}
+                <PanelLine>
+                  <DisplayItemView
+                    item={item}
+                    showFullOutput={showFullOutput}
+                    emojiMode={emojiMode}
+                    userEmoji={userEmoji}
+                    continuation={continuation}
+                  />
+                </PanelLine>
+              </React.Fragment>
+            );
+          }}
         </Static>
       ) : (
-        items.map((item, index) => (
-          <React.Fragment key={item.id}>
-            {index > 0 && <Separator />}
-            <PanelLine>
-              <DisplayItemView item={item} showFullOutput={showFullOutput} emojiMode={emojiMode} />
-            </PanelLine>
-          </React.Fragment>
-        ))
+        items.map((item, index) => {
+          const continuation = isToolCallContinuation(items, index);
+          return (
+            <React.Fragment key={item.id}>
+              {index > 0 && !continuation && <Separator />}
+              <PanelLine>
+                <DisplayItemView
+                  item={item}
+                  showFullOutput={showFullOutput}
+                  emojiMode={emojiMode}
+                  continuation={continuation}
+                />
+              </PanelLine>
+            </React.Fragment>
+          );
+        })
       )}
       {streamingText && (
         <>
@@ -86,18 +119,27 @@ export function ConversationDisplay({
           </PanelLine>
         </>
       )}
-      {pendingToolCall && (
-        <>
-          {items.length > 0 && !streamingText && <Separator />}
-          <PanelLine>
-            <ToolCallLine
-              icon="🔧"
-              toolName={pendingToolCall.toolName}
-              args={pendingToolCall.args}
-            />
-          </PanelLine>
-        </>
-      )}
+      {pendingToolCall && (() => {
+        const last = items[items.length - 1];
+        const pendingContinuation =
+          !streamingText &&
+          !!last &&
+          last.kind === 'tool-call' &&
+          last.toolName === pendingToolCall.toolName;
+        return (
+          <>
+            {items.length > 0 && !streamingText && !pendingContinuation && <Separator />}
+            <PanelLine>
+              <ToolCallLine
+                icon="🔧"
+                toolName={pendingToolCall.toolName}
+                args={pendingToolCall.args}
+                continuation={pendingContinuation}
+              />
+            </PanelLine>
+          </>
+        );
+      })()}
       {spinner && (
         <>
           {items.length > 0 && !streamingText && !pendingToolCall && <Separator />}
