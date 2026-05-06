@@ -86,10 +86,20 @@ function scheduleFlush(): void {
   flushTimer.unref?.();
 }
 
+// Holds the in-flight readFromDisk promise so concurrent first-time callers
+// share one read instead of each kicking off their own. Without this, two
+// recordX calls racing on a cold cache would each populate `cache` from
+// disk, the later resolution would clobber the earlier reference, and any
+// mutation made on the orphaned reference would be lost on the next flush.
+let pendingRead: Promise<AllKeyStats> | null = null;
 async function ensureCache(): Promise<AllKeyStats> {
   if (cache) return cache;
-  cache = await readFromDisk();
-  return cache;
+  if (!pendingRead) {
+    pendingRead = readFromDisk()
+      .then((c) => { cache = c; return c; })
+      .finally(() => { pendingRead = null; });
+  }
+  return pendingRead;
 }
 
 function getOrCreate(stats: AllKeyStats, provider: string, keyId: string): KeyStat {
@@ -206,6 +216,7 @@ export async function flushKeyStats(): Promise<void> {
  *  test pattern. */
 export function _resetKeyStatsForTests(): void {
   cache = null;
+  pendingRead = null;
   dirty = false;
   if (flushTimer) {
     clearTimeout(flushTimer);

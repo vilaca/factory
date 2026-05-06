@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'async_hooks';
 import { Ollama, type ChatRequest, type Tool, type Message } from 'ollama';
 import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
@@ -7,14 +8,18 @@ import type {
 export class OllamaProvider implements Provider {
   name = 'ollama';
   private client: Ollama;
-  // Holds the AbortSignal for the current non-streaming call so the customFetch
-  // wrapper can attach it to the underlying HTTP request. The streaming path
-  // uses AbortableAsyncIterator separately and leaves this untouched.
-  private currentSignal: AbortSignal | undefined;
+  // Per-call abort signal storage. The Ollama client doesn't accept a signal
+  // through chat()/list()/show(), so we route it through a customFetch
+  // wrapper. AsyncLocalStorage rather than an instance field because two
+  // overlapping chat calls (parallel subagents on the same provider) share
+  // this provider — a plain field would race: call B's `this.signal = …`
+  // would clobber A's slot before A's customFetch reads it. ALS gives each
+  // async context its own store and propagates across awaits.
+  private signalStore = new AsyncLocalStorage<AbortSignal | undefined>();
 
   constructor(host?: string) {
     const customFetch: typeof fetch = (input, init) => {
-      const signal = this.currentSignal;
+      const signal = this.signalStore.getStore();
       if (signal && !init?.signal) {
         return fetch(input as RequestInfo | URL, { ...init, signal });
       }
@@ -153,20 +158,17 @@ export class OllamaProvider implements Provider {
       throw makeAbortError();
     }
 
-    // Stash the signal so customFetch picks it up and attaches it to the
-    // underlying fetch call. Restored via finally.
-    const prevSignal = this.currentSignal;
-    this.currentSignal = signal;
+    // Run the chat call inside an AsyncLocalStorage context so customFetch
+    // sees the right signal even when other chat calls overlap on this same
+    // provider instance.
     let response;
     try {
-      response = await this.client.chat(request);
+      response = await this.signalStore.run(signal, () => this.client.chat(request));
     } catch (err: any) {
       if (signal?.aborted || err?.name === 'AbortError') {
         throw makeAbortError();
       }
       throw translateOllamaError(err);
-    } finally {
-      this.currentSignal = prevSignal;
     }
 
     const result: ChatChunk = {
