@@ -14,6 +14,7 @@ import { composeSystemPrompt as composeSystemPromptPure } from './agent-loop/sys
 import {
   startSessionLogger,
   createInitialRefs,
+  initSkillsRegistry,
   loadInitialHistory,
 } from './agent-loop/init.js';
 import { runAgentLoopInternal, processInput } from './agent-loop/run-loop.js';
@@ -102,6 +103,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       lineCountHint: refs.current.experimental.lineCountHint ?? false,
       subagents: refs.current.experimental.subagents ?? false,
       gitDirty: refs.current.gitDirty,
+      alwaysOnSkills: refs.current.skills?.alwaysOnSection() ?? '',
     });
   }
 
@@ -133,6 +135,26 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       initialPlanMode,
       initialExperimental,
       initialGitDirty,
+    });
+
+    // Skills load asynchronously; once loaded, attach the registry and rebuild
+    // the system prompt so any alwaysOn skills are picked up before the first
+    // turn. Conditional skills don't need a prompt rebuild — they're injected
+    // per-turn from processInput.
+    void initSkillsRegistry(
+      process.cwd(),
+      initialExperimental.skills ?? false,
+      sessionLogger,
+      addNotice,
+    ).then(reg => {
+      if (!refs.current || !reg) return;
+      refs.current.skills = reg;
+      if (reg.alwaysOnSection().length > 0) {
+        const sp = composeSystemPrompt();
+        refs.current.conversation.updateSystemPrompt(sp);
+        sessionLogger?.logSystemPromptChange('skills-loaded');
+        sessionLogger?.logSystemPrompt(sp);
+      }
     });
 
     // Seed the token estimate so the status bar shows the system prompt's

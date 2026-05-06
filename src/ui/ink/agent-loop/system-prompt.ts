@@ -13,6 +13,8 @@ export interface SystemPromptParts {
   lineCountHint: boolean;
   subagents: boolean;
   gitDirty: boolean | null;
+  /** Pre-rendered alwaysOn skills section, or empty string. */
+  alwaysOnSkills?: string;
 }
 
 export function composeSystemPrompt(p: SystemPromptParts): string {
@@ -23,5 +25,6 @@ export function composeSystemPrompt(p: SystemPromptParts): string {
   if (p.subagents) parts.push(getSubagentsPrompt());
   const git = getGitStatusSnippet(p.gitDirty);
   if (git) parts.push(git);
+  if (p.alwaysOnSkills && p.alwaysOnSkills.trim().length > 0) parts.push(p.alwaysOnSkills);
   return parts.join('\n\n');
 }

@@ -5,6 +5,7 @@ import type { FileCache } from '../../../core/agent/file-cache.js';
 import type { PermissionManager } from '../../../permissions.js';
 import type { Provider } from '../../../providers/types.js';
 import type { SessionLogger } from '../../../core/session-log.js';
+import type { SkillsRegistry } from '../../../core/skills/index.js';
 import type { DisplayItem, ToolCallSummary } from '../types.js';
 
 export type RunState = 'idle' | 'running' | 'awaiting-permission';
@@ -88,6 +89,8 @@ export interface RunRefs {
   inputQueue: string[];
   historyIndex: number;
   historyDraft: string;
+  /** Optional skills registry, present only when experimental.skills is on. */
+  skills?: SkillsRegistry;
 }
 
 export interface UseAgentLoopOptions {
