@@ -31,6 +31,10 @@ export interface AppProps {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Id of the multi-key-store entry the launch provider was built with.
+   *  Forwarded to each Session so per-key stats attribute correctly from
+   *  the first turn. */
+  keyId?: string;
   agentConfig?: AgentConfig;
   autoAllowTools?: string[];
   useTextToolFallback?: boolean;

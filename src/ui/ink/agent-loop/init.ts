@@ -87,6 +87,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     provider: opts.provider,
     model: opts.model,
     primary: { provider: opts.provider.name, model: opts.model },
+    ...(opts.keyId ? { activeKeyId: opts.keyId } : {}),
     useTextToolFallback: input.useTextToolFallback,
     nativeToolSupport: opts.nativeToolSupport ?? true,
     planMode: input.initialPlanMode,

@@ -7,15 +7,21 @@ import { AssistantText } from './assistant-text.js';
 export function DisplayItemView({
   item,
   showFullOutput = false,
+  emojiMode = false,
+  userEmoji,
 }: {
   item: DisplayItem;
   showFullOutput?: boolean;
+  emojiMode?: boolean;
+  userEmoji?: string;
 }): React.ReactElement {
   switch (item.kind) {
-    case 'user-input':
-      return <Text color="green" bold>{`> ${item.text}`}</Text>;
+    case 'user-input': {
+      const icon = emojiMode ? `${userEmoji ?? '🧑🏻‍💻'} ` : '> ';
+      return <Text color="green" bold>{icon}{item.text}</Text>;
+    }
     case 'assistant-text':
-      return <AssistantText text={item.text} streaming={item.streaming} />;
+      return <AssistantText text={item.text} streaming={item.streaming} emojiMode={emojiMode} />;
     case 'tool-call': {
       const denied = item.status === 'denied';
       return (

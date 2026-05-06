@@ -94,6 +94,11 @@ export interface UseAgentLoopOptions {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Id of the multi-key-store entry the launch provider was built with.
+   *  Seeds RunRefs.activeKeyId so per-key stats (recordSuccess /
+   *  recordFailure / recordTokenUsage) attribute correctly from turn 1.
+   *  Undefined when the token came from a CLI override or env var. */
+  keyId?: string;
   agentConfig?: AgentConfig;
   autoAllowTools?: string[];
   useTextToolFallback?: boolean;
@@ -142,6 +147,11 @@ export interface AgentLoopApi {
   /** Per-tab working directory, surfaced in the StatusBar. Updated by /cwd
    * and by Bash when a command changes $PWD via `cd`. */
   cwd: string;
+  /** Emoji mode toggle — when on, ⏺ becomes 🤖 and > becomes 🧑🏻‍💻. */
+  emojiMode: boolean;
+  /** Custom user emoji set via `/emoji <glyph>`. Falls back to 🧑🏻‍💻 when
+   *  undefined. Only applied while `emojiMode` is on. */
+  userEmoji: string | undefined;
   /** Read-only access to mutable settings/state for slash commands. */
   refs: { readonly current: RunRefs | null };
 
@@ -169,6 +179,10 @@ export interface AgentLoopApi {
   addNotice(level: NoticeLevel, text: string): void;
   addNoticeBlock(lines: { level: NoticeLevel; text: string; bold?: boolean }[]): void;
   setIdle(): void;
+  toggleEmojiMode(): void;
+  /** Set the user-prompt emoji via `/emoji <glyph>`. Trimmed; empty input
+   *  is rejected with a usage notice. Side effect: turns emoji mode on. */
+  setUserEmoji(emoji: string): void;
   /** Snapshot the running-state needed when handleSubmit dispatches inputs. */
   getRunState(): RunState;
 }

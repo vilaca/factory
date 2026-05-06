@@ -23,6 +23,11 @@ export interface ConversationDisplayProps {
   /** When on, tool-result items render the full output instead of the
    * preview. Toggled via /full. */
   showFullOutput?: boolean;
+  /** When on, assistant prompt is 🤖 and user prompt is 🧑🏻‍💻. Toggled via /emoji. */
+  emojiMode?: boolean;
+  /** Custom user emoji from `/emoji <glyph>`. Falls back to 🧑🏻‍💻 when
+   *  undefined. Ignored while emojiMode is off. */
+  userEmoji?: string;
 }
 
 /**
@@ -47,6 +52,8 @@ export function ConversationDisplay({
   spinner,
   useStatic = true,
   showFullOutput = false,
+  emojiMode = false,
+  userEmoji,
 }: ConversationDisplayProps): React.ReactElement {
   return (
     <Box flexDirection="column">
@@ -56,7 +63,7 @@ export function ConversationDisplay({
             <React.Fragment key={item.id}>
               {index > 0 && <Separator />}
               <PanelLine>
-                <DisplayItemView item={item} showFullOutput={showFullOutput} />
+                <DisplayItemView item={item} showFullOutput={showFullOutput} emojiMode={emojiMode} userEmoji={userEmoji} />
               </PanelLine>
             </React.Fragment>
           )}
@@ -66,7 +73,7 @@ export function ConversationDisplay({
           <React.Fragment key={item.id}>
             {index > 0 && <Separator />}
             <PanelLine>
-              <DisplayItemView item={item} showFullOutput={showFullOutput} />
+              <DisplayItemView item={item} showFullOutput={showFullOutput} emojiMode={emojiMode} />
             </PanelLine>
           </React.Fragment>
         ))
@@ -75,7 +82,7 @@ export function ConversationDisplay({
         <>
           {items.length > 0 && <Separator />}
           <PanelLine>
-            <AssistantText text={streamingText} streaming={true} />
+            <AssistantText text={streamingText} streaming={true} emojiMode={emojiMode} />
           </PanelLine>
         </>
       )}

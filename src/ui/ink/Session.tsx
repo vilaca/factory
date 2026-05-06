@@ -38,6 +38,10 @@ export interface SessionProps {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Id of the multi-key-store entry the launch provider was built with.
+   *  Forwarded to useAgentLoop so the first turn's success is attributed
+   *  to the right key in /keys. */
+  keyId?: string;
   agentConfig?: AgentConfig;
   autoAllowTools?: string[];
   useTextToolFallback?: boolean;
@@ -222,6 +226,8 @@ export function Session(props: SessionProps): React.ReactElement {
     gitBranch,
     gitDirty,
     cwd,
+    emojiMode,
+    userEmoji,
     refs,
     addNotice,
   } = agent;
@@ -378,6 +384,8 @@ export function Session(props: SessionProps): React.ReactElement {
         spinner={spinner}
         useStatic={useStatic}
         showFullOutput={showFullOutput}
+        emojiMode={emojiMode}
+        userEmoji={userEmoji}
       />
 
       {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} />}
