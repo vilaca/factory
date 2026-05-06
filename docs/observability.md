@@ -81,12 +81,28 @@ jq -c '
 ' ~/.factory/sessions/*.jsonl
 ```
 
+### Tool results that hit the elision cap
+
+`agent.maxToolResultTokens` rewrites oversized tool output to a stub with a stable prefix, so a string match catches both insertion-time and aging-time elisions:
+
+```bash
+jq -r '
+  select(.type == "agent-event" and .event.type == "tool-call-result")
+  | select(.event.result.output | startswith("[elided:"))
+  | .event.toolName
+' ~/.factory/sessions/*.jsonl | sort | uniq -c | sort -rn
+```
+
+A high count from one tool means either its output is genuinely outsized (raise the cap) or the tool is being called with too-broad arguments (narrow the call).
+
 ## Failure modes worth eyeballing
 
 - **Hit rate stuck at ~0% across turns.** Prefix isn't stable (volatile content leaked in) or the provider doesn't support caching at all.
 - **Hit rate high but `cacheCreationTokens` is also high every turn.** Markers placed wrong — the cache is being rewritten every turn instead of read.
 - **Specific turn drops hit rate to 0%.** Something mutated the prefix at that turn. Diff `system-prompt` events around that turn.
 - **Per-turn `promptTokens` keeps climbing.** Compaction isn't firing or its threshold is too high; tool results may be dominating context.
+- **Elision cap firing on >50% of tool calls.** Cap is too low or the agent is making sweeping calls. Either raise `agent.maxToolResultTokens` or add a "use offset/limit" hint to the system prompt.
+- **Compaction firing every few turns.** Either `agent.compactionThreshold` is too low for this workload, or `agent.toolResultAgingTurns` should be smaller so old results get pruned before full compaction is needed.
 
 ## Adding new recipes
 
