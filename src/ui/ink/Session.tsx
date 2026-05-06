@@ -11,7 +11,7 @@ import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-pa
 import { ProviderPicker, type ProviderEntry, type RecentPair } from './components/provider-picker.js';
 import { RotationPromptPanel, parseRotationPromptInput } from './components/rotation-prompt-panel.js';
 import type { RotationEntry } from '../../core/config-types.js';
-import { saveGlobalConfig } from '../../core/config.js';
+import { updateGlobalConfig } from '../../core/config.js';
 import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
 import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
@@ -179,24 +179,33 @@ export function Session(props: SessionProps): React.ReactElement {
       setPickerOpen(false);
       if (!entry) return null;
 
-      // Step 3: persist as an override for the active tuple.
+      // Step 3: persist as an override for the active tuple. Use
+      // updateGlobalConfig so the read + mutate + write all happen under the
+      // config mutex — without it, two tabs hitting rate limits at the same
+      // time would each read the same baseline and one's append would clobber
+      // the other.
+      let added = false;
       try {
         const tupleKey = `${context.provider}:${context.model}`;
-        const cfg = await loadGlobalConfig();
-        const existing = cfg.agent?.rotation?.overrides?.[tupleKey] ?? [];
-        // Skip persistence if the entry is already in the override list.
-        const dup = existing.some(e => e.provider === entry.provider && e.model === entry.model);
-        const nextOverrides = dup
-          ? cfg.agent?.rotation?.overrides ?? {}
-          : { ...(cfg.agent?.rotation?.overrides ?? {}), [tupleKey]: [...existing, entry] };
-        await saveGlobalConfig({
-          agent: {
-            ...cfg.agent,
-            rotation: { ...cfg.agent?.rotation, overrides: nextOverrides },
-          },
+        await updateGlobalConfig((cfg) => {
+          const existing = cfg.agent?.rotation?.overrides?.[tupleKey] ?? [];
+          const dup = existing.some(e => e.provider === entry.provider && e.model === entry.model);
+          if (dup) return {};
+          added = true;
+          const nextOverrides = {
+            ...(cfg.agent?.rotation?.overrides ?? {}),
+            [tupleKey]: [...existing, entry],
+          };
+          return {
+            agent: {
+              ...cfg.agent,
+              rotation: { ...cfg.agent?.rotation, overrides: nextOverrides },
+            },
+          };
         });
-        if (agent.refs.current && !dup) {
-          agent.refs.current.rotation.overrides[tupleKey] = [...existing, entry];
+        if (added && agent.refs.current) {
+          const existingRefs = agent.refs.current.rotation.overrides[tupleKey] ?? [];
+          agent.refs.current.rotation.overrides[tupleKey] = [...existingRefs, entry];
         }
       } catch (err) {
         agent.addNotice('warn', `⚠ couldn't persist fallback: ${(err as Error).message}`);
