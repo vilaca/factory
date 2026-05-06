@@ -4,9 +4,15 @@ import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { loadGlobalConfig } from '../../../core/config.js';
 import { listKeys } from '../../../core/credentials.js';
+import { getWarmthLog } from '../../../core/key-stats.js';
 import { defaultRegistry } from '../../../tools/index.js';
 import { handleAgentEvent } from './event-handler.js';
 import type { AgentLoopDeps } from './types.js';
+
+/** Anthropic's default ephemeral cache TTL. The rotation tiebreaker uses
+ *  the same window so a key that hit cache "recently" by Anthropic's
+ *  standard is also "warm" by ours. */
+const ROTATION_CACHE_WARMTH_TTL_MS = 5 * 60 * 1000;
 
 const TRIVIAL_PROMPTS = new Set([
   'ok', 'okay', 'yes', 'no', 'y', 'n', 'go', 'go on',
@@ -79,6 +85,7 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
       if (deps.refs.current) deps.refs.current.model = m;
     },
     failureLog: refs.keyFailureLog,
+    getWarmthLog: () => getWarmthLog(refs.provider.name, ROTATION_CACHE_WARMTH_TTL_MS),
     modelsEnabled,
     chain,
     loadKeysForProvider: async (providerName) => {

@@ -159,6 +159,49 @@ describe('selectNextKey', () => {
     // But `b`'s failure is older than the 5-min window so it's "fresh".
     assert.strictEqual(next?.id, 'b');
   });
+
+  it('prefers a cache-warm key as a soft tiebreaker among healthy keys', () => {
+    // Both keys are healthy (no failures). `b` was warmed more recently.
+    const warmthLog = new Map([['b', 1_000_000]]);
+    const next = selectNextKey([a, b], new Set(), { warmthLog });
+    assert.strictEqual(next?.id, 'b');
+  });
+
+  it('breaks warmth ties on most-recent cache read', () => {
+    const warmthLog = new Map([
+      ['a', 1_000_000],
+      ['b', 1_500_000], // warmer
+      ['c', 800_000],
+    ]);
+    const next = selectNextKey([a, b, c], new Set(), { warmthLog });
+    assert.strictEqual(next?.id, 'b');
+  });
+
+  it('does not promote a warm-but-failed key over a cold-and-healthy key (correctness wins)', () => {
+    const now = 1_000_000;
+    const failureLog = new Map([['b', now - 1000]]); // b just failed
+    const warmthLog = new Map([['b', now - 100]]);   // but b is also warm
+    const next = selectNextKey([a, b], new Set(), { failureLog, warmthLog, now });
+    // Stale-but-warm `b` must NOT beat fresh-but-cold `a`.
+    assert.strictEqual(next?.id, 'a');
+  });
+
+  it('falls through to a warm stale key when no fresh keys are eligible', () => {
+    const now = 1_000_000;
+    const failureLog = new Map([
+      ['a', now - 1000],
+      ['b', now - 1000],
+    ]);
+    const warmthLog = new Map([['b', now - 100]]);
+    const next = selectNextKey([a, b], new Set(), { failureLog, warmthLog, now });
+    // Both stale; warmth tiebreaker promotes b.
+    assert.strictEqual(next?.id, 'b');
+  });
+
+  it('preserves createdAt order when warmthLog is empty', () => {
+    const next = selectNextKey([c, b, a], new Set(), { warmthLog: new Map() });
+    assert.strictEqual(next?.id, 'a');
+  });
 });
 
 describe('migrateLegacyKeys', () => {

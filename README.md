@@ -382,6 +382,8 @@ Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel /
 
 **Weak-tier routing for internal sub-calls.** The compaction summary and the LLM tool-call corrector both pay the lower tier when the active provider has a weak-tier mapping. **The user's primary turn is never routed through this** — strong-tier stays strong-tier for everything you actually see in chat. Adding a new provider to the map is a single line in `src/core/agent/weak-tier.ts`.
 
+**Rotation × cache.** Prompt caches are scoped per API key, so swapping keys throws the warm prefix away. When several saved keys are equally healthy, the rotation tiebreaker prefers the one whose last cache read landed within Anthropic's 5-minute TTL — sourced from the same `lastCacheReadAt` stamp that drives the 🔥 badge in `/keys`. Failure / rate-limit signals still take precedence: a warm-but-failed key never beats a cold-and-healthy one (correctness wins over cost).
+
 For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
 ### Session Logs

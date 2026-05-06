@@ -170,6 +170,30 @@ export async function listStatsForProvider(provider: string): Promise<{ [keyId: 
   return { ...(stats[provider] ?? {}) };
 }
 
+/** Returns a map of `keyId → last-cache-read timestamp (ms epoch)` for the
+ *  given provider, restricted to keys whose `lastCacheReadAt` falls within
+ *  `ttlMs`. The rotation tiebreaker (call-model) reads this to prefer
+ *  warm keys when several are equally healthy — newer reads beat older
+ *  reads, which is a coarse but accurate proxy for "this key's prompt
+ *  cache is still alive on the provider side". */
+export async function getWarmthLog(
+  provider: string,
+  ttlMs: number,
+): Promise<Map<string, number>> {
+  const stats = await ensureCache();
+  const out = new Map<string, number>();
+  const now = Date.now();
+  for (const [keyId, stat] of Object.entries(stats[provider] ?? {})) {
+    const ts = stat.lastCacheReadAt;
+    if (!ts) continue;
+    const ms = Date.parse(ts);
+    if (Number.isFinite(ms) && now - ms < ttlMs) {
+      out.set(keyId, ms);
+    }
+  }
+  return out;
+}
+
 /** Force an immediate flush. Call on session-end so the user doesn't lose
  *  the last few minutes of counters when shutting down. */
 export async function flushKeyStats(): Promise<void> {

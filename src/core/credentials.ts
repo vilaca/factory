@@ -42,6 +42,13 @@ export function selectNextKey(
   tried: ReadonlySet<string>,
   options: {
     failureLog?: ReadonlyMap<string, number>;
+    /** Optional `keyId → last-cache-read timestamp (ms)` map. When two
+     *  keys are otherwise equally healthy, the one with the most recent
+     *  cache read wins — the provider's prompt cache is per-key, so
+     *  staying on a warm key avoids paying the full tokenization cost
+     *  again. Failure / rate-limit signals still take precedence over
+     *  warmth (correctness wins over cost). */
+    warmthLog?: ReadonlyMap<string, number>;
     recentFailureWindowMs?: number;
     now?: number;
   } = {},
@@ -61,7 +68,27 @@ export function selectNextKey(
     a.createdAt.localeCompare(b.createdAt);
   fresh.sort(byCreatedAt);
   stale.sort(byCreatedAt);
-  return fresh[0] ?? stale[0];
+
+  // Within each health bucket, promote warm keys ahead of cold ones.
+  // Warmer (more recent cache read) wins over equally-warm. Cold keys
+  // keep their createdAt order so the legacy "oldest-first when nothing
+  // is warm" behavior is preserved end-to-end.
+  const promoteWarm = (group: ProviderKey[]): ProviderKey[] => {
+    if (!options.warmthLog || options.warmthLog.size === 0) return group;
+    const warm: Array<{ key: ProviderKey; warmth: number }> = [];
+    const cold: ProviderKey[] = [];
+    for (const k of group) {
+      const w = options.warmthLog.get(k.id);
+      if (w !== undefined) warm.push({ key: k, warmth: w });
+      else cold.push(k);
+    }
+    warm.sort((a, b) => b.warmth - a.warmth);
+    return [...warm.map(w => w.key), ...cold];
+  };
+
+  const orderedFresh = promoteWarm(fresh);
+  const orderedStale = promoteWarm(stale);
+  return orderedFresh[0] ?? orderedStale[0];
 }
 
 /** Human label for the picker: `<label> · …<last4>` or just `…<last4>`. */
