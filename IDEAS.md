@@ -61,6 +61,22 @@ Sequencing rationale: **M1** closes the perceived gap on most workflows; **M2** 
 
 ---
 
+## Patterns worth borrowing from GSD
+
+[gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done) is a meta-prompting layer over agent CLIs. Most of it duplicates things factory already plans (subagents, workflows, persistent markdown state, architect-mode). Four specific patterns are additive.
+
+- **Decision capture as a discrete artifact.** Before planning, GSD's "discuss" step captures implementation decisions (API shapes, data structures, error handling) into a file separate from the plan. Plan and execute phases consume it as input. `feat/architect-mode` collapses decisions and plan into one pass; splitting them prevents replanning churn when a decision changes. *How to apply:* extend `feat/workflows` with a `decisions.md` artifact the planner is required to consume.
+- **Per-role model tiers.** GSD binds sub-agent roles to `quality` / `balanced` / `budget` profiles — researcher and verifier on cheap models, planner on frontier. Factory's rotation chain already orders models by class; what's missing is a per-delegate selector. *How to apply:* once `feat/subagent-delegate` lands, add a `model_tier` field on the delegate spec mapping into the existing chain (top = quality, mid = balanced, tail = budget). Combines with `--no-rotate-models` for predictable cost.
+- **Diagnose-then-replan recovery.** On verification failure, GSD spawns a dedicated debug agent that produces a *fix plan* — not just an error report — ready for immediate re-execution. Factory's `feat-lint-test-feedback` surfaces failures inline; the GSD pattern hands them to a fresh agent with isolated context, so the retry isn't poisoned by the original failed attempt. *How to apply:* pair with subagent-delegate. On lint/test failure, delegate to a fix-plan agent; original conversation receives a structured plan, applies it, re-verifies.
+- **Plan-sized-to-fit-fresh-context as a hard constraint.** GSD's planner must produce plans small enough to execute in a fresh 200k context. Without this, planners generate work that only fits in the main conversation's accumulated context — undelegatable. *How to apply:* feed an estimated token budget into the planner prompt; split plans whose estimated execution cost exceeds it. Pairs with parallel sub-agents (M2): oversized plans get sliced into delegatable chunks at planning time.
+
+Deliberately skipped:
+- **Six-command rigid workflow** — too prescriptive. Slash commands plus `feat/workflows` give the same affordance with less ceremony.
+- **Atomic-commit-per-task in parallel waves** — risky when steps depend on each other. Preferable as opt-in via a workflow, not a default.
+- **Five-artifact persistent state set** (PROJECT / REQUIREMENTS / ROADMAP / STATE / CONTEXT) — too much ceremony for individual developers. AGENTS.md fallback plus scoped memory cover the same ground more flexibly.
+
+---
+
 ## Hierarchical permission model
 
 Replace the flat allowlist in `src/permissions.ts` with a tree, e.g. `bash:git:read`, `bash:git:write`, `mcp:atlassian:*`. Grant once at a node, cascade to children; revoke at a node, cascade too.

@@ -6,6 +6,7 @@ import path from 'path';
 import {
   flushKeyStats,
   getStats,
+  getWarmthLog,
   listStatsForProvider,
   recordFailure,
   recordSuccess,
@@ -143,6 +144,54 @@ describe('key-stats', () => {
 
       const stat = await getStats('anthropic', 'k1');
       assert.strictEqual(stat?.uncachedInputTokens, 0);
+    });
+  });
+
+  it('getWarmthLog returns recent cache reads within the TTL window', async () => {
+    await withTempHome(async () => {
+      // k1 reads cache (lastCacheReadAt stamped now); k2 has no cache reads.
+      await recordTokenUsage('anthropic', 'k1', {
+        promptTokens: 100,
+        completionTokens: 10,
+        totalTokens: 110,
+        cachedPromptTokens: 80,
+      });
+      await recordTokenUsage('anthropic', 'k2', {
+        promptTokens: 100,
+        completionTokens: 10,
+        totalTokens: 110,
+      });
+      await flushKeyStats();
+
+      const log = await getWarmthLog('anthropic', 5 * 60 * 1000);
+      assert.strictEqual(log.has('k1'), true, 'k1 should be in the warmth log');
+      assert.strictEqual(log.has('k2'), false, 'k2 has no cache reads');
+      const k1 = log.get('k1');
+      assert.ok(k1 !== undefined && Date.now() - k1 < 5 * 60 * 1000);
+    });
+  });
+
+  it('getWarmthLog excludes cache reads older than the TTL window', async () => {
+    await withTempHome(async () => {
+      await recordTokenUsage('anthropic', 'k1', {
+        promptTokens: 100,
+        completionTokens: 10,
+        totalTokens: 110,
+        cachedPromptTokens: 80,
+      });
+      await flushKeyStats();
+      // Use a 1ms window — k1's read just happened so the entry is brand-new.
+      // Wait a couple ms to make sure it falls outside.
+      await new Promise(r => setTimeout(r, 5));
+      const log = await getWarmthLog('anthropic', 1);
+      assert.strictEqual(log.size, 0);
+    });
+  });
+
+  it('getWarmthLog returns an empty map for unknown providers', async () => {
+    await withTempHome(async () => {
+      const log = await getWarmthLog('nonexistent', 5 * 60 * 1000);
+      assert.strictEqual(log.size, 0);
     });
   });
 });

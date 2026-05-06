@@ -194,8 +194,10 @@ export async function* callModel(
             if (rotation.failureLog && activeKeyId) {
               rotation.failureLog.set(activeKeyId, Date.now());
             }
+            const warmthLog = await rotation.getWarmthLog?.();
             const next = selectNextKey(rotation.keys, triedKeyIds, {
               failureLog: rotation.failureLog,
+              warmthLog,
             });
             if (next) {
               const fromKey = activeKeyId

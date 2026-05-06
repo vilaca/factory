@@ -115,6 +115,11 @@ export interface RotationOptions {
    *  deprioritise keys that 429'd in the last few minutes. The runtime
    *  reads + writes this map; the host owns its lifetime. */
   failureLog?: Map<string, number>;
+  /** Optional async hook returning `keyId → last-cache-read timestamp (ms)`
+   *  for the active provider's keys. Drives the rotation tiebreaker —
+   *  among healthy keys, prefer the one whose prompt cache is still warm.
+   *  Hosts source this from `key-stats.getWarmthLog`. Tests omit it. */
+  getWarmthLog?: () => Promise<ReadonlyMap<string, number>>;
 
   // ─── Tier 2 (chain rotation) ─────────────────────────────────────────
   /** When false, tier 2 is a no-op even when the chain has entries. */
