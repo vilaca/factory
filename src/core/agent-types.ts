@@ -38,6 +38,8 @@ export type AgentEvent =
   | { type: 'compaction-start'; aggressive: boolean }
   | { type: 'compaction'; oldMessages: number; newMessages: number; aggressive: boolean }
   | { type: 'bash-dedup-nudge'; recentCommands: string[] }
+  | { type: 'hook-veto'; event: string; toolName: string; errorMessage?: string }
+  | { type: 'hook-error'; event: string; error: string }
   | { type: 'read-cache-hit'; path: string; afterCompaction: boolean }
   | { type: 'repetition-detected'; line: string; streak: number }
   | { type: 'empty-turn-warning'; completionTokens: number }
@@ -78,18 +80,26 @@ export interface AgentOptions {
   experimental?: {
     bashDedup?: boolean;
     readCache?: boolean;
+    hooks?: boolean;
   };
   /** Session-level cache of Read fingerprints. Required when experimental.readCache is on. */
   fileCache?: FileCache;
   /** Mutable working-directory holder. Tools resolve relative paths against
    * `.current` and Bash updates it via `cwdAfter`, so `cd` persists across
    * calls within a turn. The agent loop reads it back after the turn to keep
-   * RunRefs in sync. Optional — headless callers may omit it and tools fall
-   * back to `process.cwd()`. */
+   * RunRefs in sync. Also used by hook discovery for project-local hooks
+   * under `<cwdRef.current>/.factory/hooks/`. Optional — headless callers
+   * may omit it and tools fall back to `process.cwd()`. */
   cwdRef?: { current: string };
   /** When set, the runtime rotates among saved keys for the active provider
    *  on rate-limit/auth failures before giving up. */
   rotation?: RotationOptions;
+  /** Optional sink invoked when a hook script writes to stderr; the host
+   *  wires this to the session log. */
+  onHookStderr?: (hookPath: string, chunk: string) => void;
+  /** Optional sink invoked with errors raised while running a hook
+   *  (timeout, malformed JSON, non-zero exit, spawn failure). */
+  onHookError?: (event: string, error: string) => void;
 }
 
 export interface RotationOptions {

@@ -18,6 +18,7 @@ import {
   loadInitialHistory,
 } from './agent-loop/init.js';
 import { runAgentLoopInternal, processInput } from './agent-loop/run-loop.js';
+import { runHook } from '../../core/hooks/index.js';
 import { refreshGitState } from './agent-loop/git-state.js';
 import {
   recordHistory as recordHistoryPure,
@@ -178,11 +179,42 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
 
     void loadInitialHistory(refs, addNotice);
 
+    if (initialExperimental.hooks) {
+      const cwd = process.cwd();
+      void runHook(
+        'SessionStart',
+        { provider: opts.provider.name, model: opts.model, cwd },
+        {
+          cwd,
+          onStderr: (hookPath, chunk) =>
+            sessionLogger?.logWarning('hook-stderr', `${hookPath}: ${chunk.trim()}`),
+        },
+      ).then((r) => {
+        for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
+      }).catch((err) => {
+        sessionLogger?.logWarning('hook-error', `SessionStart: ${err?.message ?? String(err)}`);
+      });
+    }
+
     return () => {
       // Closing a tab while its agent is still running: signal abort so the
       // run-loop unwinds promptly instead of writing to React state on the
       // unmounted Session and continuing to spawn tools.
       refs.current?.abort?.abort();
+      if (refs.current?.experimental.hooks) {
+        const cwd = process.cwd();
+        void runHook(
+          'SessionEnd',
+          { provider: opts.provider.name, model: opts.model, cwd },
+          {
+            cwd,
+            onStderr: (hookPath, chunk) =>
+              sessionLogger?.logWarning('hook-stderr', `${hookPath}: ${chunk.trim()}`),
+          },
+        ).then((r) => {
+          for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
+        }).catch(() => { /* never block teardown */ });
+      }
       sessionLogger?.logSessionEnd();
       sessionLogger?.close();
     };

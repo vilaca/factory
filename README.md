@@ -142,8 +142,9 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 | `lineCountHint` | on | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants. |
 | `subagents` | on | Registers the `Delegate` tool for spawning a read-only research subagent. See the [Subagents](#subagents-experimental) section below. |
 | `skills` | off | Loads markdown skill files from `.factory/skills/` and conditionally injects them based on triggers. |
+| `hooks` | on | Run user-supplied shell scripts at lifecycle events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionEnd`). No-op when no hook scripts exist. See [Hooks](#hooks) below. |
 
-Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--no-subagents`, `--skills`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
+Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--no-subagents`, `--skills`, `--no-hooks`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
 
 ## Configuration
 
@@ -162,7 +163,8 @@ Three layers, lowest to highest precedence: config files → environment variabl
 | `--bash-dedup` | | Enable Bash near-duplicate detector |
 | `--no-read-cache` | | Disable Read mtime/hash cache |
 | `--no-line-count-hint` | | Drop the cloc/scc system-prompt hint |
-| `--subagents` | | Register the `Delegate` tool for spawning a read-only research subagent |
+| `--no-subagents` | | Disable the `Delegate` tool (on by default; see [Subagents](#subagents-experimental)) |
+| `--no-hooks` | | Disable user-supplied lifecycle shell hooks (on by default; see [Hooks](#hooks)) |
 | `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
 | `--no-log` | | Disable session JSONL logging |
 | `--no-clear` | | Do not clear the screen on startup |
@@ -518,6 +520,60 @@ Be deliberate about which tools you allow — `Bash`, `Edit`, and `Write` execut
 **Exit codes.** `0` success, `1` agent error, `2` empty stdin, `3` permission denied (no TTY), `4` turn limit, `5` token limit.
 
 Session logs are written exactly as in interactive mode, so headless runs are still inspectable in `~/.factory/sessions/`.
+
+### Hooks
+
+Lets you intercept lifecycle events with shell scripts — useful for policy gates (block `Bash` calls touching production), audit trails, or rewriting compaction context. **On by default** (no-op when no hook scripts exist on disk); disable with `--no-hooks` or in config:
+
+```json
+{ "agent": { "experimental": { "hooks": false } } }
+```
+
+**Hook locations** (both run if present, global first then project):
+- `~/.factory/hooks/<event>.sh` — applies to every project
+- `<cwd>/.factory/hooks/<event>.sh` — project-local override
+
+**Lifecycle events:**
+
+| Event | Fires | Veto via `cancel`? | Honors `contextModification`? |
+|-------|-------|---------------------|-------------------------------|
+| `SessionStart` | Once per process, after config loaded | no | no |
+| `UserPromptSubmit` | Before each user prompt is sent to the model | no | no |
+| `PreToolUse` | Before each tool executes | **yes** — `cancel: true` denies the call | no |
+| `PostToolUse` | After each tool result | no | no |
+| `PreCompact` | Before context compaction summarizes history | no | **yes** — replaces the LLM-generated summary verbatim |
+| `SessionEnd` | On REPL exit | no | no |
+
+**Protocol:**
+- `factory` spawns the script with `sh <path>` and pipes one JSON object to stdin: `{ "event": "<name>", "payload": <event-specific> }`.
+- The script must print one JSON object on stdout: `{ "cancel"?: boolean, "errorMessage"?: string, "contextModification"?: string }` (any field optional; empty stdout is OK).
+- 5-second timeout per hook (the process is `SIGKILL`ed on expiry).
+- stderr is forwarded to the session log (`~/.factory/sessions/`) tagged `hook-stderr`.
+- Spawn failures, non-zero exits, malformed JSON, and timeouts are logged as `hook-error` warnings but never crash factory.
+- For non-veto events, the return value is purely informational (logged, future-proofing).
+
+**Example: block `Bash` calls that touch a forbidden path.**
+
+```sh
+#!/bin/sh
+# ~/.factory/hooks/PreToolUse.sh
+INPUT=$(cat)
+TOOL=$(printf '%s' "$INPUT" | sed -n 's/.*"toolName":"\([^"]*\)".*/\1/p')
+if [ "$TOOL" = "Bash" ] && printf '%s' "$INPUT" | grep -q "/etc/"; then
+  printf '{"cancel": true, "errorMessage": "Bash commands touching /etc are blocked by policy"}'
+else
+  printf '{}'
+fi
+```
+
+**Example: replace compaction context with a fixed string.**
+
+```sh
+#!/bin/sh
+# .factory/hooks/PreCompact.sh
+cat >/dev/null
+printf '{"contextModification": "Working on feature/foo. Files of interest: src/main.ts, src/util.ts."}'
+```
 
 ## Architecture
 

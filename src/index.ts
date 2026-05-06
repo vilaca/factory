@@ -273,6 +273,7 @@ async function main(): Promise<void> {
       lineCountHint: true,
       subagents: true,
       skills: false,
+      hooks: true,
       ...experimentalFromConfig,
       ...(cliArgs.bashDedup ? { bashDedup: true } : {}),
       ...(cliArgs.noBashDedup ? { bashDedup: false } : {}),
@@ -284,6 +285,8 @@ async function main(): Promise<void> {
       ...(cliArgs.noSubagents ? { subagents: false } : {}),
       ...(cliArgs.skills ? { skills: true } : {}),
       ...(cliArgs.noSkills ? { skills: false } : {}),
+      ...(cliArgs.hooks ? { hooks: true } : {}),
+      ...(cliArgs.noHooks ? { hooks: false } : {}),
     },
     ...(cliArgs.turnTimeoutSec !== undefined ? { turnTimeoutSec: cliArgs.turnTimeoutSec } : {}),
   };
@@ -323,6 +326,17 @@ async function main(): Promise<void> {
     gitBranch,
   );
 
+  // Surface any hook scripts that will be active this session. With hooks
+  // default-on, a stale ~/.factory/hooks/SessionStart.sh from a prior
+  // experiment would otherwise spawn silently. Listing once per startup is
+  // cheap and prevents that footgun. Computed up front; printed below
+  // after the screen-clear so the notice survives.
+  let activeHookScripts: string[] = [];
+  if (mergedAgentConfig.experimental.hooks) {
+    const { discoverAllHooks } = await import('./core/hooks/discovery.js');
+    activeHookScripts = discoverAllHooks(cwd);
+  }
+
   const appOptions = {
     model,
     systemPrompt,
@@ -349,10 +363,16 @@ async function main(): Promise<void> {
     process.stdout.write('\n');
     await animateLogo();
     console.log(welcomeText);
+    if (activeHookScripts.length > 0) {
+      console.log(chalk.dim(`  Hook scripts active: ${activeHookScripts.join(', ')}`));
+    }
     const app = renderApp(appOptions);
     await app.waitUntilExit();
   } else {
     console.log(welcomeText);
+    if (activeHookScripts.length > 0) {
+      console.log(chalk.dim(`  Hook scripts active: ${activeHookScripts.join(', ')}`));
+    }
     if (validationWarning) {
       console.log(chalk.yellow(`  ⚠ ${validationWarning}`));
     }

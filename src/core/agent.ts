@@ -6,6 +6,7 @@ import { parseModelResponse } from './agent/parse-response.js';
 import { runToolCalls } from './agent/run-tool-calls.js';
 import { maybeCompact } from './agent/compaction.js';
 import { BashDedupTracker } from './agent/bash-dedup.js';
+import { runHook } from './hooks/index.js';
 
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
@@ -37,6 +38,32 @@ export async function* runAgent(
   const recovery = new RecoveryState(AUTO_RETRY_BUDGET, MAX_CORRECTIONS_PER_RUN);
   const bashDedup = options.experimental?.bashDedup ? new BashDedupTracker() : undefined;
   const fileCache = options.experimental?.readCache ? options.fileCache : undefined;
+  const hooksEnabled = options.experimental?.hooks ?? false;
+
+  // UserPromptSubmit fires once per runAgent call, before the user message is
+  // sent into the model loop. Return value is informational only — we log
+  // errors but don't act on `cancel` here (a vetoed user prompt would be
+  // surprising; users can just press Esc).
+  if (hooksEnabled) {
+    try {
+      // UserPromptSubmit fires before any tools have run, so cwdRef.current
+      // (if supplied) still equals process.cwd() at this point. Fresh read
+      // anyway to keep the pattern uniform with PreToolUse/PostToolUse,
+      // which DO need it live (Bash `cd` may have updated cwdRef mid-turn).
+      const cwd = options.cwdRef?.current ?? process.cwd();
+      const result = await runHook(
+        'UserPromptSubmit',
+        { userInput, model, provider: provider.name },
+        { cwd, onStderr: options.onHookStderr },
+      );
+      for (const e of result.errors) {
+        options.onHookError?.('UserPromptSubmit', e);
+        yield { type: 'hook-error', event: 'UserPromptSubmit', error: e };
+      }
+    } catch (err: any) {
+      yield { type: 'hook-error', event: 'UserPromptSubmit', error: err?.message ?? String(err) };
+    }
+  }
 
   while (true) {
     if (signal?.aborted) {
@@ -49,7 +76,12 @@ export async function* runAgent(
     // response when usage stays over the hard ceiling.
     let compaction;
     try {
-      compaction = yield* maybeCompact(contextManager, provider, model, signal, fileCache);
+      compaction = yield* maybeCompact(contextManager, provider, model, signal, fileCache, {
+        hooksEnabled,
+        cwdRef: options.cwdRef,
+        onHookStderr: options.onHookStderr,
+        onHookError: options.onHookError,
+      });
     } catch (err: any) {
       if (signal?.aborted || err?.name === 'AbortError') {
         yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
@@ -197,6 +229,9 @@ export async function* runAgent(
           model,
           userInput,
           cwdRef: options.cwdRef,
+          hooksEnabled,
+          onHookStderr: options.onHookStderr,
+          onHookError: options.onHookError,
         },
         callSignature,
         recovery,

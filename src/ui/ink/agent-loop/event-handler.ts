@@ -231,6 +231,15 @@ export function handleAgentEvent(
       );
       break;
     }
+    case 'hook-veto': {
+      const reason = event.errorMessage ? ` — ${event.errorMessage}` : '';
+      deps.addNotice('warn', `⛔ ${event.event} hook vetoed ${event.toolName}${reason}`);
+      break;
+    }
+    case 'hook-error': {
+      deps.addNotice('warn', `⚠ Hook ${event.event}: ${event.error}`);
+      break;
+    }
     case 'compaction-start': {
       deps.setCompacting({ aggressive: event.aggressive });
       deps.setThinking(false);

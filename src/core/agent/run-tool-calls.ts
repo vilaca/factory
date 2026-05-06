@@ -10,6 +10,7 @@ import { selectWeakTier } from './weak-tier.js';
 import type { RecoveryState } from './recovery-state.js';
 import type { BashDedupTracker } from './bash-dedup.js';
 import { FileCache } from './file-cache.js';
+import { runHook } from '../hooks/index.js';
 import * as fs from 'fs/promises';
 
 export interface ToolLoopContext {
@@ -31,6 +32,9 @@ export interface ToolLoopContext {
    * to RunRefs after the loop completes. Optional so headless callers can
    * skip it. */
   cwdRef?: { current: string };
+  hooksEnabled?: boolean;
+  onHookStderr?: (hookPath: string, chunk: string) => void;
+  onHookError?: (event: string, error: string) => void;
 }
 
 export interface ToolLoopResult {
@@ -73,12 +77,59 @@ export async function* runToolCalls(
       if (synthetic) continue;
     }
 
+    // PreToolUse hook — can veto the tool call. Hooks see the tool name and
+    // arguments and can return `{ cancel: true, errorMessage }`. Vetoes
+    // surface to the model as a denial so the agent can react and try
+    // something else, the same way a user-denial does.
+    if (ctx.hooksEnabled) {
+      const fnName = toolCall.function?.name ?? '';
+      const fnArgs = toolCall.function?.arguments ?? {};
+      // Resolve cwd at fire time, not at agent-loop start, so a hook fired
+      // after Bash `cd`'d earlier this turn picks up the project-local
+      // .factory/hooks/ at the new directory.
+      const cwd = ctx.cwdRef?.current ?? process.cwd();
+      try {
+        const result = await runHook(
+          'PreToolUse',
+          { toolName: fnName, args: fnArgs },
+          { cwd, onStderr: ctx.onHookStderr },
+        );
+        for (const e of result.errors) {
+          ctx.onHookError?.('PreToolUse', e);
+          yield { type: 'hook-error', event: 'PreToolUse', error: e };
+        }
+        if (result.cancel) {
+          const reason = result.errorMessage ?? 'Tool call denied by PreToolUse hook.';
+          const message = `Tool call "${fnName}" was denied by a PreToolUse hook: ${reason}`;
+          if (ctx.useUserResultFraming) {
+            ctx.conversation.addUser(formatToolResultMessage(fnName, message));
+          } else {
+            ctx.conversation.addToolResult(message, toolCall.id);
+          }
+          deniedCount++;
+          yield {
+            type: 'hook-veto',
+            event: 'PreToolUse',
+            toolName: fnName,
+            errorMessage: result.errorMessage,
+          };
+          yield { type: 'tool-call-denied', toolName: fnName, args: fnArgs as Record<string, unknown> };
+          continue;
+        }
+      } catch (err: any) {
+        ctx.onHookError?.('PreToolUse', err?.message ?? String(err));
+        yield { type: 'hook-error', event: 'PreToolUse', error: err?.message ?? String(err) };
+      }
+    }
+
     let lastFailedResult: { toolName: string; output: string } | null = null;
+    let lastResultForPostHook: { success: boolean; output: string } | null = null;
     for await (const event of executeToolCall(toolCall, ctx)) {
       if (event.type === 'tool-call-denied') {
         deniedCount++;
       }
       if (event.type === 'tool-call-result') {
+        lastResultForPostHook = { success: event.result.success, output: event.result.output };
         if (event.result.success) {
           recovery.lastFailureMessage = null;
           recovery.lastFailureSignature = null;
@@ -93,6 +144,33 @@ export async function* runToolCalls(
         }
       }
       yield event;
+    }
+
+    // PostToolUse hook — informational; return value is logged but not acted
+    // on. Fired even on failure so hook authors can observe the full lifecycle.
+    if (ctx.hooksEnabled && lastResultForPostHook) {
+      // PostToolUse fires after Bash, which may have updated cwdRef via
+      // `cd`. Re-resolve here so this hook sees the post-`cd` directory.
+      const cwd = ctx.cwdRef?.current ?? process.cwd();
+      try {
+        const result = await runHook(
+          'PostToolUse',
+          {
+            toolName: toolCall.function?.name ?? '',
+            args: toolCall.function?.arguments ?? {},
+            success: lastResultForPostHook.success,
+            output: lastResultForPostHook.output,
+          },
+          { cwd, onStderr: ctx.onHookStderr },
+        );
+        for (const e of result.errors) {
+          ctx.onHookError?.('PostToolUse', e);
+          yield { type: 'hook-error', event: 'PostToolUse', error: e };
+        }
+      } catch (err: any) {
+        ctx.onHookError?.('PostToolUse', err?.message ?? String(err));
+        yield { type: 'hook-error', event: 'PostToolUse', error: err?.message ?? String(err) };
+      }
     }
 
     // Bash-dedup: if the model is spinning on near-duplicate commands, fire
