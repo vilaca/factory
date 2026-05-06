@@ -175,11 +175,9 @@ function runSingleHook(
 
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
-    let timedOut = false;
     let settled = false;
 
     const timer = setTimeout(() => {
-      timedOut = true;
       try { child.stdin?.destroy(); } catch { /* ignore */ }
       try { child.kill('SIGKILL'); } catch { /* ignore */ }
       // Resolve immediately on timeout — don't wait for the child's `close`
@@ -203,16 +201,15 @@ function runSingleHook(
     });
 
     child.on('close', (code: number | null) => {
+      // Timeout path settles via the setTimeout handler above, so by the time
+      // `close` fires here on a timed-out run, `settled` is already true and
+      // we return early.
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       const stderr = Buffer.concat(stderrChunks).toString('utf-8');
       const stdout = Buffer.concat(stdoutChunks).toString('utf-8').trim();
 
-      if (timedOut) {
-        resolve({ error: `timed out after ${timeoutMs}ms`, stderr });
-        return;
-      }
       if (code !== 0 && code !== null) {
         // Non-zero exit: still try to parse stdout (a hook might exit 1 to
         // signal cancel). If stdout is empty/garbage, surface the exit code.

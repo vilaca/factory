@@ -2,8 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { randomBytes } from 'crypto';
-import type { Config, ProviderKey } from './config-types.js';
+import type { Config } from './config-types.js';
 import { EXPERIMENTAL_FLAG_KEYS } from './config-types.js';
+import { HOOK_EVENTS } from './hooks/discovery.js';
 
 const PROJECT_CONFIG_DIR = '.factory';
 const PROJECT_CONFIG_FILE = 'config.json';
@@ -141,10 +142,18 @@ function validateConfig(data: unknown, filePath: string): Config {
       if (agent.hooks === null || typeof agent.hooks !== 'object' || Array.isArray(agent.hooks)) {
         throw new Error(`${filePath}: "agent.hooks" must be an object`);
       }
-      const knownEvents = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PreCompact', 'SessionEnd', 'Stop', 'StopFailure'];
+      // Soft-validate event keys: unknown events are skipped with a warning
+      // rather than aborting startup. A typo like `PreTooluse` would otherwise
+      // hard-fail factory; the warning surfaces it without locking the user
+      // out of every other hook in the same file. resolveHooks() only reads
+      // events from HOOK_EVENTS, so unknown keys are inert at runtime.
       for (const [event, entries] of Object.entries(agent.hooks as Record<string, unknown>)) {
-        if (!knownEvents.includes(event)) {
-          throw new Error(`${filePath}: unknown hook event "agent.hooks.${event}". Known events: ${knownEvents.join(', ')}`);
+        if (!(HOOK_EVENTS as readonly string[]).includes(event)) {
+          process.stderr.write(
+            `${filePath}: warning: unknown hook event "agent.hooks.${event}" (skipped). ` +
+            `Known events: ${HOOK_EVENTS.join(', ')}\n`,
+          );
+          continue;
         }
         if (!Array.isArray(entries)) {
           throw new Error(`${filePath}: "agent.hooks.${event}" must be an array`);

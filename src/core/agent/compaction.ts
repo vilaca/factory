@@ -1,6 +1,7 @@
 import type { Provider } from '../../providers/types.js';
 import type { AgentEvent } from '../agent-types.js';
 import type { ContextManager } from '../context-manager.js';
+import type { HooksConfig } from '../config-types.js';
 import type { FileCache } from './file-cache.js';
 import { runHook } from '../hooks/index.js';
 
@@ -9,7 +10,7 @@ export interface CompactionHookOptions {
   /** Live cwd holder; we dereference at each hook fire so PreCompact picks
    *  up project-local hooks even after Bash `cd`'d mid-turn. */
   cwdRef?: { current: string };
-  hooksConfig?: import('../config-types.js').HooksConfig;
+  hooksConfig?: HooksConfig;
   onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
 }
@@ -121,11 +122,11 @@ async function* runPreCompactHook(
       hookOpts.onHookError?.('PreCompact', e);
       yield { type: 'hook-error', event: 'PreCompact', error: e };
     }
-    for (const hookPath of result.firedCommands) {
+    for (const hookCommand of result.firedCommands) {
       yield {
         type: 'hook-fired',
         event: 'PreCompact',
-        hookPath,
+        hookCommand,
         ...(result.notice ? { notice: result.notice } : {}),
       };
     }

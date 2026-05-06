@@ -89,8 +89,8 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
 
   const hooksEnabled = options.agentConfig?.experimental?.hooks ?? false;
   const cwd = process.cwd();
-  const onHookStderr = (hookPath: string, chunk: string): void => {
-    sessionLogger?.logWarning('hook-stderr', `${hookPath}: ${chunk.trim()}`);
+  const onHookStderr = (hookCommand: string, chunk: string): void => {
+    sessionLogger?.logWarning('hook-stderr', `${hookCommand}: ${chunk.trim()}`);
   };
   const onHookError = (event: string, error: string): void => {
     sessionLogger?.logWarning('hook-error', `${event}: ${error}`);
@@ -105,10 +105,10 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         { cwd, config: options.agentConfig?.hooks, onStderr: onHookStderr },
       );
       for (const e of r.errors) onHookError('SessionStart', e);
-      for (const hookPath of r.firedCommands) {
+      for (const hookCommand of r.firedCommands) {
         sessionLogger?.logWarning(
           'hook-fired',
-          `SessionStart: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`,
+          `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
         );
       }
       sessionStartContext = r.additionalContext;

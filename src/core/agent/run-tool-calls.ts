@@ -1,5 +1,6 @@
 import type { Provider, ToolCallMessage } from '../../providers/types.js';
 import type { AgentEvent, PermissionDecision } from '../agent-types.js';
+import type { HooksConfig } from '../config-types.js';
 import type { ToolRegistry } from '../../tools/registry.js';
 import type { ToolResult } from '../../tools/types.js';
 import type { Conversation } from '../conversation.js';
@@ -33,7 +34,7 @@ export interface ToolLoopContext {
    * skip it. */
   cwdRef?: { current: string };
   hooksEnabled?: boolean;
-  hooksConfig?: import('../config-types.js').HooksConfig;
+  hooksConfig?: HooksConfig;
   onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
 }
@@ -99,11 +100,11 @@ export async function* runToolCalls(
           ctx.onHookError?.('PreToolUse', e);
           yield { type: 'hook-error', event: 'PreToolUse', error: e };
         }
-        for (const hookPath of result.firedCommands) {
+        for (const hookCommand of result.firedCommands) {
           yield {
             type: 'hook-fired',
             event: 'PreToolUse',
-            hookPath,
+            hookCommand,
             ...(result.notice ? { notice: result.notice } : {}),
           };
         }
@@ -181,11 +182,11 @@ export async function* runToolCalls(
           ctx.onHookError?.(postEvent, e);
           yield { type: 'hook-error', event: postEvent, error: e };
         }
-        for (const hookPath of result.firedCommands) {
+        for (const hookCommand of result.firedCommands) {
           yield {
             type: 'hook-fired',
             event: postEvent,
-            hookPath,
+            hookCommand,
             ...(result.notice ? { notice: result.notice } : {}),
           };
         }

@@ -1,4 +1,4 @@
-import type { AgentConfig, BashRuleConfig, ExperimentalFlags, RotationEntry } from '../../../core/config-types.js';
+import type { AgentConfig, BashRuleConfig, ExperimentalFlags, HooksConfig, RotationEntry } from '../../../core/config-types.js';
 import type { Conversation } from '../../../core/conversation.js';
 import type { ContextManager } from '../../../core/context-manager.js';
 import type { FileCache } from '../../../core/agent/file-cache.js';
@@ -54,7 +54,7 @@ export interface RunRefs {
   experimental: ExperimentalFlags;
   /** Configured hook commands keyed by event. Cloned from agent.hooks at
    *  session init. Read by the agent loop and by the `/hooks` slash. */
-  hooksConfig?: import('../../../core/config-types.js').HooksConfig;
+  hooksConfig?: HooksConfig;
   /** Per-tab rotation snapshot, mutated by `/rotate`. Read by the runtime
    *  (commits A + B) on every provider call to decide which keys / chain
    *  entries are eligible. */
