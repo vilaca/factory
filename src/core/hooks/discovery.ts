@@ -1,4 +1,5 @@
 import type { HookEntry, HooksConfig } from '../config-types.js';
+import { globMatch } from '../../utils/glob.js';
 
 export const HOOK_EVENTS = [
   'SessionStart',
@@ -54,14 +55,3 @@ export function listAllHooks(config: HooksConfig | undefined): { event: HookEven
   return out;
 }
 
-/** Shell-style glob: `*` matches any run of characters, `?` matches one.
- *  Other regex metacharacters in the pattern are escaped. */
-function globMatch(pattern: string, value: string): boolean {
-  let re = '';
-  for (const ch of pattern) {
-    if (ch === '*') re += '.*';
-    else if (ch === '?') re += '.';
-    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  }
-  return new RegExp('^' + re + '$').test(value);
-}

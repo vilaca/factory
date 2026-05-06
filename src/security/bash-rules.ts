@@ -26,6 +26,8 @@
 // can over-grant). If a user truly needs regex they can compose multiple
 // glob rules.
 
+import { globToRegex } from '../utils/glob.js';
+
 export type BashDecision = 'allow' | 'deny' | 'prompt';
 
 export interface BashRule {
@@ -131,17 +133,6 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
     reason: 'force-push to a protected branch (main/master/release/prod)',
   },
 ];
-
-function globToRegex(glob: string): RegExp {
-  // Escape regex metacharacters EXCEPT * and ?, then translate those.
-  let re = '';
-  for (const ch of glob) {
-    if (ch === '*') re += '.*';
-    else if (ch === '?') re += '.';
-    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  }
-  return new RegExp('^' + re + '$');
-}
 
 export function matchUserRule(cmd: string, rules: BashRule[]): { rule: BashRule; index: number } | null {
   for (let i = 0; i < rules.length; i++) {

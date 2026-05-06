@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import { glob as fsGlob } from 'fs/promises';
 import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
@@ -47,7 +47,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     })) {
       const fullPath = path.resolve(searchPath, file);
       try {
-        const stat = fs.statSync(fullPath);
+        const stat = await fs.stat(fullPath);
         if (!stat.isFile()) continue;
         matches.push({ file, mtime: stat.mtimeMs });
       } catch {

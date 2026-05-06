@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { Config, ProviderKey } from './config-types.js';
-import { loadGlobalConfig, saveGlobalConfig } from './config.js';
+import { updateGlobalConfig } from './config.js';
 import { DESCRIPTOR_LIST } from '../providers/descriptors.js';
 
 /**
@@ -148,14 +148,15 @@ export function getKey(cfg: Config, provider: string, id?: string): ProviderKey 
   return list[0];
 }
 
-/** Append a new key to the store and persist. Returns the saved entry. */
+/** Append a new key to the store and persist. Returns the saved entry.
+ *  Goes through `updateGlobalConfig` so two concurrent `addKey` calls
+ *  serialise rather than each reading the same baseline and clobbering one
+ *  another's append. */
 export async function addKey(
   provider: string,
   token: string,
   opts: { label?: string; extras?: Record<string, string> } = {},
 ): Promise<ProviderKey> {
-  const cfg = await loadGlobalConfig();
-  const existing = cfg.keys?.[provider] ?? [];
   const entry: ProviderKey = {
     id: randomUUID(),
     token,
@@ -163,21 +164,20 @@ export async function addKey(
     ...(opts.label ? { label: opts.label } : {}),
     ...(opts.extras ? { extras: opts.extras } : {}),
   };
-  await saveGlobalConfig({
-    keys: { ...cfg.keys, [provider]: [...existing, entry] },
-  });
+  await updateGlobalConfig((cfg) => ({
+    keys: { ...cfg.keys, [provider]: [...(cfg.keys?.[provider] ?? []), entry] },
+  }));
   return entry;
 }
 
 /** Drop a key by id. Silent no-op if `id` doesn't match. */
 export async function deleteKey(provider: string, id: string): Promise<void> {
-  const cfg = await loadGlobalConfig();
-  const existing = cfg.keys?.[provider];
-  if (!existing) return;
-  const next = existing.filter(k => k.id !== id);
-  if (next.length === existing.length) return;
-  await saveGlobalConfig({
-    keys: { ...cfg.keys, [provider]: next },
+  await updateGlobalConfig((cfg) => {
+    const existing = cfg.keys?.[provider];
+    if (!existing) return {};
+    const next = existing.filter(k => k.id !== id);
+    if (next.length === existing.length) return {};
+    return { keys: { ...cfg.keys, [provider]: next } };
   });
 }
 

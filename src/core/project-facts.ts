@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { globToRegex } from '../utils/glob.js';
 
 export async function extractProjectFacts(cwd: string): Promise<string | null> {
   const sections: string[] = [];
@@ -90,7 +91,7 @@ async function readMarkers(cwd: string, label: string, files: string[]): Promise
   for (const file of files) {
     if (file.includes('*')) {
       const dirEntries = await fs.readdir(cwd).catch(() => [] as string[]);
-      const re = new RegExp('^' + file.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+      const re = globToRegex(file);
       if (dirEntries.some((e) => re.test(e))) markers.push(file);
       continue;
     }

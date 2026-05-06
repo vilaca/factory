@@ -385,7 +385,7 @@ async function* executeToolCall(
     if (useUserResultFraming) {
       conversation.addUser(formatToolResultMessage(labelForCap, finalOutput));
     } else if (options?.replaceLastToolResult) {
-      conversation.replaceLastToolResult(finalOutput, toolCallId);
+      conversation.replaceLastToolResult(finalOutput, toolCallId, labelForCap);
     } else {
       conversation.addToolResult(finalOutput, toolCallId, labelForCap);
     }
