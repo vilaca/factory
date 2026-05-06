@@ -31,6 +31,12 @@ export async function* maybeCompact(
   // tool results added since.
   contextManager.updateUsage(undefined);
 
+  // Pre-flight: age old tool results in place. Cheaper than full
+  // compaction and cache-friendly (only old messages change, so the
+  // recent prefix stays warm). Re-estimates internally; if this pulls us
+  // back under the soft threshold the rest of this function no-ops.
+  contextManager.ageOldToolResults();
+
   let cumulativeOld: number | null = null;
   let cumulativeNew: number | null = null;
   let lastAggressive = false;

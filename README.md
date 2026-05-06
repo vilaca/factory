@@ -374,6 +374,10 @@ Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel /
 
 **OpenRouter → Anthropic.** When OpenRouter routes to an `anthropic/...` model id, factory forwards the same `cache_control` blocks via the OpenAI envelope; OpenRouter passes them through to Anthropic untouched. Non-Anthropic upstreams on OpenRouter (`openai/gpt-*`, `google/gemini-*`, …) silently skip the markers so they never see unexpected fields.
 
+**Per-message size cap.** Any tool result whose content exceeds `agent.maxToolResultTokens` (default ~6000 tokens, ~24KB) is stored as `[elided: tool=Bash size=42kB — too large for context, ask again or narrow the call]` at the moment it's added to the conversation. Bounds the worst case at insertion time — one runaway `git log` or `Read` of a huge file can't dominate the next turn's prompt.
+
+**Tool-result aging.** Before each compaction check, tool results from turns older than `agent.toolResultAgingTurns` (default 6) are rewritten in place to elision stubs. Cheaper than full compaction and cache-friendlier — only old messages mutate, so the recent prefix stays warm for re-cache. The `tool_call_id` ↔ `tool_use` invariant Anthropic enforces stays intact: only the content changes.
+
 For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
 ### Session Logs

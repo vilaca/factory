@@ -282,6 +282,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
       compactionThreshold: opts.agentConfig?.compactionThreshold,
       recencyWindow: opts.agentConfig?.recencyWindow,
+      toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
     });
     addNotice('info', `Model switched to ${name}`);
   }
@@ -368,6 +369,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
       compactionThreshold: opts.agentConfig?.compactionThreshold,
       recencyWindow: opts.agentConfig?.recencyWindow,
+      toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
     });
     refreshTokenEstimate();
     addNotice('info', `Provider → ${nextProvider.name}, model → ${nextModel}`);

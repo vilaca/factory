@@ -205,7 +205,7 @@ async function* tryReadCacheHit(
   if (ctx.useUserResultFraming) {
     ctx.conversation.addUser(formatToolResultMessage('Read', message));
   } else {
-    ctx.conversation.addToolResult(message, toolCall.id);
+    ctx.conversation.addToolResult(message, toolCall.id, 'Read');
   }
   const result: ToolResult = { success: true, output: message, displayOutput: message };
   yield { type: 'tool-call-result', toolName: 'Read', args: args ?? {}, result };
@@ -273,13 +273,13 @@ async function* executeToolCall(
 
   const recordResult = (output: string, name?: string): void => {
     const finalOutput = options?.outputPrefix ? options.outputPrefix + output : output;
+    const labelForCap = name ?? fnName ?? 'tool';
     if (useUserResultFraming) {
-      const label = name ?? fnName ?? 'unknown';
-      conversation.addUser(formatToolResultMessage(label, finalOutput));
+      conversation.addUser(formatToolResultMessage(labelForCap, finalOutput));
     } else if (options?.replaceLastToolResult) {
       conversation.replaceLastToolResult(finalOutput, toolCallId);
     } else {
-      conversation.addToolResult(finalOutput, toolCallId);
+      conversation.addToolResult(finalOutput, toolCallId, labelForCap);
     }
   };
 

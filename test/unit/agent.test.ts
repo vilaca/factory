@@ -773,6 +773,7 @@ describe('Agent loop', () => {
     it('yields a compaction event when ContextManager.shouldCompact is true', async () => {
       const cm = {
         updateUsage: () => {},
+        ageOldToolResults: () => 0,
         shouldCompact: () => true,
         compact: async () => ({ oldCount: 5, newCount: 2 }),
         getUsagePercent: () => 0.5,
@@ -807,6 +808,7 @@ describe('Agent loop', () => {
     it('halts with token-limit when usage stays above 0.9 after compaction', async () => {
       const cm = {
         updateUsage: () => {},
+        ageOldToolResults: () => 0,
         shouldCompact: () => true,
         compact: async () => ({ oldCount: 5, newCount: 2 }),
         getUsagePercent: () => 0.95,
@@ -845,6 +847,7 @@ describe('Agent loop', () => {
 
       const cm = {
         updateUsage: () => {},
+        ageOldToolResults: () => 0,
         shouldCompact: () => true,
         compact: async (
           _provider: unknown,
@@ -976,6 +979,7 @@ describe('Agent loop', () => {
 
       const cm = {
         updateUsage: () => {},
+        ageOldToolResults: () => 0,
         shouldCompact: () => true,
         compact: async (
           _provider: unknown,
