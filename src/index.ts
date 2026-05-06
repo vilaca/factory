@@ -280,7 +280,7 @@ async function main(): Promise<void> {
   const projectHooks = projectOnly.agent?.hooks;
   if (projectHooks && Object.keys(projectHooks).length > 0) {
     const { isProjectTrusted, recordTrust } = await import('./core/hooks/trust.js');
-    if (!isProjectTrusted(cwd, projectHooks)) {
+    if (!(await isProjectTrusted(cwd, projectHooks))) {
       const { promptText } = await import('./cli/prompts.js');
       console.log('');
       console.log(chalk.yellow(' ⚠ This project declares hooks in .factory/config.json:'));
@@ -295,7 +295,7 @@ async function main(): Promise<void> {
         ? (await promptText(' > ')).toLowerCase()
         : 'n';
       if (answer === 'y' || answer === 'yes') {
-        recordTrust(cwd, projectHooks);
+        await recordTrust(cwd, projectHooks);
         console.log(chalk.dim(' Trusted. Will not prompt again unless the hook config changes.'));
       } else {
         // Strip the project hooks from the merged config. User hooks

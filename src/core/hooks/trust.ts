@@ -14,10 +14,10 @@
 // The fingerprint covers ONLY the project's hook block (not the whole
 // config), so unrelated config edits don't void the trust decision.
 
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import crypto from 'crypto';
+import crypto, { randomBytes } from 'crypto';
 import type { HooksConfig } from '../config-types.js';
 
 interface TrustEntry {
@@ -52,33 +52,50 @@ function canonicalize(value: unknown): string {
   return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
 }
 
-function readDb(): TrustDb {
+async function readDb(): Promise<TrustDb> {
+  let raw: string;
   try {
-    const raw = fs.readFileSync(trustFile(), 'utf-8');
+    raw = await fs.readFile(trustFile(), 'utf-8');
+  } catch {
+    return {};
+  }
+  try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as TrustDb;
     }
   } catch {
-    // Missing / unreadable / malformed file → start fresh; never throw.
+    // Malformed file → start fresh; never throw.
   }
   return {};
 }
 
-function writeDb(db: TrustDb): void {
-  const dir = path.dirname(trustFile());
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(trustFile(), JSON.stringify(db, null, 2), { mode: 0o600 });
+async function writeDb(db: TrustDb): Promise<void> {
+  const file = trustFile();
+  const dir = path.dirname(file);
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  // Atomic write: write to a unique temp file (mode 0o600 from creation) and
+  // rename onto the target. A crash mid-write leaves either the old DB intact
+  // or the new one — never a half-written file.
+  const tmp = path.join(dir, `trusted-projects.json.tmp-${process.pid}-${randomBytes(6).toString('hex')}`);
+  const data = JSON.stringify(db, null, 2);
+  try {
+    await fs.writeFile(tmp, data, { encoding: 'utf-8', mode: 0o600 });
+    await fs.rename(tmp, file);
+  } catch (err) {
+    await fs.unlink(tmp).catch(() => { /* tmp may not exist if writeFile failed */ });
+    throw err;
+  }
 }
 
-export function isProjectTrusted(projectDir: string, hooks: HooksConfig): boolean {
-  const entry = readDb()[projectDir];
+export async function isProjectTrusted(projectDir: string, hooks: HooksConfig): Promise<boolean> {
+  const entry = (await readDb())[projectDir];
   if (!entry) return false;
   return entry.fingerprint === fingerprintHooks(hooks);
 }
 
-export function recordTrust(projectDir: string, hooks: HooksConfig): void {
-  const db = readDb();
+export async function recordTrust(projectDir: string, hooks: HooksConfig): Promise<void> {
+  const db = await readDb();
   db[projectDir] = { fingerprint: fingerprintHooks(hooks) };
-  writeDb(db);
+  await writeDb(db);
 }

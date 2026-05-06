@@ -195,11 +195,12 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
           addNotice('warn', `⚠ SessionStart hook: ${e}`);
           sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
         }
-        for (const hookPath of r.firedCommands) {
-          const name = hookPath.split('/').pop() ?? hookPath;
+        for (const hookCommand of r.firedCommands) {
+          const exe = hookCommand.split(/\s+/)[0] ?? hookCommand;
+          const name = exe.split('/').pop() ?? exe;
           const suffix = r.notice ? ` — ${r.notice}` : '';
           addNotice('info', `↪ SessionStart hook ran (${name})${suffix}`);
-          sessionLogger?.logWarning('hook-fired', `SessionStart: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`);
+          sessionLogger?.logWarning('hook-fired', `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`);
         }
         // Inject SessionStart additionalContext as a user message so the
         // model picks it up on the next turn. Hook fire is async; if the
@@ -234,8 +235,8 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
           for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
           // SessionEnd fires during tab teardown — UI is going away, so
           // skip addNotice and just log. The session-log entry survives.
-          for (const hookPath of r.firedCommands) {
-            sessionLogger?.logWarning('hook-fired', `SessionEnd: ${hookPath}${r.notice ? ` (${r.notice})` : ''}`);
+          for (const hookCommand of r.firedCommands) {
+            sessionLogger?.logWarning('hook-fired', `SessionEnd: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`);
           }
         }).catch(() => { /* never block teardown */ });
       }

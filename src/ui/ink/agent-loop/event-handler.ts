@@ -241,9 +241,10 @@ export function handleAgentEvent(
       break;
     }
     case 'hook-fired': {
-      const name = event.hookPath.split('/').pop() ?? event.hookPath;
+      const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;
+      const display = name.split('/').pop() ?? name;
       const suffix = event.notice ? ` — ${event.notice}` : '';
-      deps.addNotice('info', `↪ ${event.event} hook ran (${name})${suffix}`);
+      deps.addNotice('info', `↪ ${event.event} hook ran (${display})${suffix}`);
       break;
     }
     case 'compaction-start': {

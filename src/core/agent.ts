@@ -34,11 +34,11 @@ async function* fireStopHook(
       options.onHookError?.(event, e);
       yield { type: 'hook-error', event, error: e };
     }
-    for (const hookPath of result.firedCommands) {
+    for (const hookCommand of result.firedCommands) {
       yield {
         type: 'hook-fired',
         event,
-        hookPath,
+        hookCommand,
         ...(result.notice ? { notice: result.notice } : {}),
       };
     }
@@ -98,11 +98,11 @@ export async function* runAgent(
         options.onHookError?.('UserPromptSubmit', e);
         yield { type: 'hook-error', event: 'UserPromptSubmit', error: e };
       }
-      for (const hookPath of result.firedCommands) {
+      for (const hookCommand of result.firedCommands) {
         yield {
           type: 'hook-fired',
           event: 'UserPromptSubmit',
-          hookPath,
+          hookCommand,
           ...(result.notice ? { notice: result.notice } : {}),
         };
       }

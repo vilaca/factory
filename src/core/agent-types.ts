@@ -5,7 +5,7 @@ import type { Conversation } from './conversation.js';
 import type { ContextManager } from './context-manager.js';
 import type { PermissionManager, PermissionDecision } from '../permissions.js';
 import type { FileCache } from './agent/file-cache.js';
-import type { ProviderKey, RotationEntry } from './config-types.js';
+import type { HooksConfig, ProviderKey, RotationEntry } from './config-types.js';
 
 export type { PermissionDecision };
 
@@ -40,7 +40,7 @@ export type AgentEvent =
   | { type: 'bash-dedup-nudge'; recentCommands: string[] }
   | { type: 'hook-veto'; event: string; toolName: string; errorMessage?: string }
   | { type: 'hook-error'; event: string; error: string }
-  | { type: 'hook-fired'; event: string; hookPath: string; notice?: string }
+  | { type: 'hook-fired'; event: string; hookCommand: string; notice?: string }
   | { type: 'read-cache-hit'; path: string; afterCompaction: boolean }
   | { type: 'repetition-detected'; line: string; streak: number }
   | { type: 'empty-turn-warning'; completionTokens: number }
@@ -103,7 +103,7 @@ export interface AgentOptions {
   onHookError?: (event: string, error: string) => void;
   /** Resolved hook config; absent or empty when no hooks are configured.
    *  Read from `config.agent.hooks` at session start. */
-  hooksConfig?: import('./config-types.js').HooksConfig;
+  hooksConfig?: HooksConfig;
 }
 
 export interface RotationOptions {

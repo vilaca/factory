@@ -6,6 +6,7 @@ import type {
   ToolDefinition,
 } from '../../providers/types.js';
 import type { AgentEvent, RotationOptions } from '../agent-types.js';
+import type { ProviderKey } from '../config-types.js';
 import { keyFingerprint, selectNextKey } from '../credentials.js';
 import { classifyForRotation } from '../provider-errors.js';
 import { RepeatDetector } from './repeat-detector.js';
@@ -23,14 +24,14 @@ async function advanceTuple(
 ): Promise<{
   entry: { provider: string; model: string };
   provider: Provider;
-  keys: import('../config-types.js').ProviderKey[];
-  firstKey: import('../config-types.js').ProviderKey;
+  keys: ProviderKey[];
+  firstKey: ProviderKey;
 } | null> {
   if (!rotation.chain || !rotation.loadKeysForProvider || !rotation.withTuple) return null;
   for (const entry of rotation.chain) {
     const tupleKey = `${entry.provider}:${entry.model}`;
     if (tried.has(tupleKey)) continue;
-    let keys: import('../config-types.js').ProviderKey[];
+    let keys: ProviderKey[];
     try {
       keys = await rotation.loadKeysForProvider(entry.provider);
     } catch {
@@ -146,7 +147,6 @@ export async function* callModel(
   // streamed, try the next saved key. Streaming losses still surface
   // because retrying mid-stream would replay tokens the caller already
   // committed to scrollback.
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     let streamedAnything = false;
     try {
@@ -279,7 +279,7 @@ export async function* callModel(
               // tier 2: load the entry's keys, build a fresh provider,
               // reset the tier-1 tried-set, retry.
               if (!triedTuples.has(promptedKey)) {
-                let promptedKeys: import('../config-types.js').ProviderKey[] = [];
+                let promptedKeys: ProviderKey[] = [];
                 try {
                   promptedKeys = await rotation.loadKeysForProvider(promptedEntry.provider);
                 } catch {
