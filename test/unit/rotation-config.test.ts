@@ -40,7 +40,6 @@ describe('agent.rotation validation', () => {
         rotation: {
           keys: true,
           models: false,
-          probeAfterTurns: 5,
           default: [{ provider: 'anthropic', model: 'claude-haiku-4-5' }],
           overrides: {
             'groq:llama-3.3-70b': [
@@ -54,7 +53,6 @@ describe('agent.rotation validation', () => {
       const cfg = await loadProjectConfig(cwd);
       assert.strictEqual(cfg.agent?.rotation?.keys, true);
       assert.strictEqual(cfg.agent?.rotation?.models, false);
-      assert.strictEqual(cfg.agent?.rotation?.probeAfterTurns, 5);
       assert.strictEqual(cfg.agent?.rotation?.default?.length, 1);
       assert.strictEqual(cfg.agent?.rotation?.overrides?.['groq:llama-3.3-70b']?.[0]?.provider, 'cerebras');
     });
@@ -66,16 +64,6 @@ describe('agent.rotation validation', () => {
       await assert.rejects(
         loadProjectConfig(cwd),
         /"agent\.rotation\.keys" must be a boolean/,
-      );
-    });
-  });
-
-  it('rejects negative probeAfterTurns', async () => {
-    const content = JSON.stringify({ agent: { rotation: { probeAfterTurns: -1 } } });
-    await withProjectFile(content, async (cwd) => {
-      await assert.rejects(
-        loadProjectConfig(cwd),
-        /"agent\.rotation\.probeAfterTurns" must be a non-negative integer/,
       );
     });
   });

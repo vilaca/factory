@@ -121,7 +121,6 @@ async function persist(agent: AgentLoopApi): Promise<void> {
     models: refs.rotation.modelsEnabled,
     default: refs.rotation.default,
     overrides: refs.rotation.overrides,
-    probeAfterTurns: refs.rotation.probeAfterTurns,
   };
   await saveGlobalConfig({
     agent: { ...global.agent, rotation: nextRotation },
