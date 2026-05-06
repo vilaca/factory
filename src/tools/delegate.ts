@@ -122,10 +122,12 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
           output: `Delegate: subagent stopped (${result.stopReason}, ${result.turnsUsed} turns) without producing a final answer.`,
         };
       }
-      // Cap fired mid-investigation: surface as an inline note so the parent
-      // agent knows the answer above is the last partial text, not a final
-      // verdict. Lets the parent decide whether to re-delegate with a
-      // narrower task.
+      // Cap fired mid-investigation. Treat as a failure rather than a success
+      // with a note: the answer above is partial and the parent typically
+      // re-delegates or redoes the work directly. Marking this as success=true
+      // hid the cap note from any UI that gates successful tool results, so
+      // users couldn't tell whether the parent's "let me try a different
+      // approach" was a model whim or a forced retry.
       // TODO: subagents hit this cap too often in practice. Investigate:
       //   - is the default cap too low for the kinds of tasks parents
       //     delegate (broad codebase searches, multi-file reads)?
@@ -135,10 +137,13 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
       //     repo", less for "read this one file and summarize")?
       // Until fixed, parents see truncated answers and re-delegate, which
       // doubles cost and latency.
-      const capNote = result.stopReason === 'turn-limit'
-        ? '\n\n[note: subagent hit its tool-call cap; the answer above is its last partial response]'
-        : '';
-      return { success: true, output: text + capNote };
+      if (result.stopReason === 'turn-limit') {
+        return {
+          success: false,
+          output: text + '\n\n[note: subagent hit its tool-call cap; the answer above is its last partial response]',
+        };
+      }
+      return { success: true, output: text };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: `Delegate: subagent failed: ${msg}` };
