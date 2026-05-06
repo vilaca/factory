@@ -356,33 +356,48 @@ factory --no-auto-correct
 
 ### Cost & Token Management
 
-Long sessions get expensive because the agent re-sends the full conversation prefix every turn — system prompt, tool definitions, and every prior message. Most providers offer some form of prompt caching that turns those repeated prefix tokens into cheap cache reads. factory tracks the split per turn and per key so you can see whether caching is actually working.
+Long sessions get expensive because the agent re-sends the full conversation prefix every turn — system prompt, tool definitions, and every prior message. factory layers six independent levers on top of that re-sending pattern, then surfaces the result so the savings are visible. None of these affect the user's primary turn; they only change how the prefix is shaped, what's pruned in the background, and which keys / sub-tier models pick up the load.
 
-**Per-key stats.** `/keys` shows cumulative cached vs. uncached input tokens, hit rate, and a 🔥 marker on keys whose last cache read landed within the last 5 minutes (Anthropic's default cache TTL). The picker uses the same data to flag warm keys.
+**Prompt caching.** Three categories of provider, three behaviors:
 
-**`/stats`.** Reports for the current session:
+| Mechanism | Providers | What factory does |
+|---|---|---|
+| Automatic (server-side) | Cerebras, Groq, Mistral, OpenRouter (non-Anthropic upstreams), Vercel, OpenCode Zen, Copilot, Cohere, llama.cpp | Reads `prompt_tokens_details.cached_tokens` from each response. Hit rate lights up automatically once the prefix stabilizes. |
+| Explicit (client-side markers) | Anthropic, OpenRouter → `anthropic/...` upstreams | Emits up to three `cache_control: { type: 'ephemeral' }` markers per call: end of tools, end of system, end of the most recent completed assistant turn. 5-minute TTL. |
+| Implicit (Gemini ≥1024 tokens) | Google AI Studio | Returns cached/uncached tokens automatically once the prefix exceeds 1024 tokens. No client work. |
+| None | HuggingFace direct, Ollama (KV-cache only, not prompt-cache) | Behaves like a cold call every turn. |
 
-- Total input tokens split into cached / fresh and the resulting hit rate
-- Cumulative cache-creation tokens (relevant for explicit caching providers)
-- A per-turn hit-rate sparkline so you can spot which turn killed the cache
-- Compaction events with the turns they fired on
-- The five largest tool results by approximate token count
-
-Auto-cache providers (OpenAI / Cerebras / Groq / Mistral / OpenRouter / Vercel / OpenCode Zen / Copilot / Cohere / llama.cpp) return cache splits in their `prompt_tokens_details.cached_tokens` field, so hit rate lights up immediately without any client-side configuration.
-
-**Anthropic explicit caching.** factory emits up to three `cache_control: { type: 'ephemeral' }` markers per call — at the end of the tools array, the end of the system prompt, and the end of the most recent completed assistant turn. Default 5-minute TTL. Any non-Anthropic provider ignores the boundary hint, so the same code path works everywhere; Anthropic's own `cache_read_input_tokens` and `cache_creation_input_tokens` flow back into the per-key stats and `/stats` so the savings are visible.
-
-**OpenRouter → Anthropic.** When OpenRouter routes to an `anthropic/...` model id, factory forwards the same `cache_control` blocks via the OpenAI envelope; OpenRouter passes them through to Anthropic untouched. Non-Anthropic upstreams on OpenRouter (`openai/gpt-*`, `google/gemini-*`, …) silently skip the markers so they never see unexpected fields.
+The system prompt itself is byte-stable across turns within a session: `cwd` and `process.env.SHELL` are seeded as the first user message instead of riding inside the prompt prefix.
 
 **Per-message size cap.** Any tool result whose content exceeds `agent.maxToolResultTokens` (default ~6000 tokens, ~24KB) is stored as `[elided: tool=Bash size=42kB — too large for context, ask again or narrow the call]` at the moment it's added to the conversation. Bounds the worst case at insertion time — one runaway `git log` or `Read` of a huge file can't dominate the next turn's prompt.
 
 **Tool-result aging.** Before each compaction check, tool results from turns older than `agent.toolResultAgingTurns` (default 6) are rewritten in place to elision stubs. Cheaper than full compaction and cache-friendlier — only old messages mutate, so the recent prefix stays warm for re-cache. The `tool_call_id` ↔ `tool_use` invariant Anthropic enforces stays intact: only the content changes.
 
-**Compaction.** Triggers at `agent.compactionThreshold` (default 75% of the model's context window). Keeps a token-weighted recency window — `agent.recencyTokens` (default 4000) sets the soft budget; `agent.recencyWindow` (default 6) is the hard floor. The summary call routes to a weak-tier model on the same provider when one is mapped (Anthropic → Haiku, OpenRouter → Haiku, Cerebras → 8B, Groq → 8B, Gemini → Flash, Mistral → Ministral) — strong-tier prompt cost for summaries was overkill. The synthetic assistant ack that opens the post-compaction conversation carries `cacheBoundary: true` so explicit-cache providers can re-anchor on the new prefix instead of starting cold.
+**Compaction.** Triggers at `agent.compactionThreshold` (default 75% of the model's context window). Keeps a token-weighted recency window — `agent.recencyTokens` (default 4000) sets the soft budget; `agent.recencyWindow` (default 6) is the hard floor. The summary call routes to a weak-tier model on the same provider when one is mapped — strong-tier prompt cost for summaries was overkill. The synthetic assistant ack that opens the post-compaction conversation carries `cacheBoundary: true` so explicit-cache providers can re-anchor on the new prefix instead of starting cold.
 
-**Weak-tier routing for internal sub-calls.** The compaction summary and the LLM tool-call corrector both pay the lower tier when the active provider has a weak-tier mapping. **The user's primary turn is never routed through this** — strong-tier stays strong-tier for everything you actually see in chat. Adding a new provider to the map is a single line in `src/core/agent/weak-tier.ts`.
+**Weak-tier routing for internal sub-calls.** The compaction summary and the LLM tool-call corrector both pay the lower tier when the active provider has a weak-tier mapping (Anthropic → Haiku, OpenRouter → Haiku, Cerebras → 8B, Groq → 8B, Gemini → Flash, Mistral → Ministral). **The user's primary turn is never routed through this** — strong-tier stays strong-tier for everything you actually see in chat. Adding a new provider to the map is a single line in `src/core/agent/weak-tier.ts`.
 
-**Rotation × cache.** Prompt caches are scoped per API key, so swapping keys throws the warm prefix away. When several saved keys are equally healthy, the rotation tiebreaker prefers the one whose last cache read landed within Anthropic's 5-minute TTL — sourced from the same `lastCacheReadAt` stamp that drives the 🔥 badge in `/keys`. Failure / rate-limit signals still take precedence: a warm-but-failed key never beats a cold-and-healthy one (correctness wins over cost).
+**Rotation × cache.** Prompt caches are scoped per API key, so swapping keys throws the warm prefix away. When several saved keys are equally healthy, the rotation tiebreaker prefers the one whose last cache read landed within the 5-minute TTL — sourced from the same `lastCacheReadAt` stamp that drives the 🔥 badge in `/keys`. Failure / rate-limit signals still take precedence: a warm-but-failed key never beats a cold-and-healthy one (correctness wins over cost).
+
+**Per-key stats.** `/keys` shows cumulative cached vs. uncached input tokens, hit rate, and a 🔥 marker on keys whose last cache read landed within the cache TTL. The picker uses the same data to flag warm keys.
+
+**`/stats`.** Reports for the current session — total input tokens split into cached/fresh + hit rate, cumulative cache-creation tokens, a per-turn hit-rate sparkline (which turn killed the cache?), compaction events, and the five largest tool results by approximate token count. Reads the active session JSONL; no extra persistence layer.
+
+**Tunable defaults.** Most users never touch these. They live under `agent` in the config:
+
+| Key | Default | What it controls |
+|---|---|---|
+| `agent.compactionThreshold` | `0.75` | Fraction of context window above which compaction fires. |
+| `agent.recencyTokens` | `4000` | Soft token budget for the post-compaction recency window. |
+| `agent.recencyWindow` | `6` | Hard floor on messages kept after compaction. |
+| `agent.maxToolResultTokens` | `6000` | Per-message ceiling — bigger tool results are stored elided. |
+| `agent.toolResultAgingTurns` | `6` | Turns of distance after which a tool result becomes eligible for aging. |
+
+**What this doesn't do.**
+- No dollar-cost projections. Provider rates shift; `/stats` reports tokens, you multiply.
+- No batch-API integration. The whole stack assumes interactive turns.
+- No codebase RAG / vector index. Read/Grep/Glob over the file system are the retrieval surface.
+- No Gemini explicit `cachedContents` lifecycle (data-gated; implicit caching covers ≥1024-token prefixes for free — see [IDEAS.md](IDEAS.md) for the open TODO).
 
 For cross-session analysis, the JSONL session log under `~/.factory/sessions/` contains every `usage` field. See [`docs/observability.md`](docs/observability.md) for `jq` recipes (session totals, hit-rate trends, tool-result distribution, outlier turns).
 
