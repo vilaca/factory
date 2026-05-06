@@ -95,8 +95,6 @@ export function DisplayItemView({
   }
 }
 
-const INLINE_CHIP_THRESHOLD = 40;
-
 export function ToolCallLine({
   icon,
   toolName,
@@ -117,20 +115,15 @@ export function ToolCallLine({
       </Text>
     );
   }
-  if (summary.length > INLINE_CHIP_THRESHOLD) {
-    return (
-      <Box flexDirection="column">
-        <Text>
-          {icon} <Text color={nameColor} bold>{toolName}</Text>:
-        </Text>
-        <Text color={denied ? 'red' : undefined}>{`    ${summary}`}</Text>
-      </Box>
-    );
-  }
+  // Args always render indented on the next line so the layout doesn't shift
+  // based on length — short Glob patterns and long Bash commands look the
+  // same shape at a glance.
   return (
-    <Text>
-      {icon} <Text color={nameColor} bold>{toolName}</Text>:{' '}
-      <Text color={denied ? 'red' : undefined}>{summary}</Text>
-    </Text>
+    <Box flexDirection="column">
+      <Text>
+        {icon} <Text color={nameColor} bold>{toolName}</Text>:
+      </Text>
+      <Text color={denied ? 'red' : undefined}>{`    ${summary}`}</Text>
+    </Box>
   );
 }
