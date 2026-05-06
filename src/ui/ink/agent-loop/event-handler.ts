@@ -296,5 +296,14 @@ export function handleAgentEvent(
       }
       break;
     }
+    case 'pre-turn-stats': {
+      // Telemetry-only — emitted so the session log can graph context growth
+      // across turns. Nothing to render in the TUI.
+      break;
+    }
+    default: {
+      const _exhaustive: never = event;
+      void _exhaustive;
+    }
   }
 }

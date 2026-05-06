@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { TokenUsage } from '../providers/types.js';
+import { writeFileAtomic } from '../utils/atomic-write.js';
 
 /**
  * Per-key usage analytics. Stored separately from the credentials file so
@@ -66,10 +67,7 @@ async function flush(): Promise<void> {
   const dir = path.dirname(filePath);
   try {
     await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
-    // Atomic temp + rename so a crash mid-write can't corrupt prior stats.
-    const tmp = `${filePath}.tmp-${process.pid}`;
-    await fs.promises.writeFile(tmp, JSON.stringify(cache, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
-    await fs.promises.rename(tmp, filePath);
+    await writeFileAtomic(filePath, JSON.stringify(cache, null, 2) + '\n');
   } catch {
     // Stats persistence is best-effort. Re-flag dirty so the next flush
     // tries again — if stats are *consistently* unwritable (read-only fs)

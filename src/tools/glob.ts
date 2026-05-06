@@ -9,6 +9,11 @@ import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './typ
 // specific `path` or `pattern`.
 const EXCLUDE_DIR_SEGMENTS = new Set(['node_modules', '.git']);
 
+// Cap on returned results. The model rarely benefits from more than a few
+// dozen file paths in one go; 500 is generous headroom and keeps the
+// formatted output below the per-tool-result token cap.
+const MAX_RESULTS = 500;
+
 const definition: ToolDefinition = {
   type: 'function',
   function: {
@@ -62,8 +67,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       return { success: true, output: 'No files matched the pattern.', empty: true };
     }
 
-    const truncated = result.length > 500
-      ? [...result.slice(0, 500), `\n... (${result.length - 500} more files)`]
+    const truncated = result.length > MAX_RESULTS
+      ? [...result.slice(0, MAX_RESULTS), `\n... (${result.length - MAX_RESULTS} more files)`]
       : result;
 
     return { success: true, output: truncated.join('\n') };

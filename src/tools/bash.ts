@@ -9,6 +9,16 @@ import { getEnvPolicy } from '../security/policy-state.js';
 // with the wrapper's marker.
 const CWD_SENTINEL_PREFIX = '__FACTORY_CWD_AFTER__';
 
+// Default per-call wall-clock cap. Long enough for most builds/tests but
+// short enough that a runaway command can't hold the agent loop hostage.
+// Callers can override per-call via the `timeout` parameter.
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+// Cap on combined stdout+stderr we ship back as the tool result. Past this
+// point the model can't usefully consume more, and bigger buffers grow the
+// per-turn conversation cost linearly.
+const OUTPUT_CAP_BYTES = 50_000;
+
 const definition: ToolDefinition = {
   type: 'function',
   function: {
@@ -33,7 +43,7 @@ const definition: ToolDefinition = {
 
 async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const command = args.command as string;
-  const timeout = (args.timeout as number) ?? 120000;
+  const timeout = (args.timeout as number) ?? DEFAULT_TIMEOUT_MS;
   const cwd = ctx?.cwd ?? process.cwd();
 
   if (!command) {
@@ -101,8 +111,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       }
 
       const combined = [stdout, stderr].filter(Boolean).join('\n');
-      const truncated = combined.length > 50000
-        ? combined.slice(0, 50000) + '\n...(output truncated)'
+      const truncated = combined.length > OUTPUT_CAP_BYTES
+        ? combined.slice(0, OUTPUT_CAP_BYTES) + '\n...(output truncated)'
         : combined;
 
       let output: string;

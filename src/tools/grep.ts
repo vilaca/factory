@@ -4,6 +4,11 @@ import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './typ
 
 const execFileAsync = promisify(execFile);
 
+// Cap how much output we'll buffer from rg/grep. 10 MiB is well above any
+// useful single-tool-call result (the model can't usefully consume more)
+// but small enough that a runaway "search everything" doesn't OOM.
+const SEARCH_OUTPUT_MAX_BYTES = 10 * 1024 * 1024;
+
 const definition: ToolDefinition = {
   type: 'function',
   function: {
@@ -56,14 +61,18 @@ async function tryRipgrep(
     args.push('--glob', '!node_modules', '--glob', '!.git');
     args.push(pattern, searchPath);
 
-    const { stdout } = await execFileAsync('rg', args, { maxBuffer: 1024 * 1024 * 10 });
+    const { stdout } = await execFileAsync('rg', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES });
     const trimmed = stdout.trim();
     if (!trimmed) return { success: true, output: 'No matches found.', empty: true };
     return { success: true, output: trimmed };
   } catch (err: any) {
-    if (err.code === 'ENOENT') return null; // ripgrep not installed
+    if (err.code === 'ENOENT') return null; // ripgrep not installed — fall back to grep.
     if (err.code === 1) return { success: true, output: 'No matches found.', empty: true };
-    return null;
+    // Ripgrep ran and exited >= 2 (regex error, IO failure, etc.). Surface
+    // the failure rather than silently falling back to grep — the same query
+    // will usually fail there too, and hiding the real diagnostic makes the
+    // model retry blindly.
+    return { success: false, output: `Grep error: ${err.stderr?.toString().trim() || err.message}` };
   }
 }
 
@@ -89,7 +98,7 @@ async function tryGrep(
     args.push('--exclude-dir=node_modules', '--exclude-dir=.git');
     args.push('-E', pattern, searchPath);
 
-    const { stdout } = await execFileAsync('grep', args, { maxBuffer: 1024 * 1024 * 10 });
+    const { stdout } = await execFileAsync('grep', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES });
     const trimmed = stdout.trim();
     if (!trimmed) return { success: true, output: 'No matches found.', empty: true };
     return { success: true, output: trimmed };

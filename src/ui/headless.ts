@@ -198,6 +198,62 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           permissionDeniedTool = event.toolName;
           event.respond('deny');
           break;
+        case 'hook-fired': {
+          const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;
+          const display = name.split('/').pop() ?? name;
+          const suffix = event.notice ? ` — ${event.notice}` : '';
+          process.stderr.write(`  ↪ ${event.event} hook (${display})${suffix}\n`);
+          break;
+        }
+        case 'hook-veto': {
+          const reason = event.errorMessage ? ` — ${event.errorMessage}` : '';
+          process.stderr.write(`  ⛔ ${event.event} hook vetoed ${event.toolName}${reason}\n`);
+          break;
+        }
+        case 'hook-error':
+          process.stderr.write(`  ⚠ Hook ${event.event}: ${event.error}\n`);
+          break;
+        case 'compaction-start':
+          process.stderr.write(
+            event.aggressive
+              ? '  ⊕ aggressively compacting…\n'
+              : '  ⊕ compacting…\n',
+          );
+          break;
+        case 'compaction':
+          process.stderr.write(
+            `  ✓ compacted ${event.oldMessages} → ${event.newMessages}` +
+              (event.aggressive ? ' (aggressive)\n' : '\n'),
+          );
+          break;
+        case 'key-rotation': {
+          const fromLabel = event.from
+            ? (event.from.label ? `${event.from.label} · …${event.from.fingerprint}` : `…${event.from.fingerprint}`)
+            : '<unknown>';
+          const toLabel = event.to.label
+            ? `${event.to.label} · …${event.to.fingerprint}`
+            : `…${event.to.fingerprint}`;
+          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+          process.stderr.write(`  ⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}\n`);
+          break;
+        }
+        case 'key-rotation-exhausted': {
+          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+          process.stderr.write(`  ⟲ no more keys for ${event.provider} (${reasonLabel})\n`);
+          break;
+        }
+        case 'tuple-rotation': {
+          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+          process.stderr.write(
+            `  ⟲ ${event.from.provider}/${event.from.model} ${reasonLabel}, falling back to ${event.to.provider}/${event.to.model}\n`,
+          );
+          break;
+        }
+        case 'tuple-rotation-exhausted': {
+          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+          process.stderr.write(`  ⟲ rotation chain exhausted (${reasonLabel})\n`);
+          break;
+        }
         case 'error':
           process.stderr.write(`factory: ${event.error.message}\n`);
           exitCode = 1;

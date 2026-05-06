@@ -6,6 +6,7 @@ import { descriptorByAlias } from '../../providers/descriptors.js';
 import { loadGlobalConfig } from '../../core/config.js';
 import { getKey } from '../../core/credentials.js';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { ExperimentalFlags } from '../../core/config-types.js';
 import type { Provider } from '../../providers/types.js';
@@ -561,7 +562,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       return;
     }
     let resolved = trimmed;
-    if (resolved.startsWith('~')) resolved = (process.env.HOME ?? '') + resolved.slice(1);
+    if (resolved.startsWith('~')) resolved = os.homedir() + resolved.slice(1);
     resolved = path.resolve(refs.current.cwd, resolved);
     try {
       const stat = fs.statSync(resolved);

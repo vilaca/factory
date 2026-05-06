@@ -60,7 +60,10 @@ async function readCappedBody(
     if (!value) continue;
     if (total + value.byteLength > maxBytes) {
       const remaining = maxBytes - total;
-      if (remaining > 0) chunks.push(value.slice(0, remaining));
+      if (remaining > 0) {
+        chunks.push(value.slice(0, remaining));
+        total += remaining;
+      }
       truncated = true;
       try { await reader.cancel(); } catch { /* ignore */ }
       break;
@@ -68,13 +71,13 @@ async function readCappedBody(
     chunks.push(value);
     total += value.byteLength;
   }
-  const merged = new Uint8Array(total + (truncated ? maxBytes - total : 0));
+  const merged = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) {
     merged.set(c, off);
     off += c.byteLength;
   }
-  return { body: merged.slice(0, off), truncated };
+  return { body: merged, truncated };
 }
 
 function decodeBody(buf: Uint8Array, contentType: string): string {

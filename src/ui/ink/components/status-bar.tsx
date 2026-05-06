@@ -1,4 +1,5 @@
 import React from 'react';
+import os from 'os';
 import { Box, Text } from 'ink';
 
 export interface StatusBarProps {
@@ -22,7 +23,7 @@ export interface StatusBarProps {
 }
 
 function shortenCwd(cwd: string): string {
-  const home = process.env.HOME;
+  const home = os.homedir();
   if (home && cwd === home) return '~';
   if (home && cwd.startsWith(home + '/')) return '~/' + cwd.slice(home.length + 1).split('/').slice(-1)[0];
   return cwd.split('/').filter(Boolean).slice(-1)[0] ?? cwd;
