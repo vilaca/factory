@@ -222,4 +222,53 @@ describe('buildChatBody', () => {
     });
     assert.strictEqual(body.reasoning_effort, 'high');
   });
+
+  it('does not emit cache_control fields when cacheControl is off (default)', () => {
+    const body = buildChatBody({
+      model: 'm',
+      messages: [
+        { role: 'system', content: 'sys', cacheBoundary: true },
+        { role: 'user', content: 'hi' },
+      ],
+      tools: [{ type: 'function', function: { name: 'X', description: '', parameters: {} } }],
+      stream: false,
+      options: { cacheTools: true },
+    });
+    assert.strictEqual(JSON.stringify(body).includes('cache_control'), false);
+  });
+
+  it('emits cache_control on a message with cacheBoundary when cacheControl is on', () => {
+    const body = buildChatBody({
+      model: 'anthropic/claude-sonnet-4-6',
+      messages: [
+        { role: 'system', content: 'sys', cacheBoundary: true },
+        { role: 'user', content: 'hi' },
+      ],
+      stream: false,
+      cacheControl: true,
+    });
+    const msgs = body.messages as any[];
+    assert.deepStrictEqual(msgs[0].content, [
+      { type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } },
+    ]);
+    // Plain user without cacheBoundary stays as string.
+    assert.strictEqual(msgs[1].content, 'hi');
+  });
+
+  it('emits cache_control on the last tool when cacheTools + cacheControl are both on', () => {
+    const body = buildChatBody({
+      model: 'anthropic/claude-sonnet-4-6',
+      messages: [],
+      tools: [
+        { type: 'function', function: { name: 'A', description: '', parameters: {} } },
+        { type: 'function', function: { name: 'B', description: '', parameters: {} } },
+      ],
+      stream: false,
+      options: { cacheTools: true },
+      cacheControl: true,
+    });
+    const tools = body.tools as any[];
+    assert.strictEqual(tools[0].cache_control, undefined);
+    assert.deepStrictEqual(tools[1].cache_control, { type: 'ephemeral' });
+  });
 });

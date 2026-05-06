@@ -115,7 +115,15 @@ export class OpenRouterProvider implements Provider {
     yield* streamOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.requestHeaders(),
-      body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: true,
+        options,
+        maxTokensField: 'max_tokens',
+        cacheControl: routesToAnthropic(model),
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -130,7 +138,15 @@ export class OpenRouterProvider implements Provider {
     return sendOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.requestHeaders(),
-      body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: false,
+        options,
+        maxTokensField: 'max_tokens',
+        cacheControl: routesToAnthropic(model),
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -201,6 +217,13 @@ export class OpenRouterProvider implements Provider {
 
     return models;
   }
+}
+
+/** OpenRouter forwards Anthropic-shape `cache_control` blocks verbatim
+ *  when the upstream is Anthropic. Any non-Anthropic upstream rejects
+ *  unknown fields, so we only opt in for `anthropic/...` model ids. */
+export function routesToAnthropic(model: string): boolean {
+  return /^anthropic\//i.test(model);
 }
 
 function isChatCapableModel(item: any): item is OpenRouterModel & { id: string } {
