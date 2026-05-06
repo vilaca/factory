@@ -106,9 +106,12 @@ export interface ExperimentalFlags {
    *  are configured under `agent.hooks.<EventName>` as `{matcher?,
    *  command, timeoutMs?}` entries. See README "Hooks" for the protocol. */
   hooks?: boolean;
+  /** Show tool result output preview in the UI after each tool call.
+   *  Defaults to false (hidden). Toggle with `/exp toolPreview on|off`. */
+  toolPreview?: boolean;
 }
 
-export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills', 'hooks'] as const;
+export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills', 'hooks', 'toolPreview'] as const;
 export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
 
 export interface PermissionConfig {

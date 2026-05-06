@@ -188,6 +188,10 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           process.stderr.write(`▶ ${event.toolName} ${formatArgsBrief(event.args)}\n`);
           break;
         case 'tool-call-result':
+          // Always emit the completion marker — pairs with the `▶ start` line
+          // above so a piped run isn't missing one half of every call. The
+          // `experimental.toolPreview` gate covers preview *body* rendering,
+          // and headless never rendered a body here.
           process.stderr.write(`  ${event.result.success ? '✓' : '✗'} ${event.toolName}\n`);
           break;
         case 'tool-call-denied':
