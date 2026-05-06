@@ -54,20 +54,27 @@ export function handleAgentEvent(
     case 'tool-call-result': {
       deps.setPendingToolCall(null);
       deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'ok' });
-      const preview = event.result.displayOutput ?? event.result.output;
-      // Only attach the full version when it actually differs from the
-      // preview, so the /full toggle has nothing to expand on tools that
-      // already show their entire output (Bash, Glob, Grep).
-      const full = event.result.output !== preview ? event.result.output : undefined;
-      deps.addItem({
-        kind: 'tool-result',
-        id: deps.nextId(),
-        toolName: event.toolName,
-        output: preview,
-        outputFull: full,
-        success: event.result.success,
-        empty: event.result.empty,
-      });
+      // The toolPreview gate hides the verbose body of *successful* tool
+      // results (the noise case the flag exists to silence). Failures and
+      // empty-success still render — those carry the only signal that
+      // something went sideways, and the model already sees them.
+      const isNoise = event.result.success && !event.result.empty;
+      if (!isNoise || deps.refs.current?.experimental?.toolPreview) {
+        const preview = event.result.displayOutput ?? event.result.output;
+        // Only attach the full version when it actually differs from the
+        // preview, so the /full toggle has nothing to expand on tools that
+        // already show their entire output (Bash, Glob, Grep).
+        const full = event.result.output !== preview ? event.result.output : undefined;
+        deps.addItem({
+          kind: 'tool-result',
+          id: deps.nextId(),
+          toolName: event.toolName,
+          output: preview,
+          outputFull: full,
+          success: event.result.success,
+          empty: event.result.empty,
+        });
+      }
       if (event.result.success) ss.addSuccessfulToolCall();
       deps.setSessionToolCalls((n) => n + 1);
       // Skill matcher uses recent tool names to gate `tools:` constrained
