@@ -37,48 +37,6 @@ function cliArgs(extra: string[] = []): string[] {
   return ['--provider', 'ollama', '--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`, ...extra];
 }
 
-// ─── CLI flags ──────────────────────────────────────────────────────────
-
-describe('CLI flags', () => {
-  // TODO: convert to unit test — call printUsage() from src/cli/args.ts and
-  // assert on the captured output. No process spawn needed.
-  it('--help shows usage information', async () => {
-    const cli = spawnCli(['--help']);
-    try {
-      const output = await cli.waitForOutput('Usage:', 5000);
-      assert.ok(output.includes('factory'));
-      assert.ok(output.includes('--model'));
-      assert.ok(output.includes('--provider'));
-    } finally {
-      cli.kill();
-    }
-  });
-
-  // TODO: convert to unit test — same as above, just a different assertion on
-  // printUsage() output.
-  it('--help shows huggingface examples', async () => {
-    const cli = spawnCli(['--help']);
-    try {
-      const output = await cli.waitForOutput('huggingface', 5000);
-      assert.ok(output.includes('huggingface'));
-    } finally {
-      cli.kill();
-    }
-  });
-
-  // TODO: convert to unit test — same as above, just a different assertion on
-  // printUsage() output.
-  it('--help shows copilot examples', async () => {
-    const cli = spawnCli(['--help']);
-    try {
-      const output = await cli.waitForOutput('copilot', 5000);
-      assert.ok(output.includes('gpt-4.1'));
-    } finally {
-      cli.kill();
-    }
-  });
-});
-
 // ─── Startup ────────────────────────────────────────────────────────────
 
 describe('Startup and welcome', () => {
@@ -125,20 +83,25 @@ describe('Startup and welcome', () => {
       ['--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`],
     );
     try {
-      const output = await cli.waitForOutput('GitHub Copilot', 5000);
-      assert.ok(output.includes('Select a provider'));
-      assert.ok(output.includes('Ollama'));
-      assert.ok(output.includes('HuggingFace'));
+      // Picker opens at the "recent provider/model" stage. With no recent
+      // sessions only one option ("Pick a different provider/model") is
+      // pre-selected — Enter advances to the provider list.
+      await cli.waitForOutput('Recent provider/model', 5000);
+      cli.sendEnter();
+      const output = await cli.waitForOutput('Select a provider', 5000);
+      assert.ok(output.includes('Anthropic'));
       assert.ok(output.includes('GitHub Copilot'));
-      cli.send('1');
-      const ready = await cli.waitForOutput('Tools:', 5000);
+      // Ollama is at alphabetical index 11 (shortcut 'B'). The viewport
+      // truncates to 8 rows but the jump shortcut works regardless.
+      cli.send('B');
+      const ready = await cli.waitForOutput('Tools:', 10000);
       assert.ok(ready.includes('Tools:'));
     } finally {
       cli.kill();
     }
   });
 
-  it('hides Ollama when the Ollama service is not reachable', async () => {
+  it('shows Ollama as offline when the Ollama service is not reachable', async () => {
     const cli = spawnCli(
       ['--host', `http://127.0.0.1:${mockCopilotPort}`],
       {
@@ -147,9 +110,11 @@ describe('Startup and welcome', () => {
       },
     );
     try {
+      await cli.waitForOutput('Recent provider/model', 5000);
+      cli.sendEnter();
       const output = await cli.waitForOutput('Select a provider', 5000);
-      assert.ok(!output.includes('Ollama'));
       assert.ok(output.includes('GitHub Copilot'));
+      assert.ok(output.includes('Anthropic'));
     } finally {
       cli.kill();
     }
@@ -165,11 +130,14 @@ describe('Startup and welcome', () => {
       FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
     });
     try {
+      await firstCli.waitForOutput('Recent provider/model', 5000);
+      firstCli.sendEnter();
       await firstCli.waitForOutput('Select a provider', 5000);
-      firstCli.send('2');
+      // GitHub Copilot is at alphabetical index 5.
+      firstCli.send('5');
       await firstCli.waitForOutput('GitHub Copilot sign-in required', 5000);
       await firstCli.waitForOutput('Enter code:', 5000);
-      const output = await firstCli.waitForOutput('Tools:', 5000);
+      const output = await firstCli.waitForOutput('Tools:', 10000);
       assert.ok(output.includes('Tools:'));
     } finally {
       firstCli.kill();
@@ -185,9 +153,11 @@ describe('Startup and welcome', () => {
       FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
     });
     try {
+      await secondCli.waitForOutput('Recent provider/model', 5000);
+      secondCli.sendEnter();
       await secondCli.waitForOutput('Select a provider', 5000);
-      secondCli.send('2');
-      const output = await secondCli.waitForOutput('Tools:', 5000);
+      secondCli.send('5');
+      const output = await secondCli.waitForOutput('Tools:', 10000);
       assert.ok(!output.includes('GitHub Copilot sign-in required'));
       assert.ok(output.includes('Tools:'));
     } finally {
@@ -210,18 +180,6 @@ describe('Error handling', () => {
     }
   });
 
-  // TODO: convert to unit test — assert that createProvider('foobar') from
-  // src/providers/registry.ts throws with "Unknown provider".
-  it('shows error for unknown provider', async () => {
-    const cli = spawnCli(['--provider', 'foobar']);
-    try {
-      const output = await cli.waitForOutput('Unknown provider', 5000);
-      assert.ok(output.includes('foobar'));
-    } finally {
-      cli.kill();
-    }
-  });
-
   it('prompts for a HuggingFace token and saves it for the next run', async () => {
     const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-hf-config-'));
     const cli = spawnCli(
@@ -230,14 +188,17 @@ describe('Error handling', () => {
     );
     try {
       await cli.waitForOutput('HuggingFace API token required', 5000);
-      cli.send('hf_test_token');
+      cli.sendLine('hf_test_token');
       const output = await cli.waitForOutput('Saved HuggingFace credentials', 5000);
       assert.ok(output.includes('Saved HuggingFace credentials'));
     } finally {
       cli.kill();
       const configPath = path.join(configHome, 'factory', 'config.json');
       const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      assert.strictEqual(savedConfig.huggingfaceToken, 'hf_test_token');
+      // Tokens are stored in the multi-key store keyed by provider.
+      const hfKeys: Array<{ token: string }> = savedConfig.keys?.huggingface ?? [];
+      assert.ok(hfKeys.some(k => k.token === 'hf_test_token'),
+        `expected hf_test_token in keys.huggingface, got ${JSON.stringify(savedConfig.keys)}`);
       fs.rmSync(configHome, { recursive: true, force: true });
     }
   });

@@ -15,6 +15,7 @@ type StopReason =
   | 'completed'
   | 'user-abort'
   | 'token-limit'
+  | 'turn-limit'
   | 'error';
 
 export type AgentEvent =
