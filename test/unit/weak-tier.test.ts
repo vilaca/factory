@@ -6,7 +6,9 @@ import type { Provider, ProviderCapabilities } from '../../src/providers/types.j
 function fakeProvider(name: string, tier: ProviderCapabilities['modelTier']): Provider {
   return {
     name,
-    async listModels() { return []; },
+    async listModels() {
+      return [];
+    },
     getCapabilities() {
       return {
         contextWindow: 200000,
@@ -19,7 +21,9 @@ function fakeProvider(name: string, tier: ProviderCapabilities['modelTier']): Pr
       };
     },
     async *chat() {},
-    async chatNoStream() { return {}; },
+    async chatNoStream() {
+      return {};
+    },
   };
 }
 
@@ -47,10 +51,16 @@ describe('selectWeakTier', () => {
   it('returns null when getCapabilities throws', () => {
     const provider: Provider = {
       name: 'anthropic',
-      async listModels() { return []; },
-      getCapabilities() { throw new Error('boom'); },
+      async listModels() {
+        return [];
+      },
+      getCapabilities() {
+        throw new Error('boom');
+      },
       async *chat() {},
-      async chatNoStream() { return {}; },
+      async chatNoStream() {
+        return {};
+      },
     };
     assert.strictEqual(selectWeakTier(provider, 'claude-sonnet-4-6'), null);
   });

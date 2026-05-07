@@ -10,8 +10,10 @@
 
 type RotationReason = 'rate-limit' | 'auth' | 'other';
 
-const RATE_RE = /(\b429\b|rate[ -]?limit|throttl|too many requests|insufficient[_ ]?quota|quota[_ ]?exceeded)/i;
-const AUTH_RE = /(\b401\b|\b403\b|unauthorized|forbidden|invalid[ _-]?api[ _-]?key|invalid_api_key|authentication[_ -]error|api[_ -]?key[_ -]?expired)/i;
+const RATE_RE =
+  /(\b429\b|rate[ -]?limit|throttl|too many requests|insufficient[_ ]?quota|quota[_ ]?exceeded)/i;
+const AUTH_RE =
+  /(\b401\b|\b403\b|unauthorized|forbidden|invalid[ _-]?api[ _-]?key|invalid_api_key|authentication[_ -]error|api[_ -]?key[_ -]?expired)/i;
 
 function statusOf(err: unknown): number | undefined {
   if (err && typeof err === 'object') {
@@ -23,7 +25,12 @@ function statusOf(err: unknown): number | undefined {
 }
 
 function messageOf(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'message' in err &&
+    typeof (err as { message: unknown }).message === 'string'
+  ) {
     return (err as { message: string }).message;
   }
   return String(err ?? '');

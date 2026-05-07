@@ -50,7 +50,10 @@ export async function selectStartupSession(
       providers={providers}
       initialProvider={defaultSelection?.provider}
       initialModel={defaultSelection?.model}
-      onResolve={(sel) => { dbg(`onResolve sel=${JSON.stringify(sel)}`); result = sel; }}
+      onResolve={sel => {
+        dbg(`onResolve sel=${JSON.stringify(sel)}`);
+        result = sel;
+      }}
     />,
   );
   dbg('rendered, waiting for exit');
@@ -75,7 +78,11 @@ interface StartupShimProps {
 }
 
 function StartupShim({
-  recents, providers, initialProvider, initialModel, onResolve,
+  recents,
+  providers,
+  initialProvider,
+  initialModel,
+  onResolve,
 }: StartupShimProps): React.ReactElement {
   const { exit } = useApp();
   const finish = (sel: StartupSelection | null): void => {
@@ -88,14 +95,16 @@ function StartupShim({
       recents={recents}
       initialProvider={initialProvider}
       initialModel={initialModel}
-      loadModels={(name) => {
+      loadModels={name => {
         // The picker only invokes loadModels after a provider-stage
         // Enter — that's our cue to commit and hand off to the main
         // flow's ensureAuth + selectModelInk. Use a never-resolving
         // promise so we don't race with Ink's unmount and trigger a
         // setState on the loading stage after exit.
         finish({ provider: name as StartupProviderName });
-        return new Promise<string[]>(() => { /* unmounted */ });
+        return new Promise<string[]>(() => {
+          /* unmounted */
+        });
       }}
       onCommit={(provider, model) => {
         // Reachable only when the user picked from the recent list.
@@ -167,7 +176,10 @@ export async function selectModelInk(
       defaultModel={defaultModel}
       provider={provider}
       providerName={providerName}
-      onResolve={(m) => { dbg(`onResolve model=${m ?? '<exit>'}`); result = m; }}
+      onResolve={m => {
+        dbg(`onResolve model=${m ?? '<exit>'}`);
+        result = m;
+      }}
     />,
   );
   dbg(`rendered ${models.length} models`);

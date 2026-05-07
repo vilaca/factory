@@ -117,7 +117,9 @@ describe('getKey', () => {
 
 describe('selectNextKey', () => {
   const mk = (id: string, createdAt: string): ProviderKey => ({
-    id, token: `tok-${id}`, createdAt,
+    id,
+    token: `tok-${id}`,
+    createdAt,
   });
   const a = mk('a', '2024-01-01T00:00:00Z');
   const b = mk('b', '2024-02-01T00:00:00Z');
@@ -150,7 +152,7 @@ describe('selectNextKey', () => {
     const now = 1_000_000;
     // `a` failed recently; `b` failed long ago; `c` never failed.
     const failureLog = new Map([
-      ['a', now - 1000],          // fresh failure
+      ['a', now - 1000], // fresh failure
       ['b', now - 24 * 3600 * 1000], // very stale, treated as fresh
     ]);
     const next = selectNextKey([a, b, c], new Set(), { failureLog, now });
@@ -180,7 +182,7 @@ describe('selectNextKey', () => {
   it('does not promote a warm-but-failed key over a cold-and-healthy key (correctness wins)', () => {
     const now = 1_000_000;
     const failureLog = new Map([['b', now - 1000]]); // b just failed
-    const warmthLog = new Map([['b', now - 100]]);   // but b is also warm
+    const warmthLog = new Map([['b', now - 100]]); // but b is also warm
     const next = selectNextKey([a, b], new Set(), { failureLog, warmthLog, now });
     // Stale-but-warm `b` must NOT beat fresh-but-cold `a`.
     assert.strictEqual(next?.id, 'a');

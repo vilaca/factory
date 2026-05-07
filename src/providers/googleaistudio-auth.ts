@@ -35,9 +35,10 @@ export class GoogleAiStudioAuthManager {
   constructor(options: GoogleAiStudioAuthOptions = {}) {
     this.apiKey = options.apiKey;
     this.authMode = options.authMode ?? (options.apiKey ? 'api-key' : 'oauth');
-    this.auth = this.authMode === 'oauth'
-      ? (options.auth ?? new GoogleAuth({ scopes: GOOGLE_AI_STUDIO_SCOPES }))
-      : undefined;
+    this.auth =
+      this.authMode === 'oauth'
+        ? (options.auth ?? new GoogleAuth({ scopes: GOOGLE_AI_STUDIO_SCOPES }))
+        : undefined;
   }
 
   mode(): GoogleAiStudioAuthMode {
@@ -121,7 +122,9 @@ function normalizeHeaders(headers: Headers | HeaderMap): HeaderMap {
     return Object.fromEntries((headers as { entries(): Iterable<[string, string]> }).entries());
   }
   return Object.fromEntries(
-    Object.entries(headers).filter((entry) => typeof entry[1] === 'string') as Array<[string, string]>
+    Object.entries(headers).filter(entry => typeof entry[1] === 'string') as Array<
+      [string, string]
+    >,
   );
 }
 
@@ -137,7 +140,9 @@ function hasAdcFile(): boolean {
   const home = os.homedir();
   if (!home) return false;
   try {
-    return fs.existsSync(path.join(home, '.config', 'gcloud', 'application_default_credentials.json'));
+    return fs.existsSync(
+      path.join(home, '.config', 'gcloud', 'application_default_credentials.json'),
+    );
   } catch {
     return false;
   }

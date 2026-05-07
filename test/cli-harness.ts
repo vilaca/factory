@@ -91,9 +91,7 @@ export function spawnCli(args: string[], env?: Record<string, string>): CliHarne
 
         const check = (): void => {
           const current = output;
-          const isMatch = typeof match === 'string'
-            ? current.includes(match)
-            : match.test(current);
+          const isMatch = typeof match === 'string' ? current.includes(match) : match.test(current);
 
           if (isMatch) {
             resolve(current);
@@ -101,9 +99,11 @@ export function spawnCli(args: string[], env?: Record<string, string>): CliHarne
           }
 
           if (Date.now() - start > timeoutMs) {
-            reject(new Error(
-              `Timed out waiting for ${match}.\nOutput so far (${current.length} chars):\n${current.slice(-2000)}`
-            ));
+            reject(
+              new Error(
+                `Timed out waiting for ${match}.\nOutput so far (${current.length} chars):\n${current.slice(-2000)}`,
+              ),
+            );
             return;
           }
 

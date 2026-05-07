@@ -1,8 +1,20 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
-import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import {
+  buildChatBody,
+  fetchOpenAiCatalog,
+  sendOpenAiChat,
+  streamOpenAiChat,
+} from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://api.cerebras.ai/v1';
 const MISSING_TOKEN_ERROR =
@@ -112,7 +124,9 @@ export class CerebrasProvider implements Provider {
     });
 
     this.modelsCache = items
-      .filter((item: any) => item && typeof item === 'object' && typeof item.id === 'string' && item.id)
+      .filter(
+        (item: any) => item && typeof item === 'object' && typeof item.id === 'string' && item.id,
+      )
       .map((item: any) => ({
         id: item.id,
         owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,

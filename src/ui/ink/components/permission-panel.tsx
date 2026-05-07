@@ -27,7 +27,9 @@ export function PermissionPanel({ toolName, args }: PermissionPanelProps): React
     return (
       <Box paddingX={1}>
         <Text color="yellow">Allow WebFetch{host ? ` to ${host}` : ''}? </Text>
-        <Text dimColor>[y]es / [n]o / [w]hitelist {host ?? 'this domain'} / [a]llow all WebFetch</Text>
+        <Text dimColor>
+          [y]es / [n]o / [w]hitelist {host ?? 'this domain'} / [a]llow all WebFetch
+        </Text>
       </Box>
     );
   }

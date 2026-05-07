@@ -28,7 +28,9 @@ export async function writeFileAtomic(
     await fs.writeFile(tmp, data, { encoding: 'utf-8', mode });
     await fs.rename(tmp, filePath);
   } catch (err) {
-    await fs.unlink(tmp).catch(() => { /* tmp may not exist */ });
+    await fs.unlink(tmp).catch(() => {
+      /* tmp may not exist */
+    });
     throw err;
   }
 }

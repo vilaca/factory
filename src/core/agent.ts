@@ -29,7 +29,12 @@ async function* fireStopHook(
     const result = await runHook(
       event,
       { turnsUsed, stopReason },
-      { cwd, config: options.hooksConfig, envPolicy: options.envPolicy, onStderr: options.onHookStderr },
+      {
+        cwd,
+        config: options.hooksConfig,
+        envPolicy: options.envPolicy,
+        onStderr: options.onHookStderr,
+      },
     );
     for (const e of result.errors) {
       options.onHookError?.(event, e);
@@ -93,7 +98,12 @@ export async function* runAgent(
       const result = await runHook(
         'UserPromptSubmit',
         { userInput, model, provider: provider.name },
-        { cwd, config: options.hooksConfig, envPolicy: options.envPolicy, onStderr: options.onHookStderr },
+        {
+          cwd,
+          config: options.hooksConfig,
+          envPolicy: options.envPolicy,
+          onStderr: options.onHookStderr,
+        },
       );
       for (const e of result.errors) {
         options.onHookError?.('UserPromptSubmit', e);
@@ -175,7 +185,14 @@ export async function* runAgent(
     let toolCalls: ToolCallMessage[] = [];
 
     try {
-      const modelResult = yield* callModel(provider, model, messages, tools, signal, options.rotation);
+      const modelResult = yield* callModel(
+        provider,
+        model,
+        messages,
+        tools,
+        signal,
+        options.rotation,
+      );
       if (modelResult.finalProvider) {
         provider = modelResult.finalProvider;
         options.rotation?.onProviderChange?.(provider);
@@ -226,7 +243,10 @@ export async function* runAgent(
       }
 
       const useUserResultFraming = !nativeToolSupport || recoveredFromText;
-      conversation.addAssistant(storedContent, !useUserResultFraming && toolCalls.length > 0 ? toolCalls : undefined);
+      conversation.addAssistant(
+        storedContent,
+        !useUserResultFraming && toolCalls.length > 0 ? toolCalls : undefined,
+      );
 
       if (toolCalls.length === 0) {
         // Detect "silent" turns where the model burned a meaningful number
@@ -265,9 +285,9 @@ export async function* runAgent(
         return;
       }
 
-      const callSignature = toolCalls.map(tc =>
-        `${tc.function?.name}:${JSON.stringify(tc.function?.arguments ?? {})}`,
-      ).join('|');
+      const callSignature = toolCalls
+        .map(tc => `${tc.function?.name}:${JSON.stringify(tc.function?.arguments ?? {})}`)
+        .join('|');
       if (recovery.lastFailureSignature && callSignature === recovery.lastFailureSignature) {
         recovery.consecutiveSameFailures++;
       } else {

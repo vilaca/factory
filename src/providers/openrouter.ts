@@ -1,8 +1,20 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
-import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import {
+  buildChatBody,
+  fetchOpenAiCatalog,
+  sendOpenAiChat,
+  streamOpenAiChat,
+} from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 const PROVIDER_NAME = 'OpenRouter';
@@ -42,7 +54,7 @@ export class OpenRouterProvider implements Provider {
     const key = options.token ?? process.env.OPENROUTER_API_KEY;
     if (!key) {
       throw new Error(
-        'OpenRouter API key required. Set OPENROUTER_API_KEY env var or use --token flag.'
+        'OpenRouter API key required. Set OPENROUTER_API_KEY env var or use --token flag.',
       );
     }
     this.apiKey = key;
@@ -80,8 +92,7 @@ export class OpenRouterProvider implements Provider {
       cached?.context_length ??
       estimateOpenRouterContextWindow(lower);
     const maxOutputTokens =
-      cached?.top_provider?.max_completion_tokens ??
-      estimateOpenRouterMaxOutput(lower);
+      cached?.top_provider?.max_completion_tokens ?? estimateOpenRouterMaxOutput(lower);
 
     return {
       contextWindow,
@@ -178,40 +189,57 @@ export class OpenRouterProvider implements Provider {
         context_length: typeof item.context_length === 'number' ? item.context_length : undefined,
         expiration_date: typeof item.expiration_date === 'string' ? item.expiration_date : null,
         supported_parameters: Array.isArray(item.supported_parameters)
-          ? item.supported_parameters.filter((value: unknown): value is string => typeof value === 'string')
+          ? item.supported_parameters.filter(
+              (value: unknown): value is string => typeof value === 'string',
+            )
           : undefined,
-        per_request_limits: item.per_request_limits && typeof item.per_request_limits === 'object'
-          ? item.per_request_limits as Record<string, unknown>
-          : null,
-        pricing: item.pricing && typeof item.pricing === 'object'
-          ? {
-            prompt: typeof item.pricing.prompt === 'string' ? item.pricing.prompt : undefined,
-            completion: typeof item.pricing.completion === 'string' ? item.pricing.completion : undefined,
-            request: typeof item.pricing.request === 'string' ? item.pricing.request : undefined,
-            image: typeof item.pricing.image === 'string' ? item.pricing.image : undefined,
-          }
-          : undefined,
-        top_provider: item.top_provider && typeof item.top_provider === 'object'
-          ? {
-            context_length: typeof item.top_provider.context_length === 'number'
-              ? item.top_provider.context_length
-              : undefined,
-            max_completion_tokens: typeof item.top_provider.max_completion_tokens === 'number'
-              ? item.top_provider.max_completion_tokens
-              : undefined,
-          }
-          : undefined,
-        architecture: item.architecture && typeof item.architecture === 'object'
-          ? {
-            modality: typeof item.architecture.modality === 'string' ? item.architecture.modality : undefined,
-            input_modalities: Array.isArray(item.architecture.input_modalities)
-              ? item.architecture.input_modalities.filter((value: unknown): value is string => typeof value === 'string')
-              : undefined,
-            output_modalities: Array.isArray(item.architecture.output_modalities)
-              ? item.architecture.output_modalities.filter((value: unknown): value is string => typeof value === 'string')
-              : undefined,
-          }
-          : undefined,
+        per_request_limits:
+          item.per_request_limits && typeof item.per_request_limits === 'object'
+            ? (item.per_request_limits as Record<string, unknown>)
+            : null,
+        pricing:
+          item.pricing && typeof item.pricing === 'object'
+            ? {
+                prompt: typeof item.pricing.prompt === 'string' ? item.pricing.prompt : undefined,
+                completion:
+                  typeof item.pricing.completion === 'string' ? item.pricing.completion : undefined,
+                request:
+                  typeof item.pricing.request === 'string' ? item.pricing.request : undefined,
+                image: typeof item.pricing.image === 'string' ? item.pricing.image : undefined,
+              }
+            : undefined,
+        top_provider:
+          item.top_provider && typeof item.top_provider === 'object'
+            ? {
+                context_length:
+                  typeof item.top_provider.context_length === 'number'
+                    ? item.top_provider.context_length
+                    : undefined,
+                max_completion_tokens:
+                  typeof item.top_provider.max_completion_tokens === 'number'
+                    ? item.top_provider.max_completion_tokens
+                    : undefined,
+              }
+            : undefined,
+        architecture:
+          item.architecture && typeof item.architecture === 'object'
+            ? {
+                modality:
+                  typeof item.architecture.modality === 'string'
+                    ? item.architecture.modality
+                    : undefined,
+                input_modalities: Array.isArray(item.architecture.input_modalities)
+                  ? item.architecture.input_modalities.filter(
+                      (value: unknown): value is string => typeof value === 'string',
+                    )
+                  : undefined,
+                output_modalities: Array.isArray(item.architecture.output_modalities)
+                  ? item.architecture.output_modalities.filter(
+                      (value: unknown): value is string => typeof value === 'string',
+                    )
+                  : undefined,
+              }
+            : undefined,
       }));
     this.modelsCache = models;
 
@@ -231,9 +259,8 @@ function isChatCapableModel(item: any): item is OpenRouterModel & { id: string }
     return false;
   }
 
-  const modality = typeof item.architecture?.modality === 'string'
-    ? item.architecture.modality.toLowerCase()
-    : '';
+  const modality =
+    typeof item.architecture?.modality === 'string' ? item.architecture.modality.toLowerCase() : '';
   if (modality && !modality.includes('text')) {
     return false;
   }
@@ -278,7 +305,10 @@ function buildModelDetail(model: OpenRouterModel): string {
   if (supportsParameter(model, 'reasoning')) {
     details.push('reasoning');
   }
-  if (supportsParameter(model, 'structured_outputs') || supportsParameter(model, 'response_format')) {
+  if (
+    supportsParameter(model, 'structured_outputs') ||
+    supportsParameter(model, 'response_format')
+  ) {
     details.push('structured output');
   }
 
@@ -324,7 +354,11 @@ function buildFreeLimitDetail(model: OpenRouterModel): string | undefined {
   const parts: string[] = [];
   const tokensPerMinute = readLimitValue(source, ['tokens_per_minute', 'tokensPerMinute', 'tpm']);
   const requestsPerDay = readLimitValue(source, ['requests_per_day', 'requestsPerDay', 'rpd']);
-  const requestsPerMinute = readLimitValue(source, ['requests_per_minute', 'requestsPerMinute', 'rpm']);
+  const requestsPerMinute = readLimitValue(source, [
+    'requests_per_minute',
+    'requestsPerMinute',
+    'rpm',
+  ]);
 
   if (tokensPerMinute !== undefined) {
     parts.push(`free ${formatTokenCount(tokensPerMinute)} TPM`);
@@ -339,23 +373,28 @@ function buildFreeLimitDetail(model: OpenRouterModel): string | undefined {
   return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
-function extractLimitSource(limits: Record<string, unknown> | null | undefined): Record<string, unknown> | undefined {
+function extractLimitSource(
+  limits: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | undefined {
   if (!limits) return undefined;
 
   const candidates = [
     limits,
-    typeof limits.free === 'object' && limits.free !== null ? limits.free as Record<string, unknown> : undefined,
+    typeof limits.free === 'object' && limits.free !== null
+      ? (limits.free as Record<string, unknown>)
+      : undefined,
     typeof limits['free_tier'] === 'object' && limits['free_tier'] !== null
-      ? limits['free_tier'] as Record<string, unknown>
+      ? (limits['free_tier'] as Record<string, unknown>)
       : undefined,
   ];
 
-  return candidates.find(candidate =>
-    candidate && (
-      readLimitValue(candidate, ['tokens_per_minute', 'tokensPerMinute', 'tpm']) !== undefined ||
-      readLimitValue(candidate, ['requests_per_day', 'requestsPerDay', 'rpd']) !== undefined ||
-      readLimitValue(candidate, ['requests_per_minute', 'requestsPerMinute', 'rpm']) !== undefined
-    )
+  return candidates.find(
+    candidate =>
+      candidate &&
+      (readLimitValue(candidate, ['tokens_per_minute', 'tokensPerMinute', 'tpm']) !== undefined ||
+        readLimitValue(candidate, ['requests_per_day', 'requestsPerDay', 'rpd']) !== undefined ||
+        readLimitValue(candidate, ['requests_per_minute', 'requestsPerMinute', 'rpm']) !==
+          undefined),
   );
 }
 
@@ -373,8 +412,10 @@ function readLimitValue(source: Record<string, unknown>, keys: string[]): number
 }
 
 function hasVisionSupport(model: OpenRouterModel): boolean {
-  const inputModalities = model.architecture?.input_modalities?.map(value => value.toLowerCase()) ?? [];
-  const outputModalities = model.architecture?.output_modalities?.map(value => value.toLowerCase()) ?? [];
+  const inputModalities =
+    model.architecture?.input_modalities?.map(value => value.toLowerCase()) ?? [];
+  const outputModalities =
+    model.architecture?.output_modalities?.map(value => value.toLowerCase()) ?? [];
   return inputModalities.includes('image') || outputModalities.includes('image');
 }
 

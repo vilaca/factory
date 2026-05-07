@@ -17,7 +17,13 @@ export async function extractProjectFacts(cwd: string): Promise<string | null> {
   const goFacts = await readGoMod(cwd);
   if (goFacts) sections.push(goFacts);
 
-  const pyFacts = await readMarkers(cwd, 'Python', ['pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile', 'poetry.lock']);
+  const pyFacts = await readMarkers(cwd, 'Python', [
+    'pyproject.toml',
+    'requirements.txt',
+    'setup.py',
+    'Pipfile',
+    'poetry.lock',
+  ]);
   if (pyFacts) sections.push(pyFacts);
 
   const javaFacts = await readMarkers(cwd, 'JVM (Java/Kotlin/Scala)', [
@@ -39,7 +45,12 @@ export async function extractProjectFacts(cwd: string): Promise<string | null> {
   const elixirFacts = await readMarkers(cwd, 'Elixir', ['mix.exs', 'mix.lock']);
   if (elixirFacts) sections.push(elixirFacts);
 
-  const cppFacts = await readMarkers(cwd, 'C/C++', ['CMakeLists.txt', 'Makefile', 'configure', 'meson.build']);
+  const cppFacts = await readMarkers(cwd, 'C/C++', [
+    'CMakeLists.txt',
+    'Makefile',
+    'configure',
+    'meson.build',
+  ]);
   if (cppFacts) sections.push(cppFacts);
 
   if (sections.length === 0) return null;
@@ -92,7 +103,7 @@ async function readMarkers(cwd: string, label: string, files: string[]): Promise
     if (file.includes('*')) {
       const dirEntries = await fs.readdir(cwd).catch(() => [] as string[]);
       const re = globToRegex(file);
-      if (dirEntries.some((e) => re.test(e))) markers.push(file);
+      if (dirEntries.some(e => re.test(e))) markers.push(file);
       continue;
     }
     try {

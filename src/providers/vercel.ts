@@ -1,8 +1,20 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
-import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import {
+  buildChatBody,
+  fetchOpenAiCatalog,
+  sendOpenAiChat,
+  streamOpenAiChat,
+} from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
 const PROVIDER_NAME = 'Vercel AI Gateway';
@@ -82,7 +94,14 @@ export class VercelProvider implements Provider {
       yield* streamOpenAiChat({
         url: `${this.baseUrl}/chat/completions`,
         headers: this.authHeaders(),
-        body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
+        body: buildChatBody({
+          model,
+          messages,
+          tools,
+          stream: true,
+          options,
+          maxTokensField: 'max_tokens',
+        }),
         signal: options?.signal,
         providerName: PROVIDER_NAME,
       });
@@ -102,7 +121,14 @@ export class VercelProvider implements Provider {
       return await sendOpenAiChat({
         url: `${this.baseUrl}/chat/completions`,
         headers: this.authHeaders(),
-        body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
+        body: buildChatBody({
+          model,
+          messages,
+          tools,
+          stream: false,
+          options,
+          maxTokensField: 'max_tokens',
+        }),
         signal: options?.signal,
         providerName: PROVIDER_NAME,
       });
@@ -199,10 +225,16 @@ function buildModelWarning(model: VercelModel): string | undefined {
 
 function estimateModelTier(model: string): ModelTier {
   if (
-    model.includes('opus') || model.includes('sonnet') || model.includes('gpt-5') ||
-    model.includes('gpt-4.1') || model.includes('o3') || model.includes('o4') ||
-    model.includes('gemini-2.5-pro') || model.includes('deepseek-r1')
-  ) return 'strong';
+    model.includes('opus') ||
+    model.includes('sonnet') ||
+    model.includes('gpt-5') ||
+    model.includes('gpt-4.1') ||
+    model.includes('o3') ||
+    model.includes('o4') ||
+    model.includes('gemini-2.5-pro') ||
+    model.includes('deepseek-r1')
+  )
+    return 'strong';
   return 'medium';
 }
 

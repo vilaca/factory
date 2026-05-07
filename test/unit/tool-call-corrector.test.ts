@@ -7,7 +7,9 @@ import { correctToolCall } from '../../src/core/tool-call-corrector.js';
 function providerReturning(content: string): Provider {
   return {
     name: 'mock',
-    async listModels() { return []; },
+    async listModels() {
+      return [];
+    },
     getCapabilities(): ProviderCapabilities {
       return {
         contextWindow: 8192,
@@ -19,7 +21,9 @@ function providerReturning(content: string): Provider {
         modelTier: 'medium',
       };
     },
-    async *chat(): AsyncGenerator<ChatChunk> { yield { done: true }; },
+    async *chat(): AsyncGenerator<ChatChunk> {
+      yield { done: true };
+    },
     async chatNoStream(): Promise<ChatChunk> {
       return { content, done: true };
     },
@@ -29,7 +33,9 @@ function providerReturning(content: string): Provider {
 function providerAbortingNoStream(): Provider {
   return {
     name: 'mock',
-    async listModels() { return []; },
+    async listModels() {
+      return [];
+    },
     getCapabilities(): ProviderCapabilities {
       return {
         contextWindow: 8192,
@@ -41,7 +47,9 @@ function providerAbortingNoStream(): Provider {
         modelTier: 'medium',
       };
     },
-    async *chat(): AsyncGenerator<ChatChunk> { yield { done: true }; },
+    async *chat(): AsyncGenerator<ChatChunk> {
+      yield { done: true };
+    },
     async chatNoStream(): Promise<ChatChunk> {
       const err = new Error('aborted');
       err.name = 'AbortError';
@@ -115,7 +123,9 @@ describe('correctToolCall', () => {
   });
 
   it('handles JSON wrapped in a ```json fence', async () => {
-    const provider = providerReturning('```json\n{"name":"Glob","arguments":{"pattern":"*.ts"}}\n```');
+    const provider = providerReturning(
+      '```json\n{"name":"Glob","arguments":{"pattern":"*.ts"}}\n```',
+    );
     const result = await correctToolCall(
       {
         originalCall: { function: { name: 'Glob', arguments: { pattern: '*.bad' } } },
@@ -140,16 +150,17 @@ describe('correctToolCall', () => {
     controller.abort();
 
     await assert.rejects(
-      () => correctToolCall(
-        {
-          originalCall: { function: { name: 'Read', arguments: {} } },
-          errorMessage: 'x',
-        },
-        provider,
-        'mock-model',
-        defaultRegistry,
-        controller.signal,
-      ),
+      () =>
+        correctToolCall(
+          {
+            originalCall: { function: { name: 'Read', arguments: {} } },
+            errorMessage: 'x',
+          },
+          provider,
+          'mock-model',
+          defaultRegistry,
+          controller.signal,
+        ),
       (err: Error) => err.name === 'AbortError',
     );
   });

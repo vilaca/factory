@@ -25,7 +25,8 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Grep,
-    description: 'Search file contents using regex. Uses ripgrep if available, otherwise falls back to grep. Returns matching file paths or lines with context. Use this instead of grep/rg commands.',
+    description:
+      'Search file contents using regex. Uses ripgrep if available, otherwise falls back to grep. Returns matching file paths or lines with context. Use this instead of grep/rg commands.',
     parameters: {
       type: 'object',
       required: ['pattern'],
@@ -44,7 +45,8 @@ const definition: ToolDefinition = {
         },
         include_content: {
           type: 'boolean',
-          description: 'If true, show matching lines with line numbers. If false (default), show only file paths.',
+          description:
+            'If true, show matching lines with line numbers. If false (default), show only file paths.',
         },
       },
     },
@@ -74,7 +76,10 @@ async function tryRipgrep(
     args.push('--glob', '!node_modules', '--glob', '!.git');
     args.push(pattern, searchPath);
 
-    const { stdout } = await execFileAsync('rg', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES, signal });
+    const { stdout } = await execFileAsync('rg', args, {
+      maxBuffer: SEARCH_OUTPUT_MAX_BYTES,
+      signal,
+    });
     const trimmed = stdout.trim();
     if (!trimmed) return { success: true, output: 'No matches found.', empty: true };
     return { success: true, output: trimmed };
@@ -119,7 +124,10 @@ async function tryGrep(
     args.push('--exclude-dir=node_modules', '--exclude-dir=.git');
     args.push('-E', pattern, searchPath);
 
-    const { stdout } = await execFileAsync('grep', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES, signal });
+    const { stdout } = await execFileAsync('grep', args, {
+      maxBuffer: SEARCH_OUTPUT_MAX_BYTES,
+      signal,
+    });
     const trimmed = stdout.trim();
     if (!trimmed) return { success: true, output: 'No matches found.', empty: true };
     return { success: true, output: trimmed };
@@ -156,7 +164,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   }
 
   const rgResult = await tryRipgrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal);
-  const result = rgResult ?? await tryGrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal);
+  const result =
+    rgResult ?? (await tryGrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal));
 
   // Post-filter: a search rooted at e.g. ~/ would otherwise let rg/grep
   // recurse into ~/.ssh and surface filenames (with -l) or content lines
@@ -195,10 +204,14 @@ function filterDeniedResults(
   }
   const footers: string[] = [];
   if (suppressed > 0) {
-    footers.push(`[${suppressed} match${suppressed === 1 ? '' : 'es'} suppressed: under deny-listed path]`);
+    footers.push(
+      `[${suppressed} match${suppressed === 1 ? '' : 'es'} suppressed: under deny-listed path]`,
+    );
   }
   if (truncated > 0) {
-    footers.push(`[+${truncated} more match${truncated === 1 ? '' : 'es'} truncated — narrow the pattern or path]`);
+    footers.push(
+      `[+${truncated} more match${truncated === 1 ? '' : 'es'} truncated — narrow the pattern or path]`,
+    );
   }
   if (footers.length === 0) return result;
   if (kept.length === 0) {

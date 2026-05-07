@@ -114,7 +114,7 @@ export function TabsProvider(props: TabsProviderProps): React.ReactElement {
   }, []);
 
   const setLabel = useCallback((id: number, label: string): void => {
-    setTabs(prev => prev.map(t => t.id === id ? { ...t, label } : t));
+    setTabs(prev => prev.map(t => (t.id === id ? { ...t, label } : t)));
   }, []);
 
   const value = useMemo<TabsContextValue>(
@@ -131,7 +131,18 @@ export function TabsProvider(props: TabsProviderProps): React.ReactElement {
       setLabel,
       setWaiting,
     }),
-    [tabs, activeId, waitingTabs, openTab, closeTab, switchTo, switchToIndex, cycle, setLabel, setWaiting],
+    [
+      tabs,
+      activeId,
+      waitingTabs,
+      openTab,
+      closeTab,
+      switchTo,
+      switchToIndex,
+      cycle,
+      setLabel,
+      setWaiting,
+    ],
   );
 
   return <TabsContext.Provider value={value}>{props.children}</TabsContext.Provider>;

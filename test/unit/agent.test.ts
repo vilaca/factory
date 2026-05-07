@@ -4,7 +4,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
-import type { Provider, ChatMessage, ChatChunk, ToolDefinition, ProviderCapabilities } from '../../src/providers/types.js';
+import type {
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+} from '../../src/providers/types.js';
 import type { AgentEvent, PermissionDecision } from '../../src/core/agent-types.js';
 import type { ContextManager } from '../../src/core/context-manager.js';
 import { Conversation } from '../../src/core/conversation.js';
@@ -16,7 +22,9 @@ import { runAgent } from '../../src/core/agent.js';
 
 interface MockResponse {
   content?: string;
-  tool_calls?: Array<{ function: { name: string; arguments: Record<string, unknown> } } | undefined>;
+  tool_calls?: Array<
+    { function: { name: string; arguments: Record<string, unknown> } } | undefined
+  >;
   /** When set, chat() throws this Error message on this queue slot (chatNoStream consumes the next slot). */
   streamError?: string;
 }
@@ -267,7 +275,9 @@ describe('Agent loop', () => {
       const controller = new AbortController();
       const provider: Provider = {
         name: 'mock',
-        async listModels() { return ['mock-model']; },
+        async listModels() {
+          return ['mock-model'];
+        },
         getCapabilities(): ProviderCapabilities {
           return {
             contextWindow: 8192,
@@ -339,7 +349,9 @@ describe('Agent loop', () => {
         toolRegistry: defaultRegistry,
       });
 
-      for await (const _ of agent) { /* drain */ }
+      for await (const _ of agent) {
+        /* drain */
+      }
 
       const msgs = conversation.getMessages();
       assert.strictEqual(msgs[1].role, 'user');
@@ -367,7 +379,9 @@ describe('Agent loop', () => {
         toolRegistry: defaultRegistry,
       });
 
-      for await (const _ of agent) { /* drain */ }
+      for await (const _ of agent) {
+        /* drain */
+      }
 
       const msgs = conversation.getMessages();
       // system, user, assistant (with tool_calls), tool (result), assistant (final)
@@ -419,7 +433,7 @@ describe('Agent loop', () => {
     it('does NOT auto-retry when model produces prose without tool call (no real failure)', async () => {
       const provider = createMockProvider([
         // Prose response with action verbs, but no tool call. No prior failure.
-        { content: "I will run npm install eslint to add linting." },
+        { content: 'I will run npm install eslint to add linting.' },
       ]);
 
       const events = await collectEvents('add linting', provider);
@@ -435,13 +449,25 @@ describe('Agent loop', () => {
 
       // Each entry: failed Read → prose bail. Model never produces a successful call.
       const provider = createMockProvider([
-        { content: '', tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-1' } } }] },
+        {
+          content: '',
+          tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-1' } } }],
+        },
         { content: 'oops' },
-        { content: '', tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-2' } } }] },
+        {
+          content: '',
+          tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-2' } } }],
+        },
         { content: 'still nope' },
-        { content: '', tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-3' } } }] },
+        {
+          content: '',
+          tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-3' } } }],
+        },
         { content: 'giving up' },
-        { content: '', tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-4' } } }] },
+        {
+          content: '',
+          tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/missing-4' } } }],
+        },
         { content: 'final' },
       ]);
 
@@ -469,11 +495,9 @@ describe('Agent loop', () => {
         { content: 'never seen' },
       ]);
 
-      const events = await collectEvents(
-        'do something dangerous',
-        provider,
-        { onPermission: () => 'deny' },
-      );
+      const events = await collectEvents('do something dangerous', provider, {
+        onPermission: () => 'deny',
+      });
 
       const halts = findEvents(events, 'all-denied-halt');
       assert.strictEqual(halts.length, 1);
@@ -499,14 +523,17 @@ describe('Agent loop', () => {
         const provider = createMockProvider([
           {
             content: '',
-            tool_calls: [
-              { function: { name: 'Read', arguments: { file_path: tmpFp } } },
-            ],
+            tool_calls: [{ function: { name: 'Read', arguments: { file_path: tmpFp } } }],
           },
           {
             content: 'I will edit it.',
             tool_calls: [
-              { function: { name: 'Edit', arguments: { file_path: tmpFp, old_string: 'foo', new_string: 'bar' } } },
+              {
+                function: {
+                  name: 'Edit',
+                  arguments: { file_path: tmpFp, old_string: 'foo', new_string: 'bar' },
+                },
+              },
             ],
           },
           { content: 'Plan ready.' },
@@ -527,7 +554,10 @@ describe('Agent loop', () => {
           if (event.type === 'permission-request') event.respond('allow');
         }
 
-        const planned = events.filter(e => e.type === 'tool-call-planned') as Extract<AgentEvent, { type: 'tool-call-planned' }>[];
+        const planned = events.filter(e => e.type === 'tool-call-planned') as Extract<
+          AgentEvent,
+          { type: 'tool-call-planned' }
+        >[];
         assert.strictEqual(planned.length, 1, 'Edit should have been queued');
         assert.strictEqual(planned[0].toolName, 'Edit');
 
@@ -538,7 +568,11 @@ describe('Agent loop', () => {
         // File should be untouched (only foo, not bar)
         assert.strictEqual(fs.readFileSync(tmpFp, 'utf-8'), 'foo\n');
       } finally {
-        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(tmpFp);
+        } catch {
+          /* ignore */
+        }
       }
     });
   });
@@ -575,7 +609,11 @@ describe('Agent loop', () => {
         assert.strictEqual((complete[0] as any).stopReason, 'completed');
         assert.strictEqual((complete[0] as any).turnsUsed, 3);
       } finally {
-        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(tmpFp);
+        } catch {
+          /* ignore */
+        }
       }
     });
   });
@@ -583,7 +621,7 @@ describe('Agent loop', () => {
   // ─── Gap-closing tests for refactor coverage ──────────────────────────
 
   describe('stream-to-no-stream fallback', () => {
-  it('falls back to chatNoStream when chat() throws a stream error', async () => {
+    it('falls back to chatNoStream when chat() throws a stream error', async () => {
       const provider = createMockProvider([
         { streamError: 'stream interrupted' },
         { content: 'recovered via fallback' },
@@ -608,17 +646,19 @@ describe('Agent loop', () => {
   it('ignores malformed tool call entries instead of crashing the turn', async () => {
     const events = await collectEvents(
       'read the readme',
-      createMockProvider([{
-        tool_calls: [
-          undefined,
-          {
-            function: {
-              name: 'Read',
-              arguments: { file_path: 'README.md' },
+      createMockProvider([
+        {
+          tool_calls: [
+            undefined,
+            {
+              function: {
+                name: 'Read',
+                arguments: { file_path: 'README.md' },
+              },
             },
-          },
-        ],
-      }]),
+          ],
+        },
+      ]),
     );
 
     const permissionRequests = findEvents(events, 'permission-request');
@@ -632,7 +672,10 @@ describe('Agent loop', () => {
       permissions.allowAll('Bash');
 
       const provider = createMockProvider([
-        { content: 'I will run echo. <tool_call>{"name":"Bash","arguments":{"command":"echo hi"}}</tool_call>' },
+        {
+          content:
+            'I will run echo. <tool_call>{"name":"Bash","arguments":{"command":"echo hi"}}</tool_call>',
+        },
         { content: 'Done.' },
       ]);
 
@@ -678,7 +721,16 @@ describe('Agent loop', () => {
       try {
         const provider = createMockProvider([
           // Turn 1: model emits a Read on a missing file (will fail).
-          { tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/definitely-does-not-exist-zzz' } } }] },
+          {
+            tool_calls: [
+              {
+                function: {
+                  name: 'Read',
+                  arguments: { file_path: '/definitely-does-not-exist-zzz' },
+                },
+              },
+            ],
+          },
           // Corrector chatNoStream: returns JSON proposing a corrected Read.
           { content: `{"name":"Read","arguments":{"file_path":${JSON.stringify(tmpFp)}}}` },
           // Turn 2: model wraps up.
@@ -704,7 +756,11 @@ describe('Agent loop', () => {
         assert.strictEqual(complete.length, 1);
         assert.strictEqual((complete[0] as any).stopReason, 'completed');
       } finally {
-        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(tmpFp);
+        } catch {
+          /* ignore */
+        }
       }
     });
 
@@ -722,7 +778,9 @@ describe('Agent loop', () => {
       const correctorModelCalls: string[] = [];
       const provider: Provider = {
         name: 'anthropic',
-        async listModels() { return ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001']; },
+        async listModels() {
+          return ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
+        },
         getCapabilities(model: string): ProviderCapabilities {
           const isHaiku = model.includes('haiku');
           return {
@@ -739,7 +797,16 @@ describe('Agent loop', () => {
           primaryModelCalls.push(model);
           // Two streaming chunks across the two primary turns.
           if (primaryModelCalls.length === 1) {
-            yield { tool_calls: [{ function: { name: 'Read', arguments: { file_path: '/definitely-does-not-exist-zzz' } } }] };
+            yield {
+              tool_calls: [
+                {
+                  function: {
+                    name: 'Read',
+                    arguments: { file_path: '/definitely-does-not-exist-zzz' },
+                  },
+                },
+              ],
+            };
             yield { done: true };
           } else {
             yield { content: 'Done.', done: true };
@@ -748,7 +815,10 @@ describe('Agent loop', () => {
         async chatNoStream(model: string) {
           // Only the corrector goes through chatNoStream.
           correctorModelCalls.push(model);
-          return { content: `{"name":"Read","arguments":{"file_path":${JSON.stringify(tmpFp)}}}`, done: true };
+          return {
+            content: `{"name":"Read","arguments":{"file_path":${JSON.stringify(tmpFp)}}}`,
+            done: true,
+          };
         },
       };
 
@@ -778,7 +848,11 @@ describe('Agent loop', () => {
         assert.strictEqual(correctorModelCalls.length, 1);
         assert.strictEqual(correctorModelCalls[0], 'claude-haiku-4-5-20251001');
       } finally {
-        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(tmpFp);
+        } catch {
+          /* ignore */
+        }
       }
     });
 
@@ -797,11 +871,16 @@ describe('Agent loop', () => {
       try {
         const provider = createMockProvider([
           {
-            tool_calls: [{
-              // Provider-supplied id, like the real Anthropic stream.
-              id: 'toolu_test_orig_id',
-              function: { name: 'Read', arguments: { file_path: '/definitely-does-not-exist-zzz' } },
-            } as any],
+            tool_calls: [
+              {
+                // Provider-supplied id, like the real Anthropic stream.
+                id: 'toolu_test_orig_id',
+                function: {
+                  name: 'Read',
+                  arguments: { file_path: '/definitely-does-not-exist-zzz' },
+                },
+              } as any,
+            ],
           },
           { content: `{"name":"Read","arguments":{"file_path":${JSON.stringify(tmpFp)}}}` },
           { content: 'Done.' },
@@ -838,7 +917,11 @@ describe('Agent loop', () => {
           'tool_result should carry the substitution preamble',
         );
       } finally {
-        try { fs.unlinkSync(tmpFp); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(tmpFp);
+        } catch {
+          /* ignore */
+        }
       }
     });
   });
@@ -985,7 +1068,9 @@ describe('Agent loop', () => {
       let chatCalled = false;
       const provider: Provider = {
         name: 'mock',
-        async listModels() { return ['mock-model']; },
+        async listModels() {
+          return ['mock-model'];
+        },
         getCapabilities(): ProviderCapabilities {
           return {
             contextWindow: 8192,
@@ -1011,11 +1096,16 @@ describe('Agent loop', () => {
       // Real ContextManager so compact() actually runs the chatNoStream path
       // and we exercise the catch block.
       const conversation = new Conversation('system');
-      conversation.addUser('one'); conversation.addAssistant('two');
-      conversation.addUser('three'); conversation.addAssistant('four');
-      conversation.addUser('five'); conversation.addAssistant('six');
-      conversation.addUser('seven'); conversation.addAssistant('eight');
-      conversation.addUser('nine'); conversation.addAssistant('ten');
+      conversation.addUser('one');
+      conversation.addAssistant('two');
+      conversation.addUser('three');
+      conversation.addAssistant('four');
+      conversation.addUser('five');
+      conversation.addAssistant('six');
+      conversation.addUser('seven');
+      conversation.addAssistant('eight');
+      conversation.addUser('nine');
+      conversation.addAssistant('ten');
       const { ContextManager } = await import('../../src/core/context-manager.js');
       const cm = new ContextManager(conversation, provider.getCapabilities('mock-model'), {
         compactionThreshold: 0.0001, // force shouldCompact=true
@@ -1052,7 +1142,7 @@ describe('Agent loop', () => {
       assert.strictEqual(compactions.length, 0);
     });
 
-    it('halts with token-limit when even aggressive compaction can\'t free enough', async () => {
+    it("halts with token-limit when even aggressive compaction can't free enough", async () => {
       const compactCalls: Array<{ aggressive: boolean }> = [];
 
       const cm = {

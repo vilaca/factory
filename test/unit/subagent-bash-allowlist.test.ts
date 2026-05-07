@@ -1,9 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import {
-  isCommandAllowed,
-  tokenizeCommand,
-} from '../../src/core/subagent/bash-allowlist.js';
+import { isCommandAllowed, tokenizeCommand } from '../../src/core/subagent/bash-allowlist.js';
 
 describe('subagent bash allow-list', () => {
   describe('positive cases', () => {
@@ -28,15 +25,18 @@ describe('subagent bash allow-list', () => {
       'node --version',
       'which node',
       'file /usr/bin/ls',
-      'awk \'{print $1}\' file.txt',
+      "awk '{print $1}' file.txt",
       'sed -n 1,40p file.txt',
     ];
 
     for (const cmd of allowedSamples) {
       it(`allows: ${cmd}`, () => {
         const decision = isCommandAllowed(cmd);
-        assert.strictEqual(decision.allowed, true,
-          `expected allowed but got rejected: ${decision.reason}`);
+        assert.strictEqual(
+          decision.allowed,
+          true,
+          `expected allowed but got rejected: ${decision.reason}`,
+        );
       });
     }
   });
@@ -62,8 +62,7 @@ describe('subagent bash allow-list', () => {
     for (const cmd of rejected) {
       it(`rejects: ${cmd}`, () => {
         const decision = isCommandAllowed(cmd);
-        assert.strictEqual(decision.allowed, false,
-          `expected rejected but got allowed: ${cmd}`);
+        assert.strictEqual(decision.allowed, false, `expected rejected but got allowed: ${cmd}`);
         assert.ok(decision.reason && decision.reason.length > 0);
       });
     }

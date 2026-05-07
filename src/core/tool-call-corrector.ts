@@ -42,7 +42,8 @@ export async function correctToolCall(
   signal?: AbortSignal,
 ): Promise<CorrectorOutcome> {
   const validNames = toolRegistry.getNames();
-  const toolDescriptions = toolRegistry.getAll()
+  const toolDescriptions = toolRegistry
+    .getAll()
     .map(t => `- ${t.name}: ${t.description}`)
     .join('\n');
 
@@ -66,16 +67,20 @@ export async function correctToolCall(
     if (!parsed) return { kind: 'abort', reason: 'corrector output was not parseable JSON' };
 
     if (parsed.action === 'abort') {
-      return { kind: 'abort', reason: typeof parsed.reason === 'string' ? parsed.reason : 'corrector said abort' };
+      return {
+        kind: 'abort',
+        reason: typeof parsed.reason === 'string' ? parsed.reason : 'corrector said abort',
+      };
     }
 
     if (typeof parsed.name !== 'string' || !validNames.includes(parsed.name)) {
       return { kind: 'abort', reason: `corrector returned unknown tool name: ${parsed.name}` };
     }
 
-    const args = (typeof parsed.arguments === 'object' && parsed.arguments !== null)
-      ? parsed.arguments as Record<string, unknown>
-      : {};
+    const args =
+      typeof parsed.arguments === 'object' && parsed.arguments !== null
+        ? (parsed.arguments as Record<string, unknown>)
+        : {};
 
     return {
       kind: 'corrected',
@@ -101,19 +106,26 @@ function buildUserMessage(request: CorrectionRequest, toolDescriptions: string):
 
   parts.push('\n## Failed tool call');
   parts.push('```json');
-  parts.push(JSON.stringify({
-    name: request.originalCall.function.name,
-    arguments: request.originalCall.function.arguments,
-  }, null, 2));
+  parts.push(
+    JSON.stringify(
+      {
+        name: request.originalCall.function.name,
+        arguments: request.originalCall.function.arguments,
+      },
+      null,
+      2,
+    ),
+  );
   parts.push('```');
 
   parts.push('\n## Error returned');
   parts.push(request.errorMessage);
 
   if (request.fileContent) {
-    const truncated = request.fileContent.content.length > 8000
-      ? request.fileContent.content.slice(0, 8000) + '\n...(truncated)'
-      : request.fileContent.content;
+    const truncated =
+      request.fileContent.content.length > 8000
+        ? request.fileContent.content.slice(0, 8000) + '\n...(truncated)'
+        : request.fileContent.content;
     parts.push(`\n## Current content of ${request.fileContent.path}`);
     parts.push('```');
     parts.push(truncated);

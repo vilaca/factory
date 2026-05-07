@@ -24,9 +24,7 @@ describe('splitMessagesForAnthropic', () => {
       {
         role: 'assistant',
         content: 'Let me check.',
-        tool_calls: [
-          { id: 'toolu_a', function: { name: 'Glob', arguments: { pattern: '*' } } },
-        ],
+        tool_calls: [{ id: 'toolu_a', function: { name: 'Glob', arguments: { pattern: '*' } } }],
       },
     ];
     const { msgs } = splitMessagesForAnthropic(messages);
@@ -101,10 +99,7 @@ describe('splitMessagesForAnthropic', () => {
       },
       { role: 'tool', content: 'orphan' },
     ];
-    assert.throws(
-      () => splitMessagesForAnthropic(messages),
-      /tool message has no tool_call_id/,
-    );
+    assert.throws(() => splitMessagesForAnthropic(messages), /tool message has no tool_call_id/);
   });
 });
 
@@ -275,7 +270,7 @@ describe('AnthropicProvider — cache token plumbing', () => {
       chunks.push(chunk);
     }
 
-    const withUsage = chunks.find((c) => c.usage);
+    const withUsage = chunks.find(c => c.usage);
     assert.ok(withUsage, 'expected a chunk to carry usage');
     assert.strictEqual(withUsage.usage.promptTokens, 200);
     assert.strictEqual(withUsage.usage.completionTokens, 30);
@@ -305,7 +300,7 @@ describe('AnthropicProvider — cache token plumbing', () => {
       chunks.push(chunk);
     }
 
-    const withUsage = chunks.find((c) => c.usage);
+    const withUsage = chunks.find(c => c.usage);
     assert.ok(withUsage);
     assert.strictEqual(withUsage.usage.cachedPromptTokens, undefined);
     assert.strictEqual(withUsage.usage.cacheCreationTokens, undefined);

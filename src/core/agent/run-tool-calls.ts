@@ -111,7 +111,13 @@ export async function* runToolCalls(
         const result = await runHook(
           'PreToolUse',
           { toolName: fnName, args: fnArgs },
-          { cwd, config: ctx.hooksConfig, envPolicy: ctx.envPolicy, matchValue: fnName, onStderr: ctx.onHookStderr },
+          {
+            cwd,
+            config: ctx.hooksConfig,
+            envPolicy: ctx.envPolicy,
+            matchValue: fnName,
+            onStderr: ctx.onHookStderr,
+          },
         );
         for (const e of result.errors) {
           ctx.onHookError?.('PreToolUse', e);
@@ -140,7 +146,11 @@ export async function* runToolCalls(
             toolName: fnName,
             errorMessage: result.errorMessage,
           };
-          yield { type: 'tool-call-denied', toolName: fnName, args: fnArgs as Record<string, unknown> };
+          yield {
+            type: 'tool-call-denied',
+            toolName: fnName,
+            args: fnArgs as Record<string, unknown>,
+          };
           continue;
         }
       } catch (err: unknown) {
@@ -194,7 +204,13 @@ export async function* runToolCalls(
             success: lastResultForPostHook.success,
             output: lastResultForPostHook.output,
           },
-          { cwd, config: ctx.hooksConfig, envPolicy: ctx.envPolicy, matchValue: toolCall.function?.name ?? '', onStderr: ctx.onHookStderr },
+          {
+            cwd,
+            config: ctx.hooksConfig,
+            envPolicy: ctx.envPolicy,
+            matchValue: toolCall.function?.name ?? '',
+            onStderr: ctx.onHookStderr,
+          },
         );
         for (const e of result.errors) {
           ctx.onHookError?.(postEvent, e);
@@ -217,11 +233,10 @@ export async function* runToolCalls(
 
     // Bash-dedup: if the model is spinning on near-duplicate commands, fire
     // a one-shot nudge so it stops trying micro-variations.
-    if (
-      ctx.bashDedup &&
-      toolCall.function?.name === TOOL_NAMES.Bash
-    ) {
-      const cmd = String((toolCall.function?.arguments as Record<string, unknown> | undefined)?.command ?? '');
+    if (ctx.bashDedup && toolCall.function?.name === TOOL_NAMES.Bash) {
+      const cmd = String(
+        (toolCall.function?.arguments as Record<string, unknown> | undefined)?.command ?? '',
+      );
       if (cmd && ctx.bashDedup.observe(cmd)) {
         yield { type: 'bash-dedup-nudge', recentCommands: ctx.bashDedup.recentCommands() };
         ctx.conversation.addUser(
@@ -358,7 +373,9 @@ async function maintainFileCache(toolCall: ToolCallMessage, cache: FileCache): P
   }
 }
 
-export async function readFileForCorrector(call: ToolCallMessage): Promise<{ path: string; content: string } | undefined> {
+export async function readFileForCorrector(
+  call: ToolCallMessage,
+): Promise<{ path: string; content: string } | undefined> {
   const args = call.function?.arguments as Record<string, unknown> | undefined;
   const path = typeof args?.file_path === 'string' ? args.file_path : null;
   if (!path) return undefined;
@@ -374,7 +391,9 @@ export async function readFileForCorrector(call: ToolCallMessage): Promise<{ pat
   } catch {
     return undefined;
   } finally {
-    await handle?.close().catch(() => { /* ignore */ });
+    await handle?.close().catch(() => {
+      /* ignore */
+    });
   }
 }
 
@@ -430,8 +449,7 @@ async function* executeToolCall(
   const args = fnArgs ?? {};
 
   if (planMode && tool.category !== 'read-only') {
-    const planSummary =
-      `[PLAN] Queued ${tool.name} call: ${JSON.stringify(args).slice(0, 200)}`;
+    const planSummary = `[PLAN] Queued ${tool.name} call: ${JSON.stringify(args).slice(0, 200)}`;
     recordResult(planSummary, tool.name);
     yield { type: 'tool-call-planned', toolName: tool.name, args };
     return;
@@ -482,7 +500,7 @@ async function* executeToolCall(
   // Permission check — inline because async generators can't yield from callbacks
   if (!bashPolicyAllowed && !webFetchAlreadyAllowed && !permissions.isAutoAllowed(tool.name)) {
     let resolvePermission!: (d: PermissionDecision | 'abort') => void;
-    const permissionPromise = new Promise<PermissionDecision | 'abort'>((resolve) => {
+    const permissionPromise = new Promise<PermissionDecision | 'abort'>(resolve => {
       resolvePermission = resolve;
     });
 

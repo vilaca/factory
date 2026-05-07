@@ -8,8 +8,15 @@ import { Separator } from './components/separator.js';
 import { StatusBar } from './components/status-bar.js';
 import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
 import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
-import { ProviderPicker, type ProviderEntry, type RecentPair } from './components/provider-picker.js';
-import { RotationPromptPanel, parseRotationPromptInput } from './components/rotation-prompt-panel.js';
+import {
+  ProviderPicker,
+  type ProviderEntry,
+  type RecentPair,
+} from './components/provider-picker.js';
+import {
+  RotationPromptPanel,
+  parseRotationPromptInput,
+} from './components/rotation-prompt-panel.js';
 import type { RotationEntry } from '../../core/config-types.js';
 import { updateGlobalConfig } from '../../core/config.js';
 import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
@@ -96,7 +103,7 @@ export function Session(props: SessionProps): React.ReactElement {
     if (!pickerOpen) return;
     let cancelled = false;
     setPickerRecentsLoading(true);
-    void getRecentSessions(8).then((sessions) => {
+    void getRecentSessions(8).then(sessions => {
       if (cancelled) return;
       const seen = new Set<string>();
       const pairs: RecentPair[] = [];
@@ -113,7 +120,9 @@ export function Session(props: SessionProps): React.ReactElement {
       setPickerRecents(pairs);
       setPickerRecentsLoading(false);
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pickerOpen]);
 
   // <Static> can only be used once we know we're staying single-tab. Once a
@@ -136,14 +145,17 @@ export function Session(props: SessionProps): React.ReactElement {
     if (!tabs || tabId === undefined) return;
     const getter = (): AgentLoopApi => apiRef.current;
     tabs.registry.register(tabId, getter);
-    return () => { tabs.registry.unregister(tabId); };
+    return () => {
+      tabs.registry.unregister(tabId);
+    };
   }, [tabs, tabId]);
 
   // Report whether this tab is blocked on user input so other tabs can
   // surface a "N waiting" hint in their prompt area.
-  const isWaiting = !!agent.permissionRequest
-    || !!rotationPrompt
-    || (agent.planMode && agent.plannedCalls.length > 0 && agent.state === 'idle');
+  const isWaiting =
+    !!agent.permissionRequest ||
+    !!rotationPrompt ||
+    (agent.planMode && agent.plannedCalls.length > 0 && agent.state === 'idle');
   useEffect(() => {
     if (!tabs || tabId === undefined) return;
     tabs.setWaiting(tabId, isWaiting);
@@ -155,12 +167,12 @@ export function Session(props: SessionProps): React.ReactElement {
   // promise with the chosen entry (or null on cancel/decline).
   useEffect(() => {
     if (!agent.refs.current) return;
-    agent.refs.current.requestFallback = async (context) => {
+    agent.refs.current.requestFallback = async context => {
       if (!agent.refs.current) return null;
       if (agent.refs.current.rotationPromptDeclined) return null;
 
       // Step 1: y/n panel.
-      const decision = await new Promise<'set-up' | 'decline'>((resolve) => {
+      const decision = await new Promise<'set-up' | 'decline'>(resolve => {
         setRotationPrompt({ ...context, resolve });
       });
       setRotationPrompt(null);
@@ -170,7 +182,7 @@ export function Session(props: SessionProps): React.ReactElement {
       }
 
       // Step 2: picker in select-rotation-entry mode.
-      const entry = await new Promise<RotationEntry | null>((resolve) => {
+      const entry = await new Promise<RotationEntry | null>(resolve => {
         setFallbackPickerResolver(() => (chosen: RotationEntry | null) => {
           resolve(chosen);
         });
@@ -188,7 +200,7 @@ export function Session(props: SessionProps): React.ReactElement {
       let added = false;
       try {
         const tupleKey = `${context.provider}:${context.model}`;
-        await updateGlobalConfig((cfg) => {
+        await updateGlobalConfig(cfg => {
           const existing = cfg.agent?.rotation?.overrides?.[tupleKey] ?? [];
           const dup = existing.some(e => e.provider === entry.provider && e.model === entry.model);
           if (dup) return {};
@@ -242,42 +254,45 @@ export function Session(props: SessionProps): React.ReactElement {
     addNotice,
   } = agent;
 
-  useInput((inputChar, key) => {
-    if (key.ctrl && inputChar === 'c') {
-      // While a turn is running, Ctrl+C aborts it without exiting — matches
-      // shell muscle memory ("interrupt this command, stay in the prompt").
-      // When idle, Ctrl+C exits the process.
-      if (state === 'running') {
-        addNotice('warn', '⏸ Ctrl+C — aborting agent run.');
+  useInput(
+    (inputChar, key) => {
+      if (key.ctrl && inputChar === 'c') {
+        // While a turn is running, Ctrl+C aborts it without exiting — matches
+        // shell muscle memory ("interrupt this command, stay in the prompt").
+        // When idle, Ctrl+C exits the process.
+        if (state === 'running') {
+          addNotice('warn', '⏸ Ctrl+C — aborting agent run.');
+          agent.abort();
+          return;
+        }
+        agent.abort();
+        exit();
+        return;
+      }
+      if (!pickerOpen && key.ctrl && inputChar === 'k') {
+        if (refs.current) refs.current.rotationPromptDeclined = false;
+        setPickerOpen(true);
+        return;
+      }
+      if (pickerOpen) return;
+      if (key.escape && state === 'running') {
+        addNotice('warn', '⏸ Esc — aborting agent run.');
         agent.abort();
         return;
       }
-      agent.abort();
-      exit();
-      return;
-    }
-    if (!pickerOpen && key.ctrl && inputChar === 'k') {
-      if (refs.current) refs.current.rotationPromptDeclined = false;
-      setPickerOpen(true);
-      return;
-    }
-    if (pickerOpen) return;
-    if (key.escape && state === 'running') {
-      addNotice('warn', '⏸ Esc — aborting agent run.');
-      agent.abort();
-      return;
-    }
-    if (key.upArrow) {
-      const next = agent.historyUp(input);
-      if (next !== null) setInput(next);
-      return;
-    }
-    if (key.downArrow) {
-      const next = agent.historyDown();
-      if (next !== null) setInput(next);
-      return;
-    }
-  }, { isActive });
+      if (key.upArrow) {
+        const next = agent.historyUp(input);
+        if (next !== null) setInput(next);
+        return;
+      }
+      if (key.downArrow) {
+        const next = agent.historyDown();
+        if (next !== null) setInput(next);
+        return;
+      }
+    },
+    { isActive },
+  );
 
   async function handleSubmit(value: string): Promise<void> {
     const trimmed = value.trim();
@@ -293,7 +308,20 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
+          agent,
+          exit,
+          tabs: tabs ?? undefined,
+          openPicker: () => {
+            if (refs.current) refs.current.rotationPromptDeclined = false;
+            setPickerOpen(true);
+          },
+          toggleFullOutput: () => {
+            const next = !showFullOutputRef.current;
+            setShowFullOutput(next);
+            return next;
+          },
+        });
         return;
       }
       const decision = parseRotationPromptInput(trimmed);
@@ -307,7 +335,20 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
+          agent,
+          exit,
+          tabs: tabs ?? undefined,
+          openPicker: () => {
+            if (refs.current) refs.current.rotationPromptDeclined = false;
+            setPickerOpen(true);
+          },
+          toggleFullOutput: () => {
+            const next = !showFullOutputRef.current;
+            setShowFullOutput(next);
+            return next;
+          },
+        });
         return;
       }
       agent.queueInput(trimmed);
@@ -321,7 +362,20 @@ export function Session(props: SessionProps): React.ReactElement {
       if (trimmed.startsWith('/')) {
         const [cmd, ...rest] = trimmed.split(' ');
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+        void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
+          agent,
+          exit,
+          tabs: tabs ?? undefined,
+          openPicker: () => {
+            if (refs.current) refs.current.rotationPromptDeclined = false;
+            setPickerOpen(true);
+          },
+          toggleFullOutput: () => {
+            const next = !showFullOutputRef.current;
+            setShowFullOutput(next);
+            return next;
+          },
+        });
         return;
       }
       const decision = parsePermissionInput(trimmed, permissionRequest?.toolName);
@@ -361,7 +415,20 @@ export function Session(props: SessionProps): React.ReactElement {
     if (trimmed.startsWith('/')) {
       const [cmd, ...rest] = trimmed.split(' ');
       refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
-      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), { agent, exit, tabs: tabs ?? undefined, openPicker: () => { if (refs.current) refs.current.rotationPromptDeclined = false; setPickerOpen(true); }, toggleFullOutput: () => { const next = !showFullOutputRef.current; setShowFullOutput(next); return next; } });
+      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), {
+        agent,
+        exit,
+        tabs: tabs ?? undefined,
+        openPicker: () => {
+          if (refs.current) refs.current.rotationPromptDeclined = false;
+          setPickerOpen(true);
+        },
+        toggleFullOutput: () => {
+          const next = !showFullOutputRef.current;
+          setShowFullOutput(next);
+          return next;
+        },
+      });
       if (handled) return;
     }
 
@@ -372,18 +439,17 @@ export function Session(props: SessionProps): React.ReactElement {
   // prop, so the StatusBar context-window figure follows /provider switches.
   const capabilities = (refs.current?.provider ?? props.provider).getCapabilities(model);
   const inputAccentColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
-  const spinner = !permissionRequest && compacting
-    ? {
-        label: compacting.aggressive
-          ? 'Compacting (aggressive)…'
-          : 'Compacting context…',
-        color: 'yellow',
-      }
-    : !permissionRequest && runningTool
-    ? { label: `Running ${runningTool}…`, color: 'magenta' }
-    : !permissionRequest && thinking
-    ? { label: 'Thinking…', color: 'cyan' }
-    : undefined;
+  const spinner =
+    !permissionRequest && compacting
+      ? {
+          label: compacting.aggressive ? 'Compacting (aggressive)…' : 'Compacting context…',
+          color: 'yellow',
+        }
+      : !permissionRequest && runningTool
+        ? { label: `Running ${runningTool}…`, color: 'magenta' }
+        : !permissionRequest && thinking
+          ? { label: 'Thinking…', color: 'cyan' }
+          : undefined;
 
   return (
     <Box flexDirection="column" display={isActive ? 'flex' : 'none'}>
@@ -398,7 +464,9 @@ export function Session(props: SessionProps): React.ReactElement {
         userEmoji={userEmoji}
       />
 
-      {permissionRequest && <PermissionPanel toolName={permissionRequest.toolName} args={permissionRequest.args} />}
+      {permissionRequest && (
+        <PermissionPanel toolName={permissionRequest.toolName} args={permissionRequest.args} />
+      )}
 
       {planMode && plannedCalls.length > 0 && state === 'idle' && (
         <PlanApprovalPanel count={plannedCalls.length} />
@@ -432,7 +500,7 @@ export function Session(props: SessionProps): React.ReactElement {
             const p = createProvider(name, opts);
             return p.listModels();
           }}
-          loadKeysForProvider={async (name) => {
+          loadKeysForProvider={async name => {
             const cfg = await loadGlobalConfig();
             const descriptor = descriptorByAlias(name);
             if (!descriptor) return [];
@@ -474,10 +542,13 @@ export function Session(props: SessionProps): React.ReactElement {
             // workersAi accountId is not asked from the picker yet — pull
             // from existing config so the saved key still works.
             const cfg = descriptor.needsAccountId ? await loadGlobalConfig() : null;
-            const extras = descriptor.needsAccountId && cfg?.workersAiAccountId
-              ? { accountId: cfg.workersAiAccountId }
-              : undefined;
-            const entry = await addCredentialKey(descriptor.name, token, { ...(extras ? { extras } : {}) });
+            const extras =
+              descriptor.needsAccountId && cfg?.workersAiAccountId
+                ? { accountId: cfg.workersAiAccountId }
+                : undefined;
+            const entry = await addCredentialKey(descriptor.name, token, {
+              ...(extras ? { extras } : {}),
+            });
             return entry.id;
           }}
           deleteKey={async (name, keyId) => {
@@ -512,34 +583,33 @@ export function Session(props: SessionProps): React.ReactElement {
         />
       )}
 
-      {isActive && (() => {
-        const totalWaiting = tabs ? tabs.waitingTabs.size : 0;
-        const showWaiting = tabs && tabs.tabs.length > 1 && totalWaiting > 0;
-        return (
-          <>
-            <Separator />
-            <Box paddingX={1} width="100%">
-              {props.tabLabel && (
-                <Text dimColor>{`[${props.tabLabel}]`}</Text>
-              )}
-              {showWaiting && (
-                <Text color="yellow">{` (${totalWaiting} waiting)`}</Text>
-              )}
-              {showFullOutput && (
-                <Text color="cyan">{' [full]'}</Text>
-              )}
-              <Text color={inputAccentColor} bold>{'> '}</Text>
-              <TextInput
-                value={input}
-                onChange={setInput}
-                onSubmit={(value) => { void handleSubmit(value); }}
-                focus={!pickerOpen}
-              />
-            </Box>
-            <Separator />
-          </>
-        );
-      })()}
+      {isActive &&
+        (() => {
+          const totalWaiting = tabs ? tabs.waitingTabs.size : 0;
+          const showWaiting = tabs && tabs.tabs.length > 1 && totalWaiting > 0;
+          return (
+            <>
+              <Separator />
+              <Box paddingX={1} width="100%">
+                {props.tabLabel && <Text dimColor>{`[${props.tabLabel}]`}</Text>}
+                {showWaiting && <Text color="yellow">{` (${totalWaiting} waiting)`}</Text>}
+                {showFullOutput && <Text color="cyan">{' [full]'}</Text>}
+                <Text color={inputAccentColor} bold>
+                  {'> '}
+                </Text>
+                <TextInput
+                  value={input}
+                  onChange={setInput}
+                  onSubmit={value => {
+                    void handleSubmit(value);
+                  }}
+                  focus={!pickerOpen}
+                />
+              </Box>
+              <Separator />
+            </>
+          );
+        })()}
 
       <StatusBar
         planMode={planMode}

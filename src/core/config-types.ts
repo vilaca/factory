@@ -111,8 +111,16 @@ export interface ExperimentalFlags {
   toolPreview?: boolean;
 }
 
-export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills', 'hooks', 'toolPreview'] as const;
-export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
+export const EXPERIMENTAL_FLAG_KEYS = [
+  'bashDedup',
+  'readCache',
+  'lineCountHint',
+  'subagents',
+  'skills',
+  'hooks',
+  'toolPreview',
+] as const;
+export type ExperimentalFlagKey = (typeof EXPERIMENTAL_FLAG_KEYS)[number];
 
 interface PermissionConfig {
   allowAll?: string[];

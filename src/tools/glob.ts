@@ -20,7 +20,8 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Glob,
-    description: 'Find files matching a glob pattern (e.g. "**/*.ts", "src/**/*.js"). Returns file paths in glob iteration order. Use this instead of find or ls.',
+    description:
+      'Find files matching a glob pattern (e.g. "**/*.ts", "src/**/*.js"). Returns file paths in glob iteration order. Use this instead of find or ls.',
     parameters: {
       type: 'object',
       required: ['pattern'],
@@ -75,7 +76,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     for await (const dirent of fsGlob(pattern, {
       cwd: searchPath,
       withFileTypes: true,
-      exclude: (entry) => {
+      exclude: entry => {
         const name = typeof entry === 'string' ? entry : entry.name;
         return name.split(path.sep).some(seg => EXCLUDE_DIR_SEGMENTS.has(seg));
       },
@@ -102,9 +103,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       matches.push(fullPath);
     }
 
-    const suppressedNote = suppressed > 0
-      ? `\n[${suppressed} suppressed: under deny-listed path]`
-      : '';
+    const suppressedNote =
+      suppressed > 0 ? `\n[${suppressed} suppressed: under deny-listed path]` : '';
 
     if (matches.length === 0) {
       return {
@@ -114,9 +114,10 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       };
     }
 
-    const truncated = matches.length > MAX_RESULTS
-      ? [...matches.slice(0, MAX_RESULTS), `\n... (${matches.length - MAX_RESULTS} more files)`]
-      : matches;
+    const truncated =
+      matches.length > MAX_RESULTS
+        ? [...matches.slice(0, MAX_RESULTS), `\n... (${matches.length - MAX_RESULTS} more files)`]
+        : matches;
 
     return { success: true, output: truncated.join('\n') + suppressedNote };
   } catch (err: unknown) {

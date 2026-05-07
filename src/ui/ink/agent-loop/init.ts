@@ -125,9 +125,10 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
         : [],
       overrides: opts.agentConfig?.rotation?.overrides
         ? Object.fromEntries(
-            Object.entries(opts.agentConfig.rotation.overrides).map(
-              ([k, v]) => [k, v.map(e => ({ ...e }))],
-            ),
+            Object.entries(opts.agentConfig.rotation.overrides).map(([k, v]) => [
+              k,
+              v.map(e => ({ ...e })),
+            ]),
           )
         : {},
     },
@@ -167,7 +168,10 @@ export async function initSkillsRegistry(
     }
     if (skills.length > 0) {
       const alwaysOn = skills.filter(s => s.alwaysOn).length;
-      addNotice('info', `Loaded ${skills.length} skill${skills.length === 1 ? '' : 's'} (${alwaysOn} always-on).`);
+      addNotice(
+        'info',
+        `Loaded ${skills.length} skill${skills.length === 1 ? '' : 's'} (${alwaysOn} always-on).`,
+      );
     }
     return new SkillsRegistry(skills);
   } catch (err) {
@@ -183,6 +187,9 @@ export async function loadInitialHistory(
   const h = await loadHistoryFromSessions();
   if (refs.current) refs.current.pastHistory = h;
   if (h.length > 0) {
-    addNotice('info', `Loaded ${h.length} prior input${h.length === 1 ? '' : 's'} (press up to recall).`);
+    addNotice(
+      'info',
+      `Loaded ${h.length} prior input${h.length === 1 ? '' : 's'} (press up to recall).`,
+    );
   }
 }

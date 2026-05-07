@@ -1,7 +1,12 @@
 import { InferenceClient } from '@huggingface/inference';
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelTier,
 } from './types.js';
 import { errorMessage } from '../utils/errors.js';
 import {
@@ -17,9 +22,7 @@ export class HuggingFaceProvider implements Provider {
   constructor(token?: string) {
     const apiKey = token ?? process.env.HF_TOKEN ?? process.env.HUGGING_FACE_HUB_TOKEN;
     if (!apiKey) {
-      throw new Error(
-        'HuggingFace token required. Set HF_TOKEN env var or use --token flag.'
-      );
+      throw new Error('HuggingFace token required. Set HF_TOKEN env var or use --token flag.');
     }
     this.client = new InferenceClient(apiKey);
   }
@@ -95,8 +98,10 @@ export class HuggingFaceProvider implements Provider {
           mergeStreamedToolCalls(toolCalls, delta.tool_calls as any[]);
         }
 
-        if (chunk.choices?.[0]?.finish_reason === 'tool_calls' ||
-            chunk.choices?.[0]?.finish_reason === 'stop') {
+        if (
+          chunk.choices?.[0]?.finish_reason === 'tool_calls' ||
+          chunk.choices?.[0]?.finish_reason === 'stop'
+        ) {
           result.done = true;
         }
 
@@ -146,9 +151,10 @@ export class HuggingFaceProvider implements Provider {
         id: tc.id,
         function: {
           name: tc.function.name,
-          arguments: typeof tc.function.arguments === 'string'
-            ? JSON.parse(tc.function.arguments)
-            : tc.function.arguments,
+          arguments:
+            typeof tc.function.arguments === 'string'
+              ? JSON.parse(tc.function.arguments)
+              : tc.function.arguments,
         },
       }));
     }

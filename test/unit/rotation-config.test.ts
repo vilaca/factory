@@ -5,10 +5,7 @@ import os from 'os';
 import path from 'path';
 import { loadProjectConfig, loadGlobalConfig, saveGlobalConfig } from '../../src/core/config.js';
 
-async function withProjectFile(
-  content: string,
-  fn: (cwd: string) => Promise<void>,
-): Promise<void> {
+async function withProjectFile(content: string, fn: (cwd: string) => Promise<void>): Promise<void> {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-rotcfg-'));
   try {
     const dir = path.join(cwd, '.factory');
@@ -42,39 +39,34 @@ describe('agent.rotation validation', () => {
           models: false,
           default: [{ provider: 'anthropic', model: 'claude-haiku-4-5' }],
           overrides: {
-            'groq:llama-3.3-70b': [
-              { provider: 'cerebras', model: 'gpt-oss-120b' },
-            ],
+            'groq:llama-3.3-70b': [{ provider: 'cerebras', model: 'gpt-oss-120b' }],
           },
         },
       },
     });
-    await withProjectFile(content, async (cwd) => {
+    await withProjectFile(content, async cwd => {
       const cfg = await loadProjectConfig(cwd);
       assert.strictEqual(cfg.agent?.rotation?.keys, true);
       assert.strictEqual(cfg.agent?.rotation?.models, false);
       assert.strictEqual(cfg.agent?.rotation?.default?.length, 1);
-      assert.strictEqual(cfg.agent?.rotation?.overrides?.['groq:llama-3.3-70b']?.[0]?.provider, 'cerebras');
+      assert.strictEqual(
+        cfg.agent?.rotation?.overrides?.['groq:llama-3.3-70b']?.[0]?.provider,
+        'cerebras',
+      );
     });
   });
 
   it('rejects non-boolean keys flag', async () => {
     const content = JSON.stringify({ agent: { rotation: { keys: 'yes' } } });
-    await withProjectFile(content, async (cwd) => {
-      await assert.rejects(
-        loadProjectConfig(cwd),
-        /"agent\.rotation\.keys" must be a boolean/,
-      );
+    await withProjectFile(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /"agent\.rotation\.keys" must be a boolean/);
     });
   });
 
   it('rejects non-array default chain', async () => {
     const content = JSON.stringify({ agent: { rotation: { default: 'nope' } } });
-    await withProjectFile(content, async (cwd) => {
-      await assert.rejects(
-        loadProjectConfig(cwd),
-        /"agent\.rotation\.default" must be an array/,
-      );
+    await withProjectFile(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /"agent\.rotation\.default" must be an array/);
     });
   });
 
@@ -82,7 +74,7 @@ describe('agent.rotation validation', () => {
     const content = JSON.stringify({
       agent: { rotation: { default: [{ provider: '', model: 'x' }] } },
     });
-    await withProjectFile(content, async (cwd) => {
+    await withProjectFile(content, async cwd => {
       await assert.rejects(
         loadProjectConfig(cwd),
         /"agent\.rotation\.default\[0\]\.provider" must be a non-empty string/,
@@ -98,7 +90,7 @@ describe('agent.rotation validation', () => {
         },
       },
     });
-    await withProjectFile(content, async (cwd) => {
+    await withProjectFile(content, async cwd => {
       await assert.rejects(
         loadProjectConfig(cwd),
         /"agent\.rotation\.overrides\..*\[0\]\.model" must be a non-empty string/,

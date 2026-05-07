@@ -7,7 +7,11 @@ interface RotationPromptPanelProps {
   reason: 'rate-limit' | 'auth';
 }
 
-export function RotationPromptPanel({ provider, model, reason }: RotationPromptPanelProps): React.ReactElement {
+export function RotationPromptPanel({
+  provider,
+  model,
+  reason,
+}: RotationPromptPanelProps): React.ReactElement {
   const reasonLabel = reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
   return (
     <Box paddingX={1} flexDirection="column">

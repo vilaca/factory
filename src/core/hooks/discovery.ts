@@ -13,7 +13,7 @@ export const HOOK_EVENTS = [
   'StopFailure',
 ] as const;
 
-export type HookEvent = typeof HOOK_EVENTS[number];
+export type HookEvent = (typeof HOOK_EVENTS)[number];
 
 /**
  * Resolve hook entries for `event` from the merged config, optionally
@@ -44,7 +44,9 @@ export function resolveHooks(
  * and by the `/hooks` slash command to surface what will fire this session
  * so the user is never surprised by an inherited config.
  */
-export function listAllHooks(config: HooksConfig | undefined): { event: HookEvent; entry: HookEntry }[] {
+export function listAllHooks(
+  config: HooksConfig | undefined,
+): { event: HookEvent; entry: HookEntry }[] {
   const out: { event: HookEvent; entry: HookEntry }[] = [];
   if (!config) return out;
   for (const event of HOOK_EVENTS) {
@@ -54,4 +56,3 @@ export function listAllHooks(config: HooksConfig | undefined): { event: HookEven
   }
   return out;
 }
-

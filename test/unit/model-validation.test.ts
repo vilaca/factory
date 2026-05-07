@@ -1,14 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import type {
-  Provider, ChatMessage, ChatChunk, ProviderCapabilities, ModelInfo,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ProviderCapabilities,
+  ModelInfo,
 } from '../../src/providers/types.js';
 import { validateModelToolSupport } from '../../src/core/model-validation.js';
 
 function baseProvider(): Provider {
   return {
     name: 'mock',
-    async listModels() { return []; },
+    async listModels() {
+      return [];
+    },
     getCapabilities(): ProviderCapabilities {
       return {
         contextWindow: 8192,

@@ -1,6 +1,13 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
@@ -36,7 +43,10 @@ export class WorkersAiProvider implements Provider {
     if (!key) {
       throw new Error(MISSING_TOKEN_ERROR);
     }
-    const accountId = options.accountId ?? process.env.CLOUDFLARE_ACCOUNT_ID ?? inferAccountIdFromHost(options.host);
+    const accountId =
+      options.accountId ??
+      process.env.CLOUDFLARE_ACCOUNT_ID ??
+      inferAccountIdFromHost(options.host);
     if (!accountId) {
       throw new Error(MISSING_ACCOUNT_ID_ERROR);
     }
@@ -153,12 +163,16 @@ export class WorkersAiProvider implements Provider {
         throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${await res.text()}`);
       }
 
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       const pageItems = Array.isArray(data?.result) ? data.result : [];
-      const normalized = pageItems.flatMap((item: any) => normalizeModel(item))
+      const normalized = pageItems
+        .flatMap((item: any) => normalizeModel(item))
         // Note: keep only text-generation entries for now; if Cloudflare starts
         // labeling useful chat models differently, this filter may need to widen.
-        .filter((model: WorkersAiModel) => model.taskName === undefined || model.taskName === 'text generation');
+        .filter(
+          (model: WorkersAiModel) =>
+            model.taskName === undefined || model.taskName === 'text generation',
+        );
 
       models.push(...normalized);
 
@@ -202,41 +216,45 @@ function normalizeModelSearchUrl(host: string | undefined, accountId: string): s
 }
 
 function normalizeModel(item: any): WorkersAiModel[] {
-  const id = typeof item?.name === 'string'
-    ? item.name
-    : typeof item?.id === 'string'
-      ? item.id
-      : typeof item?.model === 'string'
-        ? item.model
-        : undefined;
+  const id =
+    typeof item?.name === 'string'
+      ? item.name
+      : typeof item?.id === 'string'
+        ? item.id
+        : typeof item?.model === 'string'
+          ? item.model
+          : undefined;
   if (!id) return [];
 
   const taskName = normalizeTaskName(item?.task);
-  return [{
-    id,
-    description: typeof item?.description === 'string' ? item.description : undefined,
-    taskName,
-    contextWindow: pickFirstNumber(
-      item?.context_window,
-      item?.context_length,
-      item?.max_context_tokens,
-      item?.properties?.context_window,
-    ),
-    supportsTools: pickCapability(item, 'function'),
-    supportsReasoning: pickCapability(item, 'reason'),
-    supportsVision: pickCapability(item, 'vision'),
-    experimental: item?.experimental === true || hasTag(item, 'experimental'),
-  }];
+  return [
+    {
+      id,
+      description: typeof item?.description === 'string' ? item.description : undefined,
+      taskName,
+      contextWindow: pickFirstNumber(
+        item?.context_window,
+        item?.context_length,
+        item?.max_context_tokens,
+        item?.properties?.context_window,
+      ),
+      supportsTools: pickCapability(item, 'function'),
+      supportsReasoning: pickCapability(item, 'reason'),
+      supportsVision: pickCapability(item, 'vision'),
+      experimental: item?.experimental === true || hasTag(item, 'experimental'),
+    },
+  ];
 }
 
 function normalizeTaskName(task: any): string | undefined {
-  const raw = typeof task === 'string'
-    ? task
-    : typeof task?.name === 'string'
-      ? task.name
-      : typeof task?.description === 'string'
-        ? task.description
-        : undefined;
+  const raw =
+    typeof task === 'string'
+      ? task
+      : typeof task?.name === 'string'
+        ? task.name
+        : typeof task?.description === 'string'
+          ? task.description
+          : undefined;
   return raw?.toLowerCase();
 }
 
@@ -282,7 +300,8 @@ function buildModelDetail(model: string, cached?: WorkersAiModel): string {
 
 function buildModelWarning(model: string, cached?: WorkersAiModel): string | undefined {
   const lower = model.toLowerCase();
-  if (cached?.experimental || lower.includes('experimental') || lower.includes('preview')) return 'preview';
+  if (cached?.experimental || lower.includes('experimental') || lower.includes('preview'))
+    return 'preview';
   return undefined;
 }
 
@@ -299,10 +318,7 @@ function buildCapabilities(model: string, cached?: WorkersAiModel): string[] {
 }
 
 function supportsToolsByName(model: string): boolean {
-  return !(
-    model.includes('guard') ||
-    model.includes('classification')
-  );
+  return !(model.includes('guard') || model.includes('classification'));
 }
 
 function supportsVisionByName(model: string): boolean {
@@ -352,7 +368,11 @@ function estimateWorkersAiMaxOutput(model: string): number {
   return 8192;
 }
 
-function estimateWorkersAiModelTier(model: string, supportsVision: boolean, supportsReasoning: boolean): ModelTier {
+function estimateWorkersAiModelTier(
+  model: string,
+  supportsVision: boolean,
+  supportsReasoning: boolean,
+): ModelTier {
   if (
     model.includes('gpt-oss-120b') ||
     model.includes('kimi-k2.6') ||
@@ -361,7 +381,12 @@ function estimateWorkersAiModelTier(model: string, supportsVision: boolean, supp
   ) {
     return 'strong';
   }
-  if (supportsReasoning || supportsVision || model.includes('qwen2.5-coder-32b-instruct') || model.includes('mistral-small-3.1')) {
+  if (
+    supportsReasoning ||
+    supportsVision ||
+    model.includes('qwen2.5-coder-32b-instruct') ||
+    model.includes('mistral-small-3.1')
+  ) {
     return 'medium';
   }
   return 'weak';

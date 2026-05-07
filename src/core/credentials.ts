@@ -112,7 +112,10 @@ function legacyExtrasFor(cfg: Config, provider: string): Record<string, string> 
   return undefined;
 }
 
-function syntheticLegacyKey(token: string, extras: Record<string, string> | undefined): ProviderKey {
+function syntheticLegacyKey(
+  token: string,
+  extras: Record<string, string> | undefined,
+): ProviderKey {
   return {
     id: LEGACY_KEY_ID,
     label: 'default',
@@ -164,7 +167,7 @@ export async function addKey(
     ...(opts.label ? { label: opts.label } : {}),
     ...(opts.extras ? { extras: opts.extras } : {}),
   };
-  await updateGlobalConfig((cfg) => ({
+  await updateGlobalConfig(cfg => ({
     keys: { ...cfg.keys, [provider]: [...(cfg.keys?.[provider] ?? []), entry] },
   }));
   return entry;
@@ -172,7 +175,7 @@ export async function addKey(
 
 /** Drop a key by id. Silent no-op if `id` doesn't match. */
 export async function deleteKey(provider: string, id: string): Promise<void> {
-  await updateGlobalConfig((cfg) => {
+  await updateGlobalConfig(cfg => {
     const existing = cfg.keys?.[provider];
     if (!existing) return {};
     const next = existing.filter(k => k.id !== id);
@@ -197,13 +200,15 @@ export function migrateLegacyKeys(cfg: Config): { changed: boolean; next: Config
     const token = legacyTokenFor(cfg, provider);
     if (!token) continue;
     const extras = legacyExtrasFor(cfg, provider);
-    nextKeys[provider] = [{
-      id: randomUUID(),
-      label: 'default',
-      token,
-      createdAt: new Date().toISOString(),
-      ...(extras ? { extras } : {}),
-    }];
+    nextKeys[provider] = [
+      {
+        id: randomUUID(),
+        label: 'default',
+        token,
+        createdAt: new Date().toISOString(),
+        ...(extras ? { extras } : {}),
+      },
+    ];
     changed = true;
   }
   if (!changed) return { changed: false, next: cfg };

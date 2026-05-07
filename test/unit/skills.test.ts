@@ -9,12 +9,11 @@ import { SkillsRegistry } from '../../src/core/skills/index.js';
 
 describe('parseFrontmatter', () => {
   it('parses scalars, booleans, and inline arrays', () => {
-    const fm = parseFrontmatter([
-      'name: my-skill',
-      'description: hello world',
-      'alwaysOn: true',
-      'tools: [Bash, Read]',
-    ].join('\n'));
+    const fm = parseFrontmatter(
+      ['name: my-skill', 'description: hello world', 'alwaysOn: true', 'tools: [Bash, Read]'].join(
+        '\n',
+      ),
+    );
     assert.strictEqual(fm.name, 'my-skill');
     assert.strictEqual(fm.description, 'hello world');
     assert.strictEqual(fm.alwaysOn, true);
@@ -22,11 +21,9 @@ describe('parseFrontmatter', () => {
   });
 
   it('parses block-style string arrays with quoted entries', () => {
-    const fm = parseFrontmatter([
-      'triggers:',
-      '  - "\\\\bdocker\\\\b"',
-      '  - container',
-    ].join('\n'));
+    const fm = parseFrontmatter(
+      ['triggers:', '  - "\\\\bdocker\\\\b"', '  - container'].join('\n'),
+    );
     assert.deepStrictEqual(fm.triggers, ['\\bdocker\\b', 'container']);
   });
 });
@@ -89,16 +86,28 @@ describe('shouldInjectSkill', () => {
   };
 
   it('matches when the user message contains the trigger', () => {
-    assert.strictEqual(shouldInjectSkill(skill, { userMessage: 'how do I use docker compose?', recentToolNames: [] }), true);
+    assert.strictEqual(
+      shouldInjectSkill(skill, {
+        userMessage: 'how do I use docker compose?',
+        recentToolNames: [],
+      }),
+      true,
+    );
   });
 
   it('does not match when the trigger is absent', () => {
-    assert.strictEqual(shouldInjectSkill(skill, { userMessage: 'unrelated question', recentToolNames: [] }), false);
+    assert.strictEqual(
+      shouldInjectSkill(skill, { userMessage: 'unrelated question', recentToolNames: [] }),
+      false,
+    );
   });
 
   it('skips alwaysOn skills (they live in the system prompt)', () => {
     assert.strictEqual(
-      shouldInjectSkill({ ...skill, alwaysOn: true }, { userMessage: 'docker', recentToolNames: [] }),
+      shouldInjectSkill(
+        { ...skill, alwaysOn: true },
+        { userMessage: 'docker', recentToolNames: [] },
+      ),
       false,
     );
   });
@@ -119,8 +128,26 @@ describe('shouldInjectSkill', () => {
 describe('SkillsRegistry', () => {
   it('alwaysOnSection concatenates only always-on bodies', () => {
     const reg = new SkillsRegistry([
-      { name: 'on-1', description: 'd', alwaysOn: true, triggers: [], tools: [], body: 'always 1', sourcePath: '', scope: 'project' },
-      { name: 'cond-1', description: 'd', alwaysOn: false, triggers: ['x'], tools: [], body: 'cond', sourcePath: '', scope: 'project' },
+      {
+        name: 'on-1',
+        description: 'd',
+        alwaysOn: true,
+        triggers: [],
+        tools: [],
+        body: 'always 1',
+        sourcePath: '',
+        scope: 'project',
+      },
+      {
+        name: 'cond-1',
+        description: 'd',
+        alwaysOn: false,
+        triggers: ['x'],
+        tools: [],
+        body: 'cond',
+        sourcePath: '',
+        scope: 'project',
+      },
     ]);
     const text = reg.alwaysOnSection();
     assert.match(text, /## Skills/);
@@ -130,7 +157,16 @@ describe('SkillsRegistry', () => {
 
   it('evaluate de-duplicates the same skill firing twice in a row', () => {
     const reg = new SkillsRegistry([
-      { name: 's', description: 'd', alwaysOn: false, triggers: ['docker'], tools: [], body: 'tip', sourcePath: '', scope: 'project' },
+      {
+        name: 's',
+        description: 'd',
+        alwaysOn: false,
+        triggers: ['docker'],
+        tools: [],
+        body: 'tip',
+        sourcePath: '',
+        scope: 'project',
+      },
     ]);
     const a = reg.evaluate('docker question');
     const b = reg.evaluate('docker again');
@@ -184,10 +220,7 @@ describe('loadSkills', () => {
       ['---', 'name: good', 'description: ok', '---', 'body'].join('\n'),
     );
     // No frontmatter delimiters at all → should warn, not throw.
-    await fs.writeFile(
-      path.join(cwd, '.factory', 'skills', 'broken.md'),
-      'just a body, no fence',
-    );
+    await fs.writeFile(path.join(cwd, '.factory', 'skills', 'broken.md'), 'just a body, no fence');
 
     const prevHome = process.env.HOME;
     process.env.HOME = fakeHome;

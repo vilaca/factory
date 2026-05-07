@@ -81,7 +81,11 @@ export function createProvider(name: string, options: CreateProviderOptions = {}
     case 'anthropic':
       return new AnthropicProvider(options.token);
     case 'copilot':
-      return new CopilotProvider({ token: options.token, githubToken: options.githubToken, host: options.host });
+      return new CopilotProvider({
+        token: options.token,
+        githubToken: options.githubToken,
+        host: options.host,
+      });
     case 'openrouter':
       return new OpenRouterProvider({ token: options.token, host: options.host });
     case 'vercel':
@@ -105,11 +109,14 @@ export function createProvider(name: string, options: CreateProviderOptions = {}
     case 'cohere':
       return new CohereProvider({ token: options.token, host: options.host });
     case 'workersai':
-      return new WorkersAiProvider({ token: options.token, host: options.host, accountId: options.accountId });
+      return new WorkersAiProvider({
+        token: options.token,
+        host: options.host,
+        accountId: options.accountId,
+      });
     default:
       throw new Error(
-        `Unknown provider: ${name}. Use "ollama", "huggingface", "llamacpp", "anthropic", "copilot", "openrouter", "vercel", "opencodezen", "googleaistudio", "mistral", "codestral", "cerebras", "groq", "cohere", or "workersai".`
+        `Unknown provider: ${name}. Use "ollama", "huggingface", "llamacpp", "anthropic", "copilot", "openrouter", "vercel", "opencodezen", "googleaistudio", "mistral", "codestral", "cerebras", "groq", "cohere", or "workersai".`,
       );
   }
 }
-

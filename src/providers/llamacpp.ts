@@ -1,6 +1,10 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
@@ -18,7 +22,7 @@ export class LlamaCppProvider implements Provider {
     try {
       const res = await fetch(`${this.baseUrl}/v1/models`);
       if (res.ok) {
-        const data = await res.json() as any;
+        const data = (await res.json()) as any;
         if (data.data?.length) {
           // Note: llama.cpp serves the currently loaded model set; we surface
           // that list directly instead of applying provider-side filtering.
@@ -62,7 +66,14 @@ export class LlamaCppProvider implements Provider {
     yield* streamOpenAiChat({
       url: `${this.baseUrl}/v1/chat/completions`,
       headers: {},
-      body: buildChatBody({ model, messages, tools, stream: true, options, parallelToolCalls: false }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: true,
+        options,
+        parallelToolCalls: false,
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -77,7 +88,14 @@ export class LlamaCppProvider implements Provider {
     return sendOpenAiChat({
       url: `${this.baseUrl}/v1/chat/completions`,
       headers: {},
-      body: buildChatBody({ model, messages, tools, stream: false, options, parallelToolCalls: false }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: false,
+        options,
+        parallelToolCalls: false,
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });

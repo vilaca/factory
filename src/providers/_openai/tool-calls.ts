@@ -35,13 +35,15 @@ export function finalizeToolCalls(toolCalls: StreamingToolCallAcc): ToolCallMess
     if (!tc?.function || !tc.function.name) {
       return [];
     }
-    return [{
-      id: tc.id,
-      function: {
-        name: tc.function.name,
-        arguments: parseToolArgs(tc.function.__rawArgs),
+    return [
+      {
+        id: tc.id,
+        function: {
+          name: tc.function.name,
+          arguments: parseToolArgs(tc.function.__rawArgs),
+        },
       },
-    }];
+    ];
   });
 }
 

@@ -1,4 +1,9 @@
-import type { ChatMessage, Provider, ProviderCapabilities, TokenUsage } from '../providers/types.js';
+import type {
+  ChatMessage,
+  Provider,
+  ProviderCapabilities,
+  TokenUsage,
+} from '../providers/types.js';
 import type { Conversation } from './conversation.js';
 import { estimateMessagesTokens } from '../utils/tokens.js';
 import { selectWeakTier } from './agent/weak-tier.js';
@@ -6,7 +11,7 @@ import { isError } from '../utils/errors.js';
 
 interface ContextConfig {
   compactionThreshold: number; // 0-1, fraction of context window (default 0.75)
-  recencyWindow: number;       // floor on messages to keep during compaction (default 6)
+  recencyWindow: number; // floor on messages to keep during compaction (default 6)
   /** Soft token budget for the recency window. The actual count of kept
    * messages is whichever is larger — `recencyWindow` (count floor) or as
    * many trailing messages as fit under `recencyTokens`. Default 4000. */
@@ -113,9 +118,7 @@ export class ContextManager {
     // least `recencyWindow` messages, plus enough trailing messages to fill
     // `recencyTokens` (whichever is more).
     const messages = this.conversation.getMessages();
-    const recencyWindow = aggressive
-      ? AGGRESSIVE_RECENCY
-      : this.computeRecencyKeepCount(messages);
+    const recencyWindow = aggressive ? AGGRESSIVE_RECENCY : this.computeRecencyKeepCount(messages);
     if (messages.length <= recencyWindow + 1) {
       return null;
     }
@@ -140,8 +143,9 @@ export class ContextManager {
       // Both aggressive and normal compaction try the weak-tier model first;
       // mechanical is the fallback when the model call fails (per the source
       // plan: "skip-model-entirely path is overcautious").
-      summary = await this.buildModelSummary(provider, summaryModel, toSummarize, signal)
-        ?? this.buildMechanicalSummary(toSummarize);
+      summary =
+        (await this.buildModelSummary(provider, summaryModel, toSummarize, signal)) ??
+        this.buildMechanicalSummary(toSummarize);
     }
 
     // Append known file fingerprints so the agent can re-Read post-compaction
@@ -169,7 +173,8 @@ export class ContextManager {
     if (budget <= 0) return this.config.recencyWindow;
     let acc = 0;
     let count = 0;
-    for (let i = messages.length - 1; i >= 1; i--) { // skip system at [0]
+    for (let i = messages.length - 1; i >= 1; i--) {
+      // skip system at [0]
       const tokens = estimateMessagesTokens([messages[i]]);
       acc += tokens;
       count++;
@@ -190,16 +195,21 @@ export class ContextManager {
     const summaryPrompt: ChatMessage[] = [
       {
         role: 'system',
-        content: 'Summarize the key context from this conversation. Include: files accessed, tools used, decisions made, and current task state. Be concise.',
+        content:
+          'Summarize the key context from this conversation. Include: files accessed, tools used, decisions made, and current task state. Be concise.',
       },
       ...toSummarize,
       {
         role: 'user',
-        content: 'Provide a concise summary of the conversation above, focusing on context needed to continue the work.',
+        content:
+          'Provide a concise summary of the conversation above, focusing on context needed to continue the work.',
       },
     ];
     try {
-      const response = await provider.chatNoStream(model, summaryPrompt, undefined, { maxTokens: 512, signal });
+      const response = await provider.chatNoStream(model, summaryPrompt, undefined, {
+        maxTokens: 512,
+        signal,
+      });
       return response.content ?? null;
     } catch (err: unknown) {
       if (signal?.aborted || (isError(err) && err.name === 'AbortError')) throw err;
@@ -207,7 +217,9 @@ export class ContextManager {
     }
   }
 
-  private buildMechanicalSummary(messages: Array<{ role: string; content: string; tool_calls?: any[] }>): string {
+  private buildMechanicalSummary(
+    messages: Array<{ role: string; content: string; tool_calls?: any[] }>,
+  ): string {
     const toolsUsed = new Set<string>();
     const filesAccessed = new Set<string>();
     // Carry forward any prior summary text so cascaded compactions don't drop it.
@@ -222,7 +234,11 @@ export class ContextManager {
           if (args?.path) filesAccessed.add(String(args.path));
         }
       }
-      if (msg.role === 'user' && typeof msg.content === 'string' && msg.content.startsWith(SUMMARY_PREFIX)) {
+      if (
+        msg.role === 'user' &&
+        typeof msg.content === 'string' &&
+        msg.content.startsWith(SUMMARY_PREFIX)
+      ) {
         priorSummaries.push(msg.content.slice(SUMMARY_PREFIX.length));
       }
     }
@@ -238,7 +254,9 @@ export class ContextManager {
       lines.push(`Latest user request: ${truncate(latestUser, LATEST_USER_MAX_CHARS)}`);
     }
     if (latestAssistant) {
-      lines.push(`Latest assistant reply: ${truncate(latestAssistant, LATEST_ASSISTANT_MAX_CHARS)}`);
+      lines.push(
+        `Latest assistant reply: ${truncate(latestAssistant, LATEST_ASSISTANT_MAX_CHARS)}`,
+      );
     }
     if (toolsUsed.size > 0) {
       lines.push(`Tools used: ${[...toolsUsed].join(', ')}`);

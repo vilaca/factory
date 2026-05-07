@@ -32,7 +32,7 @@ const definition: ToolDefinition = {
   function: {
     name: TOOL_NAMES.Delegate,
     description:
-      'Spawn a read-only research subagent for an isolated investigation. The subagent has access to Read, Glob, Grep, and an allow-listed Bash; it CANNOT edit, write, or run state-changing commands. Use to farm out exploration without polluting your own context. Returns the subagent\'s final answer as plain text.',
+      "Spawn a read-only research subagent for an isolated investigation. The subagent has access to Read, Glob, Grep, and an allow-listed Bash; it CANNOT edit, write, or run state-changing commands. Use to farm out exploration without polluting your own context. Returns the subagent's final answer as plain text.",
     parameters: {
       type: 'object',
       required: ['task'],
@@ -45,7 +45,7 @@ const definition: ToolDefinition = {
         model: {
           type: 'string',
           description:
-            'Optional override for the subagent model. Defaults to the parent\'s weak-tier model if registered, otherwise the parent\'s current model.',
+            "Optional override for the subagent model. Defaults to the parent's weak-tier model if registered, otherwise the parent's current model.",
         },
       },
     },
@@ -75,11 +75,13 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
   async function execute(args: Record<string, unknown>): Promise<ToolResult> {
     const task = typeof args.task === 'string' ? args.task.trim() : '';
     if (!task) {
-      return { success: false, output: 'Delegate: "task" is required and must be a non-empty string.' };
+      return {
+        success: false,
+        output: 'Delegate: "task" is required and must be a non-empty string.',
+      };
     }
-    const explicitModel = typeof args.model === 'string' && args.model.trim()
-      ? args.model.trim()
-      : undefined;
+    const explicitModel =
+      typeof args.model === 'string' && args.model.trim() ? args.model.trim() : undefined;
     const subagentModel = explicitModel ?? ctx.weakModel ?? ctx.parentModel;
 
     try {
@@ -105,10 +107,7 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
       if (ctx.sessionLogger) {
         for (const event of result.events) {
           try {
-            ctx.sessionLogger.logWarning(
-              'subagent',
-              JSON.stringify({ event }),
-            );
+            ctx.sessionLogger.logWarning('subagent', JSON.stringify({ event }));
           } catch {
             // Logging failures must never propagate into the tool result.
           }
@@ -141,7 +140,9 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
       if (result.stopReason === 'turn-limit') {
         return {
           success: false,
-          output: text + '\n\n[note: subagent hit its tool-call cap; the answer above is its last partial response]',
+          output:
+            text +
+            '\n\n[note: subagent hit its tool-call cap; the answer above is its last partial response]',
         };
       }
       return { success: true, output: text };

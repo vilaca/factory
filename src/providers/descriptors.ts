@@ -149,7 +149,15 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
   googleaistudio: {
     name: 'googleaistudio',
     label: 'Google AI Studio',
-    aliases: ['googleaistudio', 'google-ai-studio', 'google ai studio', 'google-ai', 'aistudio', 'ai-studio', 'gemini'],
+    aliases: [
+      'googleaistudio',
+      'google-ai-studio',
+      'google ai studio',
+      'google-ai',
+      'aistudio',
+      'ai-studio',
+      'gemini',
+    ],
     configTokenKey: 'googleAiStudioToken',
     configAuthModeKey: 'googleAiStudioAuthMode',
     envVars: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
@@ -244,8 +252,9 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
   },
 };
 
-export const DESCRIPTOR_LIST: ProviderDescriptor[] = (Object.keys(DESCRIPTORS) as StartupProviderName[])
-  .map(name => DESCRIPTORS[name]);
+export const DESCRIPTOR_LIST: ProviderDescriptor[] = (
+  Object.keys(DESCRIPTORS) as StartupProviderName[]
+).map(name => DESCRIPTORS[name]);
 
 export function descriptorByAlias(input: string): ProviderDescriptor | undefined {
   const lower = input.trim().toLowerCase();
@@ -280,14 +289,13 @@ export function resolveToken(
     return undefined;
   };
 
-  return descriptor.envPrecedesConfig
-    ? (fromEnv() ?? fromConfig())
-    : (fromConfig() ?? fromEnv());
+  return descriptor.envPrecedesConfig ? (fromEnv() ?? fromConfig()) : (fromConfig() ?? fromEnv());
 }
 
 export function noModelsMessageFor(descriptor: ProviderDescriptor): string {
-  return descriptor.noModelsMessage
-    ?? `No ${descriptor.label} models available; API key was not saved.`;
+  return (
+    descriptor.noModelsMessage ?? `No ${descriptor.label} models available; API key was not saved.`
+  );
 }
 
 export function saveSuccessMessageFor(descriptor: ProviderDescriptor, configDir: string): string {

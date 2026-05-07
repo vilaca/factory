@@ -1,7 +1,12 @@
 import chalk from 'chalk';
 import type { Config, GoogleAiStudioAuthMode } from '../core/config-types.js';
 import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
-import { DESCRIPTOR_LIST, noModelsMessageFor, resolveToken, saveSuccessMessageFor } from '../providers/descriptors.js';
+import {
+  DESCRIPTOR_LIST,
+  noModelsMessageFor,
+  resolveToken,
+  saveSuccessMessageFor,
+} from '../providers/descriptors.js';
 import { createProvider, type CreateProviderOptions } from '../providers/registry.js';
 import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../core/config.js';
 import { addKey, getKey } from '../core/credentials.js';
@@ -41,12 +46,14 @@ export interface AuthResult {
   keyId?: string;
 }
 
-function resolveGoogleAiStudioAuthMode(config: Config, cliToken?: string): GoogleAiStudioAuthMode | undefined {
+function resolveGoogleAiStudioAuthMode(
+  config: Config,
+  cliToken?: string,
+): GoogleAiStudioAuthMode | undefined {
   if (cliToken) return 'api-key';
   if (config.googleAiStudioAuthMode === 'oauth') return 'oauth';
-  const apiKey = config.googleAiStudioToken
-    ?? process.env.GEMINI_API_KEY
-    ?? process.env.GOOGLE_API_KEY;
+  const apiKey =
+    config.googleAiStudioToken ?? process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
   if (apiKey) return 'api-key';
   return undefined;
 }
@@ -66,10 +73,11 @@ export function resolveCredentialsFor(
   }
   if (descriptor.name === 'copilot') {
     return {
-      token: cliToken
-        ?? config.copilotToken
-        ?? process.env.GITHUB_COPILOT_API_KEY
-        ?? process.env.COPILOT_API_KEY,
+      token:
+        cliToken ??
+        config.copilotToken ??
+        process.env.GITHUB_COPILOT_API_KEY ??
+        process.env.COPILOT_API_KEY,
       githubToken: config.githubToken,
     };
   }
@@ -89,7 +97,7 @@ export function resolveCredentialsFor(
             return {
               token: fromEnv,
               accountId: descriptor.needsAccountId
-                ? key.extras?.accountId ?? config.workersAiAccountId
+                ? (key.extras?.accountId ?? config.workersAiAccountId)
                 : undefined,
             };
           }
@@ -99,7 +107,7 @@ export function resolveCredentialsFor(
         token: key.token,
         keyId: key.id,
         accountId: descriptor.needsAccountId
-          ? key.extras?.accountId ?? config.workersAiAccountId
+          ? (key.extras?.accountId ?? config.workersAiAccountId)
           : undefined,
       };
     }
@@ -114,12 +122,16 @@ function canProbe(descriptor: ProviderDescriptor, creds: StartupCredentials): bo
   if (descriptor.probeWithoutCredentials) return true;
   if (descriptor.name === 'googleaistudio' && !creds.authMode) return false;
   if (descriptor.name === 'copilot' && !creds.token && !creds.githubToken) return false;
-  if (descriptor.name !== 'googleaistudio' && descriptor.name !== 'copilot' && !creds.token) return false;
+  if (descriptor.name !== 'googleaistudio' && descriptor.name !== 'copilot' && !creds.token)
+    return false;
   if (descriptor.needsAccountId && !creds.accountId) return false;
   return true;
 }
 
-export async function probeModels(providerName: string, options: CreateProviderOptions): Promise<string[] | null> {
+export async function probeModels(
+  providerName: string,
+  options: CreateProviderOptions,
+): Promise<string[] | null> {
   try {
     const provider = createProvider(providerName, options);
     return await provider.listModels();
@@ -132,22 +144,20 @@ export async function probeAllProviders(
   config: Config,
   credentials: Map<StartupProviderName, StartupCredentials>,
 ): Promise<Map<StartupProviderName, string[] | null>> {
-  const probes = DESCRIPTOR_LIST
-    .filter(d => d.probeAtStartup)
-    .map(async descriptor => {
-      const creds = credentials.get(descriptor.name) ?? {};
-      if (!canProbe(descriptor, creds)) {
-        return [descriptor.name, null] as const;
-      }
-      const models = await probeModels(descriptor.name, {
-        host: config.host,
-        token: creds.token,
-        githubToken: creds.githubToken,
-        accountId: creds.accountId,
-        googleAiStudioAuthMode: creds.authMode,
-      });
-      return [descriptor.name, models] as const;
+  const probes = DESCRIPTOR_LIST.filter(d => d.probeAtStartup).map(async descriptor => {
+    const creds = credentials.get(descriptor.name) ?? {};
+    if (!canProbe(descriptor, creds)) {
+      return [descriptor.name, null] as const;
+    }
+    const models = await probeModels(descriptor.name, {
+      host: config.host,
+      token: creds.token,
+      githubToken: creds.githubToken,
+      accountId: creds.accountId,
+      googleAiStudioAuthMode: creds.authMode,
     });
+    return [descriptor.name, models] as const;
+  });
   return new Map(await Promise.all(probes));
 }
 
@@ -182,7 +192,10 @@ async function ensureSimplePromptAuth(
 
   if (haveToken && (!needAccountId || haveAccountId)) {
     appendProviderLog({
-      provider: descriptor.name, category: 'auth', action: 'authenticate', outcome: 'success',
+      provider: descriptor.name,
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'success',
       detail: cliToken ? 'using token from --token' : 'using configured API key',
     });
     // existing.keyId is set when the token came from the multi-key store —
@@ -192,21 +205,29 @@ async function ensureSimplePromptAuth(
   }
 
   appendProviderLog({
-    provider: descriptor.name, category: 'auth', action: 'authenticate', outcome: 'started',
-    detail: needAccountId && !haveToken ? 'prompting for API token and account id' : 'prompting for API key',
+    provider: descriptor.name,
+    category: 'auth',
+    action: 'authenticate',
+    outcome: 'started',
+    detail:
+      needAccountId && !haveToken
+        ? 'prompting for API token and account id'
+        : 'prompting for API key',
   });
 
   if (descriptor.promptHeader) {
     console.log(chalk.cyan(`  ${descriptor.promptHeader}`));
   }
 
-  const token = existing.token ?? await promptText(
-    descriptor.inputPrompt ?? '  Enter API key: ',
-    { secret: true },
-  );
+  const token =
+    existing.token ??
+    (await promptText(descriptor.inputPrompt ?? '  Enter API key: ', { secret: true }));
   if (!token) {
     appendProviderLog({
-      provider: descriptor.name, category: 'auth', action: 'authenticate', outcome: 'error',
+      provider: descriptor.name,
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'error',
       detail: needAccountId ? 'API token was empty' : 'API key was empty',
     });
     throw new Error(descriptor.missingError ?? 'API key required.');
@@ -217,7 +238,10 @@ async function ensureSimplePromptAuth(
     accountId = await promptText(descriptor.accountIdInputPrompt ?? '  Enter account ID: ');
     if (!accountId) {
       appendProviderLog({
-        provider: descriptor.name, category: 'auth', action: 'authenticate', outcome: 'error',
+        provider: descriptor.name,
+        category: 'auth',
+        action: 'authenticate',
+        outcome: 'error',
         detail: 'account ID was empty',
       });
       throw new Error(descriptor.accountIdMissingError ?? 'Account ID required.');
@@ -231,17 +255,18 @@ async function ensureSimplePromptAuth(
   };
 }
 
-async function ensureCopilotAuth(
-  config: Config,
-  cliToken?: string,
-): Promise<AuthResult> {
-  const copilotToken = cliToken
-    ?? config.copilotToken
-    ?? process.env.GITHUB_COPILOT_API_KEY
-    ?? process.env.COPILOT_API_KEY;
+async function ensureCopilotAuth(config: Config, cliToken?: string): Promise<AuthResult> {
+  const copilotToken =
+    cliToken ??
+    config.copilotToken ??
+    process.env.GITHUB_COPILOT_API_KEY ??
+    process.env.COPILOT_API_KEY;
   if (copilotToken) {
     appendProviderLog({
-      provider: 'copilot', category: 'auth', action: 'authenticate', outcome: 'success',
+      provider: 'copilot',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'success',
       detail: cliToken ? 'using token from --token' : 'using existing copilot token',
     });
     return { token: copilotToken, shouldSave: false };
@@ -249,21 +274,30 @@ async function ensureCopilotAuth(
 
   if (config.githubToken) {
     appendProviderLog({
-      provider: 'copilot', category: 'auth', action: 'authenticate', outcome: 'success',
+      provider: 'copilot',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'success',
       detail: 'using saved GitHub token',
     });
     return { githubToken: config.githubToken, shouldSave: false };
   }
 
   appendProviderLog({
-    provider: 'copilot', category: 'auth', action: 'authenticate', outcome: 'started',
+    provider: 'copilot',
+    category: 'auth',
+    action: 'authenticate',
+    outcome: 'started',
     detail: 'starting device flow',
   });
   console.log(chalk.cyan('  GitHub Copilot sign-in required.'));
   const auth = new CopilotAuthManager();
   await auth.authenticateWithDeviceFlow(async ({ verificationUri, userCode, expiresIn }) => {
     appendProviderLog({
-      provider: 'copilot', category: 'auth', action: 'device-flow', outcome: 'started',
+      provider: 'copilot',
+      category: 'auth',
+      action: 'device-flow',
+      outcome: 'started',
       detail: `verificationUri=${verificationUri} expiresIn=${expiresIn}s userCodeIssued=true`,
     });
     console.log(chalk.dim(`  Open ${verificationUri}`));
@@ -272,12 +306,22 @@ async function ensureCopilotAuth(
     console.log(chalk.dim(`  ${getCopilotAuthStorageNote()}`));
   });
   appendProviderLog({
-    provider: 'copilot', category: 'auth', action: 'authenticate', outcome: 'success',
+    provider: 'copilot',
+    category: 'auth',
+    action: 'authenticate',
+    outcome: 'success',
     detail: 'device flow completed and credentials saved',
   });
-  console.log(chalk.dim(`  Signed in with GitHub and saved credentials to ${getGlobalConfigDir()}/config.json`));
+  console.log(
+    chalk.dim(
+      `  Signed in with GitHub and saved credentials to ${getGlobalConfigDir()}/config.json`,
+    ),
+  );
   const refreshed = await loadConfig(process.cwd(), {
-    provider: undefined, model: undefined, host: undefined, token: undefined,
+    provider: undefined,
+    model: undefined,
+    host: undefined,
+    token: undefined,
   });
   return { githubToken: refreshed.githubToken, shouldSave: false };
 }
@@ -292,42 +336,59 @@ async function ensureGoogleAiStudioAuth(
 
   if (configuredMode === 'oauth') {
     appendProviderLog({
-      provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-      outcome: 'started', detail: 'validating OAuth (ADC)',
+      provider: 'googleaistudio',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'started',
+      detail: 'validating OAuth (ADC)',
     });
     const auth = new GoogleAiStudioAuthManager({ authMode: 'oauth' });
     await auth.validate();
     appendProviderLog({
-      provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-      outcome: 'success', detail: 'validated OAuth (ADC)',
+      provider: 'googleaistudio',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'success',
+      detail: 'validated OAuth (ADC)',
     });
     return { authMode: 'oauth', shouldSave: false };
   }
 
   if (existingToken) {
     appendProviderLog({
-      provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-      outcome: 'success', detail: cliToken ? 'using token from --token' : 'using configured API key',
+      provider: 'googleaistudio',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'success',
+      detail: cliToken ? 'using token from --token' : 'using configured API key',
     });
     return { token: existingToken, authMode: 'api-key', shouldSave: false };
   }
 
   appendProviderLog({
-    provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-    outcome: 'started', detail: 'prompting for auth method',
+    provider: 'googleaistudio',
+    category: 'auth',
+    action: 'authenticate',
+    outcome: 'started',
+    detail: 'prompting for auth method',
   });
   console.log(chalk.cyan('  Google AI Studio authentication required.'));
   console.log(chalk.cyan('    1.') + ' API key');
   console.log(chalk.cyan('    2.') + ` OAuth ${chalk.dim('(Application Default Credentials)')}`);
   console.log(chalk.cyan('    0.') + ' Exit');
   console.log(chalk.dim(`  ${getGoogleAiStudioOAuthStorageNote()}`));
-  const choice = (await promptText(chalk.cyan('  Choose auth method (press Enter for API key, 0 to exit): '))).toLowerCase();
+  const choice = (
+    await promptText(chalk.cyan('  Choose auth method (press Enter for API key, 0 to exit): '))
+  ).toLowerCase();
   if (isExitSelection(choice)) exitStartupSelection();
 
   if (choice === '2' || choice === 'oauth') {
     appendProviderLog({
-      provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-      outcome: 'started', detail: 'selected OAuth (ADC)',
+      provider: 'googleaistudio',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'started',
+      detail: 'selected OAuth (ADC)',
     });
     const auth = new GoogleAiStudioAuthManager({ authMode: 'oauth' });
     try {
@@ -335,29 +396,45 @@ async function ensureGoogleAiStudioAuth(
     } catch (error: unknown) {
       const detail = errorMessage(error) || getGoogleAiStudioOAuthErrorMessage();
       appendProviderLog({
-        provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-        outcome: 'error', detail,
+        provider: 'googleaistudio',
+        category: 'auth',
+        action: 'authenticate',
+        outcome: 'error',
+        detail,
       });
       throw new Error(detail);
     }
     await saveGlobalConfig({ googleAiStudioAuthMode: 'oauth' });
     appendProviderLog({
-      provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-      outcome: 'success', detail: 'validated OAuth (ADC) and saved auth preference',
+      provider: 'googleaistudio',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'success',
+      detail: 'validated OAuth (ADC) and saved auth preference',
     });
-    console.log(chalk.dim(`  Saved Google AI Studio auth preference to ${getGlobalConfigDir()}/config.json`));
+    console.log(
+      chalk.dim(`  Saved Google AI Studio auth preference to ${getGlobalConfigDir()}/config.json`),
+    );
     return { authMode: 'oauth', shouldSave: false };
   }
 
   appendProviderLog({
-    provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-    outcome: 'started', detail: 'prompting for API key',
+    provider: 'googleaistudio',
+    category: 'auth',
+    action: 'authenticate',
+    outcome: 'started',
+    detail: 'prompting for API key',
   });
-  const token = await promptText(descriptor.inputPrompt ?? '  Enter Google AI Studio API key: ', { secret: true });
+  const token = await promptText(descriptor.inputPrompt ?? '  Enter Google AI Studio API key: ', {
+    secret: true,
+  });
   if (!token) {
     appendProviderLog({
-      provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-      outcome: 'error', detail: 'API key was empty',
+      provider: 'googleaistudio',
+      category: 'auth',
+      action: 'authenticate',
+      outcome: 'error',
+      detail: 'API key was empty',
     });
     throw new Error(descriptor.missingError ?? 'Google AI Studio API key required.');
   }
@@ -382,8 +459,11 @@ export async function saveCredentialsAfterModelDiscovery(
 
   if (!modelsAvailable) {
     appendProviderLog({
-      provider: descriptor.name, category: 'auth', action: 'save-credentials',
-      outcome: 'skipped', detail: skipDetail,
+      provider: descriptor.name,
+      category: 'auth',
+      action: 'save-credentials',
+      outcome: 'skipped',
+      detail: skipDetail,
     });
     console.log(chalk.dim(`  ${noModelsMessageFor(descriptor)}`));
     return undefined;
@@ -395,9 +475,8 @@ export async function saveCredentialsAfterModelDiscovery(
   // their auth flows aren't multi-key-aware (device flow / OAuth).
   let savedKeyId: string | undefined;
   if (descriptor.authFlow === 'simple-prompt' && auth.token) {
-    const extras = descriptor.needsAccountId && auth.accountId
-      ? { accountId: auth.accountId }
-      : undefined;
+    const extras =
+      descriptor.needsAccountId && auth.accountId ? { accountId: auth.accountId } : undefined;
     const saved = await addKey(descriptor.name, auth.token, {
       label: auth.keyLabel,
       extras,
@@ -414,8 +493,11 @@ export async function saveCredentialsAfterModelDiscovery(
     await saveGlobalConfig(update);
   }
   appendProviderLog({
-    provider: descriptor.name, category: 'auth', action: 'save-credentials',
-    outcome: 'success', detail: successDetail,
+    provider: descriptor.name,
+    category: 'auth',
+    action: 'save-credentials',
+    outcome: 'success',
+    detail: successDetail,
   });
   console.log(chalk.dim(`  ${saveSuccessMessageFor(descriptor, getGlobalConfigDir())}`));
   return savedKeyId;

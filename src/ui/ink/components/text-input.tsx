@@ -30,39 +30,42 @@ export function TextInput({
   // or external clear). Don't snap to end on every change — preserves the
   // offset across edits inside the buffer.
   useEffect(() => {
-    setCursorOffset((prev) => Math.min(prev, value.length));
+    setCursorOffset(prev => Math.min(prev, value.length));
   }, [value.length]);
 
-  useInput((input, key) => {
-    // Modifiers are reserved for the surrounding app (Ctrl+T/W/N/P, etc.).
-    if (key.ctrl || key.meta) return;
-    if (key.upArrow || key.downArrow || key.tab) return;
-    if (key.return) {
-      onSubmit?.(value);
-      return;
-    }
-    if (key.leftArrow) {
-      setCursorOffset((o) => Math.max(0, o - 1));
-      return;
-    }
-    if (key.rightArrow) {
-      setCursorOffset((o) => Math.min(value.length, o + 1));
-      return;
-    }
-    if (key.backspace || key.delete) {
-      if (cursorOffset > 0) {
-        const next = value.slice(0, cursorOffset - 1) + value.slice(cursorOffset);
-        onChange(next);
-        setCursorOffset((o) => o - 1);
+  useInput(
+    (input, key) => {
+      // Modifiers are reserved for the surrounding app (Ctrl+T/W/N/P, etc.).
+      if (key.ctrl || key.meta) return;
+      if (key.upArrow || key.downArrow || key.tab) return;
+      if (key.return) {
+        onSubmit?.(value);
+        return;
       }
-      return;
-    }
-    if (input) {
-      const next = value.slice(0, cursorOffset) + input + value.slice(cursorOffset);
-      onChange(next);
-      setCursorOffset((o) => o + input.length);
-    }
-  }, { isActive: focus });
+      if (key.leftArrow) {
+        setCursorOffset(o => Math.max(0, o - 1));
+        return;
+      }
+      if (key.rightArrow) {
+        setCursorOffset(o => Math.min(value.length, o + 1));
+        return;
+      }
+      if (key.backspace || key.delete) {
+        if (cursorOffset > 0) {
+          const next = value.slice(0, cursorOffset - 1) + value.slice(cursorOffset);
+          onChange(next);
+          setCursorOffset(o => o - 1);
+        }
+        return;
+      }
+      if (input) {
+        const next = value.slice(0, cursorOffset) + input + value.slice(cursorOffset);
+        onChange(next);
+        setCursorOffset(o => o + input.length);
+      }
+    },
+    { isActive: focus },
+  );
 
   let display: string;
   if (showCursor && focus) {

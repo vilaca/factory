@@ -1,21 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import type {
-  Provider,
-  ProviderCapabilities,
-  ChatChunk,
-} from '../../src/providers/types.js';
+import type { Provider, ProviderCapabilities, ChatChunk } from '../../src/providers/types.js';
 import type { AgentEvent } from '../../src/core/agent-types.js';
 import { createDelegateTool } from '../../src/tools/delegate.js';
 import type { runAgent } from '../../src/core/agent.js';
-import { runSubagent, buildSubagentRegistry, SUBAGENT_SYSTEM_PROMPT } from '../../src/core/subagent/runner.js';
+import {
+  runSubagent,
+  buildSubagentRegistry,
+  SUBAGENT_SYSTEM_PROMPT,
+} from '../../src/core/subagent/runner.js';
 
 type RunAgentFn = typeof runAgent;
 
 function stubProvider(): Provider {
   return {
     name: 'stub',
-    async listModels() { return ['stub-model']; },
+    async listModels() {
+      return ['stub-model'];
+    },
     getCapabilities(): ProviderCapabilities {
       return {
         contextWindow: 8192,
@@ -30,23 +32,22 @@ function stubProvider(): Provider {
     async *chat(): AsyncGenerator<ChatChunk> {
       yield { done: true };
     },
-    async chatNoStream(): Promise<ChatChunk> { return { done: true }; },
+    async chatNoStream(): Promise<ChatChunk> {
+      return { done: true };
+    },
   };
 }
 
 /** A fake runAgent that emits a single text-done event followed by a
  *  turn-complete. Used to mock the subagent's runtime. */
 function makeFakeRunner(events: AgentEvent[]): RunAgentFn {
-  return async function* (
-    _input: string,
-    _opts: any,
-  ): AsyncGenerator<AgentEvent> {
+  return async function* (_input: string, _opts: any): AsyncGenerator<AgentEvent> {
     for (const ev of events) yield ev;
   } as any;
 }
 
 describe('Delegate tool', () => {
-  it('returns the subagent\'s final assistant text on success', async () => {
+  it("returns the subagent's final assistant text on success", async () => {
     const fakeEvents: AgentEvent[] = [
       { type: 'text-done', fullContent: 'The answer is 42.' },
       { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 },
@@ -105,19 +106,20 @@ describe('Delegate tool', () => {
     // We assert the resolution order by inspecting which model the runner
     // is called with. To do that, intercept the runner.
     const calls: string[] = [];
-    const runner: RunAgentFn =
-      (async function* (_input: string, opts: any): AsyncGenerator<AgentEvent> {
-        calls.push(opts.model);
-        yield { type: 'text-done', fullContent: 'ok' };
-        yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
-      }) as any;
+    const runner: RunAgentFn = async function* (
+      _input: string,
+      opts: any,
+    ): AsyncGenerator<AgentEvent> {
+      calls.push(opts.model);
+      yield { type: 'text-done', fullContent: 'ok' };
+      yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
+    } as any;
 
-    return Promise.resolve()
-      .then(async () => {
-        // Explicit override wins
-        await runSubagent({ provider: stubProvider(), model: 'override', task: 't', runner });
-        assert.strictEqual(calls[0], 'override');
-      });
+    return Promise.resolve().then(async () => {
+      // Explicit override wins
+      await runSubagent({ provider: stubProvider(), model: 'override', task: 't', runner });
+      assert.strictEqual(calls[0], 'override');
+    });
   });
 
   it('passes the stopReason and turnsUsed from turn-complete through to the result', async () => {
@@ -125,11 +127,13 @@ describe('Delegate tool', () => {
     // agent loop owns that decision now. This test asserts the runner is
     // a faithful event passthrough: whatever stopReason / turnsUsed the
     // agent emits is what the Delegate caller sees.
-    const cappedRunner: RunAgentFn =
-      (async function* (_input: string, _opts: any): AsyncGenerator<AgentEvent> {
-        yield { type: 'text-done', fullContent: 'partial answer' };
-        yield { type: 'turn-complete', stopReason: 'turn-limit', turnsUsed: 3 };
-      }) as any;
+    const cappedRunner: RunAgentFn = async function* (
+      _input: string,
+      _opts: any,
+    ): AsyncGenerator<AgentEvent> {
+      yield { type: 'text-done', fullContent: 'partial answer' };
+      yield { type: 'turn-complete', stopReason: 'turn-limit', turnsUsed: 3 };
+    } as any;
     const result = await runSubagent({
       provider: stubProvider(),
       model: 'm',
@@ -149,7 +153,7 @@ describe('Delegate tool', () => {
     assert.strictEqual(registry.get('Write'), undefined);
   });
 
-  it('the subagent\'s Bash is wrapped with the allow-list and rejects bad commands', async () => {
+  it("the subagent's Bash is wrapped with the allow-list and rejects bad commands", async () => {
     const registry = buildSubagentRegistry();
     const bash = registry.get('Bash');
     assert.ok(bash);

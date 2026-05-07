@@ -11,7 +11,8 @@ describe('parseTextToolCalls', () => {
   });
 
   it('extracts a single well-formed tool call', () => {
-    const content = 'Let me read the file.\n<tool_call>{"name": "Read", "arguments": {"file_path": "/foo"}}</tool_call>';
+    const content =
+      'Let me read the file.\n<tool_call>{"name": "Read", "arguments": {"file_path": "/foo"}}</tool_call>';
     const result = parseTextToolCalls(content);
     assert.strictEqual(result.toolCalls.length, 1);
     assert.strictEqual(result.toolCalls[0].function.name, 'Read');
@@ -87,15 +88,22 @@ describe('parseTextToolCalls', () => {
     const result = parseTextToolCalls(content, new Set(['Bash', 'Read', 'Edit']));
     assert.strictEqual(result.toolCalls.length, 1);
     assert.strictEqual(result.toolCalls[0].function.name, 'Bash');
-    assert.strictEqual(result.toolCalls[0].function.arguments.command, 'npm install eslint --save-dev');
+    assert.strictEqual(
+      result.toolCalls[0].function.arguments.command,
+      'npm install eslint --save-dev',
+    );
     assert.deepStrictEqual(result.sources, ['shell-fence']);
   });
 
   it('preserves multiline shell commands with backslash continuations', () => {
-    const content = '```bash\nnpx eslint --init \\\n  --module-type commonjs \\\n  --typescript false\n```';
+    const content =
+      '```bash\nnpx eslint --init \\\n  --module-type commonjs \\\n  --typescript false\n```';
     const result = parseTextToolCalls(content, new Set(['Bash']));
     assert.strictEqual(result.toolCalls.length, 1);
-    assert.match(result.toolCalls[0].function.arguments.command as string, /--module-type commonjs/);
+    assert.match(
+      result.toolCalls[0].function.arguments.command as string,
+      /--module-type commonjs/,
+    );
     assert.match(result.toolCalls[0].function.arguments.command as string, /--typescript false/);
   });
 
@@ -106,7 +114,8 @@ describe('parseTextToolCalls', () => {
   });
 
   it('skips shell-fence fallback when a structured tool call already matched', () => {
-    const content = '<tool_call>{"name":"Read","arguments":{"file_path":"/x"}}</tool_call>\n```bash\nrm -rf /\n```';
+    const content =
+      '<tool_call>{"name":"Read","arguments":{"file_path":"/x"}}</tool_call>\n```bash\nrm -rf /\n```';
     const result = parseTextToolCalls(content, new Set(['Bash', 'Read']));
     assert.strictEqual(result.toolCalls.length, 1);
     assert.strictEqual(result.toolCalls[0].function.name, 'Read');
@@ -114,7 +123,8 @@ describe('parseTextToolCalls', () => {
 
   it('tolerates a stray closing brace from a model typo', () => {
     // Model emitted one too many "}" after the second object — common qwen typo.
-    const content = `{"name": "Write", "arguments": {"file_path": "/x", "content": "y"}}\n` +
+    const content =
+      `{"name": "Write", "arguments": {"file_path": "/x", "content": "y"}}\n` +
       `{"name": "Edit", "arguments": {"file_path": "/y", "old_string": "a", "new_string": "b"}}}\n` +
       `{"name": "Glob", "arguments": {"pattern": "*.ts"}}`;
     const result = parseTextToolCalls(content, new Set(['Write', 'Edit', 'Glob']));
@@ -156,7 +166,8 @@ Now I will run another:
   });
 
   it('extracts tool call from a JSON code fence', () => {
-    const content = 'I will read the file:\n```json\n{"name": "Read", "arguments": {"file_path": "/bar"}}\n```';
+    const content =
+      'I will read the file:\n```json\n{"name": "Read", "arguments": {"file_path": "/bar"}}\n```';
     const result = parseTextToolCalls(content);
     assert.strictEqual(result.toolCalls.length, 1);
     assert.strictEqual(result.toolCalls[0].function.arguments.file_path, '/bar');

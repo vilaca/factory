@@ -1,6 +1,13 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
 
 const DEFAULT_BASE_URL = 'https://api.cohere.com';
@@ -114,7 +121,7 @@ export class CohereProvider implements Provider {
       throw new Error(`Cohere API error ${res.status}: ${await res.text()}`);
     }
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     const result: ChatChunk = {
       content: extractTextContent(data?.message?.content),
       done: true,
@@ -128,15 +135,18 @@ export class CohereProvider implements Provider {
           return [];
         }
 
-        return [{
-          id: typeof tc.id === 'string' ? tc.id : undefined,
-          function: {
-            name: tc.function.name,
-            arguments: typeof tc.function.arguments === 'string'
-              ? parseToolArgs(tc.function.arguments)
-              : tc.function.arguments ?? {},
+        return [
+          {
+            id: typeof tc.id === 'string' ? tc.id : undefined,
+            function: {
+              name: tc.function.name,
+              arguments:
+                typeof tc.function.arguments === 'string'
+                  ? parseToolArgs(tc.function.arguments)
+                  : (tc.function.arguments ?? {}),
+            },
           },
-        }];
+        ];
       });
     }
 
@@ -230,12 +240,13 @@ export class CohereProvider implements Provider {
         throw new Error(`Cohere API error ${res.status}: ${await res.text()}`);
       }
 
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       const pageModels = Array.isArray(data?.models) ? data.models : [];
       models.push(...pageModels.flatMap((item: any) => normalizeModel(item)));
-      nextPageToken = typeof data?.next_page_token === 'string' && data.next_page_token
-        ? data.next_page_token
-        : undefined;
+      nextPageToken =
+        typeof data?.next_page_token === 'string' && data.next_page_token
+          ? data.next_page_token
+          : undefined;
     } while (nextPageToken);
 
     this.modelsCache = models;
@@ -248,21 +259,20 @@ function normalizeBaseUrl(baseUrl: string): string {
 }
 
 function normalizeModel(item: any): CohereModel[] {
-  const name = typeof item?.name === 'string'
-    ? item.name
-    : typeof item?.id === 'string'
-      ? item.id
-      : undefined;
+  const name =
+    typeof item?.name === 'string' ? item.name : typeof item?.id === 'string' ? item.id : undefined;
   if (!name) return [];
 
-  return [{
-    name,
-    endpoints: Array.isArray(item?.endpoints)
-      ? item.endpoints.filter((entry: unknown): entry is string => typeof entry === 'string')
-      : undefined,
-    context_length: typeof item?.context_length === 'number' ? item.context_length : undefined,
-    is_deprecated: item?.is_deprecated === true,
-  }];
+  return [
+    {
+      name,
+      endpoints: Array.isArray(item?.endpoints)
+        ? item.endpoints.filter((entry: unknown): entry is string => typeof entry === 'string')
+        : undefined,
+      context_length: typeof item?.context_length === 'number' ? item.context_length : undefined,
+      is_deprecated: item?.is_deprecated === true,
+    },
+  ];
 }
 
 function extractTextContent(content: unknown): string | undefined {
@@ -274,7 +284,7 @@ function extractTextContent(content: unknown): string | undefined {
   }
 
   const text = content
-    .map((item: any) => item?.type === 'text' && typeof item.text === 'string' ? item.text : '')
+    .map((item: any) => (item?.type === 'text' && typeof item.text === 'string' ? item.text : ''))
     .join('');
   return text || undefined;
 }
@@ -344,7 +354,9 @@ function buildModelDetail(model: string, cached?: CohereModel): string {
     details.push('no tools');
   }
   details.push(`max ${formatTokenCount(estimateCohereMaxOutput(lower))} out`);
-  details.push(`${formatTokenCount(cached?.context_length ?? estimateCohereContextWindow(lower))} ctx`);
+  details.push(
+    `${formatTokenCount(cached?.context_length ?? estimateCohereContextWindow(lower))} ctx`,
+  );
   return details.join(' · ');
 }
 

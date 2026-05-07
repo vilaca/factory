@@ -18,7 +18,10 @@ interface ParseResult {
   sources: ParseSource[];
 }
 
-function tryParseToolCall(jsonText: string, knownToolNames?: ReadonlySet<string>): ToolCallMessage | null {
+function tryParseToolCall(
+  jsonText: string,
+  knownToolNames?: ReadonlySet<string>,
+): ToolCallMessage | null {
   try {
     const parsed = JSON.parse(jsonText.trim());
     if (
@@ -33,9 +36,10 @@ function tryParseToolCall(jsonText: string, knownToolNames?: ReadonlySet<string>
       if (knownToolNames && !knownToolNames.has(parsed.name)) {
         return null;
       }
-      const args = (typeof parsed.arguments === 'object' && parsed.arguments !== null)
-        ? parsed.arguments as Record<string, unknown>
-        : {};
+      const args =
+        typeof parsed.arguments === 'object' && parsed.arguments !== null
+          ? (parsed.arguments as Record<string, unknown>)
+          : {};
       return { function: { name: parsed.name, arguments: args } };
     }
   } catch {
@@ -52,7 +56,10 @@ function stripObjects(content: string, objects: string[]): string {
   return out;
 }
 
-export function parseTextToolCalls(content: string, knownToolNames?: ReadonlySet<string>): ParseResult {
+export function parseTextToolCalls(
+  content: string,
+  knownToolNames?: ReadonlySet<string>,
+): ParseResult {
   const toolCalls: ToolCallMessage[] = [];
   const sources: ParseSource[] = [];
   let malformedCount = 0;

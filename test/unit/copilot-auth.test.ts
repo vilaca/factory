@@ -4,7 +4,10 @@ import http from 'node:http';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { CopilotAuthManager, inferCopilotCredentialKind } from '../../src/providers/copilot-auth.js';
+import {
+  CopilotAuthManager,
+  inferCopilotCredentialKind,
+} from '../../src/providers/copilot-auth.js';
 import { loadGlobalConfig } from '../../src/core/config.js';
 
 function withServer(
@@ -23,7 +26,7 @@ function withServer(
 
       try {
         await fn(`http://127.0.0.1:${address.port}`);
-        server.close((err) => err ? reject(err) : resolve());
+        server.close(err => (err ? reject(err) : resolve()));
       } catch (err) {
         server.close(() => reject(err));
       }
@@ -40,87 +43,99 @@ describe('CopilotAuthManager', () => {
   });
 
   it('exchanges a GitHub token for a Copilot token and uses endpoints.api', async () => {
-    await withServer((req, res) => {
-      assert.strictEqual(req.url, '/copilot_internal/v2/token');
-      assert.strictEqual(req.headers.authorization, 'token gho_test');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        token: 'copilot_token',
-        expires_at: Math.floor(Date.now() / 1000) + 3600,
-        endpoints: { api: 'https://copilot.example.test' },
-        chat_enabled: true,
-      }));
-    }, async (baseUrl) => {
-      const prevApi = process.env.FACTORY_GITHUB_API_BASE_URL;
-      process.env.FACTORY_GITHUB_API_BASE_URL = baseUrl;
-      try {
-        const auth = new CopilotAuthManager({ githubToken: 'gho_test' });
-        const session = await auth.getSession();
-        assert.strictEqual(session.token, 'copilot_token');
-        assert.strictEqual(session.apiBaseUrl, 'https://copilot.example.test');
-        assert.strictEqual(session.chatEnabled, true);
-      } finally {
-        if (prevApi === undefined) delete process.env.FACTORY_GITHUB_API_BASE_URL;
-        else process.env.FACTORY_GITHUB_API_BASE_URL = prevApi;
-      }
-    });
+    await withServer(
+      (req, res) => {
+        assert.strictEqual(req.url, '/copilot_internal/v2/token');
+        assert.strictEqual(req.headers.authorization, 'token gho_test');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            token: 'copilot_token',
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+            endpoints: { api: 'https://copilot.example.test' },
+            chat_enabled: true,
+          }),
+        );
+      },
+      async baseUrl => {
+        const prevApi = process.env.FACTORY_GITHUB_API_BASE_URL;
+        process.env.FACTORY_GITHUB_API_BASE_URL = baseUrl;
+        try {
+          const auth = new CopilotAuthManager({ githubToken: 'gho_test' });
+          const session = await auth.getSession();
+          assert.strictEqual(session.token, 'copilot_token');
+          assert.strictEqual(session.apiBaseUrl, 'https://copilot.example.test');
+          assert.strictEqual(session.chatEnabled, true);
+        } finally {
+          if (prevApi === undefined) delete process.env.FACTORY_GITHUB_API_BASE_URL;
+          else process.env.FACTORY_GITHUB_API_BASE_URL = prevApi;
+        }
+      },
+    );
   });
 
   it('runs device flow and saves the GitHub token', async () => {
     let deviceRequested = false;
     let tokenPolled = false;
 
-    await withServer((req, res) => {
-      if (req.url === '/login/device/code') {
-        deviceRequested = true;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          device_code: 'device_code',
-          user_code: 'ABCD-EFGH',
-          verification_uri: 'https://example.test/device',
-          expires_in: 900,
-          interval: 0,
-        }));
-        return;
-      }
-      if (req.url === '/login/oauth/access_token') {
-        tokenPolled = true;
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          access_token: 'gho_saved_token',
-          token_type: 'bearer',
-        }));
-        return;
-      }
-      res.writeHead(404);
-      res.end('Not found');
-    }, async (baseUrl) => {
-      const prevLogin = process.env.FACTORY_GITHUB_LOGIN_BASE_URL;
-      const prevConfigHome = process.env.XDG_CONFIG_HOME;
-      const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-device-flow-'));
-      process.env.FACTORY_GITHUB_LOGIN_BASE_URL = baseUrl;
-      process.env.XDG_CONFIG_HOME = configHome;
+    await withServer(
+      (req, res) => {
+        if (req.url === '/login/device/code') {
+          deviceRequested = true;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              device_code: 'device_code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://example.test/device',
+              expires_in: 900,
+              interval: 0,
+            }),
+          );
+          return;
+        }
+        if (req.url === '/login/oauth/access_token') {
+          tokenPolled = true;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              access_token: 'gho_saved_token',
+              token_type: 'bearer',
+            }),
+          );
+          return;
+        }
+        res.writeHead(404);
+        res.end('Not found');
+      },
+      async baseUrl => {
+        const prevLogin = process.env.FACTORY_GITHUB_LOGIN_BASE_URL;
+        const prevConfigHome = process.env.XDG_CONFIG_HOME;
+        const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-device-flow-'));
+        process.env.FACTORY_GITHUB_LOGIN_BASE_URL = baseUrl;
+        process.env.XDG_CONFIG_HOME = configHome;
 
-      try {
-        const auth = new CopilotAuthManager();
-        let promptSeen = false;
-        await auth.authenticateWithDeviceFlow(async ({ userCode, verificationUri }) => {
-          promptSeen = true;
-          assert.strictEqual(userCode, 'ABCD-EFGH');
-          assert.strictEqual(verificationUri, 'https://example.test/device');
-        });
-        const config = await loadGlobalConfig();
-        assert.ok(deviceRequested);
-        assert.ok(tokenPolled);
-        assert.ok(promptSeen);
-        assert.strictEqual(config.githubToken, 'gho_saved_token');
-      } finally {
-        if (prevLogin === undefined) delete process.env.FACTORY_GITHUB_LOGIN_BASE_URL;
-        else process.env.FACTORY_GITHUB_LOGIN_BASE_URL = prevLogin;
-        if (prevConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
-        else process.env.XDG_CONFIG_HOME = prevConfigHome;
-        await fs.rm(configHome, { recursive: true, force: true });
-      }
-    });
+        try {
+          const auth = new CopilotAuthManager();
+          let promptSeen = false;
+          await auth.authenticateWithDeviceFlow(async ({ userCode, verificationUri }) => {
+            promptSeen = true;
+            assert.strictEqual(userCode, 'ABCD-EFGH');
+            assert.strictEqual(verificationUri, 'https://example.test/device');
+          });
+          const config = await loadGlobalConfig();
+          assert.ok(deviceRequested);
+          assert.ok(tokenPolled);
+          assert.ok(promptSeen);
+          assert.strictEqual(config.githubToken, 'gho_saved_token');
+        } finally {
+          if (prevLogin === undefined) delete process.env.FACTORY_GITHUB_LOGIN_BASE_URL;
+          else process.env.FACTORY_GITHUB_LOGIN_BASE_URL = prevLogin;
+          if (prevConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+          else process.env.XDG_CONFIG_HOME = prevConfigHome;
+          await fs.rm(configHome, { recursive: true, force: true });
+        }
+      },
+    );
   });
 });

@@ -116,7 +116,10 @@ export function parseArgs(args: string[]): CliArgs {
 export function printUsage(): void {
   const lines = [
     '',
-    chalk.bold('  factory') + chalk.dim(' — Claude Code-like CLI for Ollama, HuggingFace, llama.cpp, Anthropic, Copilot, OpenRouter, Vercel AI Gateway, OpenCode Zen, Google AI Studio, Mistral, Codestral, Cerebras, Groq, Cohere & Workers AI'),
+    chalk.bold('  factory') +
+      chalk.dim(
+        ' — Claude Code-like CLI for Ollama, HuggingFace, llama.cpp, Anthropic, Copilot, OpenRouter, Vercel AI Gateway, OpenCode Zen, Google AI Studio, Mistral, Codestral, Cerebras, Groq, Cohere & Workers AI',
+      ),
     '',
     chalk.bold('  Usage:'),
     '    factory [options] [model]',

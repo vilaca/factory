@@ -9,7 +9,8 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Edit,
-    description: 'Perform exact string replacement in a file. The old_string must appear exactly once in the file. Use this instead of sed/awk.',
+    description:
+      'Perform exact string replacement in a file. The old_string must appear exactly once in the file. Use this instead of sed/awk.',
     parameters: {
       type: 'object',
       required: ['file_path', 'old_string', 'new_string'],
@@ -66,7 +67,10 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
         return rejectStructured(resolved, validation.format, validation.error);
       }
       await fs.writeFile(resolved, newContent, { encoding: 'utf-8', signal: ctx?.signal });
-      return { success: true, output: `Edited ${resolved}: replaced 1 occurrence at line ${matchLines[0]}` };
+      return {
+        success: true,
+        output: `Edited ${resolved}: replaced 1 occurrence at line ${matchLines[0]}`,
+      };
     }
 
     if (matchLines.length > 1) {

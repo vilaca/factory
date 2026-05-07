@@ -30,22 +30,39 @@ export interface EnvPolicy {
 //   NODE_ENV/NODE_PATH — sometimes load-bearing for npm scripts. NODE_OPTIONS
 //     is intentionally NOT here because it can inject `--require` modules.
 const DEFAULT_ALLOW: readonly string[] = [
-  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL',
-  'TERM', 'COLORTERM',
-  'LANG', 'LANGUAGE', 'TZ',
-  'PWD', 'OLDPWD', 'TMPDIR', 'TMP', 'TEMP',
-  'EDITOR', 'VISUAL', 'PAGER',
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TERM',
+  'COLORTERM',
+  'LANG',
+  'LANGUAGE',
+  'TZ',
+  'PWD',
+  'OLDPWD',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'EDITOR',
+  'VISUAL',
+  'PAGER',
   'DISPLAY',
-  'SSH_AUTH_SOCK', 'SSH_CONNECTION', 'SSH_CLIENT', 'SSH_TTY',
-  'NODE_ENV', 'NODE_PATH',
+  'SSH_AUTH_SOCK',
+  'SSH_CONNECTION',
+  'SSH_CLIENT',
+  'SSH_TTY',
+  'NODE_ENV',
+  'NODE_PATH',
 ];
 
 // Prefix-match patterns. Matches at the start of the var name; for example
 // 'GIT_' matches 'GIT_AUTHOR_NAME' but not 'MYGIT_FOO'.
 const DEFAULT_ALLOW_PREFIXES: readonly string[] = [
-  'LC_',     // locale: LC_ALL, LC_CTYPE, …
-  'GIT_',    // git's many knobs (GIT_AUTHOR_NAME, GIT_DIR, …)
-  'XDG_',    // XDG base dir spec
+  'LC_', // locale: LC_ALL, LC_CTYPE, …
+  'GIT_', // git's many knobs (GIT_AUTHOR_NAME, GIT_DIR, …)
+  'XDG_', // XDG base dir spec
 ];
 
 // Built-in deny that wins over any allow. These are vars whose names look
@@ -53,15 +70,15 @@ const DEFAULT_ALLOW_PREFIXES: readonly string[] = [
 // this list is preferable to removing the corresponding prefix from the
 // allow list, which would break unrelated benign vars.
 const DEFAULT_DENY: readonly string[] = [
-  'GIT_ASKPASS',           // can be set to a credential helper script path
-  'GIT_SSH_COMMAND',       // can override which ssh binary runs
-  'GIT_HTTP_USER_AGENT',   // some setups stuff tokens here
-  'XDG_RUNTIME_DIR',       // path to user's runtime dir; not a secret but
-                           //   lets subprocesses target ephemeral sockets
+  'GIT_ASKPASS', // can be set to a credential helper script path
+  'GIT_SSH_COMMAND', // can override which ssh binary runs
+  'GIT_HTTP_USER_AGENT', // some setups stuff tokens here
+  'XDG_RUNTIME_DIR', // path to user's runtime dir; not a secret but
+  //   lets subprocesses target ephemeral sockets
 ];
 
 const DEFAULT_DENY_PREFIXES: readonly string[] = [
-  'FACTORY_',  // our own debug/state vars — no reason to expose
+  'FACTORY_', // our own debug/state vars — no reason to expose
 ];
 
 interface SanitizedEnv {
@@ -70,10 +87,7 @@ interface SanitizedEnv {
   dropped: string[];
 }
 
-export function sanitizeEnv(
-  source: NodeJS.ProcessEnv,
-  policy: EnvPolicy = {},
-): SanitizedEnv {
+export function sanitizeEnv(source: NodeJS.ProcessEnv, policy: EnvPolicy = {}): SanitizedEnv {
   const allow = new Set([...DEFAULT_ALLOW, ...(policy.allow ?? [])]);
   const allowPrefixes = [...DEFAULT_ALLOW_PREFIXES, ...(policy.allowPrefixes ?? [])];
   const deny = new Set([...DEFAULT_DENY, ...(policy.deny ?? [])]);

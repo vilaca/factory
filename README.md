@@ -93,56 +93,56 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 
 ## Slash Commands
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands and hotkeys |
-| `/new [<label>]` | Open a new tab |
-| `/close` | Close the active tab |
-| `/tabs` | List open tabs |
-| `/switch <n\|label>` | Switch to a tab by index, label, or unique prefix |
-| `/clear` | Clear conversation history |
-| `/model [<name>]` | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both) |
-| `/pick` | Open the provider/model picker (recent pairs first) |
-| `/rotate` | View the active rotation chain. Subcommands: `add`, `insert`, `remove`, `move`, `clear`, `refresh` (return to the head of the chain and reset the in-memory failure log) |
-| `/keys [<provider>]` | Show saved keys with usage / rate-limit / cache-hit counters |
-| `/stats` | Cache hit rate, compaction events, and largest tool results for the current session |
-| `/full` | Show full Read output in the terminal instead of the 5-line preview (applies going forward; the model always sees the full text either way) |
-| `/cwd [<dir>]` | Show or change the active tab's working directory |
-| `/permissions` | Reset tool permissions |
-| `/plan` | Toggle plan mode or show queued plan |
-| `/queue` | Show the queued plan |
-| `/approve` (or `y`) | Execute the queued plan |
-| `/cancel` (or `n`) | Drop the queued plan |
-| `/log` | Show current session log path |
-| `/correct on\|off` | Toggle LLM tool-call corrector |
-| `/exp [<name> on\|off]` | List or toggle experimental flags |
-| `/skills` | List loaded skills (when `skills` flag is on) |
-| `/skill <name>` | Print the body of a specific skill |
-| `/exit`, `/quit`, `/q` | Exit (or close the active tab if multiple are open) |
+| Command                 | Description                                                                                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/help`                 | Show available commands and hotkeys                                                                                                                                      |
+| `/new [<label>]`        | Open a new tab                                                                                                                                                           |
+| `/close`                | Close the active tab                                                                                                                                                     |
+| `/tabs`                 | List open tabs                                                                                                                                                           |
+| `/switch <n\|label>`    | Switch to a tab by index, label, or unique prefix                                                                                                                        |
+| `/clear`                | Clear conversation history                                                                                                                                               |
+| `/model [<name>]`       | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both)                                                                                     |
+| `/pick`                 | Open the provider/model picker (recent pairs first)                                                                                                                      |
+| `/rotate`               | View the active rotation chain. Subcommands: `add`, `insert`, `remove`, `move`, `clear`, `refresh` (return to the head of the chain and reset the in-memory failure log) |
+| `/keys [<provider>]`    | Show saved keys with usage / rate-limit / cache-hit counters                                                                                                             |
+| `/stats`                | Cache hit rate, compaction events, and largest tool results for the current session                                                                                      |
+| `/full`                 | Show full Read output in the terminal instead of the 5-line preview (applies going forward; the model always sees the full text either way)                              |
+| `/cwd [<dir>]`          | Show or change the active tab's working directory                                                                                                                        |
+| `/permissions`          | Reset tool permissions                                                                                                                                                   |
+| `/plan`                 | Toggle plan mode or show queued plan                                                                                                                                     |
+| `/queue`                | Show the queued plan                                                                                                                                                     |
+| `/approve` (or `y`)     | Execute the queued plan                                                                                                                                                  |
+| `/cancel` (or `n`)      | Drop the queued plan                                                                                                                                                     |
+| `/log`                  | Show current session log path                                                                                                                                            |
+| `/correct on\|off`      | Toggle LLM tool-call corrector                                                                                                                                           |
+| `/exp [<name> on\|off]` | List or toggle experimental flags                                                                                                                                        |
+| `/skills`               | List loaded skills (when `skills` flag is on)                                                                                                                            |
+| `/skill <name>`         | Print the body of a specific skill                                                                                                                                       |
+| `/exit`, `/quit`, `/q`  | Exit (or close the active tab if multiple are open)                                                                                                                      |
 
 ## Hotkeys
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+K` | Open the provider/model picker |
-| `Ctrl+T` | New tab |
-| `Ctrl+W` | Close active tab (or exit if last) |
-| `Ctrl+N` / `Ctrl+P` | Cycle to next / previous tab |
-| `F1`–`F12` | Jump directly to tab N |
-| `Ctrl+C` | Abort running turn (or exit when idle) |
-| `Esc` | Abort the current agent run |
-| `↑` / `↓` | Recall previous / next prompt |
+| Key                 | Action                                 |
+| ------------------- | -------------------------------------- |
+| `Ctrl+K`            | Open the provider/model picker         |
+| `Ctrl+T`            | New tab                                |
+| `Ctrl+W`            | Close active tab (or exit if last)     |
+| `Ctrl+N` / `Ctrl+P` | Cycle to next / previous tab           |
+| `F1`–`F12`          | Jump directly to tab N                 |
+| `Ctrl+C`            | Abort running turn (or exit when idle) |
+| `Esc`               | Abort the current agent run            |
+| `↑` / `↓`           | Recall previous / next prompt          |
 
 ## Experimental Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `bashDedup` | off | Tracks recent Bash commands. When the model runs three near-duplicate commands (token-level Jaccard ≥ 0.5), injects a system nudge to prevent spinning. |
-| `readCache` | on | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens. |
-| `lineCountHint` | on | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants. |
-| `subagents` | on | Registers the `Delegate` tool for spawning a read-only research subagent. See the [Subagents](#subagents-experimental) section below. |
-| `skills` | off | Loads markdown skill files from `.factory/skills/` and conditionally injects them based on triggers. |
-| `hooks` | on | Run user-supplied shell scripts at lifecycle events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionEnd`). No-op when no hook scripts exist. See [Hooks](#hooks) below. |
+| Flag            | Default | Description                                                                                                                                                                                                     |
+| --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bashDedup`     | off     | Tracks recent Bash commands. When the model runs three near-duplicate commands (token-level Jaccard ≥ 0.5), injects a system nudge to prevent spinning.                                                         |
+| `readCache`     | on      | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens.                                                                                         |
+| `lineCountHint` | on      | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants.                                                                                                     |
+| `subagents`     | on      | Registers the `Delegate` tool for spawning a read-only research subagent. See the [Subagents](#subagents-experimental) section below.                                                                           |
+| `skills`        | off     | Loads markdown skill files from `.factory/skills/` and conditionally injects them based on triggers.                                                                                                            |
+| `hooks`         | on      | Run user-supplied shell scripts at lifecycle events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SessionEnd`). No-op when no hook scripts exist. See [Hooks](#hooks) below. |
 
 Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--no-subagents`, `--skills`, `--no-hooks`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
 
@@ -152,59 +152,59 @@ Three layers, lowest to highest precedence: config files → environment variabl
 
 ### Command-line flags
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--provider <name>` | `-p` | Provider name or alias (e.g. `anthropic`, `claude`, `gemini`, `or`) |
-| `--model <name>` | `-m` | Model to use; accepts `<provider>:<model>` |
-| `--host <url>` | | Override the provider's default host (e.g. remote Ollama, llama.cpp) |
-| `--token <token>` | `-t` | API token (overrides env var and saved credential) |
-| `--plan` | | Start in plan mode |
-| `--no-auto-correct` | | Disable LLM tool-call corrector |
-| `--bash-dedup` | | Enable Bash near-duplicate detector |
-| `--no-read-cache` | | Disable Read mtime/hash cache |
-| `--no-line-count-hint` | | Drop the cloc/scc system-prompt hint |
-| `--no-subagents` | | Disable the `Delegate` tool (on by default; see [Subagents](#subagents-experimental)) |
-| `--no-hooks` | | Disable user-supplied lifecycle shell hooks (on by default; see [Hooks](#hooks)) |
-| `--turn-timeout <sec>` | | Auto-abort agent after N seconds |
-| `--no-log` | | Disable session JSONL logging |
-| `--no-clear` | | Do not clear the screen on startup |
-| `--pick` | | Force the startup picker even when a previous session is on file |
-| `--rotate <a:b,c:d>` | | Default rotation chain (comma-separated `<provider>:<model>`); session-only unless `--save-rotate` |
-| `--save-rotate` | | Persist `--rotate` to global config |
-| `--no-rotate` | | Disable both key rotation and model rotation |
-| `--no-rotate-keys` | | Disable key rotation (still rotate provider/model entries) |
-| `--no-rotate-models` | | Disable model rotation (still rotate keys within the same model) |
-| `--help` | `-h` | Show help |
+| Flag                   | Short | Description                                                                                        |
+| ---------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| `--provider <name>`    | `-p`  | Provider name or alias (e.g. `anthropic`, `claude`, `gemini`, `or`)                                |
+| `--model <name>`       | `-m`  | Model to use; accepts `<provider>:<model>`                                                         |
+| `--host <url>`         |       | Override the provider's default host (e.g. remote Ollama, llama.cpp)                               |
+| `--token <token>`      | `-t`  | API token (overrides env var and saved credential)                                                 |
+| `--plan`               |       | Start in plan mode                                                                                 |
+| `--no-auto-correct`    |       | Disable LLM tool-call corrector                                                                    |
+| `--bash-dedup`         |       | Enable Bash near-duplicate detector                                                                |
+| `--no-read-cache`      |       | Disable Read mtime/hash cache                                                                      |
+| `--no-line-count-hint` |       | Drop the cloc/scc system-prompt hint                                                               |
+| `--no-subagents`       |       | Disable the `Delegate` tool (on by default; see [Subagents](#subagents-experimental))              |
+| `--no-hooks`           |       | Disable user-supplied lifecycle shell hooks (on by default; see [Hooks](#hooks))                   |
+| `--turn-timeout <sec>` |       | Auto-abort agent after N seconds                                                                   |
+| `--no-log`             |       | Disable session JSONL logging                                                                      |
+| `--no-clear`           |       | Do not clear the screen on startup                                                                 |
+| `--pick`               |       | Force the startup picker even when a previous session is on file                                   |
+| `--rotate <a:b,c:d>`   |       | Default rotation chain (comma-separated `<provider>:<model>`); session-only unless `--save-rotate` |
+| `--save-rotate`        |       | Persist `--rotate` to global config                                                                |
+| `--no-rotate`          |       | Disable both key rotation and model rotation                                                       |
+| `--no-rotate-keys`     |       | Disable key rotation (still rotate provider/model entries)                                         |
+| `--no-rotate-models`   |       | Disable model rotation (still rotate keys within the same model)                                   |
+| `--help`               | `-h`  | Show help                                                                                          |
 
 ### Environment variables
 
 Provider credentials. Set whichever ones you use; the picker also saves them to the config file the first time you enter them. Saved keys live in `keys[<provider>]` in the config file (each entry has an `id`, `token`, `createdAt`, optional `label`, and optional `extras` for things like Workers AI's `accountId`); the legacy flat `*Token` fields are migrated to a single default-labelled entry on first launch and kept in place for downgrade safety.
 
-| Variable | Purpose |
-|----------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic Claude |
-| `CEREBRAS_API_KEY` | Cerebras |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Workers AI |
-| `CODESTRAL_API_KEY` | Codestral |
-| `COHERE_API_KEY` | Cohere |
-| `GITHUB_COPILOT_API_KEY` (or `COPILOT_API_KEY`) | GitHub Copilot |
-| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google AI Studio |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Google AI Studio service-account JSON (alternative to API key) |
-| `GROQ_API_KEY` | Groq |
-| `HF_TOKEN` (or `HUGGING_FACE_HUB_TOKEN`) | HuggingFace |
-| `MISTRAL_API_KEY` | Mistral |
-| `OPENCODE_ZEN_API_KEY` (or `OPENCODE_API_KEY`) | OpenCode Zen |
-| `OPENROUTER_API_KEY` | OpenRouter |
-| `AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`) | Vercel AI Gateway |
+| Variable                                        | Purpose                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`                             | Anthropic Claude                                               |
+| `CEREBRAS_API_KEY`                              | Cerebras                                                       |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Workers AI                                          |
+| `CODESTRAL_API_KEY`                             | Codestral                                                      |
+| `COHERE_API_KEY`                                | Cohere                                                         |
+| `GITHUB_COPILOT_API_KEY` (or `COPILOT_API_KEY`) | GitHub Copilot                                                 |
+| `GEMINI_API_KEY` (or `GOOGLE_API_KEY`)          | Google AI Studio                                               |
+| `GOOGLE_APPLICATION_CREDENTIALS`                | Google AI Studio service-account JSON (alternative to API key) |
+| `GROQ_API_KEY`                                  | Groq                                                           |
+| `HF_TOKEN` (or `HUGGING_FACE_HUB_TOKEN`)        | HuggingFace                                                    |
+| `MISTRAL_API_KEY`                               | Mistral                                                        |
+| `OPENCODE_ZEN_API_KEY` (or `OPENCODE_API_KEY`)  | OpenCode Zen                                                   |
+| `OPENROUTER_API_KEY`                            | OpenRouter                                                     |
+| `AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN`)   | Vercel AI Gateway                                              |
 
 Behavioural overrides:
 
-| Variable | Purpose |
-|----------|---------|
-| `FACTORY_DEBUG=1` | Print startup checkpoints (picker, auth, provider, models, validation) to stderr |
-| `XDG_CONFIG_HOME` | Override config directory (defaults to `~/.config`) |
-| `FACTORY_GITHUB_LOGIN_BASE_URL` | Override GitHub OAuth host for Copilot auth |
-| `FACTORY_GITHUB_API_BASE_URL` | Override GitHub API host for Copilot auth |
+| Variable                        | Purpose                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `FACTORY_DEBUG=1`               | Print startup checkpoints (picker, auth, provider, models, validation) to stderr |
+| `XDG_CONFIG_HOME`               | Override config directory (defaults to `~/.config`)                              |
+| `FACTORY_GITHUB_LOGIN_BASE_URL` | Override GitHub OAuth host for Copilot auth                                      |
+| `FACTORY_GITHUB_API_BASE_URL`   | Override GitHub API host for Copilot auth                                        |
 
 For Google AI Studio OAuth via ADC instead of an API key:
 
@@ -216,6 +216,7 @@ gcloud auth application-default login \
 ### Config files
 
 Configuration is read from:
+
 1. Project-level: `./.factory/config.json`
 2. User-level: `~/.config/factory/config.json` (or `$XDG_CONFIG_HOME/factory/config.json`)
 
@@ -267,13 +268,13 @@ Each tab is an independent agent: its own conversation, working directory, provi
 
 **Managing tabs:**
 
-| Action | Command | Hotkey |
-|--------|---------|--------|
-| New tab | `/new [label]` | `Ctrl+T` |
-| Close active tab | `/close` | `Ctrl+W` |
-| List tabs | `/tabs` | — |
+| Action                       | Command              | Hotkey                |
+| ---------------------------- | -------------------- | --------------------- |
+| New tab                      | `/new [label]`       | `Ctrl+T`              |
+| Close active tab             | `/close`             | `Ctrl+W`              |
+| List tabs                    | `/tabs`              | —                     |
 | Switch by index/label/prefix | `/switch <n\|label>` | `F1`–`F12` (by index) |
-| Cycle | — | `Ctrl+N` / `Ctrl+P` |
+| Cycle                        | —                    | `Ctrl+N` / `Ctrl+P`   |
 
 **Per-tab provider and model:**
 
@@ -349,6 +350,7 @@ Off by default. When enabled, the agent gains a `Delegate(task, model?)` tool th
 - **Logging:** the subagent's events are written to the parent session log under the `subagent` source. The TTY does not show them by default — your main scrollback stays focused on what your direct agent is doing.
 
 **Enable:**
+
 ```bash
 factory --subagents
 # or at runtime:
@@ -363,10 +365,11 @@ Every tool call requires explicit permission:
 
 ```
 🔧 Read(file_path="src/index.ts")
-Allow this Read? (y/n/a): 
+Allow this Read? (y/n/a):
 ```
 
 Responses:
+
 - **y** / **yes** — Allow this specific call
 - **n** / **no** — Deny this call (model receives error message)
 - **a** / **allow all** — Auto-approve all future calls of this tool type for the session
@@ -406,6 +409,7 @@ Subdomain matching is exact — list each subdomain explicitly. The whitelist is
 ### Auto-Correction
 
 When a tool call fails (e.g., `old_string` not found in Edit), the corrector LLM:
+
 1. Analyzes the failure context
 2. Reads relevant file content if needed
 3. Produces a fixed tool call
@@ -414,6 +418,7 @@ When a tool call fails (e.g., `old_string` not found in Edit), the corrector LLM
 Capped at 5 corrections per run. Never repeats a failed call signature.
 
 **Disable:**
+
 ```bash
 factory --no-auto-correct
 # or at runtime:
@@ -426,12 +431,12 @@ Long sessions get expensive because the agent re-sends the full conversation pre
 
 **Prompt caching.** Three categories of provider, three behaviors:
 
-| Mechanism | Providers | What factory does |
-|---|---|---|
-| Automatic (server-side) | Cerebras, Groq, Mistral, OpenRouter (non-Anthropic upstreams), Vercel, OpenCode Zen, Copilot, Cohere, llama.cpp | Reads `prompt_tokens_details.cached_tokens` from each response. Hit rate lights up automatically once the prefix stabilizes. |
-| Explicit (client-side markers) | Anthropic, OpenRouter → `anthropic/...` upstreams | Emits up to three `cache_control: { type: 'ephemeral' }` markers per call: end of tools, end of system, end of the most recent completed assistant turn. 5-minute TTL. |
-| Implicit (Gemini ≥1024 tokens) | Google AI Studio | Returns cached/uncached tokens automatically once the prefix exceeds 1024 tokens. No client work. |
-| None | HuggingFace direct, Ollama (KV-cache only, not prompt-cache) | Behaves like a cold call every turn. |
+| Mechanism                      | Providers                                                                                                       | What factory does                                                                                                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automatic (server-side)        | Cerebras, Groq, Mistral, OpenRouter (non-Anthropic upstreams), Vercel, OpenCode Zen, Copilot, Cohere, llama.cpp | Reads `prompt_tokens_details.cached_tokens` from each response. Hit rate lights up automatically once the prefix stabilizes.                                           |
+| Explicit (client-side markers) | Anthropic, OpenRouter → `anthropic/...` upstreams                                                               | Emits up to three `cache_control: { type: 'ephemeral' }` markers per call: end of tools, end of system, end of the most recent completed assistant turn. 5-minute TTL. |
+| Implicit (Gemini ≥1024 tokens) | Google AI Studio                                                                                                | Returns cached/uncached tokens automatically once the prefix exceeds 1024 tokens. No client work.                                                                      |
+| None                           | HuggingFace direct, Ollama (KV-cache only, not prompt-cache)                                                    | Behaves like a cold call every turn.                                                                                                                                   |
 
 The system prompt itself is byte-stable across turns within a session: `cwd` and `process.env.SHELL` are seeded as the first user message instead of riding inside the prompt prefix.
 
@@ -451,15 +456,16 @@ The system prompt itself is byte-stable across turns within a session: `cwd` and
 
 **Tunable defaults.** Most users never touch these. They live under `agent` in the config:
 
-| Key | Default | What it controls |
-|---|---|---|
-| `agent.compactionThreshold` | `0.75` | Fraction of context window above which compaction fires. |
-| `agent.recencyTokens` | `4000` | Soft token budget for the post-compaction recency window. |
-| `agent.recencyWindow` | `6` | Hard floor on messages kept after compaction. |
-| `agent.maxToolResultTokens` | `6000` | Per-message ceiling — bigger tool results are stored elided. |
-| `agent.toolResultAgingTurns` | `6` | Turns of distance after which a tool result becomes eligible for aging. |
+| Key                          | Default | What it controls                                                        |
+| ---------------------------- | ------- | ----------------------------------------------------------------------- |
+| `agent.compactionThreshold`  | `0.75`  | Fraction of context window above which compaction fires.                |
+| `agent.recencyTokens`        | `4000`  | Soft token budget for the post-compaction recency window.               |
+| `agent.recencyWindow`        | `6`     | Hard floor on messages kept after compaction.                           |
+| `agent.maxToolResultTokens`  | `6000`  | Per-message ceiling — bigger tool results are stored elided.            |
+| `agent.toolResultAgingTurns` | `6`     | Turns of distance after which a tool result becomes eligible for aging. |
 
 **What this doesn't do.**
+
 - No dollar-cost projections. Provider rates shift; `/stats` reports tokens, you multiply.
 - No batch-API integration. The whole stack assumes interactive turns.
 - No codebase RAG / vector index. Read/Grep/Glob over the file system are the retrieval surface.
@@ -472,6 +478,7 @@ For cross-session analysis, the JSONL session log under `~/.factory/sessions/` c
 Each REPL session writes a JSONL transcript to `~/.factory/sessions/<timestamp>-<id>.jsonl`.
 
 Log events include:
+
 - `session-start`: timestamp, provider, model
 - `user-input`: raw input
 - `slash-command`: command and args
@@ -479,12 +486,14 @@ Log events include:
 - `session-end`: timestamp
 
 **View current log path:**
+
 ```
 > /log
 Session log: /Users/you/.factory/sessions/2026-05-05T12-34-56-abc123.jsonl
 ```
 
 **Tail log in another terminal:**
+
 ```bash
 tail -f ~/.factory/sessions/2026-05-05T12-34-56-abc123.jsonl
 ```
@@ -512,15 +521,16 @@ This is gated behind the experimental `skills` flag (off by default). Enable wit
 
 ```markdown
 ---
-name: docker-help        # required, kebab-case, used by /skill <name>
-description: Tips for working with Docker  # required, one-liner shown by /skills
-alwaysOn: false          # default false. true → appended to the system prompt at session start
-triggers:                # optional regex strings; OR semantics, case-insensitive
+name: docker-help # required, kebab-case, used by /skill <name>
+description: Tips for working with Docker # required, one-liner shown by /skills
+alwaysOn: false # default false. true → appended to the system prompt at session start
+triggers: # optional regex strings; OR semantics, case-insensitive
   - "\\bdocker\\b"
   - "\\bcontainer\\b"
-tools:                   # optional; only inject when one of these tools was recently used
+tools: # optional; only inject when one of these tools was recently used
   - Bash
 ---
+
 Use `docker compose`, not the legacy `docker-compose`.
 Prefer multi-stage builds for production images.
 ```
@@ -569,21 +579,23 @@ Lets you intercept lifecycle events with shell scripts — useful for policy gat
 ```
 
 **Hook locations** (both run if present, global first then project):
+
 - `~/.factory/hooks/<event>.sh` — applies to every project
 - `<cwd>/.factory/hooks/<event>.sh` — project-local override
 
 **Lifecycle events:**
 
-| Event | Fires | Veto via `cancel`? | Honors `contextModification`? |
-|-------|-------|---------------------|-------------------------------|
-| `SessionStart` | Once per process, after config loaded | no | no |
-| `UserPromptSubmit` | Before each user prompt is sent to the model | no | no |
-| `PreToolUse` | Before each tool executes | **yes** — `cancel: true` denies the call | no |
-| `PostToolUse` | After each tool result | no | no |
-| `PreCompact` | Before context compaction summarizes history | no | **yes** — replaces the LLM-generated summary verbatim |
-| `SessionEnd` | On REPL exit | no | no |
+| Event              | Fires                                        | Veto via `cancel`?                       | Honors `contextModification`?                         |
+| ------------------ | -------------------------------------------- | ---------------------------------------- | ----------------------------------------------------- |
+| `SessionStart`     | Once per process, after config loaded        | no                                       | no                                                    |
+| `UserPromptSubmit` | Before each user prompt is sent to the model | no                                       | no                                                    |
+| `PreToolUse`       | Before each tool executes                    | **yes** — `cancel: true` denies the call | no                                                    |
+| `PostToolUse`      | After each tool result                       | no                                       | no                                                    |
+| `PreCompact`       | Before context compaction summarizes history | no                                       | **yes** — replaces the LLM-generated summary verbatim |
+| `SessionEnd`       | On REPL exit                                 | no                                       | no                                                    |
 
 **Protocol:**
+
 - `factory` spawns the script with `sh <path>` and pipes one JSON object to stdin: `{ "event": "<name>", "payload": <event-specific> }`.
 - The script must print one JSON object on stdout: `{ "cancel"?: boolean, "errorMessage"?: string, "contextModification"?: string }` (any field optional; empty stdout is OK).
 - 5-second timeout per hook (the process is `SIGKILL`ed on expiry).
@@ -716,6 +728,7 @@ npm run test:e2e  # End-to-end tests only
 ```
 
 Tests cover:
+
 - CLI flag parsing
 - Startup flow and model selection
 - All 6 tools
@@ -754,6 +767,7 @@ We welcome contributions! Here's how to get started:
    ```
 
 **Found a bug?** [Open an issue](https://github.com/vilaca/factory/issues) with:
+
 - Steps to reproduce
 - Expected vs actual behavior
 - Environment (OS, Node version, provider)
@@ -785,46 +799,55 @@ GitHub Actions workflows handle releases and security scanning. See [`.github/wo
 ### Common Issues
 
 **"Connection refused" or "ECONNREFUSED"**
+
 - Ensure Ollama is running: `ollama serve`
 - Check the host/port: `factory --host http://localhost:11434`
 - For llama.cpp: ensure `llama-server` is running on the expected port
 
 **"Model not found"**
+
 - List available models: `ollama list`
 - Pull the model: `ollama pull qwen2.5-coder`
 - Or use the interactive model picker: just run `factory`
 
 **"Invalid API key" or authentication errors**
+
 - Verify environment variable is set: `echo $ANTHROPIC_API_KEY`
 - Check for typos in the API key
 - Try re-entering with: `factory -p anthropic` (it will prompt again)
 
 **Tool calls not working / model outputs text instead**
+
 - Check tool support at startup — you'll see "native" or "fallback"
 - Some models don't support function calling natively
 - The text-tool fallback will attempt recovery automatically
 
 **Edit tool fails with "old_string not found"**
+
 - Read the file first to see exact content
 - Copy/paste the exact string including whitespace
 - The fuzzy fallback helps, but exact matches work best
 
 **Session hangs or becomes unresponsive**
+
 - Press `Esc` to abort the current agent run
 - Use `--turn-timeout 120` to auto-abort after N seconds
 - Check session log with `/log` for details
 
 **Permission prompts are annoying**
+
 - Use `a` (allow all) for trusted tool types
 - Or start in plan mode: `factory --plan`
 - Reset with `/permissions` if you change your mind
 
 **High token usage / context window exceeded**
+
 - Use `/clear` to reset conversation history
 - The agent auto-compacts older messages when approaching limits
 - Check `readCache` experimental flag to reduce duplicate file reads
 
 **Can't find npm global command after `npm link`**
+
 - Ensure npm global bin is in PATH: `npm config get prefix`
 - Try `npx factory` instead
 - Or run directly: `node /path/to/factory/dist/index.js`
@@ -856,10 +879,9 @@ Approve a Bash pattern once and it will run unprompted; deny one and it's reject
   "permissions": {
     "bashRules": [
       { "pattern": "git status*", "decision": "allow" },
-      { "pattern": "git diff*",   "decision": "allow" },
-      { "pattern": "npm test*",   "decision": "allow" },
-      { "pattern": "npm publish*", "decision": "deny",
-        "note": "publish only happens via CI" }
+      { "pattern": "git diff*", "decision": "allow" },
+      { "pattern": "npm test*", "decision": "allow" },
+      { "pattern": "npm publish*", "decision": "deny", "note": "publish only happens via CI" }
     ]
   },
   "security": {
@@ -883,6 +905,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 ---
 
 **Links:**
+
 - [GitHub Repository](https://github.com/vilaca/factory)
 - [Issue Tracker](https://github.com/vilaca/factory/issues)
 - [Workflow Documentation](.github/workflows/README.md)

@@ -80,9 +80,7 @@ export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknow
   if (opts.tools && opts.tools.length > 0) {
     if (opts.cacheControl && opts.options?.cacheTools) {
       const decorated = opts.tools.map((t, i) =>
-        i === opts.tools!.length - 1
-          ? { ...t, cache_control: { type: 'ephemeral' } }
-          : t,
+        i === opts.tools!.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t,
       );
       body.tools = decorated;
     } else {

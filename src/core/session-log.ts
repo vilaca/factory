@@ -126,28 +126,56 @@ export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
 
   return {
     filePath,
-    logSessionStart(meta) { write({ type: 'session-start', ...meta }); },
-    logProviderAuth(meta) { write({ type: 'provider-auth', ...meta }); },
-    logUserInput(content) { write({ type: 'user-input', content }); },
-    logCommand(command, arg) { write({ type: 'command', command, arg }); },
-    logModelChange(from, to, keyId) { write({ type: 'model-change', from, to, ...(keyId ? { keyId } : {}) }); },
-    logSystemPrompt(prompt) { write({ type: 'system-prompt', content: prompt }); },
-    logSystemPromptChange(reason) { write({ type: 'system-prompt-change', reason }); },
-    logPermissionChange(action, toolName) { write({ type: 'permission-change', action, toolName }); },
-    logStuckPattern(consecutiveCount) { write({ type: 'stuck-pattern', consecutiveCount }); },
-    logWarning(source, message) { write({ type: 'warning', source, message }); },
-    logGitChange(prev, next) { write({ type: 'git-change', prev, next }); },
+    logSessionStart(meta) {
+      write({ type: 'session-start', ...meta });
+    },
+    logProviderAuth(meta) {
+      write({ type: 'provider-auth', ...meta });
+    },
+    logUserInput(content) {
+      write({ type: 'user-input', content });
+    },
+    logCommand(command, arg) {
+      write({ type: 'command', command, arg });
+    },
+    logModelChange(from, to, keyId) {
+      write({ type: 'model-change', from, to, ...(keyId ? { keyId } : {}) });
+    },
+    logSystemPrompt(prompt) {
+      write({ type: 'system-prompt', content: prompt });
+    },
+    logSystemPromptChange(reason) {
+      write({ type: 'system-prompt-change', reason });
+    },
+    logPermissionChange(action, toolName) {
+      write({ type: 'permission-change', action, toolName });
+    },
+    logStuckPattern(consecutiveCount) {
+      write({ type: 'stuck-pattern', consecutiveCount });
+    },
+    logWarning(source, message) {
+      write({ type: 'warning', source, message });
+    },
+    logGitChange(prev, next) {
+      write({ type: 'git-change', prev, next });
+    },
     logAgentEvent(event) {
       write({ type: 'agent-event', event: serializeEvent(event) });
     },
-    logSessionEnd() { write({ type: 'session-end' }); },
+    logSessionEnd() {
+      write({ type: 'session-end' });
+    },
     close() {
       if (closed) return;
       closed = true;
       // Drain anything queued so callers that exit immediately after close()
       // (headless mode → process.exit) don't lose the tail of the log.
       flush();
-      try { fs.closeSync(fd); } catch { /* ignore */ }
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* ignore */
+      }
     },
   };
 }
@@ -184,10 +212,13 @@ export function appendProviderLog(event: ProviderLogEvent): void {
   try {
     const filePath = providerEventsLogPath();
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.appendFileSync(filePath, JSON.stringify({
-      ts: new Date().toISOString(),
-      ...event,
-    }) + '\n');
+    fs.appendFileSync(
+      filePath,
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        ...event,
+      }) + '\n',
+    );
   } catch {
     // Logging failures must never crash startup or the REPL
   }
@@ -263,7 +294,8 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
         try {
           const candidate = JSON.parse(lines[i]);
           if (candidate.type !== 'model-change') continue;
-          if (typeof candidate.to !== 'string' || candidate.to === STARTUP_MODEL_PLACEHOLDER) continue;
+          if (typeof candidate.to !== 'string' || candidate.to === STARTUP_MODEL_PLACEHOLDER)
+            continue;
           latestModel = candidate.to;
           if (typeof candidate.keyId === 'string' && candidate.keyId) latestKeyId = candidate.keyId;
           break;
@@ -271,7 +303,8 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
           // skip malformed
         }
       }
-      const finalModel = latestModel ?? (entry.model !== STARTUP_MODEL_PLACEHOLDER ? entry.model : undefined);
+      const finalModel =
+        latestModel ?? (entry.model !== STARTUP_MODEL_PLACEHOLDER ? entry.model : undefined);
       if (finalModel) {
         return {
           provider: entry.provider,
@@ -290,7 +323,8 @@ function classifyErrorMessage(message: string): SessionErrorStatus {
   const m = message.toLowerCase();
   if (/(\b429\b|rate[ -]?limit|throttl)/.test(m)) return 'throttle';
   if (/quota|insufficient|out of (free )?credit|credit balance/.test(m)) return 'quota';
-  if (/(\b401\b|\b403\b|unauthorized|forbidden|invalid api key|authentication)/.test(m)) return 'permission';
+  if (/(\b401\b|\b403\b|unauthorized|forbidden|invalid api key|authentication)/.test(m))
+    return 'permission';
   return 'error';
 }
 
@@ -346,10 +380,18 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
         const entry = JSON.parse(line);
         if (entry.type === 'user-input') {
           userInputCount++;
-        } else if (entry.type === 'model-change' && typeof entry.to === 'string' && entry.to !== STARTUP_MODEL_PLACEHOLDER) {
+        } else if (
+          entry.type === 'model-change' &&
+          typeof entry.to === 'string' &&
+          entry.to !== STARTUP_MODEL_PLACEHOLDER
+        ) {
           model = entry.to;
           if (typeof entry.keyId === 'string' && entry.keyId) keyId = entry.keyId;
-        } else if (entry.type === 'agent-event' && entry.event?.type === 'error' && typeof entry.event.error?.message === 'string') {
+        } else if (
+          entry.type === 'agent-event' &&
+          entry.event?.type === 'error' &&
+          typeof entry.event.error?.message === 'string'
+        ) {
           lastErrorMessage = entry.event.error.message;
         }
       } catch {
@@ -365,7 +407,9 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
 
     const status = lastErrorMessage ? classifyErrorMessage(lastErrorMessage) : undefined;
     out.push({
-      provider, model, startedAt,
+      provider,
+      model,
+      startedAt,
       ...(status ? { status } : {}),
       ...(keyId ? { keyId } : {}),
     });

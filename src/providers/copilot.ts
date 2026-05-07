@@ -1,18 +1,18 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
 import { CopilotAuthManager, inferCopilotCredentialKind } from './copilot-auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
 const PROVIDER_NAME = 'GitHub Copilot';
-const FALLBACK_MODELS = [
-  'gpt-4.1',
-  'gpt-4o',
-  'claude-sonnet-4',
-  'gemini-2.5-pro',
-  'o4-mini',
-];
+const FALLBACK_MODELS = ['gpt-4.1', 'gpt-4o', 'claude-sonnet-4', 'gemini-2.5-pro', 'o4-mini'];
 
 interface CopilotModelEntry {
   id: string;
@@ -38,7 +38,7 @@ export class CopilotProvider implements Provider {
     const res = await fetch(`${session.apiBaseUrl}/models`, {
       headers: {
         ...this.auth.authHeaders(session.token),
-        'Accept': 'application/json',
+        Accept: 'application/json',
       },
     });
 
@@ -47,7 +47,7 @@ export class CopilotProvider implements Provider {
       throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${text}`);
     }
 
-    const data = await res.json() as unknown;
+    const data = (await res.json()) as unknown;
     const models = extractModelEntries(data);
     return models.length > 0 ? models.map(model => model.id) : [...FALLBACK_MODELS];
   }
@@ -84,7 +84,14 @@ export class CopilotProvider implements Provider {
     yield* streamOpenAiChat({
       url: `${session.apiBaseUrl}/chat/completions`,
       headers: this.auth.authHeaders(session.token),
-      body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: true,
+        options,
+        maxTokensField: 'max_tokens',
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -100,7 +107,14 @@ export class CopilotProvider implements Provider {
     return sendOpenAiChat({
       url: `${session.apiBaseUrl}/chat/completions`,
       headers: this.auth.authHeaders(session.token),
-      body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: false,
+        options,
+        maxTokensField: 'max_tokens',
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -116,12 +130,11 @@ export class CopilotProvider implements Provider {
 }
 
 function extractModelEntries(data: unknown): CopilotModelEntry[] {
-  const rawItems =
-    Array.isArray(data)
-      ? data
-      : (data && typeof data === 'object' && Array.isArray((data as any).data))
-        ? (data as any).data
-        : [];
+  const rawItems = Array.isArray(data)
+    ? data
+    : data && typeof data === 'object' && Array.isArray((data as any).data)
+      ? (data as any).data
+      : [];
 
   const models: string[] = rawItems
     .filter((item: any) => {
@@ -145,9 +158,15 @@ function extractModelEntries(data: unknown): CopilotModelEntry[] {
 }
 
 function estimateCopilotModelTier(model: string): ModelTier {
-  if (model.includes('opus') || model.includes('sonnet') || model.includes('gpt-5') ||
-      model.includes('gpt-4.1') || model.includes('o3') || model.includes('o4') ||
-      model.includes('gemini-2.5-pro')) {
+  if (
+    model.includes('opus') ||
+    model.includes('sonnet') ||
+    model.includes('gpt-5') ||
+    model.includes('gpt-4.1') ||
+    model.includes('o3') ||
+    model.includes('o4') ||
+    model.includes('gemini-2.5-pro')
+  ) {
     return 'strong';
   }
   return 'medium';

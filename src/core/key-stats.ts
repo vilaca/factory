@@ -96,8 +96,13 @@ async function ensureCache(): Promise<AllKeyStats> {
   if (cache) return cache;
   if (!pendingRead) {
     pendingRead = readFromDisk()
-      .then((c) => { cache = c; return c; })
-      .finally(() => { pendingRead = null; });
+      .then(c => {
+        cache = c;
+        return c;
+      })
+      .finally(() => {
+        pendingRead = null;
+      });
   }
   return pendingRead;
 }
@@ -173,7 +178,9 @@ export async function getStats(provider: string, keyId: string): Promise<KeyStat
 }
 
 /** Read-only snapshot of every key's stats for a given provider. */
-export async function listStatsForProvider(provider: string): Promise<{ [keyId: string]: KeyStat }> {
+export async function listStatsForProvider(
+  provider: string,
+): Promise<{ [keyId: string]: KeyStat }> {
   const stats = await ensureCache();
   return { ...(stats[provider] ?? {}) };
 }
@@ -184,10 +191,7 @@ export async function listStatsForProvider(provider: string): Promise<{ [keyId: 
  *  warm keys when several are equally healthy — newer reads beat older
  *  reads, which is a coarse but accurate proxy for "this key's prompt
  *  cache is still alive on the provider side". */
-export async function getWarmthLog(
-  provider: string,
-  ttlMs: number,
-): Promise<Map<string, number>> {
+export async function getWarmthLog(provider: string, ttlMs: number): Promise<Map<string, number>> {
   const stats = await ensureCache();
   const out = new Map<string, number>();
   const now = Date.now();

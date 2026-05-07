@@ -9,7 +9,8 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Read,
-    description: 'Read a file (returns content with line numbers, use instead of cat/head/tail) or a directory (returns a sorted listing of its entries, with a trailing "/" on subdirectories).',
+    description:
+      'Read a file (returns content with line numbers, use instead of cat/head/tail) or a directory (returns a sorted listing of its entries, with a trailing "/" on subdirectories).',
     parameters: {
       type: 'object',
       required: ['file_path'],
@@ -66,17 +67,18 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     const stat = await fs.stat(resolved);
     if (stat.isDirectory()) {
       const entries = await fs.readdir(resolved, { withFileTypes: true });
-      const names = entries
-        .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
-        .sort();
-      const output = names.length === 0
-        ? `${resolved} is an empty directory.`
-        : `${resolved}:\n${names.join('\n')}`;
+      const names = entries.map(e => (e.isDirectory() ? `${e.name}/` : e.name)).sort();
+      const output =
+        names.length === 0
+          ? `${resolved} is an empty directory.`
+          : `${resolved}:\n${names.join('\n')}`;
       const previewSize = Math.min(names.length, DISPLAY_PREVIEW_LINES);
       const previewLines = names.slice(0, previewSize);
       const hidden = names.length - previewSize;
       if (hidden > 0) {
-        previewLines.push(`… (+${hidden} entr${hidden === 1 ? 'y' : 'ies'}, full listing sent to model)`);
+        previewLines.push(
+          `… (+${hidden} entr${hidden === 1 ? 'y' : 'ies'}, full listing sent to model)`,
+        );
       }
       const displayOutput = names.length === 0 ? '(empty directory)' : previewLines.join('\n');
       return { success: true, output, displayOutput };
@@ -93,10 +95,12 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     const sliced = lines.slice(offset, end);
 
     // The model gets the same line-number format Claude Code uses: 6-pad + tab.
-    const numbered = sliced.map((line, i) => {
-      const lineNum = (offset + i + 1).toString().padStart(6);
-      return `${lineNum}\t${line}`;
-    }).join('\n');
+    const numbered = sliced
+      .map((line, i) => {
+        const lineNum = (offset + i + 1).toString().padStart(6);
+        return `${lineNum}\t${line}`;
+      })
+      .join('\n');
 
     const total = lines.length;
     let output = numbered;
@@ -109,12 +113,14 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     // jagged.
     const padWidth = String(offset + sliced.length).length;
     const previewSize = Math.min(sliced.length, DISPLAY_PREVIEW_LINES);
-    const previewLines = sliced.slice(0, previewSize).map((line, i) =>
-      formatNumberedLine(offset + i + 1, line, padWidth),
-    );
+    const previewLines = sliced
+      .slice(0, previewSize)
+      .map((line, i) => formatNumberedLine(offset + i + 1, line, padWidth));
     const hidden = sliced.length - previewSize;
     if (hidden > 0) {
-      previewLines.push(`… (+${hidden} line${hidden === 1 ? '' : 's'}, full content sent to model)`);
+      previewLines.push(
+        `… (+${hidden} line${hidden === 1 ? '' : 's'}, full content sent to model)`,
+      );
     }
     const displayOutput = previewLines.join('\n');
 

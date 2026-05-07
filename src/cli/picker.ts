@@ -28,7 +28,9 @@ export async function findDefaultSelection(
   credentials: Map<StartupProviderName, StartupCredentials>,
 ): Promise<{ provider: StartupProviderName; model?: string } | undefined> {
   if (!lastSession) return undefined;
-  const descriptor = (DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[lastSession.provider];
+  const descriptor = (DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[
+    lastSession.provider
+  ];
   if (!descriptor) return undefined;
 
   let models = probedModels.get(descriptor.name) ?? null;

@@ -17,10 +17,18 @@ const capabilities: ProviderCapabilities = {
 function noopProvider(): Provider {
   return {
     name: 'noop',
-    async listModels() { return []; },
-    getCapabilities() { return capabilities; },
-    async *chat() { yield { done: true } as ChatChunk; },
-    async chatNoStream() { return { done: true } as ChatChunk; },
+    async listModels() {
+      return [];
+    },
+    getCapabilities() {
+      return capabilities;
+    },
+    async *chat() {
+      yield { done: true } as ChatChunk;
+    },
+    async chatNoStream() {
+      return { done: true } as ChatChunk;
+    },
   };
 }
 
@@ -86,7 +94,9 @@ describe('ContextManager.compact (aggressive)', () => {
     const conv = new Conversation('SYSTEM');
     conv.addUser('the real user request');
     conv.addAssistant('working on it');
-    conv.addUser('Your last tool call failed with: "ENOENT". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.');
+    conv.addUser(
+      'Your last tool call failed with: "ENOENT". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.',
+    );
     conv.addAssistant('retried');
     conv.addUser('end1');
     conv.addAssistant('end2');
@@ -138,7 +148,9 @@ describe('ContextManager.compact (aggressive)', () => {
 
   it('carries forward prior summary on cascaded compaction', async () => {
     const conv = new Conversation('SYSTEM');
-    conv.addUser('[Previous conversation summary]\nConversation summary (10 messages compacted):\nLatest user request: original task\nTools used: Read');
+    conv.addUser(
+      '[Previous conversation summary]\nConversation summary (10 messages compacted):\nLatest user request: original task\nTools used: Read',
+    );
     conv.addAssistant('Continuing from the summary above.');
     conv.addUser('next user question');
     conv.addAssistant('next assistant answer');
@@ -212,7 +224,9 @@ describe('ContextManager — summary routes to weak-tier when available', () => 
     let summaryModelSeen: string | undefined;
     const provider: Provider = {
       name: 'anthropic',
-      async listModels() { return []; },
+      async listModels() {
+        return [];
+      },
       getCapabilities(model: string): ProviderCapabilities {
         // Both strong-tier (sonnet) and weak-tier (haiku) report capabilities.
         const isHaiku = model.includes('haiku');
@@ -226,7 +240,9 @@ describe('ContextManager — summary routes to weak-tier when available', () => 
           modelTier: isHaiku ? 'medium' : 'strong',
         };
       },
-      async *chat() { yield { done: true } as ChatChunk; },
+      async *chat() {
+        yield { done: true } as ChatChunk;
+      },
       async chatNoStream(model: string) {
         summaryModelSeen = model;
         return { content: 'a summary string', done: true } as ChatChunk;
@@ -253,7 +269,9 @@ describe('ContextManager — summary routes to weak-tier when available', () => 
     let summaryModelSeen: string | undefined;
     const provider: Provider = {
       name: 'cohere',
-      async listModels() { return []; },
+      async listModels() {
+        return [];
+      },
       getCapabilities() {
         return {
           contextWindow: 128000,
@@ -265,7 +283,9 @@ describe('ContextManager — summary routes to weak-tier when available', () => 
           modelTier: 'strong',
         };
       },
-      async *chat() { yield { done: true } as ChatChunk; },
+      async *chat() {
+        yield { done: true } as ChatChunk;
+      },
       async chatNoStream(model: string) {
         summaryModelSeen = model;
         return { content: 'a summary string', done: true } as ChatChunk;
@@ -292,10 +312,14 @@ describe('ContextManager — summary routes to weak-tier when available', () => 
 describe('ContextManager — summary marks cacheBoundary', () => {
   it('marks the assistant ack of the summary pair with cacheBoundary: true', async () => {
     const conv = new Conversation('SYSTEM');
-    conv.addUser('first'); conv.addAssistant('reply 1');
-    conv.addUser('second'); conv.addAssistant('reply 2');
-    conv.addUser('third'); conv.addAssistant('reply 3');
-    conv.addUser('fourth'); conv.addAssistant('reply 4');
+    conv.addUser('first');
+    conv.addAssistant('reply 1');
+    conv.addUser('second');
+    conv.addAssistant('reply 2');
+    conv.addUser('third');
+    conv.addAssistant('reply 3');
+    conv.addUser('fourth');
+    conv.addAssistant('reply 4');
 
     const cm = new ContextManager(conv, capabilities);
     await cm.compact(noopProvider(), 'm', undefined, { aggressive: true });
