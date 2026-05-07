@@ -6,6 +6,8 @@ import type { PermissionManager } from '../../../permissions.js';
 import type { Provider } from '../../../providers/types.js';
 import type { SessionLogger } from '../../../core/session-log.js';
 import type { SkillsRegistry } from '../../../core/skills/index.js';
+import type { PathPolicy } from '../../../security/paths.js';
+import type { EnvPolicy } from '../../../security/env.js';
 import type { DisplayItem, ToolCallSummary } from '../types.js';
 
 export type RunState = 'idle' | 'running' | 'awaiting-permission';
@@ -95,6 +97,10 @@ export interface RunRefs {
   historyDraft: string;
   /** Optional skills registry, present only when experimental.skills is on. */
   skills?: SkillsRegistry;
+  /** Path / env security policies. Snapshotted from UseAgentLoopOptions at
+   *  init so per-tab tools and hooks use the same scrubbed deny lists. */
+  pathPolicy: PathPolicy;
+  envPolicy: EnvPolicy;
 }
 
 export interface UseAgentLoopOptions {
@@ -122,6 +128,10 @@ export interface UseAgentLoopOptions {
   gitBranch?: string;
   gitDirty?: boolean | null;
   validationWarning?: string;
+  /** Per-process security policies. Threaded in from index.ts; the loop
+   *  snapshots them onto each tab's RunRefs. */
+  pathPolicy?: PathPolicy;
+  envPolicy?: EnvPolicy;
 }
 
 export interface AgentLoopApi {

@@ -133,6 +133,27 @@ function matchDeny(candidate: string, deniedRoots: string[]): string | null {
 }
 
 /**
+ * Resolve the full deny set for a policy: built-ins plus user entries,
+ * each kept in both lexical and realpath form so callers can match a
+ * candidate against either side without repeating the I/O. Used by
+ * checkPath (one-shot) and buildDenyMatcher (precomputed for tight loops).
+ */
+async function buildDenySet(policy: PathPolicy = {}): Promise<string[]> {
+  const userDenyExpanded = (policy.deny ?? []).map(p =>
+    path.resolve(p.replace(/^~(?=$|\/)/, os.homedir())),
+  );
+  const userDenyRealpathed = await Promise.all(userDenyExpanded.map(realpathOrLexical));
+  const builtin = builtinDenyPaths();
+  const builtinRealpathed = await Promise.all(builtin.map(realpathOrLexical));
+  return [
+    ...builtin,
+    ...builtinRealpathed,
+    ...userDenyExpanded,
+    ...userDenyRealpathed,
+  ];
+}
+
+/**
  * Check whether a path is allowed. User policy entries are additive — they
  * extend the built-in deny list but cannot remove from it.
  *
@@ -154,16 +175,7 @@ export async function checkPath(
 ): Promise<PathCheckResult> {
   const lexical = path.resolve(input);
   const resolved = await resolveForCheck(input);
-
-  const userDenyExpanded = (policy.deny ?? []).map(p =>
-    path.resolve(p.replace(/^~(?=$|\/)/, os.homedir())),
-  );
-  const userDenyRealpathed = await Promise.all(userDenyExpanded.map(realpathOrLexical));
-  const denied = [
-    ...builtinDenyPaths(),
-    ...userDenyExpanded,
-    ...userDenyRealpathed,
-  ];
+  const denied = await buildDenySet(policy);
 
   const matchedRule = matchDeny(lexical, denied) ?? matchDeny(resolved, denied);
   if (matchedRule) {
@@ -204,18 +216,7 @@ export async function assertPathAllowed(input: string, policy?: PathPolicy): Pro
 export async function buildDenyMatcher(
   policy: PathPolicy = {},
 ): Promise<(candidate: string) => string | null> {
-  const userDenyExpanded = (policy.deny ?? []).map(p =>
-    path.resolve(p.replace(/^~(?=$|\/)/, os.homedir())),
-  );
-  const userDenyRealpathed = await Promise.all(userDenyExpanded.map(realpathOrLexical));
-  const builtin = builtinDenyPaths();
-  const builtinRealpathed = await Promise.all(builtin.map(realpathOrLexical));
-  const denied = [
-    ...builtin,
-    ...builtinRealpathed,
-    ...userDenyExpanded,
-    ...userDenyRealpathed,
-  ];
+  const denied = await buildDenySet(policy);
   return (candidate: string) => matchDeny(path.resolve(candidate), denied);
 }
 

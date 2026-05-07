@@ -1,9 +1,13 @@
 /**
- * Translate a shell-style glob into an anchored RegExp.
+ * Translate a shell-style glob into an anchored RegExp using POSIX-glob
+ * semantics: `*` and `?` do NOT cross path separators; `**` does.
  *
- * Supports `*` (any run of characters) and `?` (one character). Every other
- * regex metacharacter is escaped, so a pattern like `git push origin main`
- * matches that literal string, not "git push origin mai" + any char.
+ *   `*`  → any run of non-`/` characters
+ *   `**` → any run of characters, including `/`
+ *   `?`  → exactly one non-`/` character
+ *
+ * Every other regex metacharacter is escaped, so a pattern like
+ * `git push origin main` matches that literal string.
  *
  * Used in three places: Bash user-rule matching, hook matcher matching, and
  * project-fact marker globs. They all share this single definition so a
@@ -11,10 +15,20 @@
  */
 export function globToRegex(glob: string): RegExp {
   let re = '';
-  for (const ch of glob) {
-    if (ch === '*') re += '.*';
-    else if (ch === '?') re += '.';
-    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*') {
+      if (glob[i + 1] === '*') {
+        re += '.*';
+        i++;
+      } else {
+        re += '[^/]*';
+      }
+    } else if (ch === '?') {
+      re += '[^/]';
+    } else {
+      re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
   }
   return new RegExp('^' + re + '$');
 }

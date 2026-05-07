@@ -10,11 +10,12 @@
 
 import type { Provider } from '../providers/types.js';
 import type { AgentConfig, BashRuleConfig } from '../core/config-types.js';
+import type { PathPolicy } from '../security/paths.js';
+import type { EnvPolicy } from '../security/env.js';
 import { Conversation } from '../core/conversation.js';
 import { ContextManager } from '../core/context-manager.js';
 import { PermissionManager } from '../permissions.js';
 import { runAgent } from '../core/agent.js';
-import { getPathPolicy, getEnvPolicy } from '../security/policy-state.js';
 import { errorMessage } from '../utils/errors.js';
 import { FileCache } from '../core/agent/file-cache.js';
 import { defaultRegistry } from '../tools/index.js';
@@ -42,6 +43,11 @@ export interface HeadlessOptions {
   mcpInfo?: { servers: string[]; toolCount: number };
   gitBranch?: string;
   gitDirty?: boolean | null;
+  /** Path / env security policies. Threaded in from index.ts (which loads
+   *  them from config). Snapshotting them here means tests and parallel
+   *  callers can vary policy per run instead of mutating process state. */
+  pathPolicy?: PathPolicy;
+  envPolicy?: EnvPolicy;
 }
 
 async function readAllStdin(): Promise<string> {
@@ -128,7 +134,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       const r = await runHook(
         'SessionStart',
         { provider: options.provider.name, model: options.model, cwd },
-        { cwd, config: options.agentConfig?.hooks, onStderr: onHookStderr },
+        { cwd, config: options.agentConfig?.hooks, envPolicy: options.envPolicy, onStderr: onHookStderr },
       );
       for (const e of r.errors) onHookError('SessionStart', e);
       for (const hookCommand of r.firedCommands) {
@@ -201,10 +207,11 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       // live mutable holder updated by Bash; headless does not.
       cwdRef: { current: cwd },
       // Snapshot the policy at agent start so tools see it via ToolContext
-      // and don't reach into process-global state at execute() time. See
-      // run-loop.ts for the same plumbing on the TUI side.
-      pathPolicy: getPathPolicy(),
-      envPolicy: getEnvPolicy(),
+      // and per-call hook fires use the same scrubbed env. The runtime no
+      // longer reaches into a process-wide singleton; index.ts threads the
+      // policy in via options.
+      pathPolicy: options.pathPolicy ?? {},
+      envPolicy: options.envPolicy ?? {},
       hooksConfig: options.agentConfig?.hooks,
       onHookStderr,
       onHookError,
@@ -360,7 +367,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         const r = await runHook(
           'SessionEnd',
           { provider: options.provider.name, model: options.model, cwd },
-          { cwd, config: options.agentConfig?.hooks, onStderr: onHookStderr },
+          { cwd, config: options.agentConfig?.hooks, envPolicy: options.envPolicy, onStderr: onHookStderr },
         );
         for (const e of r.errors) onHookError('SessionEnd', e);
       } catch (err: unknown) {

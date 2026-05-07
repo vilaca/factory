@@ -29,7 +29,7 @@ async function* fireStopHook(
     const result = await runHook(
       event,
       { turnsUsed, stopReason },
-      { cwd, config: options.hooksConfig, onStderr: options.onHookStderr },
+      { cwd, config: options.hooksConfig, envPolicy: options.envPolicy, onStderr: options.onHookStderr },
     );
     for (const e of result.errors) {
       options.onHookError?.(event, e);
@@ -93,7 +93,7 @@ export async function* runAgent(
       const result = await runHook(
         'UserPromptSubmit',
         { userInput, model, provider: provider.name },
-        { cwd, config: options.hooksConfig, onStderr: options.onHookStderr },
+        { cwd, config: options.hooksConfig, envPolicy: options.envPolicy, onStderr: options.onHookStderr },
       );
       for (const e of result.errors) {
         options.onHookError?.('UserPromptSubmit', e);
@@ -134,6 +134,7 @@ export async function* runAgent(
         hooksEnabled,
         cwdRef: options.cwdRef,
         hooksConfig: options.hooksConfig,
+        envPolicy: options.envPolicy,
         onHookStderr: options.onHookStderr,
         onHookError: options.onHookError,
       });

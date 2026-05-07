@@ -188,6 +188,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
         {
           cwd,
           config: opts.agentConfig?.hooks,
+          envPolicy: opts.envPolicy,
           onStderr: (command, chunk) =>
             sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
         },
@@ -229,6 +230,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
           {
             cwd,
             config: opts.agentConfig?.hooks,
+            envPolicy: opts.envPolicy,
             onStderr: (command, chunk) =>
               sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
           },

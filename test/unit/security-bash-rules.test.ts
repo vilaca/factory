@@ -130,6 +130,33 @@ describe('bash-rules: glob → regex translation', () => {
     assert.ok(re.test('cat a.txt'));
     assert.ok(!re.test('cat ab.txt'));
   });
+
+  it('* does NOT cross path separators (POSIX semantics)', () => {
+    const re = __testing.globToRegex('rm /tmp/*');
+    assert.ok(re.test('rm /tmp/foo'));
+    assert.ok(!re.test('rm /tmp/foo/bar'));
+  });
+
+  it('** crosses path separators', () => {
+    const re = __testing.globToRegex('rm /tmp/**');
+    assert.ok(re.test('rm /tmp/foo'));
+    assert.ok(re.test('rm /tmp/foo/bar'));
+  });
+
+  it('foo/**/bar matches when ** stands in for one or more path components', () => {
+    const re = __testing.globToRegex('foo/**/bar');
+    assert.ok(re.test('foo/x/bar'));
+    assert.ok(re.test('foo/x/y/bar'));
+    // Sibling cases: separator-bound `**` does not collapse to zero
+    // components — `foo/bar` requires `foo/**bar` or `foo/*` instead.
+    assert.ok(!re.test('foo/bar'));
+  });
+
+  it('? does not match path separator', () => {
+    const re = __testing.globToRegex('a?b');
+    assert.ok(re.test('axb'));
+    assert.ok(!re.test('a/b'));
+  });
 });
 
 describe('bash-rules: user rule matching (first-match-wins)', () => {

@@ -3,6 +3,7 @@ import { supportsLanguage } from 'cli-highlight';
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
+import { getBuildInfo } from '../utils/build-info.js';
 
 // marked-terminal v7's `text` renderer ignores marked v15's `tokens` array on
 // text tokens, so inline formatting (bold/italic/code/links) is dropped inside
@@ -252,7 +253,7 @@ export function renderWelcome(
     (gitBranch ? chalk.dim('  (') + chalk.cyan(gitBranch) + chalk.dim(')') : '');
   const lines = [
     '',
-    chalk.dim('  v0.1.0'),
+    chalk.dim('  v' + getBuildInfo().version),
     '',
     chalk.dim('  Model: ') + chalk.white(model),
     cwdLine,

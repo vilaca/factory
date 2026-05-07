@@ -111,7 +111,7 @@ export async function* runToolCalls(
         const result = await runHook(
           'PreToolUse',
           { toolName: fnName, args: fnArgs },
-          { cwd, config: ctx.hooksConfig, matchValue: fnName, onStderr: ctx.onHookStderr },
+          { cwd, config: ctx.hooksConfig, envPolicy: ctx.envPolicy, matchValue: fnName, onStderr: ctx.onHookStderr },
         );
         for (const e of result.errors) {
           ctx.onHookError?.('PreToolUse', e);
@@ -194,7 +194,7 @@ export async function* runToolCalls(
             success: lastResultForPostHook.success,
             output: lastResultForPostHook.output,
           },
-          { cwd, config: ctx.hooksConfig, matchValue: toolCall.function?.name ?? '', onStderr: ctx.onHookStderr },
+          { cwd, config: ctx.hooksConfig, envPolicy: ctx.envPolicy, matchValue: toolCall.function?.name ?? '', onStderr: ctx.onHookStderr },
         );
         for (const e of result.errors) {
           ctx.onHookError?.(postEvent, e);

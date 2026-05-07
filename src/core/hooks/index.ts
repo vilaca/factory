@@ -3,17 +3,16 @@ import type { HookEntry, HooksConfig } from '../config-types.js';
 import { resolveHooks, listAllHooks, type HookEvent } from './discovery.js';
 import { sanitizeEnv } from '../../security/env.js';
 import type { EnvPolicy } from '../../security/env.js';
-import { getEnvPolicy } from '../../security/policy-state.js';
 import { checkForbidden } from '../../security/bash-rules.js';
 import { errorMessage } from '../../utils/errors.js';
 
-// Cache of the scrubbed env keyed on the policy object identity. process.env
-// + policy are both set once at startup, so re-running sanitizeEnv on every
-// fire is wasted work — and hook chains can fire dozens of times per turn
-// (PreToolUse + PostToolUse on every Bash call, plus Pre/PostTurn).
+// Cache of the scrubbed env keyed on the policy object identity. The caller
+// passes in the policy (typically captured once at session start), so
+// re-running sanitizeEnv on every fire is wasted work — and hook chains can
+// fire dozens of times per turn (PreToolUse + PostToolUse on every Bash
+// call, plus Pre/PostTurn).
 let sanitizedEnvCache: { policy: EnvPolicy; env: NodeJS.ProcessEnv } | null = null;
-function getSanitizedEnv(): NodeJS.ProcessEnv {
-  const policy = getEnvPolicy();
+function getSanitizedEnv(policy: EnvPolicy): NodeJS.ProcessEnv {
   if (sanitizedEnvCache && sanitizedEnvCache.policy === policy) {
     return sanitizedEnvCache.env;
   }
@@ -75,6 +74,11 @@ export interface RunHookOptions {
   /** Default timeout per hook (ms). An entry's `timeoutMs` overrides.
    *  Defaults to 5000. */
   timeoutMs?: number;
+  /** Env-allowlist policy applied to process.env before spawning. Threaded
+   *  in by the caller so hooks behave the same regardless of where they
+   *  run from (agent loop, headless, slash command). Omit for `{}` — the
+   *  default deny-by-default behavior. */
+  envPolicy?: EnvPolicy;
   /** Optional sink for stderr lines emitted by hook commands. */
   onStderr?: (command: string, chunk: string) => void;
 }
@@ -170,7 +174,7 @@ function runSingleHook(
       // hostile `.factory/config.json` exfil ANTHROPIC_API_KEY / GH_TOKEN /
       // AWS_* on the very first session-start. Shallow-copy the cached env
       // so the per-call FACTORY_* injections don't leak across fires.
-      const env = { ...getSanitizedEnv() };
+      const env = { ...getSanitizedEnv(opts.envPolicy ?? {}) };
       // Inject hook-context vars on top of the scrubbed allowlist so shell
       // scripts can read them without parsing the JSON payload. The
       // sanitizer denies the FACTORY_ prefix on the way IN (process.env

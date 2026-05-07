@@ -142,6 +142,8 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     inputQueue: [],
     historyIndex: -1,
     historyDraft: '',
+    pathPolicy: opts.pathPolicy ?? {},
+    envPolicy: opts.envPolicy ?? {},
   };
 }
 
