@@ -2,6 +2,7 @@ import type { Provider } from '../../providers/types.js';
 import type { AgentEvent } from '../agent-types.js';
 import type { ContextManager } from '../context-manager.js';
 import type { HooksConfig } from '../config-types.js';
+import type { EnvPolicy } from '../../security/env.js';
 import type { FileCache } from './file-cache.js';
 import { errorMessage } from '../../utils/errors.js';
 import { runHook } from '../hooks/index.js';
@@ -12,6 +13,7 @@ export interface CompactionHookOptions {
    *  up project-local hooks even after Bash `cd`'d mid-turn. */
   cwdRef?: { current: string };
   hooksConfig?: HooksConfig;
+  envPolicy?: EnvPolicy;
   onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
 }
@@ -116,6 +118,7 @@ async function* runPreCompactHook(
       {
         cwd: hookOpts.cwdRef.current,
         config: hookOpts.hooksConfig,
+        envPolicy: hookOpts.envPolicy,
         onStderr: hookOpts.onHookStderr,
       },
     );

@@ -4,6 +4,7 @@ import type { McpServerConfig } from './types.js';
 import type { ToolHandler } from '../tools/types.js';
 import { adaptMcpTool } from './adapter.js';
 import { errorMessage } from '../utils/errors.js';
+import { getBuildInfo } from '../utils/build-info.js';
 
 interface McpConnection {
   client: Client;
@@ -36,7 +37,7 @@ export class McpManager {
     });
 
     const client = new Client(
-      { name: 'factory', version: '0.1.0' },
+      { name: 'factory', version: getBuildInfo().version },
       { capabilities: {} },
     );
 

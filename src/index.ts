@@ -7,7 +7,6 @@ import { DESCRIPTORS, DESCRIPTOR_LIST, descriptorByAlias } from './providers/des
 import { createProvider } from './providers/registry.js';
 import { loadConfig } from './core/config.js';
 import type { HookEntry } from './core/config-types.js';
-import { setEnvPolicy, setPathPolicy } from './security/policy-state.js';
 import { McpManager } from './mcp/client.js';
 import { defaultRegistry } from './tools/index.js';
 import { runHeadless } from './ui/headless.js';
@@ -110,11 +109,11 @@ async function main(): Promise<void> {
     }
   }
 
-  // Apply security config to process-wide policy state. Tools read these
-  // singletons because ToolHandler.execute(args) has no context parameter
-  // — see src/security/policy-state.ts for rationale.
-  setEnvPolicy(config.security?.bashEnv ?? {});
-  setPathPolicy(config.security?.paths ?? {});
+  // Hold security policies as locals; they're threaded into appOptions /
+  // headless options below so each session/tab sees them via ToolContext
+  // and RunRefs (no process-global singleton).
+  const pathPolicy = config.security?.paths ?? {};
+  const envPolicy = config.security?.bashEnv ?? {};
 
   const lastSession = await getLastSessionSelection().catch(() => null);
 
@@ -416,6 +415,8 @@ async function main(): Promise<void> {
     gitBranch,
     gitDirty,
     validationWarning,
+    pathPolicy,
+    envPolicy,
   };
 
   const isInteractiveTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);

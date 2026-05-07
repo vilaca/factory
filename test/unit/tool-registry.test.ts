@@ -1,13 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { getToolDefinitions, getTool, getAllTools } from '../../src/tools/index.js';
+import { defaultRegistry } from '../../src/tools/index.js';
 import type { ToolCategory } from '../../src/tools/types.js';
 
 describe('Tool registry', () => {
   const expectedTools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch'];
 
-  it('getAllTools returns all 7 tools', () => {
-    const tools = getAllTools();
+  it('getAll returns all 7 tools', () => {
+    const tools = defaultRegistry.getAll();
     assert.strictEqual(tools.length, 7);
     const names = tools.map(t => t.name);
     for (const name of expectedTools) {
@@ -15,8 +15,8 @@ describe('Tool registry', () => {
     }
   });
 
-  it('getToolDefinitions returns definitions for all tools', () => {
-    const defs = getToolDefinitions();
+  it('getDefinitions returns definitions for all tools', () => {
+    const defs = defaultRegistry.getDefinitions();
     assert.strictEqual(defs.length, 7);
     for (const def of defs) {
       assert.strictEqual(def.type, 'function');
@@ -26,27 +26,27 @@ describe('Tool registry', () => {
     }
   });
 
-  it('getTool finds tools by exact name', () => {
+  it('get finds tools by exact name', () => {
     for (const name of expectedTools) {
-      const tool = getTool(name);
-      assert.ok(tool, `getTool('${name}') returned undefined`);
+      const tool = defaultRegistry.get(name);
+      assert.ok(tool, `defaultRegistry.get('${name}') returned undefined`);
       assert.strictEqual(tool!.name, name);
     }
   });
 
-  it('getTool finds tools case-insensitively', () => {
-    const tool = getTool('read');
+  it('get finds tools case-insensitively', () => {
+    const tool = defaultRegistry.get('read');
     assert.ok(tool);
     assert.strictEqual(tool!.name, 'Read');
 
-    const tool2 = getTool('BASH');
+    const tool2 = defaultRegistry.get('BASH');
     assert.ok(tool2);
     assert.strictEqual(tool2!.name, 'Bash');
   });
 
-  it('getTool returns undefined for unknown tools', () => {
-    assert.strictEqual(getTool('NonExistent'), undefined);
-    assert.strictEqual(getTool(''), undefined);
+  it('get returns undefined for unknown tools', () => {
+    assert.strictEqual(defaultRegistry.get('NonExistent'), undefined);
+    assert.strictEqual(defaultRegistry.get(''), undefined);
   });
 
   it('all tools have correct categories', () => {
@@ -60,33 +60,33 @@ describe('Tool registry', () => {
     };
 
     for (const [name, category] of Object.entries(expectedCategories)) {
-      const tool = getTool(name);
-      assert.ok(tool, `getTool('${name}') returned undefined`);
+      const tool = defaultRegistry.get(name);
+      assert.ok(tool, `defaultRegistry.get('${name}') returned undefined`);
       assert.strictEqual(tool!.category, category, `${name} should have category '${category}'`);
     }
   });
 
   it('tool definitions have required parameters marked', () => {
-    const readTool = getTool('Read');
+    const readTool = defaultRegistry.get('Read');
     assert.ok(readTool);
     const readParams = readTool!.definition.function.parameters as any;
     assert.ok(readParams.required?.includes('file_path'));
 
-    const editTool = getTool('Edit');
+    const editTool = defaultRegistry.get('Edit');
     assert.ok(editTool);
     const editParams = editTool!.definition.function.parameters as any;
     assert.ok(editParams.required?.includes('file_path'));
     assert.ok(editParams.required?.includes('old_string'));
     assert.ok(editParams.required?.includes('new_string'));
 
-    const bashTool = getTool('Bash');
+    const bashTool = defaultRegistry.get('Bash');
     assert.ok(bashTool);
     const bashParams = bashTool!.definition.function.parameters as any;
     assert.ok(bashParams.required?.includes('command'));
   });
 
   it('each tool has a matching name in definition', () => {
-    const tools = getAllTools();
+    const tools = defaultRegistry.getAll();
     for (const tool of tools) {
       assert.strictEqual(
         tool.name,

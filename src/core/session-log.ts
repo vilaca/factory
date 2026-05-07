@@ -82,28 +82,45 @@ export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const id = crypto.randomBytes(3).toString('hex');
   const filePath = path.join(dir, `${ts}-${id}.jsonl`);
+  // Open sync so permission/ENOSPC at init throws to the caller. Per-event
+  // writes go through an in-memory queue flushed once per event-loop turn,
+  // so a hot loop of tool calls doesn't pay a syscall per log line.
   const fd = fs.openSync(filePath, 'a');
   let closed = false;
   let writeFailureNotified = false;
+  let queue: string[] = [];
+  let flushScheduled = false;
+
+  const surfaceWriteError = (err: unknown): void => {
+    // First failure goes to stderr so the user knows logs went dark; later
+    // failures stay silent so a full disk doesn't flood stderr per write.
+    // Logging is observability, not a hard dependency, so we never throw
+    // out of write(); strict-logging callers escalate via onWriteError.
+    if (writeFailureNotified) return;
+    writeFailureNotified = true;
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`factory: session log write failed (${filePath}) — ${msg}\n`);
+    opts?.onWriteError?.(err);
+  };
+
+  const flush = (): void => {
+    flushScheduled = false;
+    if (queue.length === 0) return;
+    const batch = queue.join('');
+    queue = [];
+    try {
+      fs.writeSync(fd, batch);
+    } catch (err) {
+      surfaceWriteError(err);
+    }
+  };
 
   const write = (entry: Record<string, unknown>): void => {
     if (closed) return;
-    try {
-      fs.writeSync(fd, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n');
-    } catch (err) {
-      // Surface the first failure to stderr so the user knows the log went
-      // dark — silent loss is worse than a one-time stderr line. Subsequent
-      // failures stay silent so a full disk doesn't flood stderr per write.
-      // Don't propagate: a logging error must not crash the REPL or agent
-      // loop by default, since logging is observability, not a hard
-      // dependency. Strict-logging callers can hook via opts.onWriteError
-      // to escalate (e.g. process.exit) when the workload requires logs.
-      if (!writeFailureNotified) {
-        writeFailureNotified = true;
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`factory: session log write failed (${filePath}) — ${msg}\n`);
-        opts?.onWriteError?.(err);
-      }
+    queue.push(JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n');
+    if (!flushScheduled) {
+      flushScheduled = true;
+      setImmediate(flush);
     }
   };
 
@@ -127,6 +144,9 @@ export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
     close() {
       if (closed) return;
       closed = true;
+      // Drain anything queued so callers that exit immediately after close()
+      // (headless mode → process.exit) don't lose the tail of the log.
+      flush();
       try { fs.closeSync(fd); } catch { /* ignore */ }
     },
   };

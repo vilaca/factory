@@ -54,8 +54,9 @@ const definition: ToolDefinition = {
 async function tryRipgrep(
   pattern: string,
   searchPath: string,
-  fileGlob?: string,
-  includeContent?: boolean,
+  fileGlob: string | undefined,
+  includeContent: boolean | undefined,
+  signal?: AbortSignal,
 ): Promise<ToolResult | null> {
   try {
     const args: string[] = ['--no-heading', '--color=never'];
@@ -73,7 +74,7 @@ async function tryRipgrep(
     args.push('--glob', '!node_modules', '--glob', '!.git');
     args.push(pattern, searchPath);
 
-    const { stdout } = await execFileAsync('rg', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES });
+    const { stdout } = await execFileAsync('rg', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES, signal });
     const trimmed = stdout.trim();
     if (!trimmed) return { success: true, output: 'No matches found.', empty: true };
     return { success: true, output: trimmed };
@@ -98,8 +99,9 @@ async function tryRipgrep(
 async function tryGrep(
   pattern: string,
   searchPath: string,
-  fileGlob?: string,
-  includeContent?: boolean,
+  fileGlob: string | undefined,
+  includeContent: boolean | undefined,
+  signal?: AbortSignal,
 ): Promise<ToolResult> {
   try {
     const args: string[] = ['-r', '--color=never'];
@@ -117,7 +119,7 @@ async function tryGrep(
     args.push('--exclude-dir=node_modules', '--exclude-dir=.git');
     args.push('-E', pattern, searchPath);
 
-    const { stdout } = await execFileAsync('grep', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES });
+    const { stdout } = await execFileAsync('grep', args, { maxBuffer: SEARCH_OUTPUT_MAX_BYTES, signal });
     const trimmed = stdout.trim();
     if (!trimmed) return { success: true, output: 'No matches found.', empty: true };
     return { success: true, output: trimmed };
@@ -153,8 +155,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     throw err;
   }
 
-  const rgResult = await tryRipgrep(pattern, searchPath, fileGlob, includeContent);
-  const result = rgResult ?? await tryGrep(pattern, searchPath, fileGlob, includeContent);
+  const rgResult = await tryRipgrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal);
+  const result = rgResult ?? await tryGrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal);
 
   // Post-filter: a search rooted at e.g. ~/ would otherwise let rg/grep
   // recurse into ~/.ssh and surface filenames (with -l) or content lines

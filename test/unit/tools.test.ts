@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { getTool } from '../../src/tools/index.js';
+import { defaultRegistry } from '../../src/tools/index.js';
 import { __testing as bashTesting } from '../../src/tools/bash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,7 +25,7 @@ function cleanup(filePath: string): void {
 // ─── Read tool ──────────────────────────────────────────────────────────
 
 describe('Read tool', () => {
-  const read = getTool('Read')!;
+  const read = defaultRegistry.get('Read')!;
 
   it('reads file content with line numbers', async () => {
     const fp = tmpFile('read', 'line1\nline2\nline3\n');
@@ -134,7 +134,7 @@ describe('Read tool', () => {
 // ─── Write tool ─────────────────────────────────────────────────────────
 
 describe('Write tool', () => {
-  const write = getTool('Write')!;
+  const write = defaultRegistry.get('Write')!;
 
   it('creates a new file', async () => {
     const fp = tmpFile('write');
@@ -198,7 +198,7 @@ describe('Write tool', () => {
 // ─── Edit tool ──────────────────────────────────────────────────────────
 
 describe('Edit tool', () => {
-  const edit = getTool('Edit')!;
+  const edit = defaultRegistry.get('Edit')!;
 
   it('replaces unique string', async () => {
     const fp = tmpFile('edit', 'foo bar baz\n');
@@ -361,7 +361,7 @@ describe('Edit tool', () => {
 // ─── Bash tool ──────────────────────────────────────────────────────────
 
 describe('Bash tool', () => {
-  const bash = getTool('Bash')!;
+  const bash = defaultRegistry.get('Bash')!;
 
   it('executes command and returns stdout', async () => {
     const result = await bash.execute({ command: 'echo hello' });
@@ -446,7 +446,7 @@ describe('Bash tool', () => {
 // ─── Glob tool ──────────────────────────────────────────────────────────
 
 describe('Glob tool', () => {
-  const glob = getTool('Glob')!;
+  const glob = defaultRegistry.get('Glob')!;
 
   it('finds files matching pattern', async () => {
     const result = await glob.execute({ pattern: 'package.json', path: process.cwd() });
@@ -470,7 +470,7 @@ describe('Glob tool', () => {
 // ─── Grep tool ──────────────────────────────────────────────────────────
 
 describe('Grep tool', () => {
-  const grep = getTool('Grep')!;
+  const grep = defaultRegistry.get('Grep')!;
 
   it('finds pattern in file', async () => {
     const fp = tmpFile('grep', 'findme in this file\nnothing here\n');
@@ -534,9 +534,9 @@ function makeSymlink(target: string, suffix: string): string {
 }
 
 describe('File tool symlink behavior', () => {
-  const read = getTool('Read')!;
-  const write = getTool('Write')!;
-  const edit = getTool('Edit')!;
+  const read = defaultRegistry.get('Read')!;
+  const write = defaultRegistry.get('Write')!;
+  const edit = defaultRegistry.get('Edit')!;
 
   it('Read follows a symlink to its target', async () => {
     const target = tmpFile('symlink-read-target', 'target-content\n');
@@ -609,8 +609,8 @@ describe('File tool symlink behavior', () => {
 // home directory.
 
 describe('Search tools: deny-list enforcement', () => {
-  const grep = getTool('Grep')!;
-  const glob = getTool('Glob')!;
+  const grep = defaultRegistry.get('Grep')!;
+  const glob = defaultRegistry.get('Glob')!;
 
   it('Grep refuses an explicit search path on the deny list', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-deny-'));

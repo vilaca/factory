@@ -144,12 +144,19 @@ function rejectStructured(filePath: string, format: string, error: string): Tool
 }
 
 function findMatchLines(content: string, needle: string): number[] {
+  // Walk `content` once, advancing a newline counter as we pass each match.
+  // Slicing+splitting on every match was O(n²·m) on large files.
   const lines: number[] = [];
   let pos = 0;
+  let lineNum = 1;
+  let scanned = 0;
   while (true) {
     const idx = content.indexOf(needle, pos);
     if (idx === -1) break;
-    const lineNum = content.slice(0, idx).split('\n').length;
+    while (scanned < idx) {
+      if (content.charCodeAt(scanned) === 10) lineNum++;
+      scanned++;
+    }
     lines.push(lineNum);
     pos = idx + Math.max(needle.length, 1);
   }
