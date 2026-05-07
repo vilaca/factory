@@ -110,6 +110,15 @@ export class Conversation {
     while (cutPoint > 0 && cutPoint < this.messages.length && this.messages[cutPoint].role === 'tool') {
       cutPoint--;
     }
+    // The walk bottoms out at 0 when every message before the recency
+    // window is a tool message (pathological — conversations don't open
+    // with tools, so this is constructed input or a corrupted log). At
+    // cutPoint=0 the slice keeps every original message AND we'd prepend
+    // a "previous conversation summary" that duplicates them — confusing
+    // timeline. Skip this pass; the next compaction will retry.
+    if (cutPoint === 0) {
+      return { oldCount, newCount: this.messages.length };
+    }
 
     const kept = this.messages.slice(cutPoint);
     this.messages = [

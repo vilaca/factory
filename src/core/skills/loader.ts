@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { errorMessage } from '../../utils/errors.js';
 
 /**
  * One parsed skill ready for matching/injection. `sourcePath` is kept around
@@ -75,8 +76,8 @@ async function loadSkillsFromDir(
     try {
       const skill = parseSkillFile(raw, filePath, scope);
       if (skill) out.push(skill);
-    } catch (err: any) {
-      warnings.push(`${filePath}: ${err.message}`);
+    } catch (err: unknown) {
+      warnings.push(`${filePath}: ${errorMessage(err)}`);
     }
   }
   return out;
@@ -121,8 +122,8 @@ export function parseSkillFile(
   // Validate regex compiles upfront so a bad pattern is caught at load time
   // rather than every turn.
   for (const t of triggers as string[]) {
-    try { new RegExp(t, 'i'); } catch (e: any) {
-      throw new Error(`invalid regex in "triggers": ${t} (${e.message})`);
+    try { new RegExp(t, 'i'); } catch (e: unknown) {
+      throw new Error(`invalid regex in "triggers": ${t} (${errorMessage(e)})`);
     }
   }
 

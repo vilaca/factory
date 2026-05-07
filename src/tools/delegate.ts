@@ -1,5 +1,6 @@
 import type { Provider } from '../providers/types.js';
 import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { TOOL_NAMES } from './types.js';
 import { runSubagent } from '../core/subagent/runner.js';
 import type { SessionLogger } from '../core/session-log.js';
 
@@ -29,7 +30,7 @@ import type { SessionLogger } from '../core/session-log.js';
 const definition: ToolDefinition = {
   type: 'function',
   function: {
-    name: 'Delegate',
+    name: TOOL_NAMES.Delegate,
     description:
       'Spawn a read-only research subagent for an isolated investigation. The subagent has access to Read, Glob, Grep, and an allow-listed Bash; it CANNOT edit, write, or run state-changing commands. Use to farm out exploration without polluting your own context. Returns the subagent\'s final answer as plain text.',
     parameters: {
@@ -151,7 +152,7 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
   }
 
   return {
-    name: 'Delegate',
+    name: TOOL_NAMES.Delegate,
     description: definition.function.description,
     category: 'read-only',
     definition,

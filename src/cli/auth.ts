@@ -13,6 +13,7 @@ import {
   getGoogleAiStudioOAuthStorageNote,
 } from '../providers/googleaistudio-auth.js';
 import { exitStartupSelection, isExitSelection, promptText } from './prompts.js';
+import { errorMessage } from '../utils/errors.js';
 
 export interface StartupCredentials {
   token?: string;
@@ -331,12 +332,13 @@ async function ensureGoogleAiStudioAuth(
     const auth = new GoogleAiStudioAuthManager({ authMode: 'oauth' });
     try {
       await auth.validate();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const detail = errorMessage(error) || getGoogleAiStudioOAuthErrorMessage();
       appendProviderLog({
         provider: 'googleaistudio', category: 'auth', action: 'authenticate',
-        outcome: 'error', detail: error?.message ?? getGoogleAiStudioOAuthErrorMessage(),
+        outcome: 'error', detail,
       });
-      throw new Error(error?.message ?? getGoogleAiStudioOAuthErrorMessage());
+      throw new Error(detail);
     }
     await saveGlobalConfig({ googleAiStudioAuthMode: 'oauth' });
     appendProviderLog({

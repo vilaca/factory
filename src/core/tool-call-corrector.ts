@@ -1,5 +1,7 @@
 import type { Provider, ToolCallMessage } from '../providers/types.js';
 import type { ToolRegistry } from '../tools/registry.js';
+import { parseFirstJsonObject } from '../utils/json-extract.js';
+import { errorMessage, isError } from '../utils/errors.js';
 
 const SYSTEM_PROMPT = `You are a tool-call corrector. The main coding agent attempted a tool call that failed. Given the original call, the error, and any relevant context, produce a single corrected tool call.
 
@@ -79,11 +81,11 @@ export async function correctToolCall(
       kind: 'corrected',
       call: { function: { name: parsed.name, arguments: args } },
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Propagate user aborts so the agent loop can exit via its AbortError
     // handler instead of treating it as a corrector failure.
-    if (signal?.aborted || err?.name === 'AbortError') throw err;
-    return { kind: 'abort', reason: `corrector call threw: ${err.message}` };
+    if (signal?.aborted || (isError(err) && err.name === 'AbortError')) throw err;
+    return { kind: 'abort', reason: `corrector call threw: ${errorMessage(err)}` };
   }
 }
 
@@ -123,39 +125,12 @@ function buildUserMessage(request: CorrectionRequest, toolDescriptions: string):
 }
 
 function extractFirstJsonObject(text: string): Record<string, unknown> | null {
-  // Strip a leading code fence if present.
+  // Strip a leading code fence if present, then delegate to the shared
+  // brace-depth scanner. Code-fence stripping stays local because no other
+  // caller of the scanner needs it.
   const stripped = text
     .replace(/^```(?:json)?\s*\n/, '')
     .replace(/\n```\s*$/, '')
     .trim();
-
-  // Find first balanced top-level object.
-  let depth = 0;
-  let start = -1;
-  let inString = false;
-  let escape = false;
-  for (let i = 0; i < stripped.length; i++) {
-    const ch = stripped[i];
-    if (escape) { escape = false; continue; }
-    if (inString) {
-      if (ch === '\\') escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') { inString = true; continue; }
-    if (ch === '{') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (ch === '}') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        try {
-          return JSON.parse(stripped.slice(start, i + 1)) as Record<string, unknown>;
-        } catch {
-          return null;
-        }
-      }
-    }
-  }
-  return null;
+  return parseFirstJsonObject(stripped);
 }

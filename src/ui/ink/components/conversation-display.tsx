@@ -61,6 +61,22 @@ function isToolCallContinuation(items: DisplayItem[], index: number): boolean {
   );
 }
 
+/** True when `items[index]` is a tool-call whose matching tool-result is the
+ *  immediately following item and reports failure. The renderer uses this to
+ *  swap `🔧` for `✗` on the call header so failures are visible at the top
+ *  instead of only on the result panel. Successful results are often filtered
+ *  out (see event-handler `isNoise`), so absence of a following result means
+ *  "succeeded", not "still pending" — by the time items[] reaches Static, the
+ *  tool-call-result event has already fired. */
+function isToolCallFailed(items: DisplayItem[], index: number): boolean {
+  const cur = items[index];
+  const next = items[index + 1];
+  if (!cur || cur.kind !== 'tool-call') return false;
+  if (!next || next.kind !== 'tool-result') return false;
+  if (next.toolName !== cur.toolName) return false;
+  return !next.success;
+}
+
 export function ConversationDisplay({
   items,
   streamingText,
@@ -77,6 +93,7 @@ export function ConversationDisplay({
         <Static items={items}>
           {(item, index) => {
             const continuation = isToolCallContinuation(items, index);
+            const failed = isToolCallFailed(items, index);
             return (
               <React.Fragment key={item.id}>
                 {index > 0 && !continuation && <Separator />}
@@ -87,6 +104,7 @@ export function ConversationDisplay({
                     emojiMode={emojiMode}
                     userEmoji={userEmoji}
                     continuation={continuation}
+                    failed={failed}
                   />
                 </PanelLine>
               </React.Fragment>
@@ -96,6 +114,7 @@ export function ConversationDisplay({
       ) : (
         items.map((item, index) => {
           const continuation = isToolCallContinuation(items, index);
+          const failed = isToolCallFailed(items, index);
           return (
             <React.Fragment key={item.id}>
               {index > 0 && !continuation && <Separator />}
@@ -105,6 +124,7 @@ export function ConversationDisplay({
                   showFullOutput={showFullOutput}
                   emojiMode={emojiMode}
                   continuation={continuation}
+                  failed={failed}
                 />
               </PanelLine>
             </React.Fragment>

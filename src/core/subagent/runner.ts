@@ -1,5 +1,6 @@
 import type { Provider } from '../../providers/types.js';
-import type { ToolHandler, ToolResult } from '../../tools/types.js';
+import type { ToolContext, ToolHandler, ToolResult } from '../../tools/types.js';
+import { TOOL_NAMES } from '../../tools/types.js';
 import type { AgentEvent } from '../agent-types.js';
 import { ToolRegistry } from '../../tools/registry.js';
 import { readTool } from '../../tools/read.js';
@@ -35,7 +36,7 @@ function makeRestrictedBashTool(): ToolHandler {
       ' (Subagent: only read-only allow-listed commands run; others are rejected.)',
     category: bashTool.category,
     definition: bashTool.definition,
-    async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    async execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
       const command = typeof args.command === 'string' ? args.command : '';
       const decision = isCommandAllowed(command);
       if (!decision.allowed) {
@@ -44,7 +45,10 @@ function makeRestrictedBashTool(): ToolHandler {
           output: `Subagent Bash rejected: ${decision.reason}. Use Read/Glob/Grep, or one of the allow-listed shell commands.`,
         };
       }
-      return bashTool.execute(args);
+      // Forward ctx so the inner Bash sees the same env policy the parent
+      // agent loop computed — the wrapper exists to gate commands, not to
+      // erase the per-call security context.
+      return bashTool.execute(args, ctx);
     },
   };
 }
@@ -55,12 +59,7 @@ function makeRestrictedBashTool(): ToolHandler {
  * literally no way to call them, regardless of what its prompt says.
  */
 export function buildSubagentRegistry(): ToolRegistry {
-  const registry = new ToolRegistry();
-  // Drop everything the default constructor added; we want an explicit
-  // allow-list, not a deny-list.
-  for (const tool of registry.getAll()) {
-    registry.unregister(tool.name);
-  }
+  const registry = new ToolRegistry({ empty: true });
   registry.register(readTool);
   registry.register(globTool);
   registry.register(grepTool);
@@ -118,10 +117,10 @@ export async function runSubagent(
   // story is the restricted registry + Bash allow-list, not interactive
   // gating.
   const permissions = new PermissionManager();
-  permissions.allowAll('Read');
-  permissions.allowAll('Glob');
-  permissions.allowAll('Grep');
-  permissions.allowAll('Bash');
+  permissions.allowAll(TOOL_NAMES.Read);
+  permissions.allowAll(TOOL_NAMES.Glob);
+  permissions.allowAll(TOOL_NAMES.Grep);
+  permissions.allowAll(TOOL_NAMES.Bash);
 
   const events: AgentEvent[] = [];
   let lastAssistantText = '';

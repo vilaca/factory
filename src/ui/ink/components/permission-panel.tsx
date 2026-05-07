@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { PermissionDecision } from '../../../permissions.js';
+import { TOOL_NAMES } from '../../../tools/types.js';
 
 export interface PermissionPanelProps {
   toolName: string;
@@ -21,7 +22,7 @@ function webFetchHostname(args: Record<string, unknown> | undefined): string | u
 }
 
 export function PermissionPanel({ toolName, args }: PermissionPanelProps): React.ReactElement {
-  if (toolName === 'WebFetch') {
+  if (toolName === TOOL_NAMES.WebFetch) {
     const host = webFetchHostname(args);
     return (
       <Box paddingX={1}>
@@ -46,6 +47,6 @@ export function parsePermissionInput(s: string, toolName?: string): PermissionDe
   const n = s.trim().toLowerCase();
   if (n === 'y' || n === 'yes' || n === '') return 'allow';
   if (n === 'a' || n === 'allow' || n === 'allow all') return 'allow-all';
-  if (toolName === 'WebFetch' && (n === 'w' || n === 'whitelist')) return 'allow-domain';
+  if (toolName === TOOL_NAMES.WebFetch && (n === 'w' || n === 'whitelist')) return 'allow-domain';
   return 'deny';
 }

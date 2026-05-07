@@ -11,6 +11,7 @@ import { keyFingerprint, selectNextKey } from '../credentials.js';
 import { classifyForRotation } from '../provider-errors.js';
 import { RepeatDetector } from './repeat-detector.js';
 import { applyCacheBoundaries } from './cache-boundaries.js';
+import { errorMessage, isError } from '../../utils/errors.js';
 
 /**
  * Walk the rotation chain looking for the next entry that hasn't been tried
@@ -114,6 +115,12 @@ export async function* callModel(
   let triedKeyIds = new Set<string>();
   if (rotation?.activeKeyId) triedKeyIds.add(rotation.activeKeyId);
   let activeKeyId = rotation?.activeKeyId;
+  // Hold the active key pool locally so a tier-2 tuple advance can swap it
+  // in without mutating the caller's RotationOptions object. The previous
+  // implementation wrote `rotation.keys = advance.keys`, which made the
+  // function impure w.r.t. its inputs; nothing outside callModel reads
+  // rotation.keys, so a local is a free upgrade.
+  let activeKeys = rotation?.keys ?? [];
   // Tier-2 bookkeeping: track which (provider, model) tuples have already
   // been tried so we don't loop back to the original on chain advance.
   const triedTuples = new Set<string>([`${provider.name}:${model}`]);
@@ -178,8 +185,8 @@ export async function* callModel(
         }
       }
       break; // success
-    } catch (err: any) {
-      if (signal?.aborted || internal.signal.aborted || err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || internal.signal.aborted || (isError(err) && err.name === 'AbortError')) {
         if (signal) signal.removeEventListener('abort', cascade);
         return { fullContent, toolCalls: sanitizeToolCalls(toolCalls), lastUsage, aborted: true, doneReason };
       }
@@ -190,18 +197,18 @@ export async function* callModel(
         if (reason !== 'other') {
           // ─── Tier 1: rotate keys for the current (provider, model) ──
           let keyRotated = false;
-          if (rotation.activeKeyId && rotation.keys.length > 0) {
+          if (rotation.activeKeyId && activeKeys.length > 0) {
             if (rotation.failureLog && activeKeyId) {
               rotation.failureLog.set(activeKeyId, Date.now());
             }
             const warmthLog = await rotation.getWarmthLog?.();
-            const next = selectNextKey(rotation.keys, triedKeyIds, {
+            const next = selectNextKey(activeKeys, triedKeyIds, {
               failureLog: rotation.failureLog,
               warmthLog,
             });
             if (next) {
               const fromKey = activeKeyId
-                ? rotation.keys.find(k => k.id === activeKeyId)
+                ? activeKeys.find(k => k.id === activeKeyId)
                 : undefined;
               yield {
                 type: 'key-rotation',
@@ -250,11 +257,11 @@ export async function* callModel(
               rotation.onModelChange?.(advance.entry.model);
               // Reset tier-1 state for the new tuple.
               triedKeyIds = new Set<string>([advance.firstKey.id]);
-              // Override `rotation.keys` so subsequent tier-1 attempts
-              // for this new tuple see *its* keys, not the original
-              // tuple's. Mutating the caller's options is awkward but
-              // keeps callModel's internal state coherent.
-              rotation.keys = advance.keys;
+              // Subsequent tier-1 attempts for this new tuple need to see
+              // *its* keys, not the original tuple's. Swap them in via the
+              // local `activeKeys` so the caller's RotationOptions stays
+              // untouched.
+              activeKeys = advance.keys;
               triedTuples.add(`${advance.entry.provider}:${advance.entry.model}`);
               tupleRotated = true;
               fullContent = '';
@@ -308,7 +315,7 @@ export async function* callModel(
                   rotation.onActiveKeyChange?.(firstKey.id);
                   rotation.onModelChange?.(promptedEntry.model);
                   triedKeyIds = new Set<string>([firstKey.id]);
-                  rotation.keys = promptedKeys;
+                  activeKeys = promptedKeys;
                   triedTuples.add(promptedKey);
                   tupleRotated = true;
                   fullContent = '';
@@ -324,7 +331,7 @@ export async function* callModel(
       }
       // Existing isStreamish fallback: stream-only failures and transient
       // connection drops retry non-streamed once on the same provider.
-      const msg = err?.message ?? '';
+      const msg = errorMessage(err);
       const isStreamish = msg.includes('stream') || msg.includes('connection dropped') ||
         msg.includes('socket hang up') || msg.includes('fetch failed');
       if (isStreamish) {

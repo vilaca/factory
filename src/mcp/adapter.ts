@@ -1,5 +1,6 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { ToolDefinition, ToolHandler, ToolResult } from '../tools/types.js';
+import { errorMessage } from '../utils/errors.js';
 
 export function adaptMcpTool(
   mcpClient: Client,
@@ -37,10 +38,10 @@ export function adaptMcpTool(
           success: !result.isError,
           output,
         };
-      } catch (err: any) {
+      } catch (err: unknown) {
         return {
           success: false,
-          output: `MCP tool error (${serverName}/${mcpTool.name}): ${err.message}`,
+          output: `MCP tool error (${serverName}/${mcpTool.name}): ${errorMessage(err)}`,
         };
       }
     },

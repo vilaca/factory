@@ -7,6 +7,7 @@ import { runToolCalls } from './agent/run-tool-calls.js';
 import { maybeCompact } from './agent/compaction.js';
 import { BashDedupTracker } from './agent/bash-dedup.js';
 import { runHook } from './hooks/index.js';
+import { errorMessage, isError } from '../utils/errors.js';
 
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
@@ -42,8 +43,8 @@ async function* fireStopHook(
         ...(result.notice ? { notice: result.notice } : {}),
       };
     }
-  } catch (err: any) {
-    const msg = err?.message ?? String(err);
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
     options.onHookError?.(event, msg);
     yield { type: 'hook-error', event, error: msg };
   }
@@ -112,8 +113,8 @@ export async function* runAgent(
       if (result.additionalContext) {
         conversation.addUser(result.additionalContext);
       }
-    } catch (err: any) {
-      yield { type: 'hook-error', event: 'UserPromptSubmit', error: err?.message ?? String(err) };
+    } catch (err: unknown) {
+      yield { type: 'hook-error', event: 'UserPromptSubmit', error: errorMessage(err) };
     }
   }
 
@@ -136,13 +137,13 @@ export async function* runAgent(
         onHookStderr: options.onHookStderr,
         onHookError: options.onHookError,
       });
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || (isError(err) && err.name === 'AbortError')) {
         yield* fireStopHook(options, turnsUsed, 'user-abort');
         yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
         return;
       }
-      yield { type: 'error', error: err };
+      yield { type: 'error', error: isError(err) ? err : new Error(errorMessage(err)) };
       yield* fireStopHook(options, turnsUsed, 'error');
       yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
       return;
@@ -288,6 +289,8 @@ export async function* runAgent(
           model,
           userInput,
           cwdRef: options.cwdRef,
+          pathPolicy: options.pathPolicy,
+          envPolicy: options.envPolicy,
           hooksEnabled,
           hooksConfig: options.hooksConfig,
           onHookStderr: options.onHookStderr,
@@ -312,13 +315,13 @@ export async function* runAgent(
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
       }
-    } catch (err: any) {
-      if (signal?.aborted || err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || (isError(err) && err.name === 'AbortError')) {
         yield* fireStopHook(options, turnsUsed, 'user-abort');
         yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
         return;
       }
-      yield { type: 'error', error: err };
+      yield { type: 'error', error: isError(err) ? err : new Error(errorMessage(err)) };
       yield* fireStopHook(options, turnsUsed, 'error');
       yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
       return;

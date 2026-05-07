@@ -17,6 +17,7 @@ import { validateModelToolSupport } from './core/model-validation.js';
 import { appendProviderLog, getLastSessionSelection, getRecentSessions, sessionsDir } from './core/session-log.js';
 import { renderWelcome, renderError, animateLogo } from './ui/renderer.js';
 import { getGitBranch, isGitDirty } from './utils/git.js';
+import { errorMessage } from './utils/errors.js';
 import { parseArgs, printUsage } from './cli/args.js';
 import {
   ensureAuth,
@@ -80,8 +81,8 @@ async function main(): Promise<void> {
     if (cliArgs.rotate !== undefined) {
       try {
         next.default = parseRotationChain(cliArgs.rotate);
-      } catch (err: any) {
-        console.log(renderError(err.message));
+      } catch (err: unknown) {
+        console.log(renderError(errorMessage(err)));
         process.exit(1);
       }
     }
@@ -102,8 +103,8 @@ async function main(): Promise<void> {
         await saveGlobalConfig({
           agent: { ...global.agent, rotation: next },
         });
-      } catch (err: any) {
-        console.log(renderError(`Failed to save rotation config: ${err.message}`));
+      } catch (err: unknown) {
+        console.log(renderError(`Failed to save rotation config: ${errorMessage(err)}`));
         process.exit(1);
       }
     }
@@ -192,15 +193,16 @@ async function main(): Promise<void> {
       // the first turn's stats land under the right key.
       if (savedKeyId) activeKeyId = savedKeyId;
     }
-  } catch (err: any) {
-    dbg(`startup error: ${err.message}`);
-    appendProviderLog({ provider: providerName, category: 'startup', action: 'startup-error', outcome: 'error', detail: err.message });
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
+    dbg(`startup error: ${msg}`);
+    appendProviderLog({ provider: providerName, category: 'startup', action: 'startup-error', outcome: 'error', detail: msg });
     if (providerName === 'ollama') {
       console.log(renderError('Cannot connect to Ollama. Is it running? (ollama serve)'));
     } else if (providerName === 'llamacpp') {
       console.log(renderError('Cannot connect to llama.cpp. Is the server running? (llama-server -m <model>)'));
     } else {
-      console.log(renderError(err.message));
+      console.log(renderError(msg));
     }
     process.exit(1);
   }
@@ -441,7 +443,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error(renderError(err.message));
+main().catch((err: unknown) => {
+  console.error(renderError(errorMessage(err)));
   process.exit(1);
 });

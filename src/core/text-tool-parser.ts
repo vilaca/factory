@@ -1,4 +1,6 @@
 import type { ToolCallMessage } from '../providers/types.js';
+import { extractAllJsonObjects } from '../utils/json-extract.js';
+import { TOOL_NAMES } from '../tools/types.js';
 
 const TOOL_CALL_TAG_PATTERN = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
 const JSON_FENCE_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/g;
@@ -40,44 +42,6 @@ function tryParseToolCall(jsonText: string, knownToolNames?: ReadonlySet<string>
     // fall through
   }
   return null;
-}
-
-/**
- * Find every top-level JSON object substring in the content.
- * Tracks brace depth and string/escape state so braces inside string literals
- * don't break the count.
- */
-function extractTopLevelJsonObjects(content: string): string[] {
-  const objects: string[] = [];
-  let depth = 0;
-  let start = -1;
-  let inString = false;
-  let escape = false;
-
-  for (let i = 0; i < content.length; i++) {
-    const ch = content[i];
-    if (escape) { escape = false; continue; }
-    if (inString) {
-      if (ch === '\\') escape = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') { inString = true; continue; }
-    if (ch === '{') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (ch === '}') {
-      depth--;
-      if (depth === 0 && start !== -1) {
-        objects.push(content.slice(start, i + 1));
-        start = -1;
-      } else if (depth < 0) {
-        depth = 0;
-        start = -1;
-      }
-    }
-  }
-  return objects;
 }
 
 function stripObjects(content: string, objects: string[]): string {
@@ -142,7 +106,7 @@ export function parseTextToolCalls(content: string, knownToolNames?: ReadonlySet
   });
 
   if (toolCalls.length === 0) {
-    const objects = extractTopLevelJsonObjects(cleaned);
+    const objects = extractAllJsonObjects(cleaned);
     if (objects.length > 0) {
       let allMatched = true;
       const recovered: ToolCallMessage[] = [];
@@ -173,7 +137,7 @@ export function parseTextToolCalls(content: string, knownToolNames?: ReadonlySet
   // Last-resort: shell fences (```bash / ```sh) become Bash tool calls when no
   // structured call was recovered AND the Bash tool is registered. Treats the
   // model's "I'll run X" code block as the call instead of just narration.
-  if (toolCalls.length === 0 && (!knownToolNames || knownToolNames.has('Bash'))) {
+  if (toolCalls.length === 0 && (!knownToolNames || knownToolNames.has(TOOL_NAMES.Bash))) {
     const shellCommands: string[] = [];
     const stripped = cleaned.replace(SHELL_FENCE_PATTERN, (_match, body: string) => {
       const trimmed = body.trim();

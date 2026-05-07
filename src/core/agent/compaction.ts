@@ -3,6 +3,7 @@ import type { AgentEvent } from '../agent-types.js';
 import type { ContextManager } from '../context-manager.js';
 import type { HooksConfig } from '../config-types.js';
 import type { FileCache } from './file-cache.js';
+import { errorMessage } from '../../utils/errors.js';
 import { runHook } from '../hooks/index.js';
 
 export interface CompactionHookOptions {
@@ -131,8 +132,8 @@ async function* runPreCompactHook(
       };
     }
     return result.additionalContext;
-  } catch (err: any) {
-    const msg = err?.message ?? String(err);
+  } catch (err: unknown) {
+    const msg = errorMessage(err);
     hookOpts.onHookError?.('PreCompact', msg);
     yield { type: 'hook-error', event: 'PreCompact', error: msg };
     return undefined;

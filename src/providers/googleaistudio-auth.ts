@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
+import { errorMessage } from '../utils/errors.js';
 
 export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
 
@@ -95,8 +96,8 @@ export class GoogleAiStudioAuthManager {
     try {
       const client = await this.auth.getClient();
       return normalizeHeaders(await client.getRequestHeaders());
-    } catch (error: any) {
-      throw new Error(`${getGoogleAiStudioOAuthErrorMessage()} ${error?.message ?? ''}`.trim());
+    } catch (error: unknown) {
+      throw new Error(`${getGoogleAiStudioOAuthErrorMessage()} ${errorMessage(error)}`.trim());
     }
   }
 
