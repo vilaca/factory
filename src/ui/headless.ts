@@ -187,13 +187,23 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         case 'tool-call-start':
           process.stderr.write(`▶ ${event.toolName} ${formatArgsBrief(event.args)}\n`);
           break;
-        case 'tool-call-result':
+        case 'tool-call-result': {
           // Always emit the completion marker — pairs with the `▶ start` line
-          // above so a piped run isn't missing one half of every call. The
-          // `experimental.toolPreview` gate covers preview *body* rendering,
-          // and headless never rendered a body here.
+          // above so a piped run isn't missing one half of every call.
           process.stderr.write(`  ${event.result.success ? '✓' : '✗'} ${event.toolName}\n`);
+          // Surface the body for tool failures (success=false) and for
+          // results flagged as `important` (e.g. Bash non-zero exit). Without
+          // this a piped run sees just `✗ Bash` with no clue why — or `✓ Bash`
+          // hiding a non-zero exit code. Successful non-error bodies stay
+          // suppressed; the model has them and the piped stdout isn't the
+          // place for verbose tool output.
+          if (!event.result.success || event.result.important) {
+            for (const line of event.result.output.split('\n')) {
+              process.stderr.write(`    ${line}\n`);
+            }
+          }
           break;
+        }
         case 'tool-call-denied':
           process.stderr.write(`  (denied: ${event.toolName})\n`);
           break;

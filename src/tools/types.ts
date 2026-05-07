@@ -18,6 +18,12 @@ export interface ToolResult {
    * with zero matches). The renderer surfaces these distinctly so they don't
    * look identical to a successful "found something" call. */
   empty?: boolean;
+  /** Set when success=true but the body still needs to reach the user — the
+   * `experimental.toolPreview` gate treats this as not-noise so the body is
+   * rendered. Bash sets it for non-zero exit codes: the tool ran cleanly
+   * (so success stays true and auto-retry doesn't fire on every failing
+   * test) but the user needs to see the exit code and output. */
+  important?: boolean;
   /** Set by Bash when the command changed the working directory. The agent
    * loop reads this and updates the session's refs.cwd so the new directory
    * persists across subsequent tool calls. */

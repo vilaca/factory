@@ -55,10 +55,13 @@ export function handleAgentEvent(
       deps.setPendingToolCall(null);
       deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'ok' });
       // The toolPreview gate hides the verbose body of *successful* tool
-      // results (the noise case the flag exists to silence). Failures and
-      // empty-success still render — those carry the only signal that
-      // something went sideways, and the model already sees them.
-      const isNoise = event.result.success && !event.result.empty;
+      // results (the noise case the flag exists to silence). Failures,
+      // empty-success, and tools that flag the body as `important` still
+      // render — those carry the only signal that something went sideways,
+      // and the model already sees them. `important` is how Bash surfaces a
+      // non-zero exit (which keeps success=true so auto-retry doesn't fire
+      // on every failing test, but still needs to reach the user).
+      const isNoise = event.result.success && !event.result.empty && !event.result.important;
       if (!isNoise || deps.refs.current?.experimental?.toolPreview) {
         const preview = event.result.displayOutput ?? event.result.output;
         // Only attach the full version when it actually differs from the
