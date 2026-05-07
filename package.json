@@ -20,13 +20,17 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "tsx --test test/unit/*.test.ts",
+    "test:unit:coverage": "c8 --reporter=text --reporter=html --reporter=lcov tsx --test test/unit/*.test.ts",
     "test:e2e": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/e2e.test.js",
-    "test:only": "node --test dist-test/test/e2e.test.js"
+    "test:only": "node --test dist-test/test/e2e.test.js",
+    "coverage": "npm run test:unit:coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.92.0",
+    "@anthropic-ai/sdk": "^0.95.1",
     "@huggingface/inference": "^4.13.15",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "chalk": "^5.4.1",
@@ -35,7 +39,7 @@
     "ink": "^7.0.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
-    "ollama": "^0.5.12",
+    "ollama": "^0.6.3",
     "react": "^19.2.5"
   },
   "devDependencies": {
@@ -44,10 +48,12 @@
     "@types/react": "^19.2.14",
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
+    "c8": "^11.0.0",
     "eslint": "^10.3.0",
     "knip": "^6.11.0",
+    "prettier": "^3.8.3",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^6.0.3"
   },
   "type": "module",
   "engines": {
