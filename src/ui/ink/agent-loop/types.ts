@@ -23,7 +23,7 @@ export interface PermissionRequestState {
 
 /** Live rotation state owned by RunRefs; mirrors `agent.rotation` from the
  *  config but mutable for `/rotate`. The runtime reads this on each call. */
-export interface RotationRefs {
+interface RotationRefs {
   keysEnabled: boolean;
   modelsEnabled: boolean;
   default: RotationEntry[];

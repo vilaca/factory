@@ -18,7 +18,7 @@ import { runHook } from '../hooks/index.js';
 import * as fs from 'fs/promises';
 import { errorMessage } from '../../utils/errors.js';
 
-export interface ToolLoopContext {
+interface ToolLoopContext {
   conversation: Conversation;
   permissions: PermissionManager;
   toolRegistry: ToolRegistry;
@@ -48,7 +48,7 @@ export interface ToolLoopContext {
   onHookError?: (event: string, error: string) => void;
 }
 
-export interface ToolLoopResult {
+interface ToolLoopResult {
   deniedCount: number;
 }
 

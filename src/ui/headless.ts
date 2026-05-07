@@ -24,7 +24,7 @@ import { getBuildInfo } from '../utils/build-info.js';
 import { buildEnvironmentMessage } from '../core/system-prompt.js';
 import { runHook } from '../core/hooks/index.js';
 
-export interface HeadlessOptions {
+interface HeadlessOptions {
   model: string;
   systemPrompt: string;
   provider: Provider;

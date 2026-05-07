@@ -31,7 +31,7 @@ export function formatMessage(msg: ChatMessage): Record<string, unknown> {
  *  verbatim. Other OpenAI-compat providers must NOT send this field, so
  *  the transformation is opt-in via the `cacheControl` flag in
  *  `buildChatBody`. */
-export function formatMessageWithCacheControl(msg: ChatMessage): Record<string, unknown> {
+function formatMessageWithCacheControl(msg: ChatMessage): Record<string, unknown> {
   const base = formatMessage(msg);
   if (!msg.cacheBoundary) return base;
   // Convert plain string content into a single text block carrying the
@@ -46,7 +46,7 @@ export function formatMessageWithCacheControl(msg: ChatMessage): Record<string, 
   };
 }
 
-export interface BuildChatBodyOptions {
+interface BuildChatBodyOptions {
   model: string;
   messages: ChatMessage[];
   tools?: ToolDefinition[];

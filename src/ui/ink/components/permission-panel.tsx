@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import type { PermissionDecision } from '../../../permissions.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
 
-export interface PermissionPanelProps {
+interface PermissionPanelProps {
   toolName: string;
   /** When the tool is `WebFetch`, surface the URL's hostname inline so the
    *  user knows what they're allowing without scrolling up to the tool-call

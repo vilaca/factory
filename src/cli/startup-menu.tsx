@@ -11,7 +11,7 @@ import {
   type RecentPair,
 } from '../ui/ink/components/provider-picker.js';
 
-export interface StartupSelection {
+interface StartupSelection {
   provider: StartupProviderName;
   /** Set when the user picked a recent (provider, model) pair directly. */
   model?: string;

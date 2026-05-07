@@ -4,7 +4,7 @@ import { estimateMessagesTokens } from '../utils/tokens.js';
 import { selectWeakTier } from './agent/weak-tier.js';
 import { isError } from '../utils/errors.js';
 
-export interface ContextConfig {
+interface ContextConfig {
   compactionThreshold: number; // 0-1, fraction of context window (default 0.75)
   recencyWindow: number;       // floor on messages to keep during compaction (default 6)
   /** Soft token budget for the recency window. The actual count of kept

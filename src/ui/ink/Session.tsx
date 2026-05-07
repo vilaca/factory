@@ -34,7 +34,7 @@ const SIMPLE_PROMPT_PROVIDERS = new Set(
   DESCRIPTOR_LIST.filter(d => d.authFlow === 'simple-prompt').map(d => d.name),
 );
 
-export interface SessionProps {
+interface SessionProps {
   model: string;
   systemPrompt: string;
   provider: Provider;

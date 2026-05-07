@@ -4,7 +4,7 @@ import { TOOL_NAMES } from './tools/types.js';
 export type PermissionDecision = 'allow' | 'deny' | 'allow-all' | 'allow-domain';
 
 /** Result of evaluating whether a tool call needs to prompt the user. */
-export type PermissionEvaluation =
+type PermissionEvaluation =
   | { kind: 'allow'; source: string }
   | { kind: 'deny'; reason: string; source: string }
   | { kind: 'prompt' };

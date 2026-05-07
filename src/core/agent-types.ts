@@ -11,7 +11,7 @@ import type { EnvPolicy } from '../security/env.js';
 
 export type { PermissionDecision };
 
-export type StopReason =
+type StopReason =
   | 'completed'
   | 'user-abort'
   | 'token-limit'

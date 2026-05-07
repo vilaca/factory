@@ -64,7 +64,7 @@ const DEFAULT_DENY_PREFIXES: readonly string[] = [
   'FACTORY_',  // our own debug/state vars — no reason to expose
 ];
 
-export interface SanitizedEnv {
+interface SanitizedEnv {
   env: NodeJS.ProcessEnv;
   /** Names of vars that were dropped. Kept short — names only, no values. */
   dropped: string[];

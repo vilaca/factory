@@ -3,7 +3,7 @@
  * as parsed from `data: [...]`. Providers do their own filtering / shaping
  * (e.g. cerebras keeps `owned_by`; openrouter has rich metadata).
  */
-export interface FetchOpenAiCatalogOptions {
+interface FetchOpenAiCatalogOptions {
   url: string;
   headers: Record<string, string>;
   providerName: string;

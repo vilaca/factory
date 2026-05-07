@@ -13,14 +13,14 @@
 
 import { getBuildInfo } from '../../utils/build-info.js';
 
-export interface FetchUrlResult {
+interface FetchUrlResult {
   url: string;
   contentType: string;
   body: string;
   truncated: boolean;
 }
 
-export interface FetchUrlOptions {
+interface FetchUrlOptions {
   maxRedirects?: number;
   timeoutMs?: number;
   maxBytes?: number;
@@ -28,9 +28,9 @@ export interface FetchUrlOptions {
   fetchImpl?: typeof fetch;
 }
 
-export const DEFAULT_MAX_REDIRECTS = 5;
-export const DEFAULT_TIMEOUT_MS = 15_000;
-export const DEFAULT_MAX_BYTES = 1024 * 1024; // 1 MiB
+const DEFAULT_MAX_REDIRECTS = 5;
+const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_MAX_BYTES = 1024 * 1024; // 1 MiB
 
 function userAgent(): string {
   const v = getBuildInfo().version;

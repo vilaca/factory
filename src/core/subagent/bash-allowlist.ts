@@ -43,7 +43,7 @@ const ALLOWED_PREFIXES: readonly string[][] = [
  */
 const COMPOUND_CHARS = ['&&', '||', ';', '|', '`', '$('];
 
-export interface AllowDecision {
+interface AllowDecision {
   allowed: boolean;
   /** Populated when allowed=false: a short user-readable explanation. */
   reason?: string;
@@ -134,9 +134,4 @@ export function isCommandAllowed(command: string): AllowDecision {
     allowed: false,
     reason: `command "${tokens[0] ?? ''}" is not in the subagent allow-list`,
   };
-}
-
-/** Exposed for help text / introspection. */
-export function describeAllowList(): string {
-  return ALLOWED_PREFIXES.map(p => p.join(' ')).join(', ');
 }

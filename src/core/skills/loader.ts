@@ -21,7 +21,7 @@ export interface Skill {
   scope: 'global' | 'project';
 }
 
-export interface SkillLoadResult {
+interface SkillLoadResult {
   skills: Skill[];
   /** One per malformed/skipped file, surfaced via the session log. */
   warnings: string[];

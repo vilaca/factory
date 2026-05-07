@@ -28,7 +28,7 @@
 
 import { globToRegex } from '../utils/glob.js';
 
-export type BashDecision = 'allow' | 'deny' | 'prompt';
+type BashDecision = 'allow' | 'deny' | 'prompt';
 
 export interface BashRule {
   pattern: string;

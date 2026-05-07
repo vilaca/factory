@@ -6,7 +6,7 @@ import {
   recordTokenUsage as recordKeyTokenUsage,
 } from '../../../core/key-stats.js';
 
-export interface StreamingState {
+interface StreamingState {
   getStreamingBuffer: () => string;
   setStreamingBuffer: (s: string) => void;
   addSuccessfulToolCall: () => void;

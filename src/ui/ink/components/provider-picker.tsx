@@ -28,13 +28,13 @@ export interface ProviderEntry {
  * has access to the live Provider) and the mid-session picker (which only
  * knows model ids). When omitted, the picker just renders the model id.
  */
-export interface ModelDisplayInfo {
+interface ModelDisplayInfo {
   label?: string;
   warning?: string;
 }
 
 /** Subset of ProviderKey shown to the picker — token never crosses this surface. */
-export interface KeySummary {
+interface KeySummary {
   id: string;
   label?: string;
   /** Last-4 fingerprint of the saved token. */
@@ -43,7 +43,7 @@ export interface KeySummary {
   stats?: { ok: number; warn: number };
 }
 
-export interface ValidateResult {
+interface ValidateResult {
   ok: boolean;
   /** Model ids returned by listModels, on success. */
   models?: string[];
@@ -64,7 +64,7 @@ type Stage =
   | { kind: 'model'; provider: string; models: string[]; keyId?: string }
   | { kind: 'error'; provider: string; message: string };
 
-export interface ProviderPickerProps {
+interface ProviderPickerProps {
   /** Provider list. Use `name` only when no metadata is available. */
   providers: ProviderEntry[];
   recents: RecentPair[];

@@ -37,15 +37,7 @@ import type {
   UseAgentLoopOptions,
 } from './agent-loop/types.js';
 
-export type {
-  AgentLoopApi,
-  NoticeLevel,
-  PermissionDecision,
-  PermissionRequestState,
-  RunRefs,
-  RunState,
-  UseAgentLoopOptions,
-};
+export type { AgentLoopApi };
 
 export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [items, setItems] = useState<DisplayItem[]>([]);

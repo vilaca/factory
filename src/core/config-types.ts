@@ -61,7 +61,7 @@ export interface HooksConfig {
   StopFailure?: HookEntry[];
 }
 
-export interface WebConfig {
+interface WebConfig {
   /** Hostnames pre-seeded into the WebFetch allowlist at session start.
    *  Compared case-insensitively. Subdomain matching is exact (no wildcards
    *  yet); list each subdomain you want to allow explicitly. */
@@ -74,7 +74,7 @@ export interface RotationEntry {
   model: string;
 }
 
-export interface RotationConfig {
+interface RotationConfig {
   /** Tier 1: rotate among saved keys for the active (provider, model)
    *  before advancing to the chain. Default: true. */
   keys?: boolean;
@@ -114,7 +114,7 @@ export interface ExperimentalFlags {
 export const EXPERIMENTAL_FLAG_KEYS = ['bashDedup', 'readCache', 'lineCountHint', 'subagents', 'skills', 'hooks', 'toolPreview'] as const;
 export type ExperimentalFlagKey = typeof EXPERIMENTAL_FLAG_KEYS[number];
 
-export interface PermissionConfig {
+interface PermissionConfig {
   allowAll?: string[];
   /** Ordered list of Bash command patterns. First match wins. Patterns
    * are simple shell-style globs (`*`, `?`) matched against the raw
@@ -128,7 +128,7 @@ export interface BashRuleConfig {
   note?: string;
 }
 
-export interface SecurityConfig {
+interface SecurityConfig {
   /** Env-var policy for the Bash subprocess. Deny-by-default; these
    * extend the small built-in allowlist. */
   bashEnv?: {
@@ -166,11 +166,11 @@ export interface ProviderKey {
 }
 
 /** Keyed by canonical provider name (the value side of PROVIDER_ALIASES). */
-export interface ConfigKeys {
+interface ConfigKeys {
   [providerName: string]: ProviderKey[];
 }
 
-export interface McpConfig {
+interface McpConfig {
   servers?: McpServerConfig[];
 }
 

@@ -1,7 +1,7 @@
 import { render } from 'ink';
 import { App, type AppProps } from './App.js';
 
-export interface RenderAppResult {
+interface RenderAppResult {
   waitUntilExit: () => Promise<void>;
   unmount: () => void;
 }

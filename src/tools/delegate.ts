@@ -52,7 +52,7 @@ const definition: ToolDefinition = {
   },
 };
 
-export interface DelegateContext {
+interface DelegateContext {
   provider: Provider;
   /** The parent's currently-selected model. */
   parentModel: string;

@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
-export interface BuildInfo {
+interface BuildInfo {
   version: string;
   buildTimestamp: string;
 }

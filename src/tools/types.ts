@@ -19,7 +19,6 @@ export const TOOL_NAMES = {
   WebFetch: 'WebFetch',
   Delegate: 'Delegate',
 } as const;
-export type ToolName = typeof TOOL_NAMES[keyof typeof TOOL_NAMES];
 
 export interface ToolDefinition {
   type: 'function';

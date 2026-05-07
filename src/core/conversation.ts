@@ -7,7 +7,7 @@ const DEFAULT_MAX_TOOL_RESULT_TOKENS = 6_000;
  *  larger than the cap. Keep the shape stable — `ageOldToolResults`
  *  produces the same template, and tooling that greps session JSONL for
  *  elisions matches on this prefix. */
-export function elisionStub(toolName: string, byteLength: number): string {
+function elisionStub(toolName: string, byteLength: number): string {
   const kb = Math.max(1, Math.round(byteLength / 1024));
   return `[elided: tool=${toolName} size=${kb}kB — too large for context, ask again or narrow the call]`;
 }

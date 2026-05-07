@@ -1,7 +1,7 @@
 import type { Provider } from '../providers/types.js';
 import { errorMessage } from '../utils/errors.js';
 
-export type ValidationResult =
+type ValidationResult =
   | { mode: 'native' }
   | { mode: 'fallback'; warning: string }
   | { mode: 'unreachable'; reason: string };

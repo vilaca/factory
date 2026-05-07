@@ -56,7 +56,7 @@ export function startSessionLogger(
   }
 }
 
-export interface InitialRefsInput {
+interface InitialRefsInput {
   opts: UseAgentLoopOptions;
   sessionLogger: SessionLogger | undefined;
   initialSystemPrompt: string;
