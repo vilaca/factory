@@ -82,8 +82,15 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         gitDirty: options.gitDirty,
       });
       sessionLogger.logUserInput(userInput);
-    } catch {
-      // Logging failures must never break headless runs.
+    } catch (err: unknown) {
+      // Logger init may fail (e.g. ~/.factory/sessions not writable, disk
+      // full). Surface it on stderr — a piped run that thinks it's logging
+      // when it isn't is a worse outcome than a noisy stderr line. Don't
+      // abort: the run can still produce useful stdout, and the session log
+      // is observability, not a hard dependency.
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`factory: session log unavailable — ${msg}\n`);
+      sessionLogger = undefined;
     }
   }
 
