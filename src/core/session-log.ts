@@ -69,7 +69,14 @@ export interface ProviderAuthMeta {
 
 const STARTUP_MODEL_PLACEHOLDER = '<startup>';
 
-export function createSessionLogger(): SessionLogger {
+export interface SessionLoggerOpts {
+  /** Called once, after the first write failure (and after the default
+   *  stderr surface fires). Strict-logging callers use this to escalate —
+   *  e.g. `process.exit` from headless mode when --strict-log is set. */
+  onWriteError?: (err: unknown) => void;
+}
+
+export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
   const dir = path.join(os.homedir(), '.factory', 'sessions');
   fs.mkdirSync(dir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -77,13 +84,26 @@ export function createSessionLogger(): SessionLogger {
   const filePath = path.join(dir, `${ts}-${id}.jsonl`);
   const fd = fs.openSync(filePath, 'a');
   let closed = false;
+  let writeFailureNotified = false;
 
   const write = (entry: Record<string, unknown>): void => {
     if (closed) return;
     try {
       fs.writeSync(fd, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n');
-    } catch {
-      // Logging failures must never crash the REPL
+    } catch (err) {
+      // Surface the first failure to stderr so the user knows the log went
+      // dark — silent loss is worse than a one-time stderr line. Subsequent
+      // failures stay silent so a full disk doesn't flood stderr per write.
+      // Don't propagate: a logging error must not crash the REPL or agent
+      // loop by default, since logging is observability, not a hard
+      // dependency. Strict-logging callers can hook via opts.onWriteError
+      // to escalate (e.g. process.exit) when the workload requires logs.
+      if (!writeFailureNotified) {
+        writeFailureNotified = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`factory: session log write failed (${filePath}) — ${msg}\n`);
+        opts?.onWriteError?.(err);
+      }
     }
   };
 

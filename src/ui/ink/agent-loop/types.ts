@@ -112,6 +112,10 @@ export interface UseAgentLoopOptions {
   useTextToolFallback?: boolean;
   nativeToolSupport?: boolean;
   enableSessionLog?: boolean;
+  /** When true, session-log failures (init or first write) terminate the
+   *  process with a dedicated exit code. Off by default. Wired from
+   *  --strict-log; meant for audit-grade workloads (CI, scripted runs). */
+  strictLogging?: boolean;
   planMode?: boolean;
   enableCorrector?: boolean;
   mcpInfo?: { servers: string[]; toolCount: number };
