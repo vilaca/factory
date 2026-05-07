@@ -17,7 +17,7 @@
  * rather than throwing. Malformed input is the common case here, not the
  * exception, and the caller can re-validate the result.
  */
-export function* iterateJsonObjectRanges(text: string): Generator<{ start: number; end: number }> {
+function* iterateJsonObjectRanges(text: string): Generator<{ start: number; end: number }> {
   let depth = 0;
   let start = -1;
   let inString = false;

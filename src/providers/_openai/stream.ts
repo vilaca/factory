@@ -8,7 +8,7 @@ import {
 } from './tool-calls.js';
 import { extractUsage } from './usage.js';
 
-export interface OpenAiChatRequest {
+interface OpenAiChatRequest {
   url: string;
   headers: Record<string, string>;
   body: Record<string, unknown>;

@@ -24,7 +24,7 @@ const COPILOT_INTEGRATION_ID = 'vscode-chat';
 const USER_AGENT = `factory/${readPackageVersion()}`;
 const TOKEN_REFRESH_SKEW_MS = 60_000;
 
-export interface CopilotAuthOptions {
+interface CopilotAuthOptions {
   githubToken?: string;
   copilotToken?: string;
   host?: string;
@@ -63,7 +63,7 @@ interface CopilotSession {
   chatEnabled: boolean;
 }
 
-export interface DeviceAuthPrompt {
+interface DeviceAuthPrompt {
   userCode: string;
   verificationUri: string;
   expiresIn: number;

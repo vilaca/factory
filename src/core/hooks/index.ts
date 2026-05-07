@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import type { HookEntry, HooksConfig } from '../config-types.js';
-import { resolveHooks, listAllHooks, type HookEvent } from './discovery.js';
+import { resolveHooks, type HookEvent } from './discovery.js';
 import { sanitizeEnv } from '../../security/env.js';
 import type { EnvPolicy } from '../../security/env.js';
 import { checkForbidden } from '../../security/bash-rules.js';
@@ -20,9 +20,6 @@ function getSanitizedEnv(policy: EnvPolicy): NodeJS.ProcessEnv {
   sanitizedEnvCache = { policy, env };
   return env;
 }
-
-export type { HookEvent };
-export { resolveHooks, listAllHooks };
 
 /**
  * Result of running one or more hooks for a single event.
@@ -49,7 +46,7 @@ export { resolveHooks, listAllHooks };
  * - `errors`: per-hook execution errors (timeouts, malformed JSON, non-zero
  *   exits, spawn failures). Logged to the session log; never thrown.
  */
-export interface HookResult {
+interface HookResult {
   cancel: boolean;
   errorMessage?: string;
   additionalContext?: string;
@@ -58,7 +55,7 @@ export interface HookResult {
   errors: string[];
 }
 
-export interface RunHookOptions {
+interface RunHookOptions {
   /** Working directory used as cwd for the spawned hook. */
   cwd: string;
   /** Hook config to resolve entries from. Ignored when `entries` is supplied

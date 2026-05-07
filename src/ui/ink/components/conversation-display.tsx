@@ -7,7 +7,7 @@ import { AssistantText } from './assistant-text.js';
 import { Spinner } from './spinner.js';
 import { Separator } from './separator.js';
 
-export interface ConversationDisplayProps {
+interface ConversationDisplayProps {
   items: DisplayItem[];
   streamingText: string;
   /** Tool call rendered live in the dynamic region while we wait for the

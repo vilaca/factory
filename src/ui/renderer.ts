@@ -46,7 +46,7 @@ function formatExperimentalFlags(flags: ExperimentalFlags | undefined): string {
     .join(', ');
 }
 
-export const LOGO_LETTERS_LEET: ReadonlyArray<{ color: string; rows: string[] }> = [
+const LOGO_LETTERS_LEET: ReadonlyArray<{ color: string; rows: string[] }> = [
   {
     color: '#FFD93D',
     rows: [
@@ -126,7 +126,7 @@ export const LOGO_LETTERS_LEET: ReadonlyArray<{ color: string; rows: string[] }>
   },
 ];
 
-export const LOGO_LETTERS: ReadonlyArray<{ color: string; rows: string[] }> = [
+const LOGO_LETTERS: ReadonlyArray<{ color: string; rows: string[] }> = [
   {
     color: '#FFD93D',
     rows: [
@@ -220,10 +220,6 @@ function renderLogoFrame(shift: number): string {
     lines.push('  ' + segments.join(''));
   }
   return lines.join('\n');
-}
-
-export function renderLogo(): string {
-  return renderLogoFrame(LOGO_LETTERS.length);
 }
 
 export async function animateLogo(frameMs = 220): Promise<void> {

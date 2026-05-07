@@ -43,9 +43,9 @@ export interface ChatChunk {
   doneReason?: string;
 }
 
-export type ToolSupportLevel = 'native' | 'basic' | 'none';
+type ToolSupportLevel = 'native' | 'basic' | 'none';
 export type ModelTier = 'strong' | 'medium' | 'weak';
-export type TokenCountingMethod = 'exact' | 'estimated';
+type TokenCountingMethod = 'exact' | 'estimated';
 
 export interface ProviderCapabilities {
   contextWindow: number;

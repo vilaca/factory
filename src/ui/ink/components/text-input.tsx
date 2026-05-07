@@ -9,7 +9,7 @@ import chalk from 'chalk';
  * into the prompt. Child `useInput` listeners fire before parent ones, so
  * an after-the-fact suppression flag wouldn't work either.
  */
-export interface TextInputProps {
+interface TextInputProps {
   value: string;
   onChange: (next: string) => void;
   onSubmit?: (value: string) => void;

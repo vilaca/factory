@@ -67,7 +67,7 @@ export function buildSubagentRegistry(): ToolRegistry {
   return registry;
 }
 
-export interface SubagentResult {
+interface SubagentResult {
   /** The final assistant text the subagent produced before stopping. */
   finalText: string;
   /** Number of turns the subagent actually used. */
@@ -85,9 +85,9 @@ export interface SubagentResult {
  *  a chatty model could investigate forever in a default-on configuration.
  *  30 is well above the typical 3–8 read-only tool calls a real
  *  investigation needs, while still bounding the worst case. */
-export const SUBAGENT_TOOL_CALL_LIMIT = 30;
+const SUBAGENT_TOOL_CALL_LIMIT = 30;
 
-export interface SubagentRunOptions {
+interface SubagentRunOptions {
   provider: Provider;
   model: string;
   task: string;

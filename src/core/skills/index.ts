@@ -2,8 +2,7 @@ import type { Skill } from './loader.js';
 import { loadSkills } from './loader.js';
 import { shouldInjectSkill, type MatchContext } from './matcher.js';
 
-export type { Skill, MatchContext };
-export { loadSkills, shouldInjectSkill };
+export { loadSkills };
 
 /**
  * In-memory registry created once per session. Owns the list of loaded skills,

@@ -7,7 +7,7 @@ import { dispatchKeys } from './slash/keys.js';
 import { dispatchStats } from './slash/stats.js';
 import { dispatchHooks } from './slash/hooks.js';
 
-export interface SlashCommandContext {
+interface SlashCommandContext {
   agent: AgentLoopApi;
   exit: () => void;
   tabs?: TabsContextValue;

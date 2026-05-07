@@ -8,7 +8,7 @@
  * with a different key won't help).
  */
 
-export type RotationReason = 'rate-limit' | 'auth' | 'other';
+type RotationReason = 'rate-limit' | 'auth' | 'other';
 
 const RATE_RE = /(\b429\b|rate[ -]?limit|throttl|too many requests|insufficient[_ ]?quota|quota[_ ]?exceeded)/i;
 const AUTH_RE = /(\b401\b|\b403\b|unauthorized|forbidden|invalid[ _-]?api[ _-]?key|invalid_api_key|authentication[_ -]error|api[_ -]?key[_ -]?expired)/i;

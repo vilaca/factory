@@ -2,7 +2,7 @@ import React from 'react';
 import os from 'os';
 import { Box, Text } from 'ink';
 
-export interface StatusBarProps {
+interface StatusBarProps {
   planMode: boolean;
   state: 'idle' | 'running' | 'awaiting-permission';
   providerName: string;

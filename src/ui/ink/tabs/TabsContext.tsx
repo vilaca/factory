@@ -1,7 +1,7 @@
 import React, { createContext, useState, useRef, useCallback, useMemo } from 'react';
 import { TabsRegistry } from './tabs-registry.js';
 
-export interface Tab {
+interface Tab {
   id: number;
   label: string;
 }
@@ -23,7 +23,7 @@ export interface TabsContextValue {
 
 export const TabsContext = createContext<TabsContextValue | null>(null);
 
-export interface TabsProviderProps {
+interface TabsProviderProps {
   children: React.ReactNode;
   initialLabel?: string;
 }

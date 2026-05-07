@@ -17,7 +17,7 @@ export type StartupProviderName =
   | 'cohere'
   | 'workersai';
 
-export type AuthFlow = 'none' | 'simple-prompt' | 'device-flow' | 'oauth-or-key';
+type AuthFlow = 'none' | 'simple-prompt' | 'device-flow' | 'oauth-or-key';
 
 export interface ProviderDescriptor {
   name: StartupProviderName;

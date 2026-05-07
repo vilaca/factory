@@ -4,7 +4,7 @@ import path from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
 import { errorMessage } from '../utils/errors.js';
 
-export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
+type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
 
 type HeaderMap = Record<string, string>;
 
@@ -16,7 +16,7 @@ interface GoogleAuthLike {
   getClient(): Promise<GoogleAuthClientLike>;
 }
 
-export interface GoogleAiStudioAuthOptions {
+interface GoogleAiStudioAuthOptions {
   apiKey?: string;
   authMode?: GoogleAiStudioAuthMode;
   auth?: GoogleAuthLike;

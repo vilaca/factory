@@ -566,7 +566,7 @@ function mergeConfigs(...configs: Config[]): Config {
   return result;
 }
 
-export interface CliOverrides {
+interface CliOverrides {
   provider?: string;
   model?: string;
   host?: string;

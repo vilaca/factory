@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
-export interface RotationPromptPanelProps {
+interface RotationPromptPanelProps {
   provider: string;
   model: string;
   reason: 'rate-limit' | 'auth';

@@ -7,7 +7,7 @@ export function formatToolResultMessage(toolName: string, output: string): strin
   return `${RESULT_OPEN} name="${toolName}">>\n${output}\n${RESULT_CLOSE}`;
 }
 
-export interface StripResult {
+interface StripResult {
   cleaned: string;
   strippedCount: number;
 }

@@ -70,7 +70,7 @@ function sanitizeToolCalls(
   });
 }
 
-export interface ModelCallResult {
+interface ModelCallResult {
   fullContent: string;
   toolCalls: ToolCallMessage[];
   lastUsage: TokenUsage | undefined;

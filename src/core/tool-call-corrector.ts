@@ -13,7 +13,7 @@ Output rules:
 - Never invent file content. Use the file content provided.
 - Never repeat the original call unchanged — that would just fail again.`;
 
-export interface CorrectionRequest {
+interface CorrectionRequest {
   originalCall: ToolCallMessage;
   errorMessage: string;
   /** User's most recent substantive task description, for intent. */
@@ -22,17 +22,17 @@ export interface CorrectionRequest {
   fileContent?: { path: string; content: string };
 }
 
-export interface CorrectionResult {
+interface CorrectionResult {
   kind: 'corrected';
   call: ToolCallMessage;
 }
 
-export interface AbortResult {
+interface AbortResult {
   kind: 'abort';
   reason: string;
 }
 
-export type CorrectorOutcome = CorrectionResult | AbortResult;
+type CorrectorOutcome = CorrectionResult | AbortResult;
 
 export async function correctToolCall(
   request: CorrectionRequest,

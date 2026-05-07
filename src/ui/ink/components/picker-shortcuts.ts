@@ -19,14 +19,14 @@ export function indexForShortcut(input: string): number {
   return -1;
 }
 
-export const STATUS_LABELS: Record<SessionErrorStatus, string> = {
+const STATUS_LABELS: Record<SessionErrorStatus, string> = {
   throttle: 'throttled',
   quota: 'out of quota',
   permission: 'permission denied',
   error: 'error',
 };
 
-export const STATUS_COLORS: Record<SessionErrorStatus, (s: string) => string> = {
+const STATUS_COLORS: Record<SessionErrorStatus, (s: string) => string> = {
   throttle: chalk.yellow,
   quota: chalk.red,
   permission: chalk.red,

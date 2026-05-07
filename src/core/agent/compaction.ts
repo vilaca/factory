@@ -7,7 +7,7 @@ import type { FileCache } from './file-cache.js';
 import { errorMessage } from '../../utils/errors.js';
 import { runHook } from '../hooks/index.js';
 
-export interface CompactionHookOptions {
+interface CompactionHookOptions {
   hooksEnabled?: boolean;
   /** Live cwd holder; we dereference at each hook fire so PreCompact picks
    *  up project-local hooks even after Bash `cd`'d mid-turn. */
@@ -18,7 +18,7 @@ export interface CompactionHookOptions {
   onHookError?: (event: string, error: string) => void;
 }
 
-export interface CompactionDecision {
+interface CompactionDecision {
   /** True when usage stays above the hard ceiling and the agent should halt. */
   halt: boolean;
 }

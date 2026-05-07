@@ -6,7 +6,7 @@ import {
   getGitStatusSnippet,
 } from '../../../core/system-prompt.js';
 
-export interface SystemPromptParts {
+interface SystemPromptParts {
   baseSystemPrompt: string;
   useTextToolFallback: boolean;
   planMode: boolean;

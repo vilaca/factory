@@ -3,7 +3,7 @@ import type { AgentEvent } from '../agent-types.js';
 import { parseTextToolCalls } from '../text-tool-parser.js';
 import { stripImitatedToolResults } from '../tool-result-format.js';
 
-export interface ParsedResponse {
+interface ParsedResponse {
   storedContent: string;
   toolCalls: ToolCallMessage[];
   recoveredFromText: boolean;

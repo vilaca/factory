@@ -86,7 +86,7 @@ function builtinDenyPaths(): string[] {
   ];
 }
 
-export interface PathCheckResult {
+interface PathCheckResult {
   ok: boolean;
   /** When ok=false, the rule that matched (built-in or user). */
   matchedRule?: string;
@@ -219,6 +219,3 @@ export async function buildDenyMatcher(
   const denied = await buildDenySet(policy);
   return (candidate: string) => matchDeny(path.resolve(candidate), denied);
 }
-
-// Exported for tests.
-export const __testing = { builtinDenyPaths, resolveForCheck };

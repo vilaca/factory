@@ -1,9 +1,9 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
-export type PlanInputKind = 'approve' | 'cancel' | 'revise';
+type PlanInputKind = 'approve' | 'cancel' | 'revise';
 
-export interface PlanApprovalPanelProps {
+interface PlanApprovalPanelProps {
   count: number;
 }
 

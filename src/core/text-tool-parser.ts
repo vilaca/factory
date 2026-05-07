@@ -9,9 +9,9 @@ const SHELL_FENCE_PATTERN = /```(?:bash|sh|shell|console)\s*\n([\s\S]*?)\n```/g;
 const FUNCTION_TAG_PATTERN = /<function=([^>\s]+)>([\s\S]*?)<\/function>/g;
 const PARAMETER_TAG_PATTERN = /<parameter=([^>\s]+)>([\s\S]*?)<\/parameter>/g;
 
-export type ParseSource = 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag';
+type ParseSource = 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag';
 
-export interface ParseResult {
+interface ParseResult {
   toolCalls: ToolCallMessage[];
   cleanedContent: string;
   malformedCount: number;

@@ -4,7 +4,7 @@ import os from 'os';
 import crypto from 'crypto';
 import type { AgentEvent } from './agent-types.js';
 
-export interface SessionStartMeta {
+interface SessionStartMeta {
   model: string;
   provider: string;
   cwd: string;
@@ -40,7 +40,7 @@ export interface SessionLogger {
   close(): void;
 }
 
-export interface LastSessionSelection {
+interface LastSessionSelection {
   provider: string;
   model: string;
   /** Set when the session was opened against a specific saved key. Older
@@ -60,7 +60,7 @@ export interface RecentSession {
   keyId?: string;
 }
 
-export interface ProviderAuthMeta {
+interface ProviderAuthMeta {
   provider: string;
   action: string;
   outcome: 'started' | 'success' | 'error' | 'skipped';
@@ -69,7 +69,7 @@ export interface ProviderAuthMeta {
 
 const STARTUP_MODEL_PLACEHOLDER = '<startup>';
 
-export interface SessionLoggerOpts {
+interface SessionLoggerOpts {
   /** Called once, after the first write failure (and after the default
    *  stderr surface fires). Strict-logging callers use this to escalate —
    *  e.g. `process.exit` from headless mode when --strict-log is set. */
@@ -168,7 +168,7 @@ export function sessionsDir(): string {
   return path.join(os.homedir(), '.factory', 'sessions');
 }
 
-export interface ProviderLogEvent {
+interface ProviderLogEvent {
   provider: string;
   category: 'auth' | 'diagnostic' | 'startup';
   action: string;

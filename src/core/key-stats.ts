@@ -13,7 +13,7 @@ import { writeFileAtomic } from '../utils/atomic-write.js';
  * for "is this key healthy?" reporting.
  */
 
-export interface KeyStat {
+interface KeyStat {
   successCount: number;
   rateLimitCount: number;
   authErrorCount: number;
@@ -30,7 +30,7 @@ export interface KeyStat {
   lastCacheReadAt?: string;
 }
 
-export interface AllKeyStats {
+interface AllKeyStats {
   [provider: string]: { [keyId: string]: KeyStat };
 }
 

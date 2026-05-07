@@ -16,7 +16,7 @@
 import * as fs from 'fs/promises';
 import { createHash } from 'crypto';
 
-export interface FileCacheEntry {
+interface FileCacheEntry {
   path: string;
   mtimeMs: number;
   size: number;
