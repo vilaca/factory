@@ -1,4 +1,5 @@
 import { runAgent } from '../../../core/agent.js';
+import { getPathPolicy, getEnvPolicy } from '../../../security/policy-state.js';
 import type { RotationOptions } from '../../../core/agent-types.js';
 import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
@@ -157,6 +158,12 @@ export async function runAgentLoopInternal(
     fileCache: deps.refs.current.fileCache,
     signal: deps.refs.current.abort.signal,
     cwdRef,
+    // Snapshot the policy here so tools never reach into process-global
+    // state during execution. The singleton remains the boot-time storage
+    // (set once from config in index.ts), but the agent loop is the only
+    // reader — every tool gets it via ToolContext.
+    pathPolicy: getPathPolicy(),
+    envPolicy: getEnvPolicy(),
     hooksConfig: deps.agentConfig?.hooks,
     onHookStderr: (command, chunk) =>
       deps.refs.current?.sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),

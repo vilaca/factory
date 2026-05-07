@@ -14,6 +14,8 @@ import { Conversation } from '../core/conversation.js';
 import { ContextManager } from '../core/context-manager.js';
 import { PermissionManager } from '../permissions.js';
 import { runAgent } from '../core/agent.js';
+import { getPathPolicy, getEnvPolicy } from '../security/policy-state.js';
+import { errorMessage } from '../utils/errors.js';
 import { FileCache } from '../core/agent/file-cache.js';
 import { defaultRegistry } from '../tools/index.js';
 import { createSessionLogger, type SessionLogger } from '../core/session-log.js';
@@ -136,8 +138,8 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         );
       }
       sessionStartContext = r.additionalContext;
-    } catch (err: any) {
-      onHookError('SessionStart', err?.message ?? String(err));
+    } catch (err: unknown) {
+      onHookError('SessionStart', errorMessage(err));
     }
   }
 
@@ -198,6 +200,11 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       // a one-shot run), so a static holder is sufficient. The TUI passes a
       // live mutable holder updated by Bash; headless does not.
       cwdRef: { current: cwd },
+      // Snapshot the policy at agent start so tools see it via ToolContext
+      // and don't reach into process-global state at execute() time. See
+      // run-loop.ts for the same plumbing on the TUI side.
+      pathPolicy: getPathPolicy(),
+      envPolicy: getEnvPolicy(),
       hooksConfig: options.agentConfig?.hooks,
       onHookStderr,
       onHookError,
@@ -356,8 +363,8 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           { cwd, config: options.agentConfig?.hooks, onStderr: onHookStderr },
         );
         for (const e of r.errors) onHookError('SessionEnd', e);
-      } catch (err: any) {
-        onHookError('SessionEnd', err?.message ?? String(err));
+      } catch (err: unknown) {
+        onHookError('SessionEnd', errorMessage(err));
       }
     }
     sessionLogger?.logSessionEnd();

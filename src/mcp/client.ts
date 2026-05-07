@@ -3,6 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import type { McpServerConfig } from './types.js';
 import type { ToolHandler } from '../tools/types.js';
 import { adaptMcpTool } from './adapter.js';
+import { errorMessage } from '../utils/errors.js';
 
 interface McpConnection {
   client: Client;
@@ -63,8 +64,8 @@ export class McpManager {
       try {
         const tools = await this.connectServer(config);
         allTools.push(...tools);
-      } catch (err: any) {
-        console.error(`Failed to connect MCP server "${config.name}": ${err.message}`);
+      } catch (err: unknown) {
+        console.error(`Failed to connect MCP server "${config.name}": ${errorMessage(err)}`);
       }
     }
 

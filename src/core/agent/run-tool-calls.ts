@@ -3,6 +3,9 @@ import type { AgentEvent, PermissionDecision } from '../agent-types.js';
 import type { HooksConfig } from '../config-types.js';
 import type { ToolRegistry } from '../../tools/registry.js';
 import type { ToolResult } from '../../tools/types.js';
+import { TOOL_NAMES } from '../../tools/types.js';
+import type { PathPolicy } from '../../security/paths.js';
+import type { EnvPolicy } from '../../security/env.js';
 import type { Conversation } from '../conversation.js';
 import type { PermissionManager } from '../../permissions.js';
 import { formatToolResultMessage } from '../tool-result-format.js';
@@ -13,6 +16,7 @@ import type { BashDedupTracker } from './bash-dedup.js';
 import { FileCache } from './file-cache.js';
 import { runHook } from '../hooks/index.js';
 import * as fs from 'fs/promises';
+import { errorMessage } from '../../utils/errors.js';
 
 export interface ToolLoopContext {
   conversation: Conversation;
@@ -33,6 +37,11 @@ export interface ToolLoopContext {
    * to RunRefs after the loop completes. Optional so headless callers can
    * skip it. */
   cwdRef?: { current: string };
+  /** Path-policy deny extensions (built-in deny list always applies). The
+   * loop forwards this verbatim to each tool's ToolContext. */
+  pathPolicy?: PathPolicy;
+  /** Env-policy allow extensions for Bash. Same plumbing as pathPolicy. */
+  envPolicy?: EnvPolicy;
   hooksEnabled?: boolean;
   hooksConfig?: HooksConfig;
   onHookStderr?: (command: string, chunk: string) => void;
@@ -63,6 +72,14 @@ export async function* runToolCalls(
 ): AsyncGenerator<AgentEvent, ToolLoopResult> {
   let deniedCount = 0;
 
+  // Strict sequential execution is load-bearing here, not an implementation
+  // detail. Bash can mutate ctx.cwdRef.current via cwdAfter (so a `cd` in
+  // one call is visible to the next), and the read-cache short-circuit
+  // assumes earlier results are already committed to ctx.fileCache. A
+  // future refactor that parallelizes this loop must first redesign cwd
+  // propagation (probably: each Bash call gets a snapshot of cwd, the
+  // last-completed cwdAfter wins — but "last" isn't well-defined under
+  // parallel execution, so this needs explicit policy).
   for (const toolCall of toolCalls) {
     if (ctx.signal?.aborted) {
       const err = new Error('aborted');
@@ -74,7 +91,7 @@ export async function* runToolCalls(
     // session, the prior result is still in conversation (not compacted away),
     // and the file's fingerprint matches, return a one-liner instead of
     // re-sending the full content. Saves real tokens on repeat reads.
-    if (ctx.fileCache && toolCall.function?.name === 'Read') {
+    if (ctx.fileCache && toolCall.function?.name === TOOL_NAMES.Read) {
       const synthetic = yield* tryReadCacheHit(toolCall, ctx);
       if (synthetic) continue;
     }
@@ -126,9 +143,10 @@ export async function* runToolCalls(
           yield { type: 'tool-call-denied', toolName: fnName, args: fnArgs as Record<string, unknown> };
           continue;
         }
-      } catch (err: any) {
-        ctx.onHookError?.('PreToolUse', err?.message ?? String(err));
-        yield { type: 'hook-error', event: 'PreToolUse', error: err?.message ?? String(err) };
+      } catch (err: unknown) {
+        const msg = errorMessage(err);
+        ctx.onHookError?.('PreToolUse', msg);
+        yield { type: 'hook-error', event: 'PreToolUse', error: msg };
       }
     }
 
@@ -190,9 +208,10 @@ export async function* runToolCalls(
             ...(result.notice ? { notice: result.notice } : {}),
           };
         }
-      } catch (err: any) {
-        ctx.onHookError?.(postEvent, err?.message ?? String(err));
-        yield { type: 'hook-error', event: postEvent, error: err?.message ?? String(err) };
+      } catch (err: unknown) {
+        const msg = errorMessage(err);
+        ctx.onHookError?.(postEvent, msg);
+        yield { type: 'hook-error', event: postEvent, error: msg };
       }
     }
 
@@ -200,7 +219,7 @@ export async function* runToolCalls(
     // a one-shot nudge so it stops trying micro-variations.
     if (
       ctx.bashDedup &&
-      toolCall.function?.name === 'Bash'
+      toolCall.function?.name === TOOL_NAMES.Bash
     ) {
       const cmd = String((toolCall.function?.arguments as Record<string, unknown> | undefined)?.command ?? '');
       if (cmd && ctx.bashDedup.observe(cmd)) {
@@ -311,16 +330,16 @@ async function* tryReadCacheHit(
   const fp = await FileCache.stamp(path, cached);
   if (!fp || fp.mtimeMs !== cached.mtimeMs || fp.hash !== cached.hash) return false;
 
-  yield { type: 'tool-call-start', toolName: 'Read', args: args ?? {} };
+  yield { type: 'tool-call-start', toolName: TOOL_NAMES.Read, args: args ?? {} };
   yield { type: 'read-cache-hit', path, afterCompaction: false };
   const message = `[Read cache hit: ${path} unchanged since your previous Read in this session (sha256:${cached.hash.slice(0, 16)}…). Refer to that earlier Read result for content.]`;
   if (ctx.useUserResultFraming) {
-    ctx.conversation.addUser(formatToolResultMessage('Read', message));
+    ctx.conversation.addUser(formatToolResultMessage(TOOL_NAMES.Read, message));
   } else {
-    ctx.conversation.addToolResult(message, toolCall.id, 'Read');
+    ctx.conversation.addToolResult(message, toolCall.id, TOOL_NAMES.Read);
   }
   const result: ToolResult = { success: true, output: message, displayOutput: message };
-  yield { type: 'tool-call-result', toolName: 'Read', args: args ?? {}, result };
+  yield { type: 'tool-call-result', toolName: TOOL_NAMES.Read, args: args ?? {}, result };
   return true;
 }
 
@@ -329,11 +348,11 @@ async function maintainFileCache(toolCall: ToolCallMessage, cache: FileCache): P
   const args = toolCall.function?.arguments as Record<string, unknown> | undefined;
   const path = typeof args?.file_path === 'string' ? args.file_path : null;
   if (!path) return;
-  if (fnName === 'Edit' || fnName === 'Write') {
+  if (fnName === TOOL_NAMES.Edit || fnName === TOOL_NAMES.Write) {
     cache.invalidate(path);
     return;
   }
-  if (fnName === 'Read') {
+  if (fnName === TOOL_NAMES.Read) {
     const fp = await FileCache.stamp(path, cache.get(path));
     if (fp) cache.record(path, fp);
   }
@@ -425,7 +444,7 @@ async function* executeToolCall(
   // can also pre-resolve to allow/deny without prompting. See
   // src/security/bash-rules.ts.
   let bashPolicyAllowed = false;
-  if (tool.name === 'Bash') {
+  if (tool.name === TOOL_NAMES.Bash) {
     const command = typeof args.command === 'string' ? args.command : '';
     if (command) {
       const policyEval = permissions.evaluateBashCommand(command);
@@ -446,7 +465,7 @@ async function* executeToolCall(
   // for this URL even though `WebFetch` itself isn't in `allowedTools`.
   let webFetchHostname: string | undefined;
   let webFetchAlreadyAllowed = false;
-  if (tool.name === 'WebFetch') {
+  if (tool.name === TOOL_NAMES.WebFetch) {
     const rawUrl = typeof args.url === 'string' ? args.url : '';
     try {
       webFetchHostname = new URL(rawUrl).hostname.toLowerCase();
@@ -509,7 +528,14 @@ async function* executeToolCall(
   }
 
   try {
-    const toolCtx = ctx.cwdRef ? { cwd: ctx.cwdRef.current } : undefined;
+    const toolCtx = ctx.cwdRef
+      ? {
+          cwd: ctx.cwdRef.current,
+          pathPolicy: ctx.pathPolicy,
+          envPolicy: ctx.envPolicy,
+          signal: ctx.signal,
+        }
+      : undefined;
     const result = await tool.execute(args, toolCtx);
     // Bash signals cwd changes via cwdAfter; propagate so subsequent tools in
     // this turn (and the next turn) see the new directory.
@@ -518,8 +544,8 @@ async function* executeToolCall(
     }
     recordResult(result.output, tool.name);
     yield { type: 'tool-call-result', toolName: tool.name, args, result };
-  } catch (err: any) {
-    const errMsg = `Tool execution error: ${err.message}`;
+  } catch (err: unknown) {
+    const errMsg = `Tool execution error: ${errorMessage(err)}`;
     recordResult(errMsg, tool.name);
     yield {
       type: 'tool-call-result',

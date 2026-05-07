@@ -1,13 +1,14 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, PathDenied } from '../security/paths.js';
-import { getPathPolicy } from '../security/policy-state.js';
+import { errorMessage } from '../utils/errors.js';
 
 const definition: ToolDefinition = {
   type: 'function',
   function: {
-    name: 'Edit',
+    name: TOOL_NAMES.Edit,
     description: 'Perform exact string replacement in a file. The old_string must appear exactly once in the file. Use this instead of sed/awk.',
     parameters: {
       type: 'object',
@@ -44,23 +45,27 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   const absPath = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
   let resolved: string;
   try {
-    resolved = await assertPathAllowed(absPath, getPathPolicy());
+    resolved = await assertPathAllowed(absPath, ctx?.pathPolicy);
   } catch (err) {
     if (err instanceof PathDenied) return { success: false, output: err.message };
     throw err;
   }
 
   try {
-    const content = await fs.readFile(resolved, 'utf-8');
+    const content = await fs.readFile(resolved, { encoding: 'utf-8', signal: ctx?.signal });
 
     const matchLines = findMatchLines(content, oldString);
     if (matchLines.length === 1) {
-      const newContent = content.replace(oldString, newString);
+      // Function replacer takes new_string literally — a string replacement
+      // would interpret `$1`, `$&`, `$'`, `` $` ``, `$$` as patterns and
+      // mangle replacements that contain them (e.g. shell snippets, regex
+      // examples, currency-with-dollar-amount).
+      const newContent = content.replace(oldString, () => newString);
       const validation = validateStructuredFile(resolved, newContent);
       if (!validation.ok) {
         return rejectStructured(resolved, validation.format, validation.error);
       }
-      await fs.writeFile(resolved, newContent, 'utf-8');
+      await fs.writeFile(resolved, newContent, { encoding: 'utf-8', signal: ctx?.signal });
       return { success: true, output: `Edited ${resolved}: replaced 1 occurrence at line ${matchLines[0]}` };
     }
 
@@ -77,12 +82,12 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     const fuzzy = fuzzyMatch(content, oldString);
     if (fuzzy.kind === 'unique') {
       const adjustedNew = reindent(oldString, fuzzy.matched, newString);
-      const newContent = content.replace(fuzzy.matched, adjustedNew);
+      const newContent = content.replace(fuzzy.matched, () => adjustedNew);
       const validation = validateStructuredFile(resolved, newContent);
       if (!validation.ok) {
         return rejectStructured(resolved, validation.format, validation.error);
       }
-      await fs.writeFile(resolved, newContent, 'utf-8');
+      await fs.writeFile(resolved, newContent, { encoding: 'utf-8', signal: ctx?.signal });
       return {
         success: true,
         output:
@@ -107,8 +112,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
         `Re-read the file with the Read tool to get the exact text — ` +
         `whitespace, indentation, and line endings must match exactly.`,
     };
-  } catch (err: any) {
-    return { success: false, output: `Error editing ${resolved}: ${err.message}` };
+  } catch (err: unknown) {
+    return { success: false, output: `Error editing ${resolved}: ${errorMessage(err)}` };
   }
 }
 
@@ -121,8 +126,8 @@ function validateStructuredFile(filePath: string, content: string): ValidationOk
     try {
       JSON.parse(content);
       return { ok: true };
-    } catch (err: any) {
-      return { ok: false, format: 'JSON', error: err.message };
+    } catch (err: unknown) {
+      return { ok: false, format: 'JSON', error: errorMessage(err) };
     }
   }
   return { ok: true };
@@ -224,7 +229,7 @@ function reindent(oldString: string, matched: string, newString: string): string
 }
 
 export const editTool: ToolHandler = {
-  name: 'Edit',
+  name: TOOL_NAMES.Edit,
   description: definition.function.description,
   category: 'write',
   definition,

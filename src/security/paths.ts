@@ -185,5 +185,39 @@ export async function assertPathAllowed(input: string, policy?: PathPolicy): Pro
   return result.resolved;
 }
 
+/**
+ * Build a synchronous deny-matcher with realpath applied to the deny set
+ * up front. The returned function takes a candidate path and returns the
+ * matched rule (or null) without any further I/O — meant for tight loops
+ * (post-filtering thousands of search results) where a per-call realpath
+ * would be too costly.
+ *
+ * Both the lexical and realpathed forms of every deny entry are kept, so
+ * macOS /tmp ↔ /private/tmp routing is symmetric: a candidate emitted as
+ * /private/tmp/forbidden/x matches a user deny of /tmp/forbidden, and
+ * vice versa. Symlink defense beyond that relies on:
+ *   1. The search root having already passed assertPathAllowed (which
+ *      realpaths it), so a symlinked-root attack is caught upstream.
+ *   2. The search tool not following symlinks during recursion (default
+ *      behavior of ripgrep, grep -r, and Node's fs.glob).
+ */
+export async function buildDenyMatcher(
+  policy: PathPolicy = {},
+): Promise<(candidate: string) => string | null> {
+  const userDenyExpanded = (policy.deny ?? []).map(p =>
+    path.resolve(p.replace(/^~(?=$|\/)/, os.homedir())),
+  );
+  const userDenyRealpathed = await Promise.all(userDenyExpanded.map(realpathOrLexical));
+  const builtin = builtinDenyPaths();
+  const builtinRealpathed = await Promise.all(builtin.map(realpathOrLexical));
+  const denied = [
+    ...builtin,
+    ...builtinRealpathed,
+    ...userDenyExpanded,
+    ...userDenyRealpathed,
+  ];
+  return (candidate: string) => matchDeny(path.resolve(candidate), denied);
+}
+
 // Exported for tests.
 export const __testing = { builtinDenyPaths, resolveForCheck };

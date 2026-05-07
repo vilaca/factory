@@ -198,3 +198,47 @@ describe('Conversation — ageOldToolResults', () => {
     assert.strictEqual(aged, 0);
   });
 });
+
+describe('Conversation — replaceWithSummary cutPoint guard', () => {
+  it('summarizes a normal conversation (sanity)', () => {
+    const conv = new Conversation('sys');
+    conv.addUser('u1');
+    conv.addAssistant('a1');
+    conv.addUser('u2');
+    conv.addAssistant('a2');
+    conv.addUser('u3');
+    conv.addAssistant('a3');
+    const result = conv.replaceWithSummary('summary text', 2);
+    assert.strictEqual(result.oldCount, 6);
+    // 1 (synth user) + 1 (synth ack) + 2 (kept) = 4.
+    assert.strictEqual(result.newCount, 4);
+    const msgs = conv.getMessages();
+    assert.strictEqual(msgs[1].role, 'user');
+    assert.ok(typeof msgs[1].content === 'string' && msgs[1].content.includes('summary text'));
+  });
+
+  it('skips summarization when the head is all tool messages (cutPoint=0 edge)', () => {
+    // Construct a pathological message sequence: every message is a tool
+    // message. The safety-walk loop hits index 0 and would otherwise slice
+    // from 0, keeping every message AND prepending a vacuous summary on
+    // top — confused timeline. The guard short-circuits this case.
+    const conv = new Conversation('sys');
+    // Reach into the private messages array via a cast — we deliberately
+    // construct an invalid head shape that the public API wouldn't allow,
+    // because that's exactly the edge the guard exists to defend against.
+    const msgs = (conv as unknown as { messages: { role: string; content: string }[] }).messages;
+    for (let i = 0; i < 5; i++) msgs.push({ role: 'tool', content: `t${i}` });
+
+    const before = conv.messageCount();
+    const result = conv.replaceWithSummary('SHOULD-NOT-BE-INSERTED', 2);
+    // Guard returns the same count for old and new — no change applied.
+    assert.strictEqual(result.oldCount, before);
+    assert.strictEqual(result.newCount, before);
+    const after = conv.getMessages();
+    // Original messages still present unmodified, no summary prepended.
+    assert.strictEqual(after.length, before + 1); // +1 for the system prompt
+    for (const m of after) {
+      assert.ok(typeof m.content !== 'string' || !m.content.includes('SHOULD-NOT-BE-INSERTED'));
+    }
+  });
+});

@@ -1,4 +1,5 @@
 import type { ToolDefinition, ToolHandler, ToolResult, ToolContext } from './types.js';
+import { TOOL_NAMES } from './types.js';
 import { fetchUrl, isHtmlType, isPlainTextType } from '../core/web/fetch.js';
 import { htmlToMarkdown } from '../core/web/html-to-markdown.js';
 
@@ -10,7 +11,7 @@ const MODEL_OUTPUT_CAP = 16 * 1024;
 const definition: ToolDefinition = {
   type: 'function',
   function: {
-    name: 'WebFetch',
+    name: TOOL_NAMES.WebFetch,
     description:
       'Fetch a URL and return its content as text. HTML is stripped of boilerplate (nav, scripts, styles, footers) and converted to markdown for clean reading; plain text and markdown are returned as-is. Bounded: 1 MiB body cap, 15s timeout, 5 redirects max, 16 KiB cap on the returned text. The user is prompted before any fetch to a non-whitelisted domain.',
     parameters: {
@@ -81,7 +82,7 @@ async function execute(args: Record<string, unknown>, _ctx?: ToolContext): Promi
 }
 
 export const webFetchTool: ToolHandler = {
-  name: 'WebFetch',
+  name: TOOL_NAMES.WebFetch,
   description: definition.function.description,
   category: 'read-only',
   definition,

@@ -2,6 +2,7 @@ import type { ChatMessage, Provider, ProviderCapabilities, TokenUsage } from '..
 import type { Conversation } from './conversation.js';
 import { estimateMessagesTokens } from '../utils/tokens.js';
 import { selectWeakTier } from './agent/weak-tier.js';
+import { isError } from '../utils/errors.js';
 
 export interface ContextConfig {
   compactionThreshold: number; // 0-1, fraction of context window (default 0.75)
@@ -200,8 +201,8 @@ export class ContextManager {
     try {
       const response = await provider.chatNoStream(model, summaryPrompt, undefined, { maxTokens: 512, signal });
       return response.content ?? null;
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') throw err;
+    } catch (err: unknown) {
+      if (signal?.aborted || (isError(err) && err.name === 'AbortError')) throw err;
       return null;
     }
   }

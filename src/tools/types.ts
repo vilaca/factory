@@ -1,3 +1,26 @@
+import type { PathPolicy } from '../security/paths.js';
+import type { EnvPolicy } from '../security/env.js';
+
+/**
+ * Canonical names for every built-in tool. String literals were sprinkled
+ * across security checks, the text-tool parser, system prompts, the agent
+ * loop, and permission gates — a typo at any of those sites silently broke
+ * behavior (no match, fallthrough). Routing call sites through this const
+ * makes typos a compile error and gives `grep TOOL_NAMES.X` exhaustive
+ * coverage when reasoning about a tool's wiring.
+ */
+export const TOOL_NAMES = {
+  Bash: 'Bash',
+  Read: 'Read',
+  Write: 'Write',
+  Edit: 'Edit',
+  Grep: 'Grep',
+  Glob: 'Glob',
+  WebFetch: 'WebFetch',
+  Delegate: 'Delegate',
+} as const;
+export type ToolName = typeof TOOL_NAMES[keyof typeof TOOL_NAMES];
+
 export interface ToolDefinition {
   type: 'function';
   function: {
@@ -34,13 +57,26 @@ export interface ToolResult {
  *
  * Optional so that headless / test callers can keep using the bare
  * `execute(args)` form. When omitted, tools fall back to process-global
- * defaults (e.g. `process.cwd()`).
+ * defaults (e.g. `process.cwd()` and an empty path/env policy).
  */
 export interface ToolContext {
   /** Working directory the tool should resolve relative paths against and
    * spawn shells with. Per-tab in the Ink UI; defaults to process.cwd()
    * elsewhere. */
   cwd: string;
+  /** Path-policy deny extensions for this tool call. Read-only; tools must
+   * not mutate. The agent loop builds this once per turn from config and
+   * passes the same object to every tool. When undefined, tools treat as
+   * `{}` (built-in deny list still applies). */
+  pathPolicy?: PathPolicy;
+  /** Env-policy allow extensions used by Bash to scrub the spawned shell's
+   * environment. Same plumbing rules as pathPolicy. */
+  envPolicy?: EnvPolicy;
+  /** Per-turn abort signal. When fired, tools should cancel in-flight I/O
+   * (`fs.readFile({signal})`, `fetch({signal})`, `child_process.spawn`'s
+   * AbortController) so an aborted turn doesn't wait out a multi-MB read.
+   * Optional — older callers and tests can omit it. */
+  signal?: AbortSignal;
 }
 
 export interface ToolHandler {

@@ -1,4 +1,5 @@
 import { evaluateBash, type BashRule, type BashEvaluation } from './security/bash-rules.js';
+import { TOOL_NAMES } from './tools/types.js';
 
 export type PermissionDecision = 'allow' | 'deny' | 'allow-all' | 'allow-domain';
 
@@ -81,7 +82,7 @@ export class PermissionManager {
       return { kind: 'allow', source: evalResult.source };
     }
     // 'prompt' from policy → defer to allow-all, otherwise prompt the user.
-    if (this.isAutoAllowed('Bash')) {
+    if (this.isAutoAllowed(TOOL_NAMES.Bash)) {
       return { kind: 'allow', source: 'allow-all' };
     }
     return { kind: 'prompt' };

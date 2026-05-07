@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import type { Config } from './config-types.js';
 import { EXPERIMENTAL_FLAG_KEYS } from './config-types.js';
+import { errorMessage } from '../utils/errors.js';
 import { HOOK_EVENTS } from './hooks/discovery.js';
 import { writeFileAtomic } from '../utils/atomic-write.js';
 
@@ -39,8 +40,8 @@ async function readJsonFile(filePath: string): Promise<Record<string, unknown> |
   }
   try {
     return JSON.parse(content);
-  } catch (err: any) {
-    throw new Error(`${filePath}: invalid JSON — ${err.message}`);
+  } catch (err: unknown) {
+    throw new Error(`${filePath}: invalid JSON — ${errorMessage(err)}`);
   }
 }
 

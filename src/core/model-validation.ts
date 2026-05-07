@@ -1,4 +1,5 @@
 import type { Provider } from '../providers/types.js';
+import { errorMessage } from '../utils/errors.js';
 
 export type ValidationResult =
   | { mode: 'native' }
@@ -23,10 +24,10 @@ export async function validateModelToolSupport(
         `Model "${model}" does not natively support tools. ` +
         `Falling back to text-based <tool_call> parsing — reliability may be reduced.`,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       mode: 'unreachable',
-      reason: `Could not verify model capabilities: ${err.message}`,
+      reason: `Could not verify model capabilities: ${errorMessage(err)}`,
     };
   }
 }

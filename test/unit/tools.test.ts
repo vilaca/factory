@@ -6,6 +6,7 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { getTool } from '../../src/tools/index.js';
+import { __testing as bashTesting } from '../../src/tools/bash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -179,6 +180,19 @@ describe('Write tool', () => {
     const result = await write.execute({ file_path: '/tmp/x' });
     assert.strictEqual(result.success, false);
   });
+
+  it('rejects non-string content (number, object, array)', async () => {
+    const fp = tmpFile('write-typecheck');
+    try {
+      for (const bad of [123, { foo: 'bar' }, ['a', 'b'], true]) {
+        const result = await write.execute({ file_path: fp, content: bad });
+        assert.strictEqual(result.success, false, `should reject ${typeof bad}`);
+        assert.ok(result.output.includes('must be a string'), `wrong message for ${typeof bad}: ${result.output}`);
+      }
+    } finally {
+      cleanup(fp);
+    }
+  });
 });
 
 // ─── Edit tool ──────────────────────────────────────────────────────────
@@ -319,6 +333,29 @@ describe('Edit tool', () => {
       cleanup(fp);
     }
   });
+
+  it('treats $-patterns in new_string literally (not as regex backrefs)', async () => {
+    // String.prototype.replace with a string replacement interprets $1, $&,
+    // $', $`, $$ — a model writing a shell snippet, regex example, or a
+    // dollar-amount would otherwise see those characters mangled. The fix
+    // is a function replacer; this test guards against regressing it.
+    const cases = [
+      'price = $1.50',
+      'echo "$&" && exit',
+      'literal $$ dollars',
+      "preceding $` and trailing $'",
+    ];
+    for (const newStr of cases) {
+      const fp = tmpFile('edit-dollar', 'X: PLACEHOLDER\n');
+      try {
+        const result = await edit.execute({ file_path: fp, old_string: 'PLACEHOLDER', new_string: newStr });
+        assert.strictEqual(result.success, true, `edit failed for ${newStr}`);
+        assert.strictEqual(fs.readFileSync(fp, 'utf-8'), `X: ${newStr}\n`, `wrong content for ${newStr}`);
+      } finally {
+        cleanup(fp);
+      }
+    }
+  });
 });
 
 // ─── Bash tool ──────────────────────────────────────────────────────────
@@ -385,6 +422,25 @@ describe('Bash tool', () => {
     assert.strictEqual(result.success, true);
     assert.match(result.output, /\b3\b/);
   });
+
+  it('clamps the timeout parameter to [MIN, MAX]', () => {
+    const { clampTimeout, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS, DEFAULT_TIMEOUT_MS } = bashTesting;
+    // Invalid input (non-finite, non-numeric) → default. Pretending to honor
+    // ±Infinity by clamping to MAX/MIN would mask a malformed model call.
+    assert.strictEqual(clampTimeout(undefined), DEFAULT_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(null), DEFAULT_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(NaN), DEFAULT_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(Infinity), DEFAULT_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(-Infinity), DEFAULT_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout('not a number'), DEFAULT_TIMEOUT_MS);
+    // Finite values clamp to [MIN, MAX]. 0 would otherwise disable the
+    // timeout entirely (Node treats falsy as no timeout) — the main reason
+    // we clamp at all.
+    assert.strictEqual(clampTimeout(0), MIN_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(-5000), MIN_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(MAX_TIMEOUT_MS + 1), MAX_TIMEOUT_MS);
+    assert.strictEqual(clampTimeout(5000), 5000);
+  });
 });
 
 // ─── Glob tool ──────────────────────────────────────────────────────────
@@ -443,6 +499,26 @@ describe('Grep tool', () => {
     const result = await grep.execute({});
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('required'));
+  });
+
+  it('caps result lines and emits a truncation footer', async () => {
+    // Produce more matches than MAX_RESULT_LINES (1000) by writing a single
+    // file with many matching lines. Grep with include_content returns one
+    // line per match, so the cap kicks in on output line count.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-grep-cap-'));
+    const fp = path.join(tmp, 'big.txt');
+    const lines = Array.from({ length: 1500 }, (_, i) => `match-${i}: hit-marker-zzz`);
+    fs.writeFileSync(fp, lines.join('\n') + '\n');
+    try {
+      const result = await grep.execute({ pattern: 'hit-marker-zzz', path: tmp, include_content: true });
+      assert.strictEqual(result.success, true);
+      const outLines = result.output.split('\n');
+      // Footer line + cap of 1000 = 1001 lines total.
+      assert.strictEqual(outLines.length, 1001, `expected 1001 lines, got ${outLines.length}`);
+      assert.ok(result.output.includes('truncated'), `expected truncation footer in: ${result.output.slice(-200)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
@@ -521,6 +597,92 @@ describe('File tool symlink behavior', () => {
       cleanup(link);
       cleanup(outsideFile);
       try { fs.rmSync(outsideDir, { recursive: true }); } catch { /* ignore */ }
+    }
+  });
+});
+
+// ─── Search tools deny-list ─────────────────────────────────────────────
+// Grep/Glob now share the path-policy enforcement Read/Write/Edit had: an
+// explicit search rooted at a denied path fails clean, and recursion from a
+// wider root post-filters denied results. We use a tmp dir + user-deny
+// entry rather than the real ~/.ssh so tests don't depend on the host's
+// home directory.
+
+describe('Search tools: deny-list enforcement', () => {
+  const grep = getTool('Grep')!;
+  const glob = getTool('Glob')!;
+
+  it('Grep refuses an explicit search path on the deny list', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-deny-'));
+    const denied = path.join(tmp, 'forbidden');
+    fs.mkdirSync(denied);
+    fs.writeFileSync(path.join(denied, 'a.txt'), 'secret-token\n');
+    try {
+      const result = await grep.execute(
+        { pattern: 'secret-token', path: denied },
+        { cwd: process.cwd(), pathPolicy: { deny: [denied] } },
+      );
+      assert.strictEqual(result.success, false);
+      assert.ok(result.output.includes('denied'));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('Grep filters denied paths out of recursive results from a wider root', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-deny-'));
+    const denied = path.join(tmp, 'forbidden');
+    fs.mkdirSync(denied);
+    fs.writeFileSync(path.join(denied, 'leak.txt'), 'unique-marker-abc123\n');
+    fs.writeFileSync(path.join(tmp, 'ok.txt'), 'unique-marker-abc123\n');
+    try {
+      const result = await grep.execute(
+        { pattern: 'unique-marker-abc123', path: tmp },
+        { cwd: process.cwd(), pathPolicy: { deny: [denied] } },
+      );
+      assert.strictEqual(result.success, true);
+      assert.ok(result.output.includes('ok.txt'), `expected ok.txt in: ${result.output}`);
+      assert.ok(!result.output.includes('leak.txt'), `leaked denied path in: ${result.output}`);
+      assert.ok(result.output.includes('suppressed'), `expected suppression note in: ${result.output}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('Glob refuses an explicit search path on the deny list', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-deny-'));
+    const denied = path.join(tmp, 'forbidden');
+    fs.mkdirSync(denied);
+    fs.writeFileSync(path.join(denied, 'a.txt'), '');
+    try {
+      const result = await glob.execute(
+        { pattern: '*.txt', path: denied },
+        { cwd: process.cwd(), pathPolicy: { deny: [denied] } },
+      );
+      assert.strictEqual(result.success, false);
+      assert.ok(result.output.includes('denied'));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('Glob filters denied paths out of recursive results from a wider root', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-deny-'));
+    const denied = path.join(tmp, 'forbidden');
+    fs.mkdirSync(denied);
+    fs.writeFileSync(path.join(denied, 'leak.txt'), '');
+    fs.writeFileSync(path.join(tmp, 'ok.txt'), '');
+    try {
+      const result = await glob.execute(
+        { pattern: '**/*.txt', path: tmp },
+        { cwd: process.cwd(), pathPolicy: { deny: [denied] } },
+      );
+      assert.strictEqual(result.success, true);
+      assert.ok(result.output.includes('ok.txt'), `expected ok.txt in: ${result.output}`);
+      assert.ok(!result.output.includes('leak.txt'), `leaked denied path in: ${result.output}`);
+      assert.ok(result.output.includes('suppressed'), `expected suppression note in: ${result.output}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 });

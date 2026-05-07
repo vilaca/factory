@@ -6,6 +6,8 @@ import type { ContextManager } from './context-manager.js';
 import type { PermissionManager, PermissionDecision } from '../permissions.js';
 import type { FileCache } from './agent/file-cache.js';
 import type { HooksConfig, ProviderKey, RotationEntry } from './config-types.js';
+import type { PathPolicy } from '../security/paths.js';
+import type { EnvPolicy } from '../security/env.js';
 
 export type { PermissionDecision };
 
@@ -92,6 +94,15 @@ export interface AgentOptions {
    * under `<cwdRef.current>/.factory/hooks/`. Optional — headless callers
    * may omit it and tools fall back to `process.cwd()`. */
   cwdRef?: { current: string };
+  /** Path-policy deny extensions. Built-in deny list (~/.ssh, /etc/shadow,
+   *  …) always applies; this is for user-supplied additions. The loop
+   *  forwards it through ToolLoopContext to each tool's ToolContext so
+   *  Read/Write/Edit/Grep/Glob can hard-deny without consulting any
+   *  process-global state. */
+  pathPolicy?: PathPolicy;
+  /** Env-policy allow extensions used by Bash to scrub the spawned shell's
+   *  environment. Same plumbing rules as pathPolicy. */
+  envPolicy?: EnvPolicy;
   /** When set, the runtime rotates among saved keys for the active provider
    *  on rate-limit/auth failures before giving up. */
   rotation?: RotationOptions;

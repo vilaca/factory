@@ -1,13 +1,14 @@
 import fs from 'fs/promises';
 import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, PathDenied } from '../security/paths.js';
-import { getPathPolicy } from '../security/policy-state.js';
+import { errorMessage } from '../utils/errors.js';
 
 const definition: ToolDefinition = {
   type: 'function',
   function: {
-    name: 'Read',
+    name: TOOL_NAMES.Read,
     description: 'Read a file (returns content with line numbers, use instead of cat/head/tail) or a directory (returns a sorted listing of its entries, with a trailing "/" on subdirectories).',
     parameters: {
       type: 'object',
@@ -55,7 +56,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   const absPath = path.resolve(ctx?.cwd ?? process.cwd(), filePath);
   let resolved: string;
   try {
-    resolved = await assertPathAllowed(absPath, getPathPolicy());
+    resolved = await assertPathAllowed(absPath, ctx?.pathPolicy);
   } catch (err) {
     if (err instanceof PathDenied) return { success: false, output: err.message };
     throw err;
@@ -86,7 +87,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   }
 
   try {
-    const content = await fs.readFile(resolved, 'utf-8');
+    const content = await fs.readFile(resolved, { encoding: 'utf-8', signal: ctx?.signal });
     const lines = content.split('\n');
     const end = limit !== undefined ? offset + limit : lines.length;
     const sliced = lines.slice(offset, end);
@@ -118,8 +119,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     const displayOutput = previewLines.join('\n');
 
     return { success: true, output, displayOutput };
-  } catch (err: any) {
-    return { success: false, output: `Error reading ${resolved}: ${err.message}` };
+  } catch (err: unknown) {
+    return { success: false, output: `Error reading ${resolved}: ${errorMessage(err)}` };
   }
 }
 
@@ -138,7 +139,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
 // visible in the session log.
 
 export const readTool: ToolHandler = {
-  name: 'Read',
+  name: TOOL_NAMES.Read,
   description: definition.function.description,
   category: 'read-only',
   definition,

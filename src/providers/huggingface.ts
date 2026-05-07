@@ -3,6 +3,7 @@ import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
   ProviderCapabilities, ChatOptions, ModelTier,
 } from './types.js';
+import { errorMessage } from '../utils/errors.js';
 import {
   mergeStreamedToolCalls,
   finalizeToolCalls,
@@ -110,8 +111,8 @@ export class HuggingFaceProvider implements Provider {
           yield { tool_calls: finalized, done: true };
         }
       }
-    } catch (err: any) {
-      throw new Error(`HuggingFace API error: ${err.message}`);
+    } catch (err: unknown) {
+      throw new Error(`HuggingFace API error: ${errorMessage(err)}`);
     }
   }
 

@@ -4,6 +4,7 @@ import type {
   Provider, ChatMessage, ChatChunk, ToolDefinition,
   ProviderCapabilities, ChatOptions, ModelTier, ModelInfo,
 } from './types.js';
+import { errorCode, errorMessage, isError } from '../utils/errors.js';
 
 export class OllamaProvider implements Provider {
   name = 'ollama';
@@ -127,7 +128,7 @@ export class OllamaProvider implements Provider {
         }
         yield result;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // The iterator throws when stream.abort() runs. Surface this as an
       // AbortError so callers can route it through their existing abort path.
       if (signal?.aborted) {
@@ -164,8 +165,8 @@ export class OllamaProvider implements Provider {
     let response;
     try {
       response = await this.signalStore.run(signal, () => this.client.chat(request));
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (signal?.aborted || (isError(err) && err.name === 'AbortError')) {
         throw makeAbortError();
       }
       throw translateOllamaError(err);
@@ -208,19 +209,19 @@ function makeAbortError(): Error {
  * usually because Ollama crashed, ran out of memory, or unloaded the model
  * and hit a race during reload.
  */
-function translateOllamaError(err: any): Error {
-  const msg = err?.message ?? '';
-  const code = err?.code ?? '';
+function translateOllamaError(err: unknown): Error {
+  const msg = errorMessage(err);
+  const code = errorCode(err) ?? '';
   if (msg === 'EOF' || code === 'ECONNREFUSED' || code === 'ECONNRESET' ||
       msg.includes('socket hang up') || msg.includes('fetch failed')) {
     const detail = msg || code || 'connection lost';
     const wrapped = new Error(
       `Ollama connection dropped (${detail}). The model may have been unloaded or the server may be out of memory — check ollama serve and retry.`,
     );
-    (wrapped as any).cause = err;
+    (wrapped as Error & { cause?: unknown }).cause = err;
     return wrapped;
   }
-  return err;
+  return err instanceof Error ? err : new Error(msg);
 }
 
 function estimateOllamaModelTier(model: string): ModelTier {

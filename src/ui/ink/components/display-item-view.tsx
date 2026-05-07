@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { DisplayItem } from '../types.js';
 import { summarizeToolArgs } from '../format.js';
 import { AssistantText } from './assistant-text.js';
+import { TOOL_NAMES } from '../../../tools/types.js';
 
 export function DisplayItemView({
   item,
@@ -10,6 +11,7 @@ export function DisplayItemView({
   emojiMode = false,
   userEmoji,
   continuation = false,
+  failed = false,
 }: {
   item: DisplayItem;
   showFullOutput?: boolean;
@@ -19,6 +21,11 @@ export function DisplayItemView({
    *  icon + tool name header). Set by ConversationDisplay when the previous
    *  item was a tool-call of the same tool. */
   continuation?: boolean;
+  /** When true and `item` is a tool-call, the matching tool-result reported
+   *  failure. ConversationDisplay computes this via lookahead so the call
+   *  panel can carry the failure marker (✗) at the top instead of letting
+   *  the result panel be the only place that signals failure. */
+  failed?: boolean;
 }): React.ReactElement {
   switch (item.kind) {
     case 'user-input': {
@@ -29,12 +36,14 @@ export function DisplayItemView({
       return <AssistantText text={item.text} streaming={item.streaming} emojiMode={emojiMode} />;
     case 'tool-call': {
       const denied = item.status === 'denied';
+      const icon = denied ? '🚫' : failed ? '✗' : '🔧';
       return (
         <ToolCallLine
-          icon={denied ? '🚫' : '🔧'}
+          icon={icon}
           toolName={item.toolName}
           args={item.args}
           denied={denied}
+          failed={failed}
           continuation={continuation}
         />
       );
@@ -47,14 +56,26 @@ export function DisplayItemView({
       // above its output was just visual noise. Edit/Write keep an inline
       // ✅ prefix on the first body line so file-mutating successes still
       // pop out at a glance.
-      // Failure (✗) and empty-success (○) keep the icon-only line — those
-      // are the cases where the body alone wouldn't carry the signal.
+      // Failures don't render a standalone ✗ line either — the call panel
+      // header now shows ✗ in place of 🔧 (computed in ConversationDisplay
+      // via lookahead), so the body alone is enough.
+      // Empty-success (○) keeps the icon-only line because nothing else
+      // distinguishes "succeeded but found nothing" from a regular run.
       if (item.success && !item.empty) {
-        const isEdit = item.toolName === 'Edit' || item.toolName === 'Write';
+        const isEdit = item.toolName === TOOL_NAMES.Edit || item.toolName === TOOL_NAMES.Write;
         return (
           <Box flexDirection="column">
             {lines.map((line, i) => (
               <Text dimColor key={i}>{i === 0 && isEdit ? `  ✅ ${line}` : `    ${line}`}</Text>
+            ))}
+          </Box>
+        );
+      }
+      if (!item.success) {
+        return (
+          <Box flexDirection="column">
+            {lines.map((line, i) => (
+              <Text dimColor key={i}>    {line}</Text>
             ))}
           </Box>
         );
@@ -64,11 +85,9 @@ export function DisplayItemView({
       // "  ○\n     No matches found." render. Requires checking item.empty
       // and either inlining the body alongside the icon or replacing the
       // generic ○ with a body-aware glyph (❌ for grep/glob misses, etc.).
-      const icon = !item.success ? '  ✗' : '  ○';
-      const color = !item.success ? 'red' : 'yellow';
       return (
         <Box flexDirection="column">
-          <Text color={color}>{icon}</Text>
+          <Text color="yellow">  ○</Text>
           {lines.map((line, i) => (
             <Text dimColor key={i}>    {line}</Text>
           ))}
@@ -106,12 +125,17 @@ export function ToolCallLine({
   toolName,
   args,
   denied,
+  failed,
   continuation,
 }: {
   icon: string;
   toolName: string;
   args: Record<string, unknown>;
   denied?: boolean;
+  /** When true, the matching tool-result reported failure. Drives the red
+   *  coloring (same treatment as denied) and adds a ✗ prefix on continuation
+   *  rows where the header is suppressed. */
+  failed?: boolean;
   /** When true, suppress the icon + tool-name header and render only the
    *  indented arg line. Used when the immediately previous item was a
    *  tool-call of the same tool — three Glob calls in a row read as one
@@ -119,9 +143,14 @@ export function ToolCallLine({
   continuation?: boolean;
 }): React.ReactElement {
   const summary = summarizeToolArgs(toolName, args);
-  const nameColor = denied ? 'red' : 'cyan';
+  const isProblem = denied || failed;
+  const nameColor = isProblem ? 'red' : 'cyan';
   if (continuation && summary) {
-    return <Text color={denied ? 'red' : undefined}>{`    ${summary}`}</Text>;
+    // Continuation rows have no header to carry the failure marker, so the
+    // ✗ has to live on the args line itself. `  ✗ ` is 4 chars wide so the
+    // summary stays aligned with non-continuation rows (4-space indent).
+    const prefix = failed ? '  ✗ ' : '    ';
+    return <Text color={isProblem ? 'red' : undefined}>{`${prefix}${summary}`}</Text>;
   }
   if (!summary) {
     return (
@@ -138,7 +167,7 @@ export function ToolCallLine({
       <Text>
         {icon} <Text color={nameColor} bold>{toolName}</Text>:
       </Text>
-      <Text color={denied ? 'red' : undefined}>{`    ${summary}`}</Text>
+      <Text color={isProblem ? 'red' : undefined}>{`    ${summary}`}</Text>
     </Box>
   );
 }

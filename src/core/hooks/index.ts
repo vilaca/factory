@@ -5,6 +5,7 @@ import { sanitizeEnv } from '../../security/env.js';
 import type { EnvPolicy } from '../../security/env.js';
 import { getEnvPolicy } from '../../security/policy-state.js';
 import { checkForbidden } from '../../security/bash-rules.js';
+import { errorMessage } from '../../utils/errors.js';
 
 // Cache of the scrubbed env keyed on the policy object identity. process.env
 // + policy are both set once at startup, so re-running sanitizeEnv on every
@@ -185,8 +186,8 @@ function runSingleHook(
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-    } catch (err: any) {
-      resolve({ error: `spawn failed: ${err?.message ?? String(err)}` });
+    } catch (err: unknown) {
+      resolve({ error: `spawn failed: ${errorMessage(err)}` });
       return;
     }
 
