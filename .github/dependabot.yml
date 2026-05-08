@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      typescript-eslint:
+        patterns:
+          - '@typescript-eslint/*'
+      types:
+        patterns:
+          - '@types/*'
+      dev-minor:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      prod-minor:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Pinned to match `engines.node` (>=22). Bumping types past 22 invites
+      # accidental use of newer Node APIs that won't run on 22.
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
+      # marked-terminal@7 peer-deps marked >=1 <16 — bumping marked beyond 15
+      # requires also replacing marked-terminal.
+      - dependency-name: marked
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
