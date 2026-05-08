@@ -97,6 +97,12 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    const settle = (r: ToolResult): void => {
+      if (settled) return;
+      settled = true;
+      resolve(r);
+    };
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
@@ -104,6 +110,23 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
 
     proc.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
+    });
+
+    // Signal-driven termination (timeout, AbortController) is reported on
+    // 'exit'. We must resolve here rather than waiting for 'close', because
+    // 'close' is gated on stdio drain — and a wrapped command like
+    // `sleep 30` leaves the sleep child holding stdout/stderr after sh
+    // dies, so 'close' wouldn't fire until the orphan finished. Result:
+    // a 1s timeout would block the agent loop for 30s.
+    proc.on('exit', (_code, signal) => {
+      if (!signal) return;
+      const tail = [stdout, stderr].filter(Boolean).join('\n');
+      settle({
+        success: false,
+        output: tail
+          ? `Command terminated by signal ${signal}\n${tail}`
+          : `Command terminated by signal ${signal}`,
+      });
     });
 
     // TODO: split stdout and stderr in the output instead of concatenating.
@@ -158,7 +181,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       // runToolCalls. If that ever parallelizes, cwdAfter semantics need
       // rethinking (last-writer-wins isn't well-defined under parallelism).
       const dirChanged = cwdAfter !== undefined && cwdAfter !== cwd;
-      resolve({
+      settle({
         success: true,
         output,
         important: code !== 0,
@@ -167,7 +190,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     });
 
     proc.on('error', err => {
-      resolve({ success: false, output: `Failed to execute: ${err.message}` });
+      settle({ success: false, output: `Failed to execute: ${err.message}` });
     });
   });
 }

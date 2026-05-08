@@ -5,6 +5,11 @@ import { Box, Text } from 'ink';
 interface StatusBarProps {
   planMode: boolean;
   state: 'idle' | 'running' | 'awaiting-permission';
+  /** Transient label rendered in place of "running" while the agent is
+   *  doing something specific (retry/backoff sleep, rotation hand-off,
+   *  shutdown). Cleared by the event handler at progress events. When
+   *  null/undefined, the bar shows the literal "running". */
+  activity?: string | null;
   providerName: string;
   model: string;
   totalTokens?: number;
@@ -40,6 +45,7 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
   const {
     planMode,
     state,
+    activity,
     providerName,
     model,
     totalTokens,
@@ -73,7 +79,18 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
         ) : (
           ''
         )}
-        {state === 'running' ? <Text color="green">running · </Text> : ''}
+        {state === 'running' ? (
+          activity ? (
+            // Activity replaces the literal "running" so the user sees what
+            // the agent is doing right now (retrying / rotating / etc.) —
+            // yellow signals "paused but not stuck".
+            <Text color="yellow">{activity} · </Text>
+          ) : (
+            <Text color="green">running · </Text>
+          )
+        ) : (
+          ''
+        )}
         {`${providerName}/${model}`}
         {cwd && (
           <>

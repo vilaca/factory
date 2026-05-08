@@ -59,6 +59,44 @@ async function readTextFile(filePath: string): Promise<string | null> {
  * so users can fix it quickly. Unknown fields are tolerated for forward
  * compatibility.
  */
+// Top-level fields the current build understands. Unknown keys at this
+// level are reported via a stderr warning (not a hard error): hard-reject
+// would create a downgrade hazard — a newer factory adding a field would
+// make all configs unloadable by older builds. Warning still surfaces
+// typos like `permissons` (instead of `permissions`) loudly enough that
+// users notice and fix them.
+const STRING_TOP_LEVEL_KEYS = [
+  'provider',
+  'model',
+  'host',
+  'token',
+  'huggingfaceToken',
+  'anthropicToken',
+  'copilotToken',
+  'githubToken',
+  'openrouterToken',
+  'vercelToken',
+  'opencodeZenToken',
+  'googleAiStudioToken',
+  'mistralToken',
+  'codestralToken',
+  'cerebrasToken',
+  'groqToken',
+  'cohereToken',
+  'workersAiToken',
+  'workersAiAccountId',
+] as const;
+
+const KNOWN_TOP_LEVEL_KEYS: ReadonlySet<string> = new Set<string>([
+  ...STRING_TOP_LEVEL_KEYS,
+  'googleAiStudioAuthMode',
+  'keys',
+  'agent',
+  'permissions',
+  'security',
+  'mcp',
+]);
+
 // eslint-disable-next-line max-lines-per-function, max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split per-section validators.
 function validateConfig(data: unknown, filePath: string): Config {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
@@ -66,27 +104,16 @@ function validateConfig(data: unknown, filePath: string): Config {
   }
   const obj = data as Record<string, unknown>;
 
-  for (const key of [
-    'provider',
-    'model',
-    'host',
-    'token',
-    'huggingfaceToken',
-    'anthropicToken',
-    'copilotToken',
-    'githubToken',
-    'openrouterToken',
-    'vercelToken',
-    'opencodeZenToken',
-    'googleAiStudioToken',
-    'mistralToken',
-    'codestralToken',
-    'cerebrasToken',
-    'groqToken',
-    'cohereToken',
-    'workersAiToken',
-    'workersAiAccountId',
-  ] as const) {
+  const unknown = Object.keys(obj).filter(k => !KNOWN_TOP_LEVEL_KEYS.has(k));
+  if (unknown.length > 0) {
+    process.stderr.write(
+      `${filePath}: warning: unknown top-level field${unknown.length > 1 ? 's' : ''} ` +
+        `${unknown.map(k => `"${k}"`).join(', ')} (ignored). ` +
+        `Did you mean one of: ${[...KNOWN_TOP_LEVEL_KEYS].sort().join(', ')}?\n`,
+    );
+  }
+
+  for (const key of STRING_TOP_LEVEL_KEYS) {
     if (obj[key] !== undefined && typeof obj[key] !== 'string') {
       throw new Error(`${filePath}: "${key}" must be a string`);
     }

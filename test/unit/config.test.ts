@@ -93,6 +93,40 @@ describe('loadProjectConfig', () => {
     });
   });
 
+  it('warns on unknown top-level fields without rejecting the load', async () => {
+    // A typo like `permissons` (missing `i`) used to silently pass through —
+    // the user thought their allowlist was active, but the field was dropped.
+    // We warn loudly to stderr instead of hard-rejecting, because hard-reject
+    // would prevent older builds from loading newer configs after upgrade.
+    const original = process.stderr.write;
+    const captured: string[] = [];
+    (process.stderr as unknown as { write: (chunk: string) => boolean }).write = (
+      chunk: string,
+    ) => {
+      captured.push(chunk);
+      return true;
+    };
+    try {
+      await withTempProject(
+        JSON.stringify({ provider: 'ollama', permissons: { allowAll: ['Bash'] } }),
+        async cwd => {
+          const cfg = await loadProjectConfig(cwd);
+          // Load succeeds; the typo'd field is ignored, the valid one stuck.
+          assert.strictEqual(cfg.provider, 'ollama');
+          assert.strictEqual(cfg.permissions, undefined);
+        },
+      );
+    } finally {
+      (process.stderr as unknown as { write: (chunk: string) => boolean }).write =
+        original as unknown as (chunk: string) => boolean;
+    }
+    const all = captured.join('');
+    assert.match(all, /unknown top-level field/);
+    assert.match(all, /permissons/);
+    // The known-list should be in the suggestion so the user can spot the right name.
+    assert.match(all, /permissions/);
+  });
+
   it('rejects a non-string provider', async () => {
     await withTempProject('{"provider": 42}', async cwd => {
       await assert.rejects(

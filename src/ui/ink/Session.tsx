@@ -234,6 +234,7 @@ export function Session(props: SessionProps): React.ReactElement {
     thinking,
     compacting,
     runningTool,
+    activity,
     streamingText,
     permissionRequest,
     pendingToolCall,
@@ -615,6 +616,7 @@ export function Session(props: SessionProps): React.ReactElement {
       <StatusBar
         planMode={planMode}
         state={state}
+        activity={activity}
         providerName={providerName}
         model={model}
         totalTokens={lastUsage?.totalTokens ?? estimatedTokens}
