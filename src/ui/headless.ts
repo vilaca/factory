@@ -69,6 +69,7 @@ function formatArgsBrief(args: Record<string, unknown>): string {
   return parts.join(' ');
 }
 
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split into setup / event-pump / shutdown phases.
 export async function runHeadless(options: HeadlessOptions): Promise<void> {
   const userInput = await readAllStdin();
   if (!userInput) {

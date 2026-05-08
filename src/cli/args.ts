@@ -37,6 +37,7 @@ interface CliArgs {
   noRotateModels?: boolean;
 }
 
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): split flag dispatch into a table.
 export function parseArgs(args: string[]): CliArgs {
   const result: CliArgs = {};
 

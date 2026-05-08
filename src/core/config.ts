@@ -59,6 +59,7 @@ async function readTextFile(filePath: string): Promise<string | null> {
  * so users can fix it quickly. Unknown fields are tolerated for forward
  * compatibility.
  */
+// eslint-disable-next-line max-lines-per-function, max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split per-section validators.
 function validateConfig(data: unknown, filePath: string): Config {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`${filePath}: top-level must be a JSON object`);
@@ -536,6 +537,7 @@ export async function loadProjectInstructions(cwd: string): Promise<string | nul
   return result;
 }
 
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): table-drive the per-section deep-merge cases.
 function mergeConfigs(...configs: Config[]): Config {
   const result: Config = {};
 

@@ -335,6 +335,7 @@ function classifyErrorMessage(message: string): SessionErrorStatus {
  * or crashes before the first prompt). Status is set only when the surviving
  * session recorded a model-side error.
  */
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): split provider/model/error parsing into helpers.
 export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
   const sessions = await listSessionLogs();
   const seen = new Set<string>();

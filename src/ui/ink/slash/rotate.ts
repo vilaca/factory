@@ -215,6 +215,7 @@ function validateEntry(entry: RotationEntry): string | null {
   return null;
 }
 
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split sub-commands (status, add, remove, replace) into handlers.
 export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<void> {
   const refs = agent.refs.current;
   if (!refs) return;

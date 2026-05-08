@@ -15,6 +15,7 @@ interface SlashCommandContext {
   toggleFullOutput?: () => boolean;
 }
 
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): table-drive slash dispatch (registry of {name -> handler}).
 export async function dispatchSlashCommand(
   cmd: string,
   arg: string,

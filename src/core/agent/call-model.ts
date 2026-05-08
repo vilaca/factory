@@ -1,3 +1,4 @@
+/* eslint-disable max-depth -- TODO(complexity): rotation/retry tier logic is deeply nested; flatten via early-return helpers. */
 import type {
   ChatMessage,
   Provider,
@@ -106,6 +107,7 @@ interface ModelCallResult {
  * Abort and non-stream errors propagate to the orchestrator, which decides
  * how to surface them.
  */
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split rotation tiers into helpers.
 export async function* callModel(
   initialProvider: Provider,
   initialModel: string,

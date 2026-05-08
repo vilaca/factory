@@ -55,6 +55,7 @@ async function* fireStopHook(
   }
 }
 
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): extract step phases (plan / tool / model / hook).
 export async function* runAgent(
   userInput: string,
   options: AgentOptions,

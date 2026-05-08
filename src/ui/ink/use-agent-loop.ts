@@ -39,6 +39,7 @@ import type {
 
 export type { AgentLoopApi };
 
+// eslint-disable-next-line max-lines-per-function -- TODO(complexity): extract action handlers (run, cancel, pick, plan-resume) into separate hooks.
 export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [items, setItems] = useState<DisplayItem[]>([]);
   const [state, setState] = useState<RunState>('idle');

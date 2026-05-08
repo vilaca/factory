@@ -65,6 +65,7 @@ export class AnthropicProvider implements Provider {
     };
   }
 
+  // eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): split request build / stream parse / usage emit.
   async *chat(
     model: string,
     messages: ChatMessage[],
@@ -221,6 +222,7 @@ export function buildAnthropicTools(tools: ToolDefinition[], cacheLast?: boolean
   return out;
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity -- TODO(complexity): split system/cache/role-walk extraction.
 export function splitMessagesForAnthropic(messages: ChatMessage[]): {
   system: string | any[] | null;
   msgs: any[];
