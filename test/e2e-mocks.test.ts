@@ -1,3 +1,9 @@
+/**
+ * E2E tests that initiate a network connection. They either talk to a
+ * mock server (ollama / copilot) or deliberately point at a dead local
+ * port to verify error surfacing. Either way, the CLI opens a socket.
+ */
+
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
@@ -122,6 +128,49 @@ describe('Startup and welcome', () => {
     }
   });
 
+  it('shows error when Ollama is not running', async () => {
+    const cli = spawnCli([
+      '--provider',
+      'ollama',
+      '--model',
+      'test-model',
+      '--host',
+      'http://127.0.0.1:19999',
+    ]);
+    try {
+      const output = await cli.waitForOutput('Cannot connect', 10000);
+      assert.ok(output.includes('Cannot connect'));
+    } finally {
+      cli.kill();
+    }
+  });
+
+  it('prompts for a HuggingFace token and saves it for the next run', async () => {
+    const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-hf-config-'));
+    const cli = spawnCli(['--provider', 'huggingface'], {
+      XDG_CONFIG_HOME: configHome,
+      HF_TOKEN: '',
+      HUGGING_FACE_HUB_TOKEN: '',
+    });
+    try {
+      await cli.waitForOutput('HuggingFace API token required', 5000);
+      cli.sendLine('hf_test_token');
+      const output = await cli.waitForOutput('Saved HuggingFace credentials', 5000);
+      assert.ok(output.includes('Saved HuggingFace credentials'));
+    } finally {
+      cli.kill();
+      const configPath = path.join(configHome, 'factory', 'config.json');
+      const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      // Tokens are stored in the multi-key store keyed by provider.
+      const hfKeys: Array<{ token: string }> = savedConfig.keys?.huggingface ?? [];
+      assert.ok(
+        hfKeys.some(k => k.token === 'hf_test_token'),
+        `expected hf_test_token in keys.huggingface, got ${JSON.stringify(savedConfig.keys)}`,
+      );
+      fs.rmSync(configHome, { recursive: true, force: true });
+    }
+  });
+
   it('prompts for a Copilot token and reuses the saved token on the next run', async () => {
     const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-copilot-config-'));
     const args = ['--model', 'gpt-4.1', '--host', `http://127.0.0.1:${mockCopilotPort}`];
@@ -164,53 +213,6 @@ describe('Startup and welcome', () => {
       assert.ok(output.includes('Tools:'));
     } finally {
       secondCli.kill();
-      fs.rmSync(configHome, { recursive: true, force: true });
-    }
-  });
-});
-
-// ─── Error handling ─────────────────────────────────────────────────────
-
-describe('Error handling', () => {
-  it('shows error when Ollama is not running', async () => {
-    const cli = spawnCli([
-      '--provider',
-      'ollama',
-      '--model',
-      'test-model',
-      '--host',
-      'http://127.0.0.1:19999',
-    ]);
-    try {
-      const output = await cli.waitForOutput('Cannot connect', 10000);
-      assert.ok(output.includes('Cannot connect'));
-    } finally {
-      cli.kill();
-    }
-  });
-
-  it('prompts for a HuggingFace token and saves it for the next run', async () => {
-    const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-hf-config-'));
-    const cli = spawnCli(['--provider', 'huggingface'], {
-      XDG_CONFIG_HOME: configHome,
-      HF_TOKEN: '',
-      HUGGING_FACE_HUB_TOKEN: '',
-    });
-    try {
-      await cli.waitForOutput('HuggingFace API token required', 5000);
-      cli.sendLine('hf_test_token');
-      const output = await cli.waitForOutput('Saved HuggingFace credentials', 5000);
-      assert.ok(output.includes('Saved HuggingFace credentials'));
-    } finally {
-      cli.kill();
-      const configPath = path.join(configHome, 'factory', 'config.json');
-      const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      // Tokens are stored in the multi-key store keyed by provider.
-      const hfKeys: Array<{ token: string }> = savedConfig.keys?.huggingface ?? [];
-      assert.ok(
-        hfKeys.some(k => k.token === 'hf_test_token'),
-        `expected hf_test_token in keys.huggingface, got ${JSON.stringify(savedConfig.keys)}`,
-      );
       fs.rmSync(configHome, { recursive: true, force: true });
     }
   });
