@@ -66,6 +66,7 @@ interface SessionProps {
   tabLabel?: string;
 }
 
+// eslint-disable-next-line max-lines-per-function, complexity -- TODO(complexity): extract subviews (input bar, transcript, modals) into child components.
 export function Session(props: SessionProps): React.ReactElement {
   const isActive = props.isActive ?? true;
   const { exit } = useApp();

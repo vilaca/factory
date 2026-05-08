@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(complexity): extract subviews from ProviderPicker. */
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import chalk from 'chalk';
@@ -119,6 +120,7 @@ interface ProviderPickerProps {
 
 const VISIBLE_ROWS = 8;
 
+// eslint-disable-next-line max-lines-per-function -- TODO(complexity): extract row, header, and key-handler subcomponents.
 export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   const {
     providers,
@@ -295,6 +297,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   const isTextInputStage = stage.kind === 'key-add';
 
   useInput(
+    // eslint-disable-next-line max-statements, sonarjs/cognitive-complexity, complexity -- TODO(complexity): split per-stage key handlers.
     (input, key) => {
       if (key.escape) {
         switch (stage.kind) {

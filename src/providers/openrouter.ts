@@ -314,7 +314,7 @@ function buildModelDetail(model: OpenRouterModel): string {
 
   const maxOutputTokens = model.top_provider?.max_completion_tokens;
   if (typeof maxOutputTokens === 'number' && maxOutputTokens > 0) {
-    details.push(`max ${formatTokenCount(maxOutputTokens)} out`);
+    details.push(`max ${formatCount(maxOutputTokens)} out`);
   }
 
   const freeLimits = buildFreeLimitDetail(model);
@@ -361,13 +361,13 @@ function buildFreeLimitDetail(model: OpenRouterModel): string | undefined {
   ]);
 
   if (tokensPerMinute !== undefined) {
-    parts.push(`free ${formatTokenCount(tokensPerMinute)} TPM`);
+    parts.push(`free ${formatCount(tokensPerMinute)} TPM`);
   }
   if (requestsPerDay !== undefined) {
-    parts.push(`free ${formatLimitCount(requestsPerDay)} RPD`);
+    parts.push(`free ${formatCount(requestsPerDay)} RPD`);
   }
   if (requestsPerMinute !== undefined) {
-    parts.push(`free ${formatLimitCount(requestsPerMinute)} RPM`);
+    parts.push(`free ${formatCount(requestsPerMinute)} RPM`);
   }
 
   return parts.length > 0 ? parts.join(' · ') : undefined;
@@ -423,17 +423,7 @@ function supportsParameter(model: OpenRouterModel, name: string): boolean {
   return model.supported_parameters?.includes(name) ?? false;
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
-  }
-  return String(value);
-}
-
-function formatLimitCount(value: number): string {
+function formatCount(value: number): string {
   if (value >= 1_000_000) {
     return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
   }

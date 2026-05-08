@@ -225,6 +225,7 @@ function processTokens(tokens: Token[]): string {
   return ctx.out.join('');
 }
 
+// eslint-disable-next-line complexity -- Tag dispatch is intrinsically broad; per-tag helpers would just shuffle the cases around.
 function openTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
   const n = t.name;
   switch (n) {
@@ -325,6 +326,7 @@ function openTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
   }
 }
 
+// eslint-disable-next-line complexity -- Tag dispatch is intrinsically broad; per-tag helpers would just shuffle the cases around.
 function closeTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
   const n = t.name;
   // Find the most recent matching opener on the stack and pop down to it.

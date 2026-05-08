@@ -64,6 +64,7 @@ interface ToolLoopResult {
  * Aborts mid-loop are surfaced by throwing an AbortError; the orchestrator's
  * outer catch decides how to halt.
  */
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): factor recovery + dedup paths.
 export async function* runToolCalls(
   toolCalls: ToolCallMessage[],
   ctx: ToolLoopContext,
@@ -304,6 +305,7 @@ export async function* runToolCalls(
             deniedCount++;
           }
           if (event.type === 'tool-call-result') {
+            // eslint-disable-next-line max-depth -- TODO(complexity): inner result-handling block runs 6 deep; lift into a helper.
             if (event.result.success) {
               recovery.lastFailureMessage = null;
               recovery.lastFailureSignature = null;
@@ -411,6 +413,7 @@ interface ExecuteToolCallOptions {
   outputPrefix?: string;
 }
 
+// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split permission/exec/event-emit phases.
 async function* executeToolCall(
   toolCall: ToolCallMessage,
   ctx: ToolLoopContext,

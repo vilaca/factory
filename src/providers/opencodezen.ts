@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- TODO(complexity): split provider implementation. */
 import Anthropic from '@anthropic-ai/sdk';
 import type {
   Provider,

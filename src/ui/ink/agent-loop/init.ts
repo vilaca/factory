@@ -67,6 +67,7 @@ interface InitialRefsInput {
   initialGitDirty: boolean | null;
 }
 
+// eslint-disable-next-line complexity -- TODO(complexity): split optional-feature wiring (cache, hooks, planner) into builders.
 export function createInitialRefs(input: InitialRefsInput): RunRefs {
   const { opts, sessionLogger, initialSystemPrompt } = input;
   const conversation = new Conversation(initialSystemPrompt, opts.agentConfig?.maxToolResultTokens);

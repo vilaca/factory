@@ -54,6 +54,7 @@ export class HuggingFaceProvider implements Provider {
     };
   }
 
+  // eslint-disable-next-line complexity -- TODO(complexity): split tool-use / non-tool branches.
   async *chat(
     model: string,
     messages: ChatMessage[],

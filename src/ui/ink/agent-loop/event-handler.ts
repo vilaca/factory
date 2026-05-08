@@ -14,6 +14,7 @@ interface StreamingState {
   markTokenLimitHalt: () => void;
 }
 
+// eslint-disable-next-line max-lines-per-function, max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): table-drive the event-type switch into a registry.
 export function handleAgentEvent(event: AgentEvent, deps: AgentLoopDeps, ss: StreamingState): void {
   if (!deps.refs.current) return;
 

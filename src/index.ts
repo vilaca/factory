@@ -50,6 +50,7 @@ function canResumeLastSession(
   return models.includes(last.model);
 }
 
+// eslint-disable-next-line max-lines-per-function, max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split startup phases (rotation / auth / picker / mode dispatch).
 async function main(): Promise<void> {
   const cliArgs = parseArgs(process.argv.slice(2));
 
