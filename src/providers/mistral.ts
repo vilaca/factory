@@ -193,12 +193,12 @@ export class MistralProvider implements Provider {
     }
 
     this.modelsCache = dedupeModels(
-      (items as any[])
+      items
         // Note: exclude obvious non-chat families (embedding/moderation/OCR/
         // transcription/TTS) so the picker stays focused on usable chat models.
-        .filter(item => isSupportedMistralModel(item))
+        .filter((item): item is MistralModelItem => isSupportedMistralModel(item))
         .map(item => ({
-          id: typeof item.id === 'string' ? item.id : item.name,
+          id: typeof item.id === 'string' ? item.id : item.name!,
           name: typeof item.name === 'string' ? item.name : undefined,
           description: typeof item.description === 'string' ? item.description : undefined,
           max_context_length:
@@ -249,10 +249,25 @@ export class CodestralProvider extends MistralProvider {
   }
 }
 
-function isSupportedMistralModel(item: any): boolean {
+interface MistralModelItem {
+  id?: string;
+  name?: string;
+  description?: string;
+  max_context_length?: number;
+  maxContextLength?: number;
+  capabilities?: {
+    completion_chat?: boolean;
+    chat_completion?: boolean;
+    function_calling?: boolean;
+    tools?: boolean;
+    vision?: boolean;
+  };
+}
+
+function isSupportedMistralModel(item: unknown): item is MistralModelItem {
   if (!item || typeof item !== 'object') return false;
-  const id =
-    typeof item.id === 'string' ? item.id : typeof item.name === 'string' ? item.name : null;
+  const i = item as MistralModelItem;
+  const id = typeof i.id === 'string' ? i.id : typeof i.name === 'string' ? i.name : null;
   if (!id) return false;
   const lower = id.toLowerCase();
   if (/(embed|moderation|ocr|transcri|tts)/i.test(lower)) return false;

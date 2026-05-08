@@ -1,6 +1,19 @@
 import type { TokenUsage } from '../types.js';
 
-export function extractUsage(data: any): TokenUsage | undefined {
+/** OpenAI-compatible usage envelope. Cached split is a relatively recent
+ *  addition; older proxies emit only the three core counters. */
+export interface OpenAiCompatUsageEnvelope {
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+    };
+  };
+}
+
+export function extractUsage(data: OpenAiCompatUsageEnvelope | undefined): TokenUsage | undefined {
   if (!data?.usage) return undefined;
   const cached = data.usage.prompt_tokens_details?.cached_tokens;
   const out: TokenUsage = {

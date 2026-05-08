@@ -11,7 +11,20 @@ interface ToolCallAcc {
 
 export type StreamingToolCallAcc = ToolCallAcc[];
 
-export function mergeStreamedToolCalls(target: StreamingToolCallAcc, incoming: any[]): void {
+/** Shape of a streamed tool-call delta from OpenAI-compatible providers. */
+export interface StreamedToolCallDelta {
+  index?: number;
+  id?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+}
+
+export function mergeStreamedToolCalls(
+  target: StreamingToolCallAcc,
+  incoming: StreamedToolCallDelta[],
+): void {
   for (const tc of incoming) {
     const idx = tc.index ?? 0;
     if (!target[idx]) {
@@ -21,11 +34,11 @@ export function mergeStreamedToolCalls(target: StreamingToolCallAcc, incoming: a
       };
     }
     if (tc.function?.name) {
-      target[idx].function.name += tc.function.name;
+      target[idx]!.function.name += tc.function.name;
     }
     if (tc.function?.arguments) {
-      target[idx].function.__rawArgs =
-        (target[idx].function.__rawArgs ?? '') + tc.function.arguments;
+      target[idx]!.function.__rawArgs =
+        (target[idx]!.function.__rawArgs ?? '') + tc.function.arguments;
     }
   }
 }

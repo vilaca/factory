@@ -154,11 +154,22 @@ export class VercelProvider implements Provider {
       providerName: PROVIDER_NAME,
     });
 
+    interface VercelCatalogItem {
+      id?: string;
+      name?: string;
+      description?: string;
+      owned_by?: string;
+      context_window?: number;
+      max_tokens?: number;
+      type?: string;
+      tags?: unknown[];
+    }
     const byId = new Map<string, VercelModel>();
-    for (const item of items as any[]) {
+    for (const raw of items) {
       // Vercel's catalog includes multiple resource types; keep only language
       // models because this provider only targets chat text models.
-      if (!item || typeof item !== 'object') continue;
+      if (!raw || typeof raw !== 'object') continue;
+      const item = raw as VercelCatalogItem;
       if (typeof item.id !== 'string' || !item.id) continue;
       if (item.type !== 'language') continue;
       if (byId.has(item.id)) continue;

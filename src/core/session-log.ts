@@ -276,10 +276,10 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
   const sessions = await listSessionLogs();
   if (sessions.length === 0) return null;
   try {
-    const raw = await fs.promises.readFile(sessions[0].path, 'utf-8');
+    const raw = await fs.promises.readFile(sessions[0]!.path, 'utf-8');
     const lines = raw.split('\n').filter(Boolean);
     if (lines.length === 0) return null;
-    const entry = JSON.parse(lines[0]);
+    const entry = JSON.parse(lines[0]!);
     if (
       entry.type === 'session-start' &&
       typeof entry.provider === 'string' &&
@@ -292,7 +292,7 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
       let latestKeyId: string | undefined = startKeyId;
       for (let i = lines.length - 1; i >= 1; i--) {
         try {
-          const candidate = JSON.parse(lines[i]);
+          const candidate = JSON.parse(lines[i]!);
           if (candidate.type !== 'model-change') continue;
           if (typeof candidate.to !== 'string' || candidate.to === STARTUP_MODEL_PLACEHOLDER)
             continue;
@@ -416,7 +416,7 @@ async function readRecentSession(filePath: string): Promise<RecentSession | null
   const lines = raw.split('\n').filter(Boolean);
   if (lines.length === 0) return null;
 
-  const header = parseSessionStart(lines[0]);
+  const header = parseSessionStart(lines[0]!);
   if (!header) return null;
 
   const rollup = rollupSessionLines(lines.slice(1), header);
@@ -471,7 +471,7 @@ export async function loadHistoryFromSessions(limit = 500): Promise<string[]> {
     const inputs = await extractUserInputs(session.path).catch(() => []);
     // Within a session, push newest-first (the file is oldest-first, so reverse).
     for (let i = inputs.length - 1; i >= 0; i--) {
-      const input = inputs[i];
+      const input = inputs[i]!;
       if (history[history.length - 1] === input) continue;
       history.push(input);
       if (history.length >= limit) return history;

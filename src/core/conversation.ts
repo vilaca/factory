@@ -71,7 +71,7 @@ export class Conversation {
     const finalContent =
       content.length > cap ? elisionStub(toolName ?? '<tool>', content.length) : content;
     for (let i = this.messages.length - 1; i >= 0; i--) {
-      if (this.messages[i].role === 'tool') {
+      if (this.messages[i]!.role === 'tool') {
         const msg: ChatMessage = { role: 'tool', content: finalContent };
         if (toolCallId) {
           msg.tool_call_id = toolCallId;
@@ -105,7 +105,7 @@ export class Conversation {
     while (
       cutPoint > 0 &&
       cutPoint < this.messages.length &&
-      this.messages[cutPoint].role === 'tool'
+      this.messages[cutPoint]!.role === 'tool'
     ) {
       cutPoint--;
     }
@@ -143,7 +143,7 @@ export class Conversation {
     let userCount = 0;
     let boundaryIdx = -1;
     for (let i = this.messages.length - 1; i >= 0; i--) {
-      if (this.messages[i].role === 'user') {
+      if (this.messages[i]!.role === 'user') {
         userCount++;
         if (userCount === turnsToKeep) {
           boundaryIdx = i;
@@ -155,7 +155,7 @@ export class Conversation {
 
     let aged = 0;
     for (let i = 0; i < boundaryIdx; i++) {
-      const m = this.messages[i];
+      const m = this.messages[i]!;
       if (m.role !== 'tool') continue;
       if (m.content.startsWith('[elided:')) continue;
       const replacement: ChatMessage = {

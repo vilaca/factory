@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import chalk from 'chalk';
 
 interface CliArgs {
@@ -6,6 +7,8 @@ interface CliArgs {
   provider?: string;
   token?: string;
   help?: boolean;
+  version?: boolean;
+  debug?: boolean;
   noLog?: boolean;
   /** Treat session-log failures as fatal — exit non-zero on log init failure
    *  or first write failure. For workloads where logs are auditable artifacts
@@ -37,76 +40,82 @@ interface CliArgs {
   noRotateModels?: boolean;
 }
 
-// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): split flag dispatch into a table.
+/** Flags whose presence sets a boolean field on `CliArgs`. */
+const BOOLEAN_FLAGS: Record<string, keyof CliArgs> = {
+  '--help': 'help',
+  '-h': 'help',
+  '--version': 'version',
+  '-V': 'version',
+  '--debug': 'debug',
+  '--no-log': 'noLog',
+  '--strict-log': 'strictLog',
+  '--plan': 'plan',
+  '--no-auto-correct': 'noAutoCorrect',
+  '--bash-dedup': 'bashDedup',
+  '--no-bash-dedup': 'noBashDedup',
+  '--read-cache': 'readCache',
+  '--no-read-cache': 'noReadCache',
+  '--line-count-hint': 'lineCountHint',
+  '--no-line-count-hint': 'noLineCountHint',
+  '--subagents': 'subagents',
+  '--no-subagents': 'noSubagents',
+  '--skills': 'skills',
+  '--no-skills': 'noSkills',
+  '--hooks': 'hooks',
+  '--no-hooks': 'noHooks',
+  '--no-clear': 'noClear',
+  '--pick': 'pick',
+  '--save-rotate': 'saveRotate',
+  '--no-rotate': 'noRotate',
+  '--no-rotate-keys': 'noRotateKeys',
+  '--no-rotate-models': 'noRotateModels',
+};
+
+/** Flags whose value is the next argv entry (a string). */
+const STRING_FLAGS: Record<string, keyof CliArgs> = {
+  '--model': 'model',
+  '-m': 'model',
+  '--host': 'host',
+  '--provider': 'provider',
+  '-p': 'provider',
+  '--token': 'token',
+  '-t': 'token',
+  '--rotate': 'rotate',
+};
+
+function parsePositiveSeconds(raw: string | undefined): number {
+  const n = Number(raw);
+  if (!isFinite(n) || n <= 0) {
+    console.error(`Invalid value for --turn-timeout: must be a positive number of seconds`);
+    process.exit(1);
+  }
+  return n;
+}
+
 export function parseArgs(args: string[]): CliArgs {
   const result: CliArgs = {};
 
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--model' || arg === '-m') {
-      result.model = args[++i];
-    } else if (arg === '--host') {
-      result.host = args[++i];
-    } else if (arg === '--provider' || arg === '-p') {
-      result.provider = args[++i];
-    } else if (arg === '--token' || arg === '-t') {
-      result.token = args[++i];
-    } else if (arg === '--help' || arg === '-h') {
-      result.help = true;
-    } else if (arg === '--no-log') {
-      result.noLog = true;
-    } else if (arg === '--strict-log') {
-      result.strictLog = true;
-    } else if (arg === '--plan') {
-      result.plan = true;
-    } else if (arg === '--no-auto-correct') {
-      result.noAutoCorrect = true;
-    } else if (arg === '--bash-dedup') {
-      result.bashDedup = true;
-    } else if (arg === '--no-bash-dedup') {
-      result.noBashDedup = true;
-    } else if (arg === '--read-cache') {
-      result.readCache = true;
-    } else if (arg === '--no-read-cache') {
-      result.noReadCache = true;
-    } else if (arg === '--line-count-hint') {
-      result.lineCountHint = true;
-    } else if (arg === '--no-line-count-hint') {
-      result.noLineCountHint = true;
-    } else if (arg === '--subagents') {
-      result.subagents = true;
-    } else if (arg === '--no-subagents') {
-      result.noSubagents = true;
-    } else if (arg === '--skills') {
-      result.skills = true;
-    } else if (arg === '--no-skills') {
-      result.noSkills = true;
-    } else if (arg === '--hooks') {
-      result.hooks = true;
-    } else if (arg === '--no-hooks') {
-      result.noHooks = true;
-    } else if (arg === '--no-clear') {
-      result.noClear = true;
-    } else if (arg === '--pick') {
-      result.pick = true;
-    } else if (arg === '--rotate') {
-      result.rotate = args[++i];
-    } else if (arg === '--save-rotate') {
-      result.saveRotate = true;
-    } else if (arg === '--no-rotate') {
-      result.noRotate = true;
-    } else if (arg === '--no-rotate-keys') {
-      result.noRotateKeys = true;
-    } else if (arg === '--no-rotate-models') {
-      result.noRotateModels = true;
-    } else if (arg === '--turn-timeout') {
-      const n = Number(args[++i]);
-      if (!isFinite(n) || n <= 0) {
-        console.error(`Invalid value for --turn-timeout: must be a positive number of seconds`);
-        process.exit(1);
-      }
-      result.turnTimeoutSec = n;
-    } else if (!arg.startsWith('-')) {
+    const arg = args[i]!;
+
+    const boolKey = BOOLEAN_FLAGS[arg];
+    if (boolKey) {
+      (result as Record<string, unknown>)[boolKey] = true;
+      continue;
+    }
+
+    const strKey = STRING_FLAGS[arg];
+    if (strKey) {
+      (result as Record<string, unknown>)[strKey] = args[++i];
+      continue;
+    }
+
+    if (arg === '--turn-timeout') {
+      result.turnTimeoutSec = parsePositiveSeconds(args[++i]);
+      continue;
+    }
+
+    if (!arg.startsWith('-')) {
       result.model = arg;
     }
   }
@@ -114,10 +123,26 @@ export function parseArgs(args: string[]): CliArgs {
   return result;
 }
 
+function readPackageVersion(): string {
+  try {
+    const url = new URL('../../package.json', import.meta.url);
+    const json = JSON.parse(readFileSync(url, 'utf8')) as { version?: string };
+    return json.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+export function printVersion(): void {
+  console.log(`factory ${readPackageVersion()}`);
+}
+
 export function printUsage(): void {
   const lines = [
     '',
     chalk.bold('  factory') +
+      ' ' +
+      chalk.dim(`v${readPackageVersion()}`) +
       chalk.dim(
         ' — Claude Code-like CLI for Ollama, HuggingFace, llama.cpp, Anthropic, Copilot, OpenRouter, Vercel AI Gateway, OpenCode Zen, Google AI Studio, Mistral, Codestral, Cerebras, Groq, Cohere & Workers AI',
       ),
@@ -149,6 +174,8 @@ export function printUsage(): void {
     '    --no-rotate-keys         Disable key rotation (still rotate (provider, model) entries)',
     '    --no-rotate-models       Disable model rotation (still rotate keys within the same model)',
     '    --help, -h               Show this help',
+    '    --version, -V            Print version and exit',
+    '    --debug                  Enable debug logging to stderr (alias for FACTORY_DEBUG=1)',
     '',
     chalk.bold('  Examples:'),
     '    factory qwen2.5-coder',

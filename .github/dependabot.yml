@@ -13,6 +13,19 @@ updates:
       types:
         patterns:
           - '@types/*'
+      # Ink's major versions track React's; group them so a Ink major bump and
+      # the matching React major bump land in the same PR rather than fighting
+      # each other across two open PRs.
+      ink-react:
+        patterns:
+          - 'ink'
+          - 'react'
+          - '@types/react'
+      # MCP packages share a release cadence; bump them together so the SDK
+      # client and any MCP-adjacent tooling stay in lockstep.
+      modelcontextprotocol:
+        patterns:
+          - '@modelcontextprotocol/*'
       dev-minor:
         dependency-type: development
         update-types:

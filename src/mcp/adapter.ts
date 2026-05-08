@@ -2,10 +2,21 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { ToolDefinition, ToolHandler, ToolResult } from '../tools/types.js';
 import { errorMessage } from '../utils/errors.js';
 
+interface McpToolDescriptor {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+interface McpContentItem {
+  type?: string;
+  text?: string;
+}
+
 export function adaptMcpTool(
   mcpClient: Client,
   serverName: string,
-  mcpTool: { name: string; description?: string; inputSchema?: any },
+  mcpTool: McpToolDescriptor,
 ): ToolHandler {
   const definition: ToolDefinition = {
     type: 'function',
@@ -30,7 +41,7 @@ export function adaptMcpTool(
 
         const output = Array.isArray(result.content)
           ? result.content
-              .map((c: any) => (c.type === 'text' ? c.text : JSON.stringify(c)))
+              .map((c: McpContentItem) => (c.type === 'text' ? (c.text ?? '') : JSON.stringify(c)))
               .join('\n')
           : String(result.content);
 

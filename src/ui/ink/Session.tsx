@@ -307,7 +307,7 @@ export function Session(props: SessionProps): React.ReactElement {
     // (so the user can /q out without answering the prompt first).
     if (rotationPrompt) {
       if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ');
+        const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
         void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
           agent,
@@ -334,7 +334,7 @@ export function Session(props: SessionProps): React.ReactElement {
       // Slash commands always fire immediately — they are UI/state ops,
       // not prompts for the agent. Only plain text gets queued.
       if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ');
+        const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
         void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
           agent,
@@ -361,7 +361,7 @@ export function Session(props: SessionProps): React.ReactElement {
       // permission decision (e.g. /clear shouldn't deny the pending tool).
       // Dispatch them and leave the permission still pending.
       if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ');
+        const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
         refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
         void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
           agent,
@@ -414,7 +414,7 @@ export function Session(props: SessionProps): React.ReactElement {
     }
 
     if (trimmed.startsWith('/')) {
-      const [cmd, ...rest] = trimmed.split(' ');
+      const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
       refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
       const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), {
         agent,

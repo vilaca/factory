@@ -22,11 +22,11 @@ export class LlamaCppProvider implements Provider {
     try {
       const res = await fetch(`${this.baseUrl}/v1/models`);
       if (res.ok) {
-        const data = (await res.json()) as any;
+        const data = (await res.json()) as { data?: Array<{ id: string }> };
         if (data.data?.length) {
           // Note: llama.cpp serves the currently loaded model set; we surface
           // that list directly instead of applying provider-side filtering.
-          return data.data.map((m: any) => m.id);
+          return data.data.map(m => m.id);
         }
       }
     } catch {

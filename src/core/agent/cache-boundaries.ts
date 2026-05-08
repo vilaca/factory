@@ -24,21 +24,21 @@ export function applyCacheBoundaries(messages: ChatMessage[]): ChatMessage[] {
   const out = messages.slice();
 
   for (let i = 0; i < out.length; i++) {
-    if (out[i].role === 'system') {
-      out[i] = { ...out[i], cacheBoundary: true };
+    if (out[i]!.role === 'system') {
+      out[i] = { ...out[i]!, cacheBoundary: true };
       break;
     }
   }
 
   let lastAssistantIdx = -1;
   for (let i = out.length - 1; i >= 0; i--) {
-    if (out[i].role === 'assistant') {
+    if (out[i]!.role === 'assistant') {
       lastAssistantIdx = i;
       break;
     }
   }
   if (lastAssistantIdx >= 0 && lastAssistantIdx < out.length - 1) {
-    out[lastAssistantIdx] = { ...out[lastAssistantIdx], cacheBoundary: true };
+    out[lastAssistantIdx] = { ...out[lastAssistantIdx]!, cacheBoundary: true };
   }
 
   return out;

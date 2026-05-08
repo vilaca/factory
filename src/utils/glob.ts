@@ -16,7 +16,7 @@
 export function globToRegex(glob: string): RegExp {
   let re = '';
   for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i];
+    const ch = glob[i]!;
     if (ch === '*') {
       if (glob[i + 1] === '*') {
         re += '.*';

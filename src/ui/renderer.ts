@@ -5,19 +5,39 @@ import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
 import { getBuildInfo } from '../utils/build-info.js';
 
+/** Minimal shape of the marked-terminal extension we patch. The package's
+ *  exported types don't expose the `renderer` object directly, so we declare
+ *  a narrow surface covering exactly what we touch. */
+interface MarkedTerminalExt {
+  renderer: {
+    text: (this: { parser: { parseInline: (tokens: unknown[]) => string } }, token: unknown) => string;
+    code: (token: unknown) => string;
+  };
+}
+
+interface TextTokenLike {
+  tokens?: unknown[];
+}
+
+interface CodeTokenLike {
+  lang?: unknown;
+}
+
 // marked-terminal v7's `text` renderer ignores marked v15's `tokens` array on
 // text tokens, so inline formatting (bold/italic/code/links) is dropped inside
 // list items. Patch it to parse the inline tokens when present.
-const ext = markedTerminal({ reflowText: false, width: 0, showSectionPrefix: false }) as any;
+const ext = markedTerminal({
+  reflowText: false,
+  width: 0,
+  showSectionPrefix: false,
+}) as unknown as MarkedTerminalExt;
 const origText = ext.renderer.text;
-ext.renderer.text = function (token: any): string {
-  if (
-    token &&
-    typeof token === 'object' &&
-    Array.isArray(token.tokens) &&
-    token.tokens.length > 0
-  ) {
-    return this.parser.parseInline(token.tokens);
+ext.renderer.text = function (token: unknown): string {
+  if (token && typeof token === 'object') {
+    const t = token as TextTokenLike;
+    if (Array.isArray(t.tokens) && t.tokens.length > 0) {
+      return this.parser.parseInline(t.tokens);
+    }
   }
   return origText.call(this, token);
 };
@@ -27,14 +47,17 @@ ext.renderer.text = function (token: any): string {
 // language — common with LLM output like ```plain / ```plaintext / ```output.
 // Strip unsupported langs so cli-highlight takes the auto-detect path instead.
 const origCode = ext.renderer.code;
-ext.renderer.code = function (token: any): string {
-  if (token && typeof token === 'object' && token.lang && !supportsLanguage(String(token.lang))) {
-    token = { ...token, lang: '' };
+ext.renderer.code = function (token: unknown): string {
+  if (token && typeof token === 'object') {
+    const t = token as CodeTokenLike;
+    if (t.lang && !supportsLanguage(String(t.lang))) {
+      token = { ...t, lang: '' };
+    }
   }
   return origCode.call(this, token);
 };
 
-const marked = new Marked(ext);
+const marked = new Marked(ext as unknown as Parameters<typeof Marked.prototype.use>[0]);
 
 export function renderMarkdown(text: string): string {
   if (!text.trim()) return text;
@@ -115,12 +138,12 @@ function renderLogoFrame(shift: number): string {
   const palette = LOGO_LETTERS.map(l => l.color);
   const animating = shift < palette.length;
   const letters = animating ? LOGO_LETTERS_LEET : LOGO_LETTERS;
-  const rowCount = letters[0].rows.length;
+  const rowCount = letters[0]!.rows.length;
   const lines: string[] = [];
   for (let r = 0; r < rowCount; r++) {
     const segments = letters.map((letter, i) => {
-      const color = palette[(i + shift) % palette.length];
-      return chalk.hex(color)(letter.rows[r]);
+      const color = palette[(i + shift) % palette.length]!;
+      return chalk.hex(color)(letter.rows[r]!);
     });
     lines.push('  ' + segments.join(''));
   }
@@ -128,7 +151,7 @@ function renderLogoFrame(shift: number): string {
 }
 
 export async function animateLogo(frameMs = 220): Promise<void> {
-  const rowCount = LOGO_LETTERS[0].rows.length;
+  const rowCount = LOGO_LETTERS[0]!.rows.length;
   if (!process.stdout.isTTY) {
     process.stdout.write(renderLogoFrame(LOGO_LETTERS.length) + '\n');
     return;

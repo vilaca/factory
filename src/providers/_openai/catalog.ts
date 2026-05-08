@@ -14,6 +14,6 @@ export async function fetchOpenAiCatalog(opts: FetchOpenAiCatalogOptions): Promi
   if (!res.ok) {
     throw new Error(`${opts.providerName} API error ${res.status}: ${await res.text()}`);
   }
-  const data = (await res.json()) as any;
+  const data = (await res.json()) as { data?: unknown[] };
   return Array.isArray(data?.data) ? data.data : [];
 }

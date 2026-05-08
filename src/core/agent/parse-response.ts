@@ -41,7 +41,7 @@ export async function* parseModelResponse(
       yield {
         type: 'tool-call-recovered',
         count: parsed.toolCalls.length,
-        source: parsed.sources[0],
+        source: parsed.sources[0]!,
       };
     }
   }

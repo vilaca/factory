@@ -20,7 +20,7 @@ export function historyUp(refs: { current: RunRefs | null }, currentInput: strin
   } else if (refs.current.historyIndex < history.length - 1) {
     refs.current.historyIndex++;
   }
-  return history[refs.current.historyIndex];
+  return history[refs.current.historyIndex] ?? null;
 }
 
 export function historyDown(refs: { current: RunRefs | null }): string | null {
@@ -28,7 +28,7 @@ export function historyDown(refs: { current: RunRefs | null }): string | null {
   if (refs.current.historyIndex === -1) return null;
   if (refs.current.historyIndex > 0) {
     refs.current.historyIndex--;
-    return refs.current.pastHistory[refs.current.historyIndex];
+    return refs.current.pastHistory[refs.current.historyIndex] ?? null;
   }
   refs.current.historyIndex = -1;
   return refs.current.historyDraft;

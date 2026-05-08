@@ -163,10 +163,10 @@ export class WorkersAiProvider implements Provider {
         throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${await res.text()}`);
       }
 
-      const data = (await res.json()) as any;
+      const data = (await res.json()) as { result?: unknown[] };
       const pageItems = Array.isArray(data?.result) ? data.result : [];
       const normalized = pageItems
-        .flatMap((item: any) => normalizeModel(item))
+        .flatMap((item: unknown) => normalizeModel(item))
         // Note: keep only text-generation entries for now; if Cloudflare starts
         // labeling useful chat models differently, this filter may need to widen.
         .filter(
@@ -215,46 +215,59 @@ function normalizeModelSearchUrl(host: string | undefined, accountId: string): s
   return `${DEFAULT_API_ROOT}/accounts/${accountId}/ai/models/search`;
 }
 
-function normalizeModel(item: any): WorkersAiModel[] {
+interface CatalogRecord {
+  [key: string]: unknown;
+}
+
+function asRecord(value: unknown): CatalogRecord | undefined {
+  return value && typeof value === 'object' ? (value as CatalogRecord) : undefined;
+}
+
+function normalizeModel(rawItem: unknown): WorkersAiModel[] {
+  const item = asRecord(rawItem);
+  if (!item) return [];
+
   const id =
-    typeof item?.name === 'string'
+    typeof item.name === 'string'
       ? item.name
-      : typeof item?.id === 'string'
+      : typeof item.id === 'string'
         ? item.id
-        : typeof item?.model === 'string'
+        : typeof item.model === 'string'
           ? item.model
           : undefined;
   if (!id) return [];
 
-  const taskName = normalizeTaskName(item?.task);
+  const taskName = normalizeTaskName(item.task);
+  const properties = asRecord(item.properties);
   return [
     {
       id,
-      description: typeof item?.description === 'string' ? item.description : undefined,
+      description: typeof item.description === 'string' ? item.description : undefined,
       taskName,
       contextWindow: pickFirstNumber(
-        item?.context_window,
-        item?.context_length,
-        item?.max_context_tokens,
-        item?.properties?.context_window,
+        item.context_window,
+        item.context_length,
+        item.max_context_tokens,
+        properties?.context_window,
       ),
       supportsTools: pickCapability(item, 'function'),
       supportsReasoning: pickCapability(item, 'reason'),
       supportsVision: pickCapability(item, 'vision'),
-      experimental: item?.experimental === true || hasTag(item, 'experimental'),
+      experimental: item.experimental === true || hasTag(item, 'experimental'),
     },
   ];
 }
 
-function normalizeTaskName(task: any): string | undefined {
+function normalizeTaskName(task: unknown): string | undefined {
+  if (typeof task === 'string') return task.toLowerCase();
+  const t = asRecord(task);
+  if (!t) return undefined;
   const raw =
-    typeof task === 'string'
-      ? task
-      : typeof task?.name === 'string'
-        ? task.name
-        : typeof task?.description === 'string'
-          ? task.description
-          : undefined;
+    typeof t.name === 'string'
+      ? t.name
+      : typeof t.description === 'string'
+        ? t.description
+        : undefined;
   return raw?.toLowerCase();
 }
 
@@ -265,19 +278,21 @@ function pickFirstNumber(...values: unknown[]): number | undefined {
   return undefined;
 }
 
-function pickCapability(item: any, keyword: string): boolean | undefined {
-  if (typeof item?.[`supports_${keyword}`] === 'boolean') return item[`supports_${keyword}`];
-  if (typeof item?.capabilities?.[keyword] === 'boolean') return item.capabilities[keyword];
+function pickCapability(item: CatalogRecord, keyword: string): boolean | undefined {
+  const flag = item[`supports_${keyword}`];
+  if (typeof flag === 'boolean') return flag;
+  const caps = asRecord(item.capabilities);
+  if (caps && typeof caps[keyword] === 'boolean') return caps[keyword] as boolean;
   if (hasTag(item, keyword)) return true;
   return undefined;
 }
 
-function hasTag(item: any, keyword: string): boolean {
+function hasTag(item: CatalogRecord, keyword: string): boolean {
   const lower = keyword.toLowerCase();
   const tags = [
-    ...(Array.isArray(item?.tags) ? item.tags : []),
-    ...(Array.isArray(item?.capabilities) ? item.capabilities : []),
-    ...(Array.isArray(item?.features) ? item.features : []),
+    ...(Array.isArray(item.tags) ? item.tags : []),
+    ...(Array.isArray(item.capabilities) ? item.capabilities : []),
+    ...(Array.isArray(item.features) ? item.features : []),
   ];
   return tags.some(tag => typeof tag === 'string' && tag.toLowerCase().includes(lower));
 }

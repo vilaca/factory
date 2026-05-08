@@ -33,7 +33,7 @@ export default [
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/prefer-nullish-coalescing': 'warn',
     },
   },
@@ -66,6 +66,9 @@ export default [
     rules: {
       '@typescript-eslint/no-floating-promises': 'off',
       '@typescript-eslint/no-misused-promises': 'off',
+      // Tests legitimately use `any` for ad-hoc mocks and partial doubles.
+      // Source code is held to the stricter `error` setting.
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 ];

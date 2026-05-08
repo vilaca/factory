@@ -122,14 +122,12 @@ export class OllamaProvider implements Provider {
         }
         if (chunk.done) {
           result.done = true;
-          const doneReason = (chunk as any).done_reason;
-          if (typeof doneReason === 'string') result.doneReason = doneReason;
-          if ((chunk as any).eval_count || (chunk as any).prompt_eval_count) {
+          if (typeof chunk.done_reason === 'string') result.doneReason = chunk.done_reason;
+          if (chunk.eval_count || chunk.prompt_eval_count) {
             result.usage = {
-              promptTokens: (chunk as any).prompt_eval_count ?? 0,
-              completionTokens: (chunk as any).eval_count ?? 0,
-              totalTokens:
-                ((chunk as any).prompt_eval_count ?? 0) + ((chunk as any).eval_count ?? 0),
+              promptTokens: chunk.prompt_eval_count ?? 0,
+              completionTokens: chunk.eval_count ?? 0,
+              totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
             };
           }
         }
@@ -183,8 +181,7 @@ export class OllamaProvider implements Provider {
       content: response.message?.content,
       done: true,
     };
-    const doneReason = (response as any).done_reason;
-    if (typeof doneReason === 'string') result.doneReason = doneReason;
+    if (typeof response.done_reason === 'string') result.doneReason = response.done_reason;
     if (response.message?.tool_calls) {
       result.tool_calls = response.message.tool_calls.map(tc => ({
         function: {
@@ -193,12 +190,11 @@ export class OllamaProvider implements Provider {
         },
       }));
     }
-    if ((response as any).eval_count || (response as any).prompt_eval_count) {
+    if (response.eval_count || response.prompt_eval_count) {
       result.usage = {
-        promptTokens: (response as any).prompt_eval_count ?? 0,
-        completionTokens: (response as any).eval_count ?? 0,
-        totalTokens:
-          ((response as any).prompt_eval_count ?? 0) + ((response as any).eval_count ?? 0),
+        promptTokens: response.prompt_eval_count ?? 0,
+        completionTokens: response.eval_count ?? 0,
+        totalTokens: (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
       };
     }
     return result;
@@ -242,7 +238,7 @@ function estimateOllamaModelTier(model: string): ModelTier {
   // Extract parameter count from model name (e.g., "qwen2.5-coder:32b", "llama3:70b")
   const paramMatch = lower.match(/(\d+)b/);
   if (paramMatch) {
-    const params = parseInt(paramMatch[1], 10);
+    const params = parseInt(paramMatch[1]!, 10);
     if (params >= 70) return 'strong';
     if (params >= 14) return 'medium';
     return 'weak';

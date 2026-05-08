@@ -123,11 +123,19 @@ export class CerebrasProvider implements Provider {
       providerName: 'Cerebras',
     });
 
+    interface CatalogItem {
+      id?: string;
+      owned_by?: string;
+    }
     this.modelsCache = items
       .filter(
-        (item: any) => item && typeof item === 'object' && typeof item.id === 'string' && item.id,
+        (item: unknown): item is CatalogItem & { id: string } =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof (item as CatalogItem).id === 'string' &&
+          !!(item as CatalogItem).id,
       )
-      .map((item: any) => ({
+      .map(item => ({
         id: item.id,
         owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
       }));

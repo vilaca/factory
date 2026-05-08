@@ -15,6 +15,43 @@ import {
   type StreamingToolCallAcc,
 } from './_openai/tool-calls.js';
 
+/** Local mirror of the OpenAI-style tool shape HF accepts. The HF SDK's
+ *  `ChatCompletionInputTool` interface isn't re-exported from the package
+ *  root, so we declare a structurally-equivalent local type. The trailing
+ *  index signature matches the SDK's open shape so it's assignable. */
+interface HfTool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    arguments: Record<string, unknown>;
+    [property: string]: unknown;
+  };
+  [property: string]: unknown;
+}
+
+/** Non-streaming tool-call output. Mirrors the HF SDK's
+ *  `ChatCompletionOutputToolCall` (also unexported at root level). */
+interface HfToolCall {
+  id: string;
+  function: {
+    name: string;
+    arguments: string | Record<string, unknown>;
+  };
+}
+
+function toHfTools(tools?: ToolDefinition[]): HfTool[] | undefined {
+  if (!tools || tools.length === 0) return undefined;
+  return tools.map(t => ({
+    type: t.type,
+    function: {
+      name: t.function.name,
+      description: t.function.description ?? '',
+      arguments: t.function.parameters,
+    },
+  }));
+}
+
 export class HuggingFaceProvider implements Provider {
   name = 'huggingface';
   private client: InferenceClient;
@@ -76,10 +113,10 @@ export class HuggingFaceProvider implements Provider {
       const stream = this.client.chatCompletionStream({
         model,
         messages: hfMessages,
-        tools: tools as any,
+        tools: toHfTools(tools),
         max_tokens: options?.maxTokens ?? 4096,
         signal: options?.signal,
-      } as any);
+      });
 
       let toolCalls: StreamingToolCallAcc | undefined;
 
@@ -96,7 +133,7 @@ export class HuggingFaceProvider implements Provider {
 
         if (delta.tool_calls) {
           if (!toolCalls) toolCalls = [];
-          mergeStreamedToolCalls(toolCalls, delta.tool_calls as any[]);
+          mergeStreamedToolCalls(toolCalls, delta.tool_calls);
         }
 
         if (
@@ -136,10 +173,10 @@ export class HuggingFaceProvider implements Provider {
     const response = await this.client.chatCompletion({
       model,
       messages: hfMessages,
-      tools: tools as any,
+      tools: toHfTools(tools),
       max_tokens: options?.maxTokens ?? 4096,
       signal: options?.signal,
-    } as any);
+    });
 
     const choice = response.choices?.[0];
     const result: ChatChunk = {
@@ -148,20 +185,20 @@ export class HuggingFaceProvider implements Provider {
     };
 
     if (choice?.message?.tool_calls) {
-      result.tool_calls = choice.message.tool_calls.map((tc: any) => ({
+      result.tool_calls = choice.message.tool_calls.map((tc: HfToolCall) => ({
         id: tc.id,
         function: {
           name: tc.function.name,
           arguments:
             typeof tc.function.arguments === 'string'
-              ? JSON.parse(tc.function.arguments)
+              ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
               : tc.function.arguments,
         },
       }));
     }
 
-    if ((response as any).usage) {
-      const u = (response as any).usage;
+    if (response.usage) {
+      const u = response.usage;
       result.usage = {
         promptTokens: u.prompt_tokens ?? 0,
         completionTokens: u.completion_tokens ?? 0,
@@ -177,7 +214,7 @@ function estimateHfModelTier(model: string): ModelTier {
   const lower = model.toLowerCase();
   const paramMatch = lower.match(/(\d+)b/);
   if (paramMatch) {
-    const params = parseInt(paramMatch[1], 10);
+    const params = parseInt(paramMatch[1]!, 10);
     if (params >= 70) return 'strong';
     if (params >= 14) return 'medium';
     return 'weak';

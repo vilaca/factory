@@ -129,27 +129,39 @@ export class CopilotProvider implements Provider {
   }
 }
 
+interface CopilotModelItem {
+  id?: string;
+  name?: string;
+  model_picker_enabled?: boolean;
+  capabilities?: { type?: string };
+  policy?: { state?: string };
+}
+
 function extractModelEntries(data: unknown): CopilotModelEntry[] {
-  const rawItems = Array.isArray(data)
+  const rawItems: unknown[] = Array.isArray(data)
     ? data
-    : data && typeof data === 'object' && Array.isArray((data as any).data)
-      ? (data as any).data
+    : data && typeof data === 'object' && Array.isArray((data as { data?: unknown[] }).data)
+      ? ((data as { data: unknown[] }).data)
       : [];
 
   const models: string[] = rawItems
-    .filter((item: any) => {
+    .filter((item: unknown) => {
       if (!item || typeof item !== 'object') return true;
+      const i = item as CopilotModelItem;
       // Note: respect Copilot's own picker and policy flags so we do not offer
       // models the upstream service marks as hidden, non-chat, or disabled.
-      if (item.model_picker_enabled === false) return false;
-      if (item.capabilities?.type && item.capabilities.type !== 'chat') return false;
-      if (item.policy?.state && item.policy.state !== 'enabled') return false;
+      if (i.model_picker_enabled === false) return false;
+      if (i.capabilities?.type && i.capabilities.type !== 'chat') return false;
+      if (i.policy?.state && i.policy.state !== 'enabled') return false;
       return true;
     })
-    .map((item: any) => {
+    .map((item: unknown) => {
       if (typeof item === 'string') return item;
-      if (item && typeof item.id === 'string') return item.id;
-      if (item && typeof item.name === 'string') return item.name;
+      if (item && typeof item === 'object') {
+        const i = item as CopilotModelItem;
+        if (typeof i.id === 'string') return i.id;
+        if (typeof i.name === 'string') return i.name;
+      }
       return null;
     })
     .filter((value: string | null): value is string => value !== null);

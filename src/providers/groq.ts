@@ -139,8 +139,18 @@ export class GroqProvider implements Provider {
       providerName: PROVIDER_NAME,
     });
 
-    this.modelsCache = (items as any[])
-      .filter(item => item && typeof item === 'object' && typeof item.id === 'string' && item.id)
+    interface GroqCatalogItem {
+      id?: string;
+      owned_by?: string;
+    }
+    this.modelsCache = items
+      .filter(
+        (item: unknown): item is GroqCatalogItem & { id: string } =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof (item as GroqCatalogItem).id === 'string' &&
+          !!(item as GroqCatalogItem).id,
+      )
       // Exclude Groq models that are clearly speech/audio, guardrail, or
       // other non-chat endpoints even if they share the same catalog.
       .filter(item => supportsChatCompletions(item.id))

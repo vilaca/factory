@@ -121,7 +121,7 @@ export class CohereProvider implements Provider {
       throw new Error(`Cohere API error ${res.status}: ${await res.text()}`);
     }
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as CohereChatResponse;
     const result: ChatChunk = {
       content: extractTextContent(data?.message?.content),
       done: true,
@@ -130,7 +130,7 @@ export class CohereProvider implements Provider {
     };
 
     if (Array.isArray(data?.message?.tool_calls)) {
-      result.tool_calls = data.message.tool_calls.flatMap((tc: any) => {
+      result.tool_calls = data.message.tool_calls.flatMap((tc: CohereToolCall) => {
         if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
           return [];
         }
@@ -240,9 +240,9 @@ export class CohereProvider implements Provider {
         throw new Error(`Cohere API error ${res.status}: ${await res.text()}`);
       }
 
-      const data = (await res.json()) as any;
+      const data = (await res.json()) as CohereModelsResponse;
       const pageModels = Array.isArray(data?.models) ? data.models : [];
-      models.push(...pageModels.flatMap((item: any) => normalizeModel(item)));
+      models.push(...pageModels.flatMap((item: unknown) => normalizeModel(item)));
       nextPageToken =
         typeof data?.next_page_token === 'string' && data.next_page_token
           ? data.next_page_token
@@ -258,19 +258,22 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '');
 }
 
-function normalizeModel(item: any): CohereModel[] {
+function normalizeModel(item: unknown): CohereModel[] {
+  const obj = (typeof item === 'object' && item !== null ? item : {}) as Record<string, unknown>;
   const name =
-    typeof item?.name === 'string' ? item.name : typeof item?.id === 'string' ? item.id : undefined;
+    typeof obj.name === 'string' ? obj.name : typeof obj.id === 'string' ? obj.id : undefined;
   if (!name) return [];
+
+  const endpoints = Array.isArray(obj.endpoints)
+    ? obj.endpoints.filter((entry: unknown): entry is string => typeof entry === 'string')
+    : undefined;
 
   return [
     {
       name,
-      endpoints: Array.isArray(item?.endpoints)
-        ? item.endpoints.filter((entry: unknown): entry is string => typeof entry === 'string')
-        : undefined,
-      context_length: typeof item?.context_length === 'number' ? item.context_length : undefined,
-      is_deprecated: item?.is_deprecated === true,
+      endpoints,
+      context_length: typeof obj.context_length === 'number' ? obj.context_length : undefined,
+      is_deprecated: obj.is_deprecated === true,
     },
   ];
 }
@@ -284,12 +287,16 @@ function extractTextContent(content: unknown): string | undefined {
   }
 
   const text = content
-    .map((item: any) => (item?.type === 'text' && typeof item.text === 'string' ? item.text : ''))
+    .map((item: unknown) => {
+      if (typeof item !== 'object' || item === null) return '';
+      const i = item as { type?: unknown; text?: unknown };
+      return i.type === 'text' && typeof i.text === 'string' ? i.text : '';
+    })
     .join('');
   return text || undefined;
 }
 
-function extractUsage(data: any): ChatChunk['usage'] {
+function extractUsage(data: CohereChatResponse | undefined): ChatChunk['usage'] {
   const input = data?.meta?.tokens?.input_tokens ?? data?.meta?.billed_units?.input_tokens;
   const output = data?.meta?.tokens?.output_tokens ?? data?.meta?.billed_units?.output_tokens;
   if (typeof input !== 'number' && typeof output !== 'number') return undefined;
@@ -301,6 +308,31 @@ function extractUsage(data: any): ChatChunk['usage'] {
     completionTokens,
     totalTokens: promptTokens + completionTokens,
   };
+}
+
+interface CohereToolCall {
+  id?: string;
+  function: {
+    name: string;
+    arguments?: string | Record<string, unknown>;
+  };
+}
+
+interface CohereChatResponse {
+  message?: {
+    content?: unknown;
+    tool_calls?: CohereToolCall[];
+  };
+  finish_reason?: string;
+  meta?: {
+    tokens?: { input_tokens?: number; output_tokens?: number };
+    billed_units?: { input_tokens?: number; output_tokens?: number };
+  };
+}
+
+interface CohereModelsResponse {
+  models?: unknown[];
+  next_page_token?: string;
 }
 
 function normalizeFinishReason(reason: unknown): string | undefined {

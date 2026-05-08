@@ -136,8 +136,10 @@ export function DisplayItemView({
         </Box>
       );
     }
-    default:
-      return <Text>{(item as any).text ?? ''}</Text>;
+    default: {
+      const maybeText = (item as unknown as { text?: unknown }).text;
+      return <Text>{typeof maybeText === 'string' ? maybeText : ''}</Text>;
+    }
   }
 }
 
