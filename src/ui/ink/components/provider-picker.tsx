@@ -1,69 +1,31 @@
-/* eslint-disable max-lines -- TODO(complexity): extract subviews from ProviderPicker. */
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
-import chalk from 'chalk';
-import type { SessionErrorStatus } from '../../../core/session-log.js';
-import { indexForShortcut, renderStatusBadge, shortcutFor } from './picker-shortcuts.js';
-import { TextInput } from './text-input.js';
+import {
+  type KeySummary,
+  type ModelDisplayInfo,
+  type ProviderEntry,
+  type RecentPair,
+  type Stage,
+  type ValidateResult,
+} from './provider-picker-types.js';
+import {
+  ConfirmDeleteStage,
+  ErrorStage,
+  KeyAddStage,
+  KeyDeleteStage,
+  KeyStage,
+  LoadingStage,
+  ModelStage,
+  ProviderStage,
+  RecentStage,
+  ValidatingStage,
+  ValidateFailedStage,
+  indexForShortcut,
+} from './provider-picker-stages.js';
 
-export interface RecentPair {
-  provider: string;
-  model: string;
-  /** Optional badge (throttled/quota/permission/error). */
-  status?: SessionErrorStatus;
-  /** Set when this recent pair was tied to a specific saved key. */
-  keyId?: string;
-}
-
-export interface ProviderEntry {
-  /** Canonical provider name (the key in PROVIDER_ALIASES values). */
-  name: string;
-  /** Display label, falls back to `name`. */
-  label?: string;
-  /** Dimmed + selection-blocked when true. */
-  offline?: boolean;
-}
-
-/**
- * Optional per-model display info, used by both the startup picker (which
- * has access to the live Provider) and the mid-session picker (which only
- * knows model ids). When omitted, the picker just renders the model id.
- */
-interface ModelDisplayInfo {
-  label?: string;
-  warning?: string;
-}
-
-/** Subset of ProviderKey shown to the picker — token never crosses this surface. */
-interface KeySummary {
-  id: string;
-  label?: string;
-  /** Last-4 fingerprint of the saved token. */
-  fingerprint: string;
-  /** Optional usage counters for the picker's compact stat column. */
-  stats?: { ok: number; warn: number };
-}
-
-interface ValidateResult {
-  ok: boolean;
-  /** Model ids returned by listModels, on success. */
-  models?: string[];
-  /** Error message, on failure. */
-  error?: string;
-}
-
-type Stage =
-  | { kind: 'recent' }
-  | { kind: 'provider' }
-  | { kind: 'key'; provider: string; keys: KeySummary[]; selectedIdx: number }
-  | { kind: 'key-delete'; provider: string; keys: KeySummary[]; selectedIdx: number }
-  | { kind: 'key-confirm-delete'; provider: string; keys: KeySummary[]; selectedIdx: number }
-  | { kind: 'key-add'; provider: string; tokenDraft: string }
-  | { kind: 'key-validating'; provider: string; token: string }
-  | { kind: 'key-validate-failed'; provider: string; token: string; error: string; choice: 0 | 1 }
-  | { kind: 'loading'; provider: string; keyId?: string }
-  | { kind: 'model'; provider: string; models: string[]; keyId?: string }
-  | { kind: 'error'; provider: string; message: string };
+// Re-export types so existing call sites that import from this module
+// (e.g. Session.tsx, headless callers) keep working without churn.
+export type { RecentPair, ProviderEntry } from './provider-picker-types.js';
 
 interface ProviderPickerProps {
   /** Provider list. Use `name` only when no metadata is available. */
@@ -118,9 +80,7 @@ interface ProviderPickerProps {
   purpose?: 'select-active' | 'select-rotation-entry';
 }
 
-const VISIBLE_ROWS = 8;
-
-// eslint-disable-next-line max-lines-per-function -- TODO(complexity): extract row, header, and key-handler subcomponents.
+// eslint-disable-next-line max-lines-per-function -- TODO(complexity): extract per-stage key handlers (Esc switch + per-stage keypress dispatch).
 export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   const {
     providers,
@@ -611,267 +571,41 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   }
 
   function renderBody(): React.ReactElement {
-    if (stage.kind === 'recent') {
-      const lastIdx = recents.length;
-      const placeholder = recentsLoading
-        ? 'Loading recent sessions…'
-        : recents.length === 0
-          ? '(no recent sessions yet)'
-          : null;
-      return (
-        <>
-          <Text color="cyan" bold>
-            Recent provider/model
-          </Text>
-          <Box flexDirection="column">
-            {recents.map((p, i) => {
-              const sel = i === recentIdx;
-              const sc = shortcutFor(i);
-              const badge = p.status ? ` ${renderStatusBadge(p.status)}` : '';
-              const labelText = `${sc ? `${sc}. ` : ''}${p.provider} / ${p.model}`;
-              const text = sel ? chalk.inverse(` ${labelText} `) + badge : `  ${labelText}` + badge;
-              return <Text key={`${p.provider}/${p.model}/${i}`}>{text}</Text>;
-            })}
-            {placeholder && <Text dimColor>{`  ${placeholder}`}</Text>}
-            <Text dimColor>{'  ─'}</Text>
-            {(() => {
-              const sel = recentIdx === lastIdx;
-              const label = ' Pick a different provider/model ';
-              return <Text>{sel ? chalk.inverse(label) : `  ${label.trim()}`}</Text>;
-            })()}
-          </Box>
-        </>
-      );
-    }
-    if (stage.kind === 'provider') {
-      return (
-        <>
-          <Text color="cyan" bold>
-            Select a provider
-          </Text>
-          {renderProviderList(providers, providerIndex)}
-        </>
-      );
-    }
-    if (stage.kind === 'key') {
-      const n = stage.keys.length;
-      const hasDelete = n >= 1 && Boolean(deleteKey);
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider} — select a key
-          </Text>
-          <Box flexDirection="column">
-            {stage.keys.map((k, i) => {
-              const sel = i === stage.selectedIdx;
-              const sc = shortcutFor(i);
-              const display = describeKeyRow(k);
-              const labelText = `${sc ? `${sc}. ` : ''}${display}`;
-              const text = sel ? chalk.inverse(` ${labelText} `) : `  ${labelText}`;
-              return <Text key={k.id}>{text}</Text>;
-            })}
-            {(() => {
-              const i = n;
-              const sel = i === stage.selectedIdx;
-              const labelText = ' Add new key… ';
-              return (
-                <Text key="add">{sel ? chalk.inverse(labelText) : `  ${labelText.trim()}`}</Text>
-              );
-            })()}
-            {hasDelete &&
-              (() => {
-                const i = n + 1;
-                const sel = i === stage.selectedIdx;
-                const labelText = ' Delete a key… ';
-                return (
-                  <Text key="del">{sel ? chalk.inverse(labelText) : `  ${labelText.trim()}`}</Text>
-                );
-              })()}
-          </Box>
-        </>
-      );
-    }
-    if (stage.kind === 'key-delete') {
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider} — pick a key to delete
-          </Text>
-          <Box flexDirection="column">
-            {stage.keys.map((k, i) => {
-              const sel = i === stage.selectedIdx;
-              const display = describeKeyRow(k);
-              const text = sel ? chalk.inverse(` ${display} `) : `  ${display}`;
-              return <Text key={k.id}>{text}</Text>;
-            })}
-          </Box>
-        </>
-      );
-    }
-    if (stage.kind === 'key-confirm-delete') {
-      const target = stage.keys[stage.selectedIdx];
-      return (
-        <>
-          <Text color="red" bold>
-            Delete this key?
-          </Text>
-          <Text>{target ? `  ${describeKeyRow(target)}` : '  (gone)'}</Text>
-        </>
-      );
-    }
-    if (stage.kind === 'key-add') {
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider} — paste API token
-          </Text>
-          <Box>
-            <Text dimColor> token: </Text>
-            <TextInput
-              value={stage.tokenDraft}
-              onChange={next => setStage({ ...stage, tokenDraft: next })}
-              onSubmit={value => {
-                const trimmed = value.trim();
-                if (!trimmed) return;
-                setStage({ kind: 'key-validating', provider: stage.provider, token: trimmed });
-              }}
-            />
-          </Box>
-          <Text dimColor> the token will be hidden after validation</Text>
-        </>
-      );
-    }
-    if (stage.kind === 'key-validating') {
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider}
-          </Text>
-          <Text dimColor>Validating key… (3s timeout)</Text>
-        </>
-      );
-    }
-    if (stage.kind === 'key-validate-failed') {
-      const opts = [' edit ', ' save anyway '];
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider} — validation failed
-          </Text>
-          <Text color="red">⚠ {stage.error}</Text>
-          <Box flexDirection="column">
-            {opts.map((o, i) => {
-              const sel = i === stage.choice;
-              return <Text key={i}>{sel ? chalk.inverse(o) : `  ${o.trim()}`}</Text>;
-            })}
-          </Box>
-        </>
-      );
-    }
-    if (stage.kind === 'loading') {
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider}
-          </Text>
-          <Text dimColor>Loading models…</Text>
-        </>
-      );
-    }
-    if (stage.kind === 'error') {
-      return (
-        <>
-          <Text color="cyan" bold>
-            {stage.provider}
-          </Text>
-          <Text color="red">⚠ {stage.message}</Text>
-          <Text dimColor>
-            {startsAtModel ? 'Press Esc to cancel.' : 'Press Esc or any key to go back.'}
-          </Text>
-        </>
-      );
-    }
-    return (
-      <>
-        <Text color="cyan" bold>
-          Select a model
-        </Text>
-        {renderModelList(stage.provider, stage.models, modelIndex)}
-      </>
-    );
-  }
-
-  function renderModelList(
-    provider: string,
-    items: string[],
-    selected: number,
-  ): React.ReactElement {
-    const half = Math.floor(VISIBLE_ROWS / 2);
-    let start = Math.max(0, selected - half);
-    const end = Math.min(items.length, start + VISIBLE_ROWS);
-    start = Math.max(0, end - VISIBLE_ROWS);
-    const window = items.slice(start, end);
-    return (
-      <Box flexDirection="column">
-        {start > 0 && <Text dimColor> ↑ {start} more</Text>}
-        {window.map((item, i) => {
-          const idx = start + i;
-          const isSel = idx === selected;
-          const info = getModelInfo?.(provider, item);
-          const sc = shortcutFor(idx);
-          const display = info?.label ?? item;
-          const labelText = `${sc ? `${sc}. ` : ''}${display}`;
-          const warning = info?.warning ? ` ${chalk.yellow(`(${info.warning})`)}` : '';
-          const text = isSel
-            ? chalk.inverse(` ${labelText} `) + warning
-            : `  ${labelText}` + warning;
-          return <Text key={idx}>{text}</Text>;
-        })}
-        {end < items.length && <Text dimColor> ↓ {items.length - end} more</Text>}
-      </Box>
-    );
-  }
-}
-
-function describeKeyRow(k: KeySummary): string {
-  const base = k.label ? `${k.label} · …${k.fingerprint}` : `…${k.fingerprint}`;
-  if (!k.stats || (k.stats.ok === 0 && k.stats.warn === 0)) return base;
-  return `${base}  · ${k.stats.ok} ok / ${k.stats.warn} ⚠`;
-}
-
-function renderProviderList(items: ProviderEntry[], selected: number): React.ReactElement {
-  const half = Math.floor(VISIBLE_ROWS / 2);
-  let start = Math.max(0, selected - half);
-  const end = Math.min(items.length, start + VISIBLE_ROWS);
-  start = Math.max(0, end - VISIBLE_ROWS);
-  const window = items.slice(start, end);
-  return (
-    <Box flexDirection="column">
-      {start > 0 && <Text dimColor> ↑ {start} more</Text>}
-      {window.map((entry, i) => {
-        const idx = start + i;
-        const isSel = idx === selected;
-        const sc = shortcutFor(idx);
-        const display = entry.label ?? entry.name;
-        const labelText = `${sc ? `${sc}. ` : ''}${display}`;
-        const offlineSuffix = entry.offline ? ` ${chalk.dim('(offline)')}` : '';
-        if (isSel) {
-          const rendered = chalk.inverse(` ${labelText} `);
-          return (
-            <Text key={idx} dimColor={entry.offline}>
-              {rendered}
-              {offlineSuffix}
-            </Text>
-          );
-        }
+    switch (stage.kind) {
+      case 'recent':
+        return <RecentStage recents={recents} recentsLoading={recentsLoading} recentIdx={recentIdx} />;
+      case 'provider':
+        return <ProviderStage providers={providers} providerIndex={providerIndex} />;
+      case 'key':
         return (
-          <Text key={idx} dimColor={entry.offline}>
-            {`  ${labelText}`}
-            {offlineSuffix}
-          </Text>
+          <KeyStage stage={stage} hasDelete={stage.keys.length >= 1 && Boolean(deleteKey)} />
         );
-      })}
-      {end < items.length && <Text dimColor> ↓ {items.length - end} more</Text>}
-    </Box>
-  );
+      case 'key-delete':
+        return <KeyDeleteStage stage={stage} />;
+      case 'key-confirm-delete':
+        return <ConfirmDeleteStage stage={stage} />;
+      case 'key-add':
+        return (
+          <KeyAddStage
+            stage={stage}
+            onChange={next => setStage({ ...stage, tokenDraft: next })}
+            onSubmit={value => {
+              const trimmed = value.trim();
+              if (!trimmed) return;
+              setStage({ kind: 'key-validating', provider: stage.provider, token: trimmed });
+            }}
+          />
+        );
+      case 'key-validating':
+        return <ValidatingStage stage={stage} />;
+      case 'key-validate-failed':
+        return <ValidateFailedStage stage={stage} />;
+      case 'loading':
+        return <LoadingStage stage={stage} />;
+      case 'error':
+        return <ErrorStage stage={stage} startsAtModel={startsAtModel} />;
+      case 'model':
+        return <ModelStage stage={stage} modelIndex={modelIndex} getModelInfo={getModelInfo} />;
+    }
+  }
 }
