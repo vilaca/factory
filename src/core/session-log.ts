@@ -328,6 +328,112 @@ function classifyErrorMessage(message: string): SessionErrorStatus {
   return 'error';
 }
 
+interface SessionStartHeader {
+  provider: string;
+  model: string;
+  startedAt: string;
+  keyId?: string;
+}
+
+/** Parse the session-start line; returns null if it isn't one or is malformed. */
+function parseSessionStart(line: string): SessionStartHeader | null {
+  let entry: Record<string, unknown>;
+  try {
+    entry = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  if (entry.type !== 'session-start') return null;
+  if (typeof entry.provider !== 'string' || typeof entry.model !== 'string') return null;
+  if (!entry.provider || !entry.model) return null;
+  const header: SessionStartHeader = {
+    provider: entry.provider,
+    model: entry.model,
+    startedAt: typeof entry.ts === 'string' ? entry.ts : '',
+  };
+  if (typeof entry.keyId === 'string' && entry.keyId) header.keyId = entry.keyId;
+  return header;
+}
+
+interface SessionRollup {
+  model: string;
+  keyId: string | undefined;
+  userInputCount: number;
+  lastErrorMessage: string | null;
+}
+
+/**
+ * Walk every line after session-start, applying its effect on the session's
+ * final (model, keyId, error, user-input count). The latest model-change
+ * wins for model/keyId; the latest error wins for status; user-input count
+ * is needed to skip abandoned probes.
+ */
+function rollupSessionLines(lines: string[], header: SessionStartHeader): SessionRollup {
+  let model = header.model;
+  let keyId = header.keyId;
+  let userInputCount = 0;
+  let lastErrorMessage: string | null = null;
+
+  for (const line of lines) {
+    let entry: Record<string, unknown>;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.type === 'user-input') {
+      userInputCount++;
+      continue;
+    }
+    if (
+      entry.type === 'model-change' &&
+      typeof entry.to === 'string' &&
+      entry.to !== STARTUP_MODEL_PLACEHOLDER
+    ) {
+      model = entry.to;
+      if (typeof entry.keyId === 'string' && entry.keyId) keyId = entry.keyId;
+      continue;
+    }
+    if (entry.type === 'agent-event') {
+      const event = entry.event as { type?: string; error?: { message?: unknown } } | undefined;
+      if (event?.type === 'error' && typeof event.error?.message === 'string') {
+        lastErrorMessage = event.error.message;
+      }
+    }
+  }
+
+  return { model, keyId, userInputCount, lastErrorMessage };
+}
+
+/** Read one session log into a RecentSession entry, or null if it should be skipped. */
+async function readRecentSession(filePath: string): Promise<RecentSession | null> {
+  let raw: string;
+  try {
+    raw = await fs.promises.readFile(filePath, 'utf-8');
+  } catch {
+    return null;
+  }
+  const lines = raw.split('\n').filter(Boolean);
+  if (lines.length === 0) return null;
+
+  const header = parseSessionStart(lines[0]);
+  if (!header) return null;
+
+  const rollup = rollupSessionLines(lines.slice(1), header);
+  if (rollup.userInputCount === 0) return null;
+
+  const status = rollup.lastErrorMessage
+    ? classifyErrorMessage(rollup.lastErrorMessage)
+    : undefined;
+  return {
+    provider: header.provider,
+    model: rollup.model,
+    startedAt: header.startedAt,
+    ...(status ? { status } : {}),
+    ...(rollup.keyId ? { keyId: rollup.keyId } : {}),
+  };
+}
+
 /**
  * Returns up to `limit` recent sessions, newest first, deduplicated by
  * provider+model — only the most recent session per pair survives. Sessions
@@ -335,7 +441,6 @@ function classifyErrorMessage(message: string): SessionErrorStatus {
  * or crashes before the first prompt). Status is set only when the surviving
  * session recorded a model-side error.
  */
-// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): split provider/model/error parsing into helpers.
 export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
   const sessions = await listSessionLogs();
   const seen = new Set<string>();
@@ -343,77 +448,12 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
 
   for (const session of sessions) {
     if (out.length >= limit) break;
-
-    let raw: string;
-    try {
-      raw = await fs.promises.readFile(session.path, 'utf-8');
-    } catch {
-      continue;
-    }
-    const lines = raw.split('\n').filter(Boolean);
-    if (lines.length === 0) continue;
-
-    let provider = '';
-    let model = '';
-    let startedAt = '';
-    let keyId: string | undefined;
-    let lastErrorMessage: string | null = null;
-    let userInputCount = 0;
-
-    try {
-      const first = JSON.parse(lines[0]);
-      if (first.type !== 'session-start') continue;
-      if (typeof first.provider !== 'string' || typeof first.model !== 'string') continue;
-      provider = first.provider;
-      model = first.model;
-      startedAt = typeof first.ts === 'string' ? first.ts : '';
-      if (typeof first.keyId === 'string' && first.keyId) keyId = first.keyId;
-    } catch {
-      continue;
-    }
-    if (!provider || !model) continue;
-
-    // The latest model swap wins for the model and keyId fields; the
-    // latest error (if any) wins for status. Count user inputs to skip
-    // sessions that were started but never used.
-    for (const line of lines.slice(1)) {
-      try {
-        const entry = JSON.parse(line);
-        if (entry.type === 'user-input') {
-          userInputCount++;
-        } else if (
-          entry.type === 'model-change' &&
-          typeof entry.to === 'string' &&
-          entry.to !== STARTUP_MODEL_PLACEHOLDER
-        ) {
-          model = entry.to;
-          if (typeof entry.keyId === 'string' && entry.keyId) keyId = entry.keyId;
-        } else if (
-          entry.type === 'agent-event' &&
-          entry.event?.type === 'error' &&
-          typeof entry.event.error?.message === 'string'
-        ) {
-          lastErrorMessage = entry.event.error.message;
-        }
-      } catch {
-        // skip malformed lines
-      }
-    }
-
-    if (userInputCount === 0) continue;
-
-    const key = `${provider}/${model}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const status = lastErrorMessage ? classifyErrorMessage(lastErrorMessage) : undefined;
-    out.push({
-      provider,
-      model,
-      startedAt,
-      ...(status ? { status } : {}),
-      ...(keyId ? { keyId } : {}),
-    });
+    const entry = await readRecentSession(session.path);
+    if (!entry) continue;
+    const dedupKey = `${entry.provider}/${entry.model}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
+    out.push(entry);
   }
   out.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   return out;

@@ -1,5 +1,5 @@
-/* eslint-disable max-depth -- TODO(complexity): rotation/retry tier logic is deeply nested; flatten via early-return helpers. */
 import type {
+  ChatChunk,
   ChatMessage,
   Provider,
   TokenUsage,
@@ -13,6 +13,154 @@ import { classifyForRotation } from '../provider-errors.js';
 import { RepeatDetector } from './repeat-detector.js';
 import { applyCacheBoundaries } from './cache-boundaries.js';
 import { errorMessage, isError } from '../../utils/errors.js';
+
+type RotationReason = 'rate-limit' | 'auth';
+
+/**
+ * Mutable bundle of state that rotates between provider/model/key swaps.
+ * Carrying it as one object keeps the rotation helpers callable without
+ * juggling six out-params; the helpers reset accumulators on a successful
+ * swap so the retry loop reads as if it were a fresh attempt.
+ */
+interface RotationState {
+  provider: Provider;
+  model: string;
+  activeKeyId: string | undefined;
+  activeKeys: ProviderKey[];
+  triedKeyIds: Set<string>;
+  triedTuples: Set<string>;
+  tupleRotated: boolean;
+  fullContent: string;
+  toolCalls: ToolCallMessage[];
+  lastUsage: TokenUsage | undefined;
+  doneReason: string | undefined;
+  /** Set true on the first chunk that lands. Read by the catch handler to
+   *  decide whether rotation is meaningful (rotating mid-stream would
+   *  duplicate tokens already committed to the caller's scrollback). */
+  streamedAnything: boolean;
+}
+
+interface TierResult {
+  /** True when state was advanced and the caller should retry the chat call. */
+  rotated: boolean;
+  /** Events to yield to the agent loop in order. */
+  events: AgentEvent[];
+  /** Set when the helper decides the original error must propagate (e.g.
+   *  withTuple threw). The caller rethrows verbatim. */
+  rethrow?: unknown;
+}
+
+function resetAccumulators(state: RotationState): void {
+  state.fullContent = '';
+  state.toolCalls = [];
+  state.lastUsage = undefined;
+  state.doneReason = undefined;
+}
+
+/**
+ * Pump chat chunks into the rotation state, yielding text and repetition
+ * events as they land. Returns when the iterator finishes; throws on the
+ * caller's abort or on any iterator-side error (including provider rejections
+ * that the caller will route through rotation).
+ */
+async function* streamIntoState(
+  state: RotationState,
+  iter: AsyncIterable<ChatChunk>,
+  repeatDetector: RepeatDetector,
+  internal: AbortController,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<AgentEvent, void> {
+  for await (const chunk of iter) {
+    if (signal?.aborted) {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
+    if (chunk.content) {
+      yield { type: 'text-chunk', content: chunk.content };
+      state.fullContent += chunk.content;
+      state.streamedAnything = true;
+      const repeat = repeatDetector.feed(chunk.content);
+      if (repeat) {
+        yield { type: 'repetition-detected', line: repeat.line, streak: repeat.streak };
+        internal.abort();
+      }
+    }
+    if (chunk.tool_calls) {
+      state.toolCalls.push(...sanitizeToolCalls(chunk.tool_calls));
+      state.streamedAnything = true;
+    }
+    if (chunk.usage) {
+      state.lastUsage = chunk.usage;
+    }
+    if (chunk.doneReason) {
+      state.doneReason = chunk.doneReason;
+    }
+  }
+}
+
+interface RotationOutcome {
+  /** True when state advanced and the caller should retry the chat. */
+  rotated: boolean;
+  /** Set when the caller should rethrow the original error verbatim. */
+  rethrow?: unknown;
+}
+
+/**
+ * Recover from a stream-only failure by replaying the call non-streamed.
+ * Mirrors what the streaming success path would have done — assigns the
+ * response into state and yields the full content as a single text-chunk so
+ * downstream rendering sees the same event shape either way.
+ */
+async function* recoverViaNonStream(
+  state: RotationState,
+  messages: ChatMessage[],
+  tools: ToolDefinition[] | undefined,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<AgentEvent, void> {
+  const response = await state.provider.chatNoStream(state.model, messages, tools, {
+    signal,
+    cacheTools: true,
+  });
+  state.fullContent = response.content ?? '';
+  state.toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
+  if (response.usage) {
+    state.lastUsage = response.usage;
+  }
+  if (state.fullContent) {
+    yield { type: 'text-chunk', content: state.fullContent };
+  }
+}
+
+/**
+ * Walk tier-1 → tier-2 → prompted-fallback in order, yielding the events
+ * each tier emits. Stops at the first tier that successfully advances state;
+ * returns rotated=false when every tier exhausts. Caller decides whether to
+ * retry (on rotated=true) or fall through (on rotated=false).
+ */
+async function* handleRotationFailure(
+  state: RotationState,
+  rotation: RotationOptions,
+  err: unknown,
+): AsyncGenerator<AgentEvent, RotationOutcome> {
+  const reason = classifyForRotation(err);
+  if (reason === 'other') return { rotated: false };
+
+  const tier1 = await tryRotateKey(state, rotation, reason);
+  for (const event of tier1.events) yield event;
+  if (tier1.rotated) return { rotated: true };
+
+  const tier2 = await tryRotateTuple(state, rotation, reason);
+  for (const event of tier2.events) yield event;
+  if (tier2.rotated) return { rotated: true };
+
+  const fallback = await tryPromptedFallback(state, rotation, reason, err);
+  for (const event of fallback.events) yield event;
+  if (fallback.rotated) return { rotated: true };
+  if (fallback.rethrow !== undefined) return { rotated: false, rethrow: fallback.rethrow };
+
+  return { rotated: false };
+}
 
 /**
  * Walk the rotation chain looking for the next entry that hasn't been tried
@@ -77,6 +225,166 @@ function sanitizeToolCalls(
   });
 }
 
+/**
+ * Tier 1: rotate to the next saved key for the current (provider, model).
+ * Stamps a failure for the outgoing key, picks the next available, swaps the
+ * provider via `rotation.withKey`, and resets accumulators so the retry loop
+ * starts clean.
+ */
+async function tryRotateKey(
+  state: RotationState,
+  rotation: RotationOptions,
+  reason: RotationReason,
+): Promise<TierResult> {
+  if (!rotation.activeKeyId || state.activeKeys.length === 0) {
+    return { rotated: false, events: [] };
+  }
+  if (rotation.failureLog && state.activeKeyId) {
+    rotation.failureLog.set(state.activeKeyId, Date.now());
+  }
+  const warmthLog = await rotation.getWarmthLog?.();
+  const next = selectNextKey(state.activeKeys, state.triedKeyIds, {
+    failureLog: rotation.failureLog,
+    warmthLog,
+  });
+  if (!next) {
+    return {
+      rotated: false,
+      events: [{ type: 'key-rotation-exhausted', provider: state.provider.name, reason }],
+    };
+  }
+  const fromKey = state.activeKeyId
+    ? state.activeKeys.find(k => k.id === state.activeKeyId)
+    : undefined;
+  const event: AgentEvent = {
+    type: 'key-rotation',
+    provider: state.provider.name,
+    from: fromKey
+      ? {
+          keyId: fromKey.id,
+          fingerprint: keyFingerprint(fromKey.token),
+          ...(fromKey.label ? { label: fromKey.label } : {}),
+        }
+      : null,
+    to: {
+      keyId: next.id,
+      fingerprint: keyFingerprint(next.token),
+      ...(next.label ? { label: next.label } : {}),
+    },
+    reason,
+  };
+  state.triedKeyIds.add(next.id);
+  state.activeKeyId = next.id;
+  rotation.activeKeyId = next.id;
+  rotation.onActiveKeyChange?.(next.id);
+  state.provider = rotation.withKey(next);
+  resetAccumulators(state);
+  return { rotated: true, events: [event] };
+}
+
+/**
+ * Tier 2: advance to the next entry in the rotation chain, swapping the
+ * (provider, model) tuple. Resets the tier-1 tried-set and active-keys for
+ * the new tuple — each tuple has its own pool to walk.
+ */
+async function tryRotateTuple(
+  state: RotationState,
+  rotation: RotationOptions,
+  reason: RotationReason,
+): Promise<TierResult> {
+  if (
+    rotation.modelsEnabled === false ||
+    !rotation.chain ||
+    rotation.chain.length === 0 ||
+    !rotation.loadKeysForProvider ||
+    !rotation.withTuple
+  ) {
+    return { rotated: false, events: [] };
+  }
+  const advance = await advanceTuple(rotation, state.triedTuples);
+  if (!advance) {
+    return { rotated: false, events: [{ type: 'tuple-rotation-exhausted', reason }] };
+  }
+  const event: AgentEvent = {
+    type: 'tuple-rotation',
+    from: { provider: state.provider.name, model: state.model },
+    to: { provider: advance.entry.provider, model: advance.entry.model },
+    reason,
+  };
+  state.provider = advance.provider;
+  state.model = advance.entry.model;
+  state.activeKeyId = advance.firstKey.id;
+  rotation.activeKeyId = advance.firstKey.id;
+  rotation.onActiveKeyChange?.(advance.firstKey.id);
+  rotation.onModelChange?.(advance.entry.model);
+  state.triedKeyIds = new Set<string>([advance.firstKey.id]);
+  state.activeKeys = advance.keys;
+  state.triedTuples.add(`${advance.entry.provider}:${advance.entry.model}`);
+  state.tupleRotated = true;
+  resetAccumulators(state);
+  return { rotated: true, events: [event] };
+}
+
+/**
+ * Last-chance fallback: ask the host for a brand-new chain entry. Treats the
+ * host's reply as a virtual tier-2 advance. Returns rethrow=err when the
+ * prompt yields a tuple but constructing the provider throws — the original
+ * error is more useful than a generic "fallback failed".
+ */
+async function tryPromptedFallback(
+  state: RotationState,
+  rotation: RotationOptions,
+  reason: RotationReason,
+  err: unknown,
+): Promise<TierResult> {
+  if (!rotation.promptForFallback || !rotation.loadKeysForProvider || !rotation.withTuple) {
+    return { rotated: false, events: [] };
+  }
+  const promptedEntry = await rotation.promptForFallback({
+    provider: state.provider.name,
+    model: state.model,
+    reason,
+  });
+  if (!promptedEntry) return { rotated: false, events: [] };
+  const promptedKey = `${promptedEntry.provider}:${promptedEntry.model}`;
+  if (state.triedTuples.has(promptedKey)) return { rotated: false, events: [] };
+
+  let promptedKeys: ProviderKey[] = [];
+  try {
+    promptedKeys = await rotation.loadKeysForProvider(promptedEntry.provider);
+  } catch {
+    // empty list — fall through to the no-keys exit.
+  }
+  if (promptedKeys.length === 0) return { rotated: false, events: [] };
+
+  const firstKey = promptedKeys[0]!;
+  let nextProvider: Provider;
+  try {
+    nextProvider = rotation.withTuple(promptedEntry.provider, firstKey);
+  } catch {
+    return { rotated: false, events: [], rethrow: err };
+  }
+
+  const event: AgentEvent = {
+    type: 'tuple-rotation',
+    from: { provider: state.provider.name, model: state.model },
+    to: { provider: promptedEntry.provider, model: promptedEntry.model },
+    reason,
+  };
+  state.provider = nextProvider;
+  state.model = promptedEntry.model;
+  state.activeKeyId = firstKey.id;
+  rotation.activeKeyId = firstKey.id;
+  rotation.onActiveKeyChange?.(firstKey.id);
+  rotation.onModelChange?.(promptedEntry.model);
+  state.triedKeyIds = new Set<string>([firstKey.id]);
+  state.activeKeys = promptedKeys;
+  state.triedTuples.add(promptedKey);
+  state.tupleRotated = true;
+  resetAccumulators(state);
+  return { rotated: true, events: [event] };
+}
+
 interface ModelCallResult {
   fullContent: string;
   toolCalls: ToolCallMessage[];
@@ -107,7 +415,6 @@ interface ModelCallResult {
  * Abort and non-stream errors propagate to the orchestrator, which decides
  * how to surface them.
  */
-// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split rotation tiers into helpers.
 export async function* callModel(
   initialProvider: Provider,
   initialModel: string,
@@ -116,29 +423,24 @@ export async function* callModel(
   signal: AbortSignal | undefined,
   rotation?: RotationOptions,
 ): AsyncGenerator<AgentEvent, ModelCallResult> {
-  let provider = initialProvider;
-  let model = initialModel;
-  // Per-call tried-set to prevent looping when every key 429s. Reset when
-  // tier 2 advances to a new tuple — each tuple gets its own pool to walk.
-  let triedKeyIds = new Set<string>();
-  if (rotation?.activeKeyId) triedKeyIds.add(rotation.activeKeyId);
-  let activeKeyId = rotation?.activeKeyId;
-  // Hold the active key pool locally so a tier-2 tuple advance can swap it
-  // in without mutating the caller's RotationOptions object. The previous
-  // implementation wrote `rotation.keys = advance.keys`, which made the
-  // function impure w.r.t. its inputs; nothing outside callModel reads
-  // rotation.keys, so a local is a free upgrade.
-  let activeKeys = rotation?.keys ?? [];
-  // Tier-2 bookkeeping: track which (provider, model) tuples have already
-  // been tried so we don't loop back to the original on chain advance.
-  const triedTuples = new Set<string>([`${provider.name}:${model}`]);
-  /** Did tier-2 ever advance away from the initial tuple? */
-  let tupleRotated = false;
-
-  let fullContent = '';
-  let toolCalls: ToolCallMessage[] = [];
-  let lastUsage: TokenUsage | undefined;
-  let doneReason: string | undefined;
+  const state: RotationState = {
+    provider: initialProvider,
+    model: initialModel,
+    activeKeyId: rotation?.activeKeyId,
+    activeKeys: rotation?.keys ?? [],
+    // Per-call tried-set to prevent looping when every key 429s. Reset when
+    // tier 2 advances to a new tuple — each tuple gets its own pool to walk.
+    triedKeyIds: new Set<string>(rotation?.activeKeyId ? [rotation.activeKeyId] : []),
+    // Tier-2 bookkeeping: track which (provider, model) tuples have already
+    // been tried so we don't loop back to the original on chain advance.
+    triedTuples: new Set<string>([`${initialProvider.name}:${initialModel}`]),
+    tupleRotated: false,
+    fullContent: '',
+    toolCalls: [],
+    lastUsage: undefined,
+    doneReason: undefined,
+    streamedAnything: false,
+  };
 
   // Combine the user's abort signal with an internal one so we can also
   // abort from inside this loop (e.g. when a runaway-repetition pattern is
@@ -149,6 +451,9 @@ export async function* callModel(
     if (signal.aborted) internal.abort();
     else signal.addEventListener('abort', cascade, { once: true });
   }
+  const cleanup = (): void => {
+    if (signal) signal.removeEventListener('abort', cascade);
+  };
   const repeatDetector = new RepeatDetector();
 
   // Annotate cache boundaries once per call. The marked array shares the
@@ -158,239 +463,68 @@ export async function* callModel(
   const annotated = applyCacheBoundaries(messages);
   const callOpts = { signal: internal.signal, cacheTools: true };
 
+  const isAbortError = (err: unknown): boolean =>
+    Boolean(signal?.aborted) ||
+    internal.signal.aborted ||
+    (isError(err) && err.name === 'AbortError');
+
+  const isStreamish = (err: unknown): boolean => {
+    const msg = errorMessage(err);
+    return (
+      msg.includes('stream') ||
+      msg.includes('connection dropped') ||
+      msg.includes('socket hang up') ||
+      msg.includes('fetch failed')
+    );
+  };
+
   // Rotation loop: on a rate-limit/auth failure *before* any chunk has
   // streamed, try the next saved key. Streaming losses still surface
   // because retrying mid-stream would replay tokens the caller already
   // committed to scrollback.
   while (true) {
-    let streamedAnything = false;
+    state.streamedAnything = false;
     try {
-      for await (const chunk of provider.chat(model, annotated, tools, callOpts)) {
-        if (signal?.aborted) {
-          const err = new Error('aborted');
-          err.name = 'AbortError';
-          throw err;
-        }
-        if (chunk.content) {
-          yield { type: 'text-chunk', content: chunk.content };
-          fullContent += chunk.content;
-          streamedAnything = true;
-          const repeat = repeatDetector.feed(chunk.content);
-          if (repeat) {
-            yield { type: 'repetition-detected', line: repeat.line, streak: repeat.streak };
-            internal.abort();
-          }
-        }
-        if (chunk.tool_calls) {
-          toolCalls.push(...sanitizeToolCalls(chunk.tool_calls));
-          streamedAnything = true;
-        }
-        if (chunk.usage) {
-          lastUsage = chunk.usage;
-        }
-        if (chunk.doneReason) {
-          doneReason = chunk.doneReason;
-        }
-      }
-      break; // success
+      const stream = state.provider.chat(state.model, annotated, tools, callOpts);
+      yield* streamIntoState(state, stream, repeatDetector, internal, signal);
+      break;
     } catch (err: unknown) {
-      if (
-        signal?.aborted ||
-        internal.signal.aborted ||
-        (isError(err) && err.name === 'AbortError')
-      ) {
-        if (signal) signal.removeEventListener('abort', cascade);
+      if (isAbortError(err)) {
+        cleanup();
         return {
-          fullContent,
-          toolCalls: sanitizeToolCalls(toolCalls),
-          lastUsage,
+          fullContent: state.fullContent,
+          toolCalls: sanitizeToolCalls(state.toolCalls),
+          lastUsage: state.lastUsage,
           aborted: true,
-          doneReason,
+          doneReason: state.doneReason,
         };
       }
-      // Rotation: only meaningful when no tokens have streamed yet
-      // (otherwise we'd duplicate output on retry).
-      if (rotation && !streamedAnything) {
-        const reason = classifyForRotation(err);
-        if (reason !== 'other') {
-          // ─── Tier 1: rotate keys for the current (provider, model) ──
-          let keyRotated = false;
-          if (rotation.activeKeyId && activeKeys.length > 0) {
-            if (rotation.failureLog && activeKeyId) {
-              rotation.failureLog.set(activeKeyId, Date.now());
-            }
-            const warmthLog = await rotation.getWarmthLog?.();
-            const next = selectNextKey(activeKeys, triedKeyIds, {
-              failureLog: rotation.failureLog,
-              warmthLog,
-            });
-            if (next) {
-              const fromKey = activeKeyId ? activeKeys.find(k => k.id === activeKeyId) : undefined;
-              yield {
-                type: 'key-rotation',
-                provider: provider.name,
-                from: fromKey
-                  ? {
-                      keyId: fromKey.id,
-                      fingerprint: keyFingerprint(fromKey.token),
-                      ...(fromKey.label ? { label: fromKey.label } : {}),
-                    }
-                  : null,
-                to: {
-                  keyId: next.id,
-                  fingerprint: keyFingerprint(next.token),
-                  ...(next.label ? { label: next.label } : {}),
-                },
-                reason,
-              };
-              triedKeyIds.add(next.id);
-              activeKeyId = next.id;
-              rotation.activeKeyId = next.id;
-              rotation.onActiveKeyChange?.(next.id);
-              provider = rotation.withKey(next);
-              fullContent = '';
-              toolCalls = [];
-              lastUsage = undefined;
-              doneReason = undefined;
-              keyRotated = true;
-            } else {
-              yield { type: 'key-rotation-exhausted', provider: provider.name, reason };
-            }
-          }
-          if (keyRotated) continue;
-
-          // ─── Tier 2: advance to the next entry in the chain ────────
-          if (
-            rotation.modelsEnabled !== false &&
-            rotation.chain &&
-            rotation.chain.length > 0 &&
-            rotation.loadKeysForProvider &&
-            rotation.withTuple
-          ) {
-            const advance = await advanceTuple(rotation, triedTuples);
-            if (advance) {
-              yield {
-                type: 'tuple-rotation',
-                from: { provider: provider.name, model },
-                to: { provider: advance.entry.provider, model: advance.entry.model },
-                reason,
-              };
-              provider = advance.provider;
-              model = advance.entry.model;
-              activeKeyId = advance.firstKey.id;
-              rotation.activeKeyId = advance.firstKey.id;
-              rotation.onActiveKeyChange?.(advance.firstKey.id);
-              rotation.onModelChange?.(advance.entry.model);
-              // Reset tier-1 state for the new tuple.
-              triedKeyIds = new Set<string>([advance.firstKey.id]);
-              // Subsequent tier-1 attempts for this new tuple need to see
-              // *its* keys, not the original tuple's. Swap them in via the
-              // local `activeKeys` so the caller's RotationOptions stays
-              // untouched.
-              activeKeys = advance.keys;
-              triedTuples.add(`${advance.entry.provider}:${advance.entry.model}`);
-              tupleRotated = true;
-              fullContent = '';
-              toolCalls = [];
-              lastUsage = undefined;
-              doneReason = undefined;
-              continue;
-            }
-            yield { type: 'tuple-rotation-exhausted', reason };
-          }
-
-          // ─── Last-chance prompt: ask the host (typically the UI) for
-          //  a brand-new chain entry. The host decides whether to involve
-          //  the user; we just await whatever entry it returns.
-          if (rotation.promptForFallback && rotation.loadKeysForProvider && rotation.withTuple) {
-            const promptedEntry = await rotation.promptForFallback({
-              provider: provider.name,
-              model,
-              reason,
-            });
-            if (promptedEntry) {
-              const promptedKey = `${promptedEntry.provider}:${promptedEntry.model}`;
-              // Treat as a virtual one-shot chain advance. Same wiring as
-              // tier 2: load the entry's keys, build a fresh provider,
-              // reset the tier-1 tried-set, retry.
-              if (!triedTuples.has(promptedKey)) {
-                let promptedKeys: ProviderKey[] = [];
-                try {
-                  promptedKeys = await rotation.loadKeysForProvider(promptedEntry.provider);
-                } catch {
-                  // empty list — fall through to throw.
-                }
-                if (promptedKeys.length > 0) {
-                  const firstKey = promptedKeys[0]!;
-                  let nextProvider: Provider;
-                  try {
-                    nextProvider = rotation.withTuple(promptedEntry.provider, firstKey);
-                  } catch {
-                    // give up and let the original error propagate
-                    if (signal) signal.removeEventListener('abort', cascade);
-                    throw err;
-                  }
-                  yield {
-                    type: 'tuple-rotation',
-                    from: { provider: provider.name, model },
-                    to: { provider: promptedEntry.provider, model: promptedEntry.model },
-                    reason,
-                  };
-                  provider = nextProvider;
-                  model = promptedEntry.model;
-                  activeKeyId = firstKey.id;
-                  rotation.activeKeyId = firstKey.id;
-                  rotation.onActiveKeyChange?.(firstKey.id);
-                  rotation.onModelChange?.(promptedEntry.model);
-                  triedKeyIds = new Set<string>([firstKey.id]);
-                  activeKeys = promptedKeys;
-                  triedTuples.add(promptedKey);
-                  tupleRotated = true;
-                  fullContent = '';
-                  toolCalls = [];
-                  lastUsage = undefined;
-                  doneReason = undefined;
-                  continue;
-                }
-              }
-            }
-          }
+      if (rotation && !state.streamedAnything) {
+        const outcome = yield* handleRotationFailure(state, rotation, err);
+        if (outcome.rotated) continue;
+        if (outcome.rethrow !== undefined) {
+          cleanup();
+          throw outcome.rethrow;
         }
       }
-      // Existing isStreamish fallback: stream-only failures and transient
-      // connection drops retry non-streamed once on the same provider.
-      const msg = errorMessage(err);
-      const isStreamish =
-        msg.includes('stream') ||
-        msg.includes('connection dropped') ||
-        msg.includes('socket hang up') ||
-        msg.includes('fetch failed');
-      if (isStreamish) {
-        const response = await provider.chatNoStream(model, annotated, tools, {
-          signal,
-          cacheTools: true,
-        });
-        fullContent = response.content ?? '';
-        toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
-        if (response.usage) {
-          lastUsage = response.usage;
-        }
-        if (fullContent) {
-          yield { type: 'text-chunk', content: fullContent };
-        }
+      // Stream-only failures and transient connection drops retry
+      // non-streamed once on the same provider — the model usually has the
+      // answer in non-streaming mode even when the SSE channel hiccups.
+      if (isStreamish(err)) {
+        yield* recoverViaNonStream(state, annotated, tools, signal);
         break;
       }
-      if (signal) signal.removeEventListener('abort', cascade);
+      cleanup();
       throw err;
     }
   }
-  if (signal) signal.removeEventListener('abort', cascade);
+  cleanup();
   return {
-    fullContent,
-    toolCalls: sanitizeToolCalls(toolCalls),
-    lastUsage,
-    doneReason,
-    ...(provider !== initialProvider ? { finalProvider: provider } : {}),
-    ...(tupleRotated ? { finalModel: model } : {}),
+    fullContent: state.fullContent,
+    toolCalls: sanitizeToolCalls(state.toolCalls),
+    lastUsage: state.lastUsage,
+    doneReason: state.doneReason,
+    ...(state.provider !== initialProvider ? { finalProvider: state.provider } : {}),
+    ...(state.tupleRotated ? { finalModel: state.model } : {}),
   };
 }
