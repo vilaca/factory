@@ -21,10 +21,7 @@ export class Conversation {
   ) {}
 
   getMessages(): ChatMessage[] {
-    return [
-      { role: 'system', content: this.systemPrompt },
-      ...this.messages,
-    ];
+    return [{ role: 'system', content: this.systemPrompt }, ...this.messages];
   }
 
   getSystemPrompt(): string {
@@ -49,9 +46,8 @@ export class Conversation {
 
   addToolResult(content: string, toolCallId?: string, toolName?: string): void {
     const cap = this.maxToolResultTokens * CHARS_PER_TOKEN;
-    const finalContent = content.length > cap
-      ? elisionStub(toolName ?? '<tool>', content.length)
-      : content;
+    const finalContent =
+      content.length > cap ? elisionStub(toolName ?? '<tool>', content.length) : content;
     const msg: ChatMessage = { role: 'tool', content: finalContent };
     if (toolCallId) {
       msg.tool_call_id = toolCallId;
@@ -72,9 +68,8 @@ export class Conversation {
    */
   replaceLastToolResult(content: string, toolCallId?: string, toolName?: string): void {
     const cap = this.maxToolResultTokens * CHARS_PER_TOKEN;
-    const finalContent = content.length > cap
-      ? elisionStub(toolName ?? '<tool>', content.length)
-      : content;
+    const finalContent =
+      content.length > cap ? elisionStub(toolName ?? '<tool>', content.length) : content;
     for (let i = this.messages.length - 1; i >= 0; i--) {
       if (this.messages[i].role === 'tool') {
         const msg: ChatMessage = { role: 'tool', content: finalContent };
@@ -107,7 +102,11 @@ export class Conversation {
     // If the first kept message is a 'tool' role, extend backwards to include
     // the preceding assistant message (which has the tool_call).
     let cutPoint = this.messages.length - keepCount;
-    while (cutPoint > 0 && cutPoint < this.messages.length && this.messages[cutPoint].role === 'tool') {
+    while (
+      cutPoint > 0 &&
+      cutPoint < this.messages.length &&
+      this.messages[cutPoint].role === 'tool'
+    ) {
       cutPoint--;
     }
     // The walk bottoms out at 0 when every message before the recency

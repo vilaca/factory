@@ -30,7 +30,12 @@ export function DisplayItemView({
   switch (item.kind) {
     case 'user-input': {
       const icon = emojiMode ? `${userEmoji ?? '🧑🏻‍💻'} ` : '> ';
-      return <Text color="green" bold>{icon}{item.text}</Text>;
+      return (
+        <Text color="green" bold>
+          {icon}
+          {item.text}
+        </Text>
+      );
     }
     case 'assistant-text':
       return <AssistantText text={item.text} streaming={item.streaming} emojiMode={emojiMode} />;
@@ -66,7 +71,9 @@ export function DisplayItemView({
         return (
           <Box flexDirection="column">
             {lines.map((line, i) => (
-              <Text dimColor key={i}>{i === 0 && isEdit ? `  ✅ ${line}` : `    ${line}`}</Text>
+              <Text dimColor key={i}>
+                {i === 0 && isEdit ? `  ✅ ${line}` : `    ${line}`}
+              </Text>
             ))}
           </Box>
         );
@@ -75,7 +82,10 @@ export function DisplayItemView({
         return (
           <Box flexDirection="column">
             {lines.map((line, i) => (
-              <Text dimColor key={i}>    {line}</Text>
+              <Text dimColor key={i}>
+                {' '}
+                {line}
+              </Text>
             ))}
           </Box>
         );
@@ -87,9 +97,12 @@ export function DisplayItemView({
       // generic ○ with a body-aware glyph (❌ for grep/glob misses, etc.).
       return (
         <Box flexDirection="column">
-          <Text color="yellow">  ○</Text>
+          <Text color="yellow"> ○</Text>
           {lines.map((line, i) => (
-            <Text dimColor key={i}>    {line}</Text>
+            <Text dimColor key={i}>
+              {' '}
+              {line}
+            </Text>
           ))}
         </Box>
       );
@@ -108,9 +121,17 @@ export function DisplayItemView({
         <Box flexDirection="column">
           {item.lines.map((line, i) => {
             if (line.level === 'info') {
-              return <Text key={i} dimColor={!line.bold} bold={line.bold}>{line.text}</Text>;
+              return (
+                <Text key={i} dimColor={!line.bold} bold={line.bold}>
+                  {line.text}
+                </Text>
+              );
             }
-            return <Text key={i} color={colorMap[line.level]} bold={line.bold}>{line.text}</Text>;
+            return (
+              <Text key={i} color={colorMap[line.level]} bold={line.bold}>
+                {line.text}
+              </Text>
+            );
           })}
         </Box>
       );
@@ -155,7 +176,10 @@ export function ToolCallLine({
   if (!summary) {
     return (
       <Text>
-        {icon} <Text color={nameColor} bold>{toolName}</Text>
+        {icon}{' '}
+        <Text color={nameColor} bold>
+          {toolName}
+        </Text>
       </Text>
     );
   }
@@ -165,7 +189,11 @@ export function ToolCallLine({
   return (
     <Box flexDirection="column">
       <Text>
-        {icon} <Text color={nameColor} bold>{toolName}</Text>:
+        {icon}{' '}
+        <Text color={nameColor} bold>
+          {toolName}
+        </Text>
+        :
       </Text>
       <Text color={isProblem ? 'red' : undefined}>{`    ${summary}`}</Text>
     </Box>

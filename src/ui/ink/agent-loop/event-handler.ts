@@ -14,11 +14,7 @@ interface StreamingState {
   markTokenLimitHalt: () => void;
 }
 
-export function handleAgentEvent(
-  event: AgentEvent,
-  deps: AgentLoopDeps,
-  ss: StreamingState,
-): void {
+export function handleAgentEvent(event: AgentEvent, deps: AgentLoopDeps, ss: StreamingState): void {
   if (!deps.refs.current) return;
 
   switch (event.type) {
@@ -34,7 +30,12 @@ export function handleAgentEvent(
       // clear the streaming buffer. <Static> keeps history in the terminal's
       // real scrollback; only the streaming buffer + spinner re-render.
       if (event.fullContent) {
-        deps.addItem({ kind: 'assistant-text', id: deps.nextId(), text: event.fullContent, streaming: false });
+        deps.addItem({
+          kind: 'assistant-text',
+          id: deps.nextId(),
+          text: event.fullContent,
+          streaming: false,
+        });
       }
       ss.setStreamingBuffer('');
       deps.setStreamingText('');
@@ -53,7 +54,13 @@ export function handleAgentEvent(
     }
     case 'tool-call-result': {
       deps.setPendingToolCall(null);
-      deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'ok' });
+      deps.addItem({
+        kind: 'tool-call',
+        id: deps.nextId(),
+        toolName: event.toolName,
+        args: event.args,
+        status: 'ok',
+      });
       // The toolPreview gate hides the verbose body of *successful* tool
       // results (the noise case the flag exists to silence). Failures,
       // empty-success, and tools that flag the body as `important` still
@@ -79,7 +86,7 @@ export function handleAgentEvent(
         });
       }
       if (event.result.success) ss.addSuccessfulToolCall();
-      deps.setSessionToolCalls((n) => n + 1);
+      deps.setSessionToolCalls(n => n + 1);
       // Skill matcher uses recent tool names to gate `tools:` constrained
       // skills — track the call before the next user prompt evaluates.
       deps.refs.current?.skills?.recordToolUsed(event.toolName);
@@ -91,54 +98,69 @@ export function handleAgentEvent(
     }
     case 'tool-call-denied': {
       deps.setPendingToolCall(null);
-      deps.addItem({ kind: 'tool-call', id: deps.nextId(), toolName: event.toolName, args: event.args, status: 'denied' });
+      deps.addItem({
+        kind: 'tool-call',
+        id: deps.nextId(),
+        toolName: event.toolName,
+        args: event.args,
+        status: 'denied',
+      });
       deps.setRunningTool(null);
       break;
     }
     case 'tool-call-recovered': {
       if (!deps.refs.current.useTextToolFallback) {
         const sourceLabel =
-          event.source === 'bare' ? 'bare JSON' :
-          event.source === 'fence' ? 'a JSON code block' :
-          event.source === 'shell-fence' ? 'a shell code block' :
-          'tagged JSON';
-        deps.addNotice('warn',
+          event.source === 'bare'
+            ? 'bare JSON'
+            : event.source === 'fence'
+              ? 'a JSON code block'
+              : event.source === 'shell-fence'
+                ? 'a shell code block'
+                : 'tagged JSON';
+        deps.addNotice(
+          'warn',
           `⚠ Model emitted tool call as ${sourceLabel} instead of structured tool_calls. Recovered ${event.count} call${event.count === 1 ? '' : 's'} via fallback parser.`,
         );
         deps.refs.current.useTextToolFallback = true;
         deps.refs.current.conversation.updateSystemPrompt(deps.composeSystemPrompt());
         deps.refs.current.sessionLogger?.logSystemPromptChange('text-tool-fallback=true (auto)');
-        deps.addNotice('warn',
+        deps.addNotice(
+          'warn',
           '⚠ Auto-enabling text-tool fallback mode — model will be instructed to use <tool_call> format from now on. Subsequent recoveries will be silent.',
         );
       }
       break;
     }
     case 'tool-result-imitation-stripped': {
-      deps.addNotice('danger',
+      deps.addNotice(
+        'danger',
         `⚠ Model fabricated ${event.count} tool result block${event.count === 1 ? '' : 's'} in its response. Stripped before storing — the result was NOT real.`,
       );
       break;
     }
     case 'auto-retry-injected': {
-      deps.addNotice('warn',
+      deps.addNotice(
+        'warn',
         `↻ Model bailed after a tool failure — auto-injecting retry nudge (${event.remainingBudget} retr${event.remainingBudget === 1 ? 'y' : 'ies'} left).`,
       );
       break;
     }
     case 'auto-retry-exhausted': {
       ss.markAutoRetryExhausted();
-      deps.addNotice('warn', '⚠ Auto-retry exhausted — model couldn\'t recover on its own.');
+      deps.addNotice('warn', "⚠ Auto-retry exhausted — model couldn't recover on its own.");
       break;
     }
     case 'all-denied-halt': {
-      deps.addNotice('warn',
+      deps.addNotice(
+        'warn',
         `⏸ All ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting. Tell the model what to do differently.`,
       );
       break;
     }
     case 'tool-call-corrected': {
-      deps.addNotice('warn',
+      deps.addNotice(
+        'warn',
         `↺ Auto-correcting ${event.original.function.name} call (${event.reason.slice(0, 80)})...`,
       );
       break;
@@ -149,12 +171,19 @@ export function handleAgentEvent(
     }
     case 'tool-call-planned': {
       const sig = `${event.toolName}:${JSON.stringify(event.args)}`;
-      const dup = deps.getPlannedCalls().some(p => `${p.toolName}:${JSON.stringify(p.args)}` === sig);
+      const dup = deps
+        .getPlannedCalls()
+        .some(p => `${p.toolName}:${JSON.stringify(p.args)}` === sig);
       if (dup) {
         deps.addNotice('info', `[planned] (skipped duplicate ${event.toolName} call)`);
       } else {
-        deps.setPlannedCalls((prev) => [...prev, { toolName: event.toolName, args: event.args }]);
-        deps.addItem({ kind: 'tool-planned', id: deps.nextId(), toolName: event.toolName, args: event.args });
+        deps.setPlannedCalls(prev => [...prev, { toolName: event.toolName, args: event.args }]);
+        deps.addItem({
+          kind: 'tool-planned',
+          id: deps.nextId(),
+          toolName: event.toolName,
+          args: event.args,
+        });
       }
       break;
     }
@@ -165,7 +194,7 @@ export function handleAgentEvent(
       deps.setPermissionRequest({
         toolName,
         args: event.args,
-        resolve: (decision) => {
+        resolve: decision => {
           deps.refs.current?.sessionLogger?.logPermissionChange(`request:${decision}`, toolName);
           respond(decision);
           deps.setPermissionRequest(undefined);
@@ -175,20 +204,23 @@ export function handleAgentEvent(
       break;
     }
     case 'output-cap-reached': {
-      deps.addNotice('warn',
+      deps.addNotice(
+        'warn',
         `⚠ Output cap reached (${event.completionTokens} tokens). Response was truncated — ask for the rest if needed.`,
       );
       break;
     }
     case 'empty-turn-warning': {
-      deps.addNotice('warn',
+      deps.addNotice(
+        'warn',
         `⚠ Model produced ${event.completionTokens} tokens of internal reasoning but no visible output. ` +
-        `Try a different model or a more concrete prompt.`,
+          `Try a different model or a more concrete prompt.`,
       );
       break;
     }
     case 'repetition-detected': {
-      deps.addNotice('danger',
+      deps.addNotice(
+        'danger',
         `⚠ Runaway repetition (${event.streak} identical lines: ${event.line.slice(0, 60)}). Aborting.`,
       );
       break;
@@ -199,7 +231,9 @@ export function handleAgentEvent(
     }
     case 'key-rotation': {
       const fromLabel = event.from
-        ? (event.from.label ? `${event.from.label} · …${event.from.fingerprint}` : `…${event.from.fingerprint}`)
+        ? event.from.label
+          ? `${event.from.label} · …${event.from.fingerprint}`
+          : `…${event.from.fingerprint}`
         : '<unknown>';
       const toLabel = event.to.label
         ? `${event.to.label} · …${event.to.fingerprint}`
@@ -236,7 +270,8 @@ export function handleAgentEvent(
       break;
     }
     case 'bash-dedup-nudge': {
-      deps.addNotice('warn',
+      deps.addNotice(
+        'warn',
         `↻ Near-duplicate Bash pattern (${event.recentCommands.length} recent commands) — nudge injected.`,
       );
       break;
@@ -286,7 +321,7 @@ export function handleAgentEvent(
       break;
     }
     case 'turn-complete': {
-      deps.setSessionTurns((n) => n + event.turnsUsed);
+      deps.setSessionTurns(n => n + event.turnsUsed);
       if (event.usage) {
         deps.setLastUsage(event.usage);
       }

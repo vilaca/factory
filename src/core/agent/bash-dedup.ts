@@ -42,13 +42,18 @@ export class BashDedupTracker {
   /** Returns true when this command should fire a dedup nudge. */
   observe(command: string): boolean {
     const trimmed = command.trim();
-    const matches = this.recent.filter(c => jaccardSimilarity(c, trimmed) >= SIMILARITY_THRESHOLD).length;
+    const matches = this.recent.filter(
+      c => jaccardSimilarity(c, trimmed) >= SIMILARITY_THRESHOLD,
+    ).length;
     this.recent.push(trimmed);
     if (this.recent.length > RECENT_WINDOW) this.recent.shift();
 
     if (matches >= SIMILAR_COUNT_TRIGGER) {
       // Don't fire repeatedly for the same near-identical command.
-      if (this.lastNudgedFor !== null && jaccardSimilarity(this.lastNudgedFor, trimmed) >= SIMILARITY_THRESHOLD) {
+      if (
+        this.lastNudgedFor !== null &&
+        jaccardSimilarity(this.lastNudgedFor, trimmed) >= SIMILARITY_THRESHOLD
+      ) {
         return false;
       }
       this.lastNudgedFor = trimmed;

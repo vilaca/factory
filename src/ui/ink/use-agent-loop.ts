@@ -48,13 +48,16 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [providerName, setProviderName] = useState(opts.provider.name);
   const [sessionTurns, setSessionTurns] = useState(0);
   const [sessionToolCalls, setSessionToolCalls] = useState(0);
-  const [lastUsage, setLastUsage] = useState<{
-    totalTokens?: number;
-    completionTokens?: number;
-    cachedPromptTokens?: number;
-    cacheCreationTokens?: number;
-    promptTokens?: number;
-  } | undefined>();
+  const [lastUsage, setLastUsage] = useState<
+    | {
+        totalTokens?: number;
+        completionTokens?: number;
+        cachedPromptTokens?: number;
+        cacheCreationTokens?: number;
+        promptTokens?: number;
+      }
+    | undefined
+  >();
   const [estimatedTokens, setEstimatedTokens] = useState<number | undefined>();
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequestState | undefined>();
   const [pendingToolCall, setPendingToolCall] = useState<ToolCallSummary | null>(null);
@@ -74,7 +77,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const refs = useRef<RunRefs | null>(null);
 
   function addItem(item: DisplayItem): void {
-    setItems((prev) => [...prev, item]);
+    setItems(prev => [...prev, item]);
   }
   function addNotice(level: NoticeLevel, text: string): void {
     addItem({ kind: 'notice', id: nextId(), text, level });
@@ -184,29 +187,34 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
           onStderr: (command, chunk) =>
             sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
         },
-      ).then((r) => {
-        for (const e of r.errors) {
-          addNotice('warn', `⚠ SessionStart hook: ${e}`);
-          sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
-        }
-        for (const hookCommand of r.firedCommands) {
-          const exe = hookCommand.split(/\s+/)[0] ?? hookCommand;
-          const name = exe.split('/').pop() ?? exe;
-          const suffix = r.notice ? ` — ${r.notice}` : '';
-          addNotice('info', `↪ SessionStart hook ran (${name})${suffix}`);
-          sessionLogger?.logWarning('hook-fired', `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`);
-        }
-        // Inject SessionStart additionalContext as a user message so the
-        // model picks it up on the next turn. Hook fire is async; if the
-        // user types fast the first turn won't include it (acceptable).
-        if (r.additionalContext) {
-          refs.current?.conversation.addUser(r.additionalContext);
-        }
-      }).catch((err) => {
-        const msg = err?.message ?? String(err);
-        addNotice('warn', `⚠ SessionStart hook: ${msg}`);
-        sessionLogger?.logWarning('hook-error', `SessionStart: ${msg}`);
-      });
+      )
+        .then(r => {
+          for (const e of r.errors) {
+            addNotice('warn', `⚠ SessionStart hook: ${e}`);
+            sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
+          }
+          for (const hookCommand of r.firedCommands) {
+            const exe = hookCommand.split(/\s+/)[0] ?? hookCommand;
+            const name = exe.split('/').pop() ?? exe;
+            const suffix = r.notice ? ` — ${r.notice}` : '';
+            addNotice('info', `↪ SessionStart hook ran (${name})${suffix}`);
+            sessionLogger?.logWarning(
+              'hook-fired',
+              `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
+            );
+          }
+          // Inject SessionStart additionalContext as a user message so the
+          // model picks it up on the next turn. Hook fire is async; if the
+          // user types fast the first turn won't include it (acceptable).
+          if (r.additionalContext) {
+            refs.current?.conversation.addUser(r.additionalContext);
+          }
+        })
+        .catch(err => {
+          const msg = err?.message ?? String(err);
+          addNotice('warn', `⚠ SessionStart hook: ${msg}`);
+          sessionLogger?.logWarning('hook-error', `SessionStart: ${msg}`);
+        });
     }
 
     return () => {
@@ -226,14 +234,21 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
             onStderr: (command, chunk) =>
               sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
           },
-        ).then((r) => {
-          for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
-          // SessionEnd fires during tab teardown — UI is going away, so
-          // skip addNotice and just log. The session-log entry survives.
-          for (const hookCommand of r.firedCommands) {
-            sessionLogger?.logWarning('hook-fired', `SessionEnd: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`);
-          }
-        }).catch(() => { /* never block teardown */ });
+        )
+          .then(r => {
+            for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
+            // SessionEnd fires during tab teardown — UI is going away, so
+            // skip addNotice and just log. The session-log entry survives.
+            for (const hookCommand of r.firedCommands) {
+              sessionLogger?.logWarning(
+                'hook-fired',
+                `SessionEnd: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
+              );
+            }
+          })
+          .catch(() => {
+            /* never block teardown */
+          });
       }
       sessionLogger?.logSessionEnd();
       sessionLogger?.close();
@@ -276,7 +291,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       next = refs.current.inputQueue.shift();
       setQueueLength(refs.current.inputQueue.length);
       if (next !== undefined) {
-        addNotice('info', `📨 processing queued: ${next.slice(0, 80)}${next.length > 80 ? '…' : ''}`);
+        addNotice(
+          'info',
+          `📨 processing queued: ${next.slice(0, 80)}${next.length > 80 ? '…' : ''}`,
+        );
       }
     }
     setState('idle');
@@ -297,7 +315,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     if (!refs.current) return;
     refs.current.inputQueue.push(text);
     setQueueLength(refs.current.inputQueue.length);
-    addNotice('info', `📨 queued (${refs.current.inputQueue.length} pending) — runs after current task.`);
+    addNotice(
+      'info',
+      `📨 queued (${refs.current.inputQueue.length} pending) — runs after current task.`,
+    );
   }
 
   function respondToPermission(decision: PermissionDecision): void {
@@ -349,7 +370,9 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     if (prevFallback !== refs.current.useTextToolFallback) {
       const sp = composeSystemPrompt();
       refs.current.conversation.updateSystemPrompt(sp);
-      refs.current.sessionLogger?.logSystemPromptChange(`text-tool-fallback=${refs.current.useTextToolFallback}`);
+      refs.current.sessionLogger?.logSystemPromptChange(
+        `text-tool-fallback=${refs.current.useTextToolFallback}`,
+      );
       refs.current.sessionLogger?.logSystemPrompt(sp);
     }
     refs.current.sessionLogger?.logModelChange(refs.current.model, name);
@@ -372,7 +395,11 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   // hint. If a model is supplied (via `/provider <name> <model>` or as
   // `provider:model` from /model), validate and apply it; otherwise fall
   // back to a sensible default by listing the new provider's models.
-  async function setProviderByName(name: string, requestedModel?: string, keyId?: string): Promise<void> {
+  async function setProviderByName(
+    name: string,
+    requestedModel?: string,
+    keyId?: string,
+  ): Promise<void> {
     if (!refs.current) return;
     const trimmed = name.trim();
     if (!trimmed) {
@@ -430,7 +457,10 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
         return;
       }
       if (!nextModel) {
-        addNotice('warn', `${trimmed} returned no models. Pass one explicitly: /provider ${trimmed} <model>`);
+        addNotice(
+          'warn',
+          `${trimmed} returned no models. Pass one explicitly: /provider ${trimmed} <model>`,
+        );
         return;
       }
     }
@@ -480,7 +510,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   }
 
   function toggleEmojiMode(): void {
-    setEmojiMode((prev) => {
+    setEmojiMode(prev => {
       const next = !prev;
       addNotice('info', `Emoji mode: ${next ? 'ON 🤖' : 'OFF'}.`);
       return next;
@@ -522,8 +552,13 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     refs.current.conversation.updateSystemPrompt(sp);
     refs.current.sessionLogger?.logSystemPromptChange('plan-mode=false');
     refs.current.sessionLogger?.logSystemPrompt(sp);
-    addNotice('cyan', `Executing ${plan.length} planned tool call${plan.length === 1 ? '' : 's'}...`);
-    const summary = plan.map(p => `- ${p.toolName}: ${JSON.stringify(p.args).slice(0, 200)}`).join('\n');
+    addNotice(
+      'cyan',
+      `Executing ${plan.length} planned tool call${plan.length === 1 ? '' : 's'}...`,
+    );
+    const summary = plan
+      .map(p => `- ${p.toolName}: ${JSON.stringify(p.args).slice(0, 200)}`)
+      .join('\n');
     setState('running');
     try {
       await runAgentLoopInternal(

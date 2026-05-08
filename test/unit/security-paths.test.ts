@@ -66,10 +66,9 @@ describe('checkPath: user-extended deny', () => {
   });
 
   it('expands a leading ~ in user deny entries', async () => {
-    const r = await checkPath(
-      path.join(os.homedir(), 'custom-secrets', 'token'),
-      { deny: ['~/custom-secrets'] },
-    );
+    const r = await checkPath(path.join(os.homedir(), 'custom-secrets', 'token'), {
+      deny: ['~/custom-secrets'],
+    });
     assert.strictEqual(r.ok, false);
   });
 });

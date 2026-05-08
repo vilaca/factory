@@ -54,7 +54,11 @@ function parseSession(raw: string): SessionStats {
     const trimmed = line.trim();
     if (!trimmed) continue;
     let entry: any;
-    try { entry = JSON.parse(trimmed); } catch { continue; }
+    try {
+      entry = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
     if (entry.type !== 'agent-event') continue;
     const ev = entry.event;
     if (!ev) continue;
@@ -90,7 +94,10 @@ function parseSession(raw: string): SessionStats {
   return stats;
 }
 
-function formatStats(s: SessionStats, filePath: string): { level: 'cyan' | 'info' | 'warn'; text: string; bold?: boolean }[] {
+function formatStats(
+  s: SessionStats,
+  filePath: string,
+): { level: 'cyan' | 'info' | 'warn'; text: string; bold?: boolean }[] {
   const lines: { level: 'cyan' | 'info' | 'warn'; text: string; bold?: boolean }[] = [
     { level: 'cyan', text: `Session stats — ${filePath.split('/').pop()}`, bold: true },
   ];
@@ -104,7 +111,10 @@ function formatStats(s: SessionStats, filePath: string): { level: 'cyan' | 'info
     text: `  Input tokens: ${formatNum(totalInput)} total · ${formatNum(s.cachedInputTokens)} cached (${overallHit}%) · ${formatNum(s.uncachedInputTokens)} fresh`,
   });
   if (s.cacheCreationTokens > 0) {
-    lines.push({ level: 'info', text: `  Cache creation: ${formatNum(s.cacheCreationTokens)} tokens written this session` });
+    lines.push({
+      level: 'info',
+      text: `  Cache creation: ${formatNum(s.cacheCreationTokens)} tokens written this session`,
+    });
   }
 
   if (s.perTurnHitRate.length > 0) {
@@ -121,14 +131,20 @@ function formatStats(s: SessionStats, filePath: string): { level: 'cyan' | 'info
   if (s.largestToolResults.length > 0) {
     lines.push({ level: 'cyan', text: '  Largest tool results:' });
     for (const r of s.largestToolResults) {
-      lines.push({ level: 'info', text: `    ${r.tool.padEnd(10)} ~${formatNum(r.tokens)} tokens` });
+      lines.push({
+        level: 'info',
+        text: `    ${r.tool.padEnd(10)} ~${formatNum(r.tokens)} tokens`,
+      });
     }
   }
 
   if (totalInput === 0) {
     lines.push({ level: 'warn', text: '  No usage recorded yet — run a turn first.' });
   } else if (overallHit < 30 && s.turns >= 3) {
-    lines.push({ level: 'warn', text: '  ⚠ Low cache hit rate — provider may not support caching, or prefix is volatile.' });
+    lines.push({
+      level: 'warn',
+      text: '  ⚠ Low cache hit rate — provider may not support caching, or prefix is volatile.',
+    });
   }
 
   return lines;
@@ -143,7 +159,7 @@ function formatNum(n: number): string {
 const SPARK_BARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 function sparkline(values: number[]): string {
   return values
-    .map((v) => {
+    .map(v => {
       const clamped = Math.max(0, Math.min(1, v));
       const idx = Math.min(SPARK_BARS.length - 1, Math.floor(clamped * SPARK_BARS.length));
       return SPARK_BARS[idx];

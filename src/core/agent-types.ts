@@ -11,25 +11,34 @@ import type { EnvPolicy } from '../security/env.js';
 
 export type { PermissionDecision };
 
-type StopReason =
-  | 'completed'
-  | 'user-abort'
-  | 'token-limit'
-  | 'turn-limit'
-  | 'error';
+type StopReason = 'completed' | 'user-abort' | 'token-limit' | 'turn-limit' | 'error';
 
 export type AgentEvent =
   | { type: 'text-chunk'; content: string }
   | { type: 'text-done'; fullContent: string }
   | { type: 'tool-call-start'; toolName: string; args: Record<string, unknown> }
-  | { type: 'tool-call-result'; toolName: string; args: Record<string, unknown>; result: ToolResult }
+  | {
+      type: 'tool-call-result';
+      toolName: string;
+      args: Record<string, unknown>;
+      result: ToolResult;
+    }
   | { type: 'tool-call-denied'; toolName: string; args: Record<string, unknown> }
-  | { type: 'tool-call-recovered'; count: number; source: 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag' }
+  | {
+      type: 'tool-call-recovered';
+      count: number;
+      source: 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag';
+    }
   | { type: 'tool-result-imitation-stripped'; count: number }
   | { type: 'auto-retry-injected'; remainingBudget: number; reason: string }
   | { type: 'auto-retry-exhausted' }
   | { type: 'all-denied-halt'; count: number }
-  | { type: 'tool-call-corrected'; original: ToolCallMessage; corrected: ToolCallMessage; reason: string }
+  | {
+      type: 'tool-call-corrected';
+      original: ToolCallMessage;
+      corrected: ToolCallMessage;
+      reason: string;
+    }
   | { type: 'tool-call-corrector-aborted'; reason: string }
   | { type: 'tool-call-planned'; toolName: string; args: Record<string, unknown> }
   | {

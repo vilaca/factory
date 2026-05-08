@@ -162,7 +162,7 @@ function runSingleHook(
   timeoutMs: number,
   opts: RunHookOptions,
 ): Promise<SingleHookOutcome> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     let child;
     try {
       // Same env scrubbing the Bash tool uses (deny-by-default; see
@@ -197,8 +197,16 @@ function runSingleHook(
     let settled = false;
 
     const timer = setTimeout(() => {
-      try { child.stdin?.destroy(); } catch { /* ignore */ }
-      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      try {
+        child.stdin?.destroy();
+      } catch {
+        /* ignore */
+      }
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
       // Resolve immediately on timeout — don't wait for the child's `close`
       // event, which may be delayed by orphaned descendants (e.g. `sleep` in
       // the command outliving the parent `sh`).
@@ -260,9 +268,7 @@ function runSingleHook(
         return;
       }
       const NOTICE_CAP = 200;
-      const notice = stdout.length > NOTICE_CAP
-        ? stdout.slice(0, NOTICE_CAP) + '…'
-        : stdout;
+      const notice = stdout.length > NOTICE_CAP ? stdout.slice(0, NOTICE_CAP) + '…' : stdout;
       resolve({ parsed: { notice }, stderr });
     });
 

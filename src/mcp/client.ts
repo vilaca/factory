@@ -30,8 +30,9 @@ export class McpManager {
       args: config.args,
       env: config.env
         ? Object.fromEntries(
-            Object.entries({ ...process.env, ...config.env })
-              .filter((entry): entry is [string, string] => entry[1] !== undefined),
+            Object.entries({ ...process.env, ...config.env }).filter(
+              (entry): entry is [string, string] => entry[1] !== undefined,
+            ),
           )
         : undefined,
     });

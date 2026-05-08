@@ -65,14 +65,36 @@ function validateConfig(data: unknown, filePath: string): Config {
   }
   const obj = data as Record<string, unknown>;
 
-  for (const key of ['provider', 'model', 'host', 'token', 'huggingfaceToken', 'anthropicToken', 'copilotToken', 'githubToken', 'openrouterToken', 'vercelToken', 'opencodeZenToken', 'googleAiStudioToken', 'mistralToken', 'codestralToken', 'cerebrasToken', 'groqToken', 'cohereToken', 'workersAiToken', 'workersAiAccountId'] as const) {
+  for (const key of [
+    'provider',
+    'model',
+    'host',
+    'token',
+    'huggingfaceToken',
+    'anthropicToken',
+    'copilotToken',
+    'githubToken',
+    'openrouterToken',
+    'vercelToken',
+    'opencodeZenToken',
+    'googleAiStudioToken',
+    'mistralToken',
+    'codestralToken',
+    'cerebrasToken',
+    'groqToken',
+    'cohereToken',
+    'workersAiToken',
+    'workersAiAccountId',
+  ] as const) {
     if (obj[key] !== undefined && typeof obj[key] !== 'string') {
       throw new Error(`${filePath}: "${key}" must be a string`);
     }
   }
-  if (obj.googleAiStudioAuthMode !== undefined &&
-      obj.googleAiStudioAuthMode !== 'api-key' &&
-      obj.googleAiStudioAuthMode !== 'oauth') {
+  if (
+    obj.googleAiStudioAuthMode !== undefined &&
+    obj.googleAiStudioAuthMode !== 'api-key' &&
+    obj.googleAiStudioAuthMode !== 'oauth'
+  ) {
     throw new Error(`${filePath}: "googleAiStudioAuthMode" must be "api-key" or "oauth"`);
   }
 
@@ -82,25 +104,40 @@ function validateConfig(data: unknown, filePath: string): Config {
     }
     const agent = obj.agent as Record<string, unknown>;
     if (agent.compactionThreshold !== undefined) {
-      if (typeof agent.compactionThreshold !== 'number' ||
-          agent.compactionThreshold < 0 || agent.compactionThreshold > 1) {
-        throw new Error(`${filePath}: "agent.compactionThreshold" must be a number between 0 and 1`);
+      if (
+        typeof agent.compactionThreshold !== 'number' ||
+        agent.compactionThreshold < 0 ||
+        agent.compactionThreshold > 1
+      ) {
+        throw new Error(
+          `${filePath}: "agent.compactionThreshold" must be a number between 0 and 1`,
+        );
       }
     }
     if (agent.recencyWindow !== undefined) {
-      if (typeof agent.recencyWindow !== 'number' || agent.recencyWindow < 0 ||
-          !Number.isInteger(agent.recencyWindow)) {
+      if (
+        typeof agent.recencyWindow !== 'number' ||
+        agent.recencyWindow < 0 ||
+        !Number.isInteger(agent.recencyWindow)
+      ) {
         throw new Error(`${filePath}: "agent.recencyWindow" must be a non-negative integer`);
       }
     }
     if (agent.turnTimeoutSec !== undefined) {
-      if (typeof agent.turnTimeoutSec !== 'number' || agent.turnTimeoutSec <= 0 ||
-          !Number.isFinite(agent.turnTimeoutSec)) {
+      if (
+        typeof agent.turnTimeoutSec !== 'number' ||
+        agent.turnTimeoutSec <= 0 ||
+        !Number.isFinite(agent.turnTimeoutSec)
+      ) {
         throw new Error(`${filePath}: "agent.turnTimeoutSec" must be a positive number`);
       }
     }
     if (agent.rotation !== undefined) {
-      if (agent.rotation === null || typeof agent.rotation !== 'object' || Array.isArray(agent.rotation)) {
+      if (
+        agent.rotation === null ||
+        typeof agent.rotation !== 'object' ||
+        Array.isArray(agent.rotation)
+      ) {
         throw new Error(`${filePath}: "agent.rotation" must be an object`);
       }
       const rot = agent.rotation as Record<string, unknown>;
@@ -130,7 +167,11 @@ function validateConfig(data: unknown, filePath: string): Config {
         validateChain(rot.default, 'agent.rotation.default');
       }
       if (rot.overrides !== undefined) {
-        if (rot.overrides === null || typeof rot.overrides !== 'object' || Array.isArray(rot.overrides)) {
+        if (
+          rot.overrides === null ||
+          typeof rot.overrides !== 'object' ||
+          Array.isArray(rot.overrides)
+        ) {
           throw new Error(`${filePath}: "agent.rotation.overrides" must be an object`);
         }
         for (const [scope, chain] of Object.entries(rot.overrides as Record<string, unknown>)) {
@@ -152,7 +193,7 @@ function validateConfig(data: unknown, filePath: string): Config {
         if (!(HOOK_EVENTS as readonly string[]).includes(event)) {
           process.stderr.write(
             `${filePath}: warning: unknown hook event "agent.hooks.${event}" (skipped). ` +
-            `Known events: ${HOOK_EVENTS.join(', ')}\n`,
+              `Known events: ${HOOK_EVENTS.join(', ')}\n`,
           );
           continue;
         }
@@ -165,26 +206,36 @@ function validateConfig(data: unknown, filePath: string): Config {
           }
           const e = entry as Record<string, unknown>;
           if (typeof e.command !== 'string' || !e.command) {
-            throw new Error(`${filePath}: "agent.hooks.${event}[${i}].command" must be a non-empty string`);
+            throw new Error(
+              `${filePath}: "agent.hooks.${event}[${i}].command" must be a non-empty string`,
+            );
           }
           if (e.matcher !== undefined && typeof e.matcher !== 'string') {
             throw new Error(`${filePath}: "agent.hooks.${event}[${i}].matcher" must be a string`);
           }
-          if (e.timeoutMs !== undefined &&
-              (typeof e.timeoutMs !== 'number' || e.timeoutMs <= 0 || !Number.isFinite(e.timeoutMs))) {
-            throw new Error(`${filePath}: "agent.hooks.${event}[${i}].timeoutMs" must be a positive number`);
+          if (
+            e.timeoutMs !== undefined &&
+            (typeof e.timeoutMs !== 'number' || e.timeoutMs <= 0 || !Number.isFinite(e.timeoutMs))
+          ) {
+            throw new Error(
+              `${filePath}: "agent.hooks.${event}[${i}].timeoutMs" must be a positive number`,
+            );
           }
         });
       }
     }
 
     if (agent.experimental !== undefined) {
-      if (agent.experimental === null || typeof agent.experimental !== 'object' || Array.isArray(agent.experimental)) {
+      if (
+        agent.experimental === null ||
+        typeof agent.experimental !== 'object' ||
+        Array.isArray(agent.experimental)
+      ) {
         throw new Error(`${filePath}: "agent.experimental" must be an object`);
       }
       const exp = agent.experimental as Record<string, unknown>;
       for (const key of Object.keys(exp)) {
-        if (!EXPERIMENTAL_FLAG_KEYS.includes(key as typeof EXPERIMENTAL_FLAG_KEYS[number])) {
+        if (!EXPERIMENTAL_FLAG_KEYS.includes(key as (typeof EXPERIMENTAL_FLAG_KEYS)[number])) {
           throw new Error(
             `${filePath}: unknown experimental flag "agent.experimental.${key}". Known flags: ${EXPERIMENTAL_FLAG_KEYS.join(', ')}`,
           );
@@ -197,7 +248,11 @@ function validateConfig(data: unknown, filePath: string): Config {
   }
 
   if (obj.permissions !== undefined) {
-    if (obj.permissions === null || typeof obj.permissions !== 'object' || Array.isArray(obj.permissions)) {
+    if (
+      obj.permissions === null ||
+      typeof obj.permissions !== 'object' ||
+      Array.isArray(obj.permissions)
+    ) {
       throw new Error(`${filePath}: "permissions" must be an object`);
     }
     const perms = obj.permissions as Record<string, unknown>;
@@ -216,10 +271,14 @@ function validateConfig(data: unknown, filePath: string): Config {
         }
         const rule = r as Record<string, unknown>;
         if (typeof rule.pattern !== 'string' || rule.pattern.length === 0) {
-          throw new Error(`${filePath}: "permissions.bashRules[${i}].pattern" must be a non-empty string`);
+          throw new Error(
+            `${filePath}: "permissions.bashRules[${i}].pattern" must be a non-empty string`,
+          );
         }
         if (rule.decision !== 'allow' && rule.decision !== 'deny' && rule.decision !== 'prompt') {
-          throw new Error(`${filePath}: "permissions.bashRules[${i}].decision" must be "allow" | "deny" | "prompt"`);
+          throw new Error(
+            `${filePath}: "permissions.bashRules[${i}].decision" must be "allow" | "deny" | "prompt"`,
+          );
         }
         if (rule.note !== undefined && typeof rule.note !== 'string') {
           throw new Error(`${filePath}: "permissions.bashRules[${i}].note" must be a string`);
@@ -240,7 +299,10 @@ function validateConfig(data: unknown, filePath: string): Config {
       const env = sec.bashEnv as Record<string, unknown>;
       for (const key of ['allow', 'allowPrefixes', 'deny', 'denyPrefixes'] as const) {
         if (env[key] !== undefined) {
-          if (!Array.isArray(env[key]) || !(env[key] as unknown[]).every(s => typeof s === 'string')) {
+          if (
+            !Array.isArray(env[key]) ||
+            !(env[key] as unknown[]).every(s => typeof s === 'string')
+          ) {
             throw new Error(`${filePath}: "security.bashEnv.${key}" must be an array of strings`);
           }
         }
@@ -252,7 +314,10 @@ function validateConfig(data: unknown, filePath: string): Config {
       }
       const paths = sec.paths as Record<string, unknown>;
       if (paths.deny !== undefined) {
-        if (!Array.isArray(paths.deny) || !(paths.deny as unknown[]).every(s => typeof s === 'string')) {
+        if (
+          !Array.isArray(paths.deny) ||
+          !(paths.deny as unknown[]).every(s => typeof s === 'string')
+        ) {
           throw new Error(`${filePath}: "security.paths.deny" must be an array of strings`);
         }
       }
@@ -289,7 +354,9 @@ function validateConfig(data: unknown, filePath: string): Config {
           throw new Error(`${filePath}: "keys.${provider}[${i}].token" must be a non-empty string`);
         }
         if (typeof e.createdAt !== 'string' || !e.createdAt) {
-          throw new Error(`${filePath}: "keys.${provider}[${i}].createdAt" must be a non-empty string`);
+          throw new Error(
+            `${filePath}: "keys.${provider}[${i}].createdAt" must be a non-empty string`,
+          );
         }
         if (e.label !== undefined && typeof e.label !== 'string') {
           throw new Error(`${filePath}: "keys.${provider}[${i}].label" must be a string`);
@@ -354,7 +421,10 @@ function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-async function writeMergedConfig(filePath: string, merged: Record<string, unknown>): Promise<Config> {
+async function writeMergedConfig(
+  filePath: string,
+  merged: Record<string, unknown>,
+): Promise<Config> {
   const validated = validateConfig(merged, filePath);
   const dir = getGlobalConfigDir();
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
@@ -387,7 +457,7 @@ async function writeMergedConfig(filePath: string, merged: Record<string, unknow
 export async function saveGlobalConfig(config: Partial<Config>): Promise<Config> {
   return withConfigLock(async () => {
     const filePath = getGlobalConfigFile();
-    const existingRaw = await readJsonFile(filePath) ?? {};
+    const existingRaw = (await readJsonFile(filePath)) ?? {};
     // Spread order: existingRaw first (preserves unknown/future keys), then config
     // (applies our updates). Validate only to catch type errors, then write the
     // merged raw object so unknown keys are not silently dropped.
@@ -413,7 +483,7 @@ export async function updateGlobalConfig(
 ): Promise<Config> {
   return withConfigLock(async () => {
     const filePath = getGlobalConfigFile();
-    const existingRaw = await readJsonFile(filePath) ?? {};
+    const existingRaw = (await readJsonFile(filePath)) ?? {};
     const validated = validateConfig(existingRaw, filePath);
     const updates = await mutate(validated);
     const merged = { ...existingRaw, ...updates };
@@ -481,15 +551,18 @@ function mergeConfigs(...configs: Config[]): Config {
     if (config.openrouterToken !== undefined) result.openrouterToken = config.openrouterToken;
     if (config.vercelToken !== undefined) result.vercelToken = config.vercelToken;
     if (config.opencodeZenToken !== undefined) result.opencodeZenToken = config.opencodeZenToken;
-    if (config.googleAiStudioToken !== undefined) result.googleAiStudioToken = config.googleAiStudioToken;
-    if (config.googleAiStudioAuthMode !== undefined) result.googleAiStudioAuthMode = config.googleAiStudioAuthMode;
+    if (config.googleAiStudioToken !== undefined)
+      result.googleAiStudioToken = config.googleAiStudioToken;
+    if (config.googleAiStudioAuthMode !== undefined)
+      result.googleAiStudioAuthMode = config.googleAiStudioAuthMode;
     if (config.mistralToken !== undefined) result.mistralToken = config.mistralToken;
     if (config.codestralToken !== undefined) result.codestralToken = config.codestralToken;
     if (config.cerebrasToken !== undefined) result.cerebrasToken = config.cerebrasToken;
     if (config.groqToken !== undefined) result.groqToken = config.groqToken;
     if (config.cohereToken !== undefined) result.cohereToken = config.cohereToken;
     if (config.workersAiToken !== undefined) result.workersAiToken = config.workersAiToken;
-    if (config.workersAiAccountId !== undefined) result.workersAiAccountId = config.workersAiAccountId;
+    if (config.workersAiAccountId !== undefined)
+      result.workersAiAccountId = config.workersAiAccountId;
     if (config.keys !== undefined) {
       // keys are global-only state; project configs that set keys override
       // matching providers wholesale. Most users will only have keys at the
@@ -498,26 +571,28 @@ function mergeConfigs(...configs: Config[]): Config {
     }
 
     if (config.agent) {
-      const mergedExperimental = config.agent.experimental || result.agent?.experimental
-        ? { ...result.agent?.experimental, ...config.agent.experimental }
-        : undefined;
-      const mergedRotation = config.agent.rotation || result.agent?.rotation
-        ? {
-            ...result.agent?.rotation,
-            ...config.agent.rotation,
-            // Override map merges shallowly per scope so a project config
-            // can override only specific scopes from global without wiping
-            // the rest.
-            ...(config.agent.rotation?.overrides || result.agent?.rotation?.overrides
-              ? {
-                  overrides: {
-                    ...result.agent?.rotation?.overrides,
-                    ...config.agent.rotation?.overrides,
-                  },
-                }
-              : {}),
-          }
-        : undefined;
+      const mergedExperimental =
+        config.agent.experimental || result.agent?.experimental
+          ? { ...result.agent?.experimental, ...config.agent.experimental }
+          : undefined;
+      const mergedRotation =
+        config.agent.rotation || result.agent?.rotation
+          ? {
+              ...result.agent?.rotation,
+              ...config.agent.rotation,
+              // Override map merges shallowly per scope so a project config
+              // can override only specific scopes from global without wiping
+              // the rest.
+              ...(config.agent.rotation?.overrides || result.agent?.rotation?.overrides
+                ? {
+                    overrides: {
+                      ...result.agent?.rotation?.overrides,
+                      ...config.agent.rotation?.overrides,
+                    },
+                  }
+                : {}),
+            }
+          : undefined;
       result.agent = {
         ...result.agent,
         ...config.agent,
@@ -529,9 +604,10 @@ function mergeConfigs(...configs: Config[]): Config {
       // bashRules are additive across config layers (global → project → CLI)
       // so a project can extend the user's global allow list without
       // having to repeat it.
-      const mergedRules = (result.permissions?.bashRules || config.permissions.bashRules)
-        ? [...(result.permissions?.bashRules ?? []), ...(config.permissions.bashRules ?? [])]
-        : undefined;
+      const mergedRules =
+        result.permissions?.bashRules || config.permissions.bashRules
+          ? [...(result.permissions?.bashRules ?? []), ...(config.permissions.bashRules ?? [])]
+          : undefined;
       result.permissions = {
         ...result.permissions,
         ...config.permissions,
@@ -541,15 +617,27 @@ function mergeConfigs(...configs: Config[]): Config {
     if (config.security) {
       const merge = (a?: string[], b?: string[]): string[] | undefined =>
         a || b ? [...(a ?? []), ...(b ?? [])] : undefined;
-      const bashEnv = config.security.bashEnv || result.security?.bashEnv ? {
-        allow: merge(result.security?.bashEnv?.allow, config.security.bashEnv?.allow),
-        allowPrefixes: merge(result.security?.bashEnv?.allowPrefixes, config.security.bashEnv?.allowPrefixes),
-        deny: merge(result.security?.bashEnv?.deny, config.security.bashEnv?.deny),
-        denyPrefixes: merge(result.security?.bashEnv?.denyPrefixes, config.security.bashEnv?.denyPrefixes),
-      } : undefined;
-      const paths = config.security.paths || result.security?.paths ? {
-        deny: merge(result.security?.paths?.deny, config.security.paths?.deny),
-      } : undefined;
+      const bashEnv =
+        config.security.bashEnv || result.security?.bashEnv
+          ? {
+              allow: merge(result.security?.bashEnv?.allow, config.security.bashEnv?.allow),
+              allowPrefixes: merge(
+                result.security?.bashEnv?.allowPrefixes,
+                config.security.bashEnv?.allowPrefixes,
+              ),
+              deny: merge(result.security?.bashEnv?.deny, config.security.bashEnv?.deny),
+              denyPrefixes: merge(
+                result.security?.bashEnv?.denyPrefixes,
+                config.security.bashEnv?.denyPrefixes,
+              ),
+            }
+          : undefined;
+      const paths =
+        config.security.paths || result.security?.paths
+          ? {
+              deny: merge(result.security?.paths?.deny, config.security.paths?.deny),
+            }
+          : undefined;
       result.security = {
         ...(bashEnv ? { bashEnv } : {}),
         ...(paths ? { paths } : {}),
@@ -588,8 +676,5 @@ export async function loadConfig(cwd: string, cliOverrides?: CliOverrides): Prom
 }
 
 export function getGlobalConfigDir(): string {
-  return path.join(
-    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'),
-    'factory',
-  );
+  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'factory');
 }

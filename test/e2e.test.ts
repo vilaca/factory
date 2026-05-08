@@ -3,14 +3,8 @@ import assert from 'node:assert';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import {
-  startMockServer,
-  stopMockServer,
-} from './mock-ollama-server.js';
-import {
-  startMockCopilotServer,
-  stopMockCopilotServer,
-} from './mock-copilot-server.js';
+import { startMockServer, stopMockServer } from './mock-ollama-server.js';
+import { startMockCopilotServer, stopMockCopilotServer } from './mock-copilot-server.js';
 import { spawnCli } from './cli-harness.js';
 
 let mockPort: number;
@@ -34,7 +28,15 @@ after(async () => {
 });
 
 function cliArgs(extra: string[] = []): string[] {
-  return ['--provider', 'ollama', '--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`, ...extra];
+  return [
+    '--provider',
+    'ollama',
+    '--model',
+    'test-model:latest',
+    '--host',
+    `http://127.0.0.1:${mockPort}`,
+    ...extra,
+  ];
 }
 
 // ─── Startup ────────────────────────────────────────────────────────────
@@ -79,9 +81,12 @@ describe('Startup and welcome', () => {
   });
 
   it('prompts for provider selection when no provider is configured', async () => {
-    const cli = spawnCli(
-      ['--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`],
-    );
+    const cli = spawnCli([
+      '--model',
+      'test-model:latest',
+      '--host',
+      `http://127.0.0.1:${mockPort}`,
+    ]);
     try {
       // Picker opens at the "recent provider/model" stage. With no recent
       // sessions only one option ("Pick a different provider/model") is
@@ -102,13 +107,10 @@ describe('Startup and welcome', () => {
   });
 
   it('shows Ollama as offline when the Ollama service is not reachable', async () => {
-    const cli = spawnCli(
-      ['--host', `http://127.0.0.1:${mockCopilotPort}`],
-      {
-        GITHUB_COPILOT_API_KEY: 'ghu_test_token',
-        FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
-      },
-    );
+    const cli = spawnCli(['--host', `http://127.0.0.1:${mockCopilotPort}`], {
+      GITHUB_COPILOT_API_KEY: 'ghu_test_token',
+      FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
+    });
     try {
       await cli.waitForOutput('Recent provider/model', 5000);
       cli.sendEnter();
@@ -171,7 +173,14 @@ describe('Startup and welcome', () => {
 
 describe('Error handling', () => {
   it('shows error when Ollama is not running', async () => {
-    const cli = spawnCli(['--provider', 'ollama', '--model', 'test-model', '--host', 'http://127.0.0.1:19999']);
+    const cli = spawnCli([
+      '--provider',
+      'ollama',
+      '--model',
+      'test-model',
+      '--host',
+      'http://127.0.0.1:19999',
+    ]);
     try {
       const output = await cli.waitForOutput('Cannot connect', 10000);
       assert.ok(output.includes('Cannot connect'));
@@ -182,10 +191,11 @@ describe('Error handling', () => {
 
   it('prompts for a HuggingFace token and saves it for the next run', async () => {
     const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-hf-config-'));
-    const cli = spawnCli(
-      ['--provider', 'huggingface'],
-      { XDG_CONFIG_HOME: configHome, HF_TOKEN: '', HUGGING_FACE_HUB_TOKEN: '' },
-    );
+    const cli = spawnCli(['--provider', 'huggingface'], {
+      XDG_CONFIG_HOME: configHome,
+      HF_TOKEN: '',
+      HUGGING_FACE_HUB_TOKEN: '',
+    });
     try {
       await cli.waitForOutput('HuggingFace API token required', 5000);
       cli.sendLine('hf_test_token');
@@ -197,8 +207,10 @@ describe('Error handling', () => {
       const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       // Tokens are stored in the multi-key store keyed by provider.
       const hfKeys: Array<{ token: string }> = savedConfig.keys?.huggingface ?? [];
-      assert.ok(hfKeys.some(k => k.token === 'hf_test_token'),
-        `expected hf_test_token in keys.huggingface, got ${JSON.stringify(savedConfig.keys)}`);
+      assert.ok(
+        hfKeys.some(k => k.token === 'hf_test_token'),
+        `expected hf_test_token in keys.huggingface, got ${JSON.stringify(savedConfig.keys)}`,
+      );
       fs.rmSync(configHome, { recursive: true, force: true });
     }
   });

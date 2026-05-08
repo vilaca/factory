@@ -1,8 +1,14 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { Ollama, type ChatRequest, type Tool, type Message } from 'ollama';
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelTier, ModelInfo,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelTier,
+  ModelInfo,
 } from './types.js';
 import { errorCode, errorMessage, isError } from '../utils/errors.js';
 
@@ -122,7 +128,8 @@ export class OllamaProvider implements Provider {
             result.usage = {
               promptTokens: (chunk as any).prompt_eval_count ?? 0,
               completionTokens: (chunk as any).eval_count ?? 0,
-              totalTokens: ((chunk as any).prompt_eval_count ?? 0) + ((chunk as any).eval_count ?? 0),
+              totalTokens:
+                ((chunk as any).prompt_eval_count ?? 0) + ((chunk as any).eval_count ?? 0),
             };
           }
         }
@@ -190,7 +197,8 @@ export class OllamaProvider implements Provider {
       result.usage = {
         promptTokens: (response as any).prompt_eval_count ?? 0,
         completionTokens: (response as any).eval_count ?? 0,
-        totalTokens: ((response as any).prompt_eval_count ?? 0) + ((response as any).eval_count ?? 0),
+        totalTokens:
+          ((response as any).prompt_eval_count ?? 0) + ((response as any).eval_count ?? 0),
       };
     }
     return result;
@@ -212,8 +220,13 @@ function makeAbortError(): Error {
 function translateOllamaError(err: unknown): Error {
   const msg = errorMessage(err);
   const code = errorCode(err) ?? '';
-  if (msg === 'EOF' || code === 'ECONNREFUSED' || code === 'ECONNRESET' ||
-      msg.includes('socket hang up') || msg.includes('fetch failed')) {
+  if (
+    msg === 'EOF' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    msg.includes('socket hang up') ||
+    msg.includes('fetch failed')
+  ) {
     const detail = msg || code || 'connection lost';
     const wrapped = new Error(
       `Ollama connection dropped (${detail}). The model may have been unloaded or the server may be out of memory — check ollama serve and retry.`,

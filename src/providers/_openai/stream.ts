@@ -25,7 +25,11 @@ interface OpenAiChatRequest {
  * surface them can handle that in their own chat() wrapper.
  */
 export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<ChatChunk> {
-  const headers = { Accept: 'text/event-stream', 'Content-Type': 'application/json', ...req.headers };
+  const headers = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+    ...req.headers,
+  };
   const res = await fetch(req.url, {
     method: 'POST',
     headers,
@@ -73,7 +77,11 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
       }
     }
   } finally {
-    try { await reader.cancel(); } catch { /* already-cancelled or stream errored */ }
+    try {
+      await reader.cancel();
+    } catch {
+      /* already-cancelled or stream errored */
+    }
   }
 }
 
@@ -94,7 +102,7 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
     throw new Error(`${req.providerName} API error ${res.status}: ${await res.text()}`);
   }
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
   const choice = data.choices?.[0];
   const result: ChatChunk = {
     content: choice?.message?.content ?? undefined,
@@ -107,15 +115,18 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
       if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
         return [];
       }
-      return [{
-        id: tc.id,
-        function: {
-          name: tc.function.name,
-          arguments: typeof tc.function.arguments === 'string'
-            ? parseToolArgs(tc.function.arguments)
-            : tc.function.arguments,
+      return [
+        {
+          id: tc.id,
+          function: {
+            name: tc.function.name,
+            arguments:
+              typeof tc.function.arguments === 'string'
+                ? parseToolArgs(tc.function.arguments)
+                : tc.function.arguments,
+          },
         },
-      }];
+      ];
     });
     if (tcs.length > 0) result.tool_calls = tcs;
   }

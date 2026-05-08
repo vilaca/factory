@@ -10,8 +10,12 @@ interface PlanApprovalPanelProps {
 export function PlanApprovalPanel({ count }: PlanApprovalPanelProps): React.ReactElement {
   return (
     <Box paddingX={1}>
-      <Text color="cyan" bold>Plan: </Text>
-      <Text color="cyan">{count} change{count === 1 ? '' : 's'} queued. </Text>
+      <Text color="cyan" bold>
+        Plan:{' '}
+      </Text>
+      <Text color="cyan">
+        {count} change{count === 1 ? '' : 's'} queued.{' '}
+      </Text>
       <Text dimColor>[y] approve · [n] drop · or describe revisions</Text>
     </Box>
   );

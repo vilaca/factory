@@ -102,7 +102,10 @@ describe('bash-rules: forbidden patterns', () => {
   it('hard-denies force-push to protected branches', () => {
     assert.strictEqual(checkForbidden('git push --force origin main')?.id, 'force-push-protected');
     assert.strictEqual(checkForbidden('git push -f origin master')?.id, 'force-push-protected');
-    assert.strictEqual(checkForbidden('git push --force-with-lease=main origin main')?.id, 'force-push-protected');
+    assert.strictEqual(
+      checkForbidden('git push --force-with-lease=main origin main')?.id,
+      'force-push-protected',
+    );
     // Allowed: force-push a feature branch
     assert.strictEqual(checkForbidden('git push --force origin feat/foo'), null);
     assert.strictEqual(checkForbidden('git push -f origin some-branch'), null);

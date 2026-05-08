@@ -31,9 +31,7 @@ export function parseRotationChain(spec: string): RotationEntry[] {
     if (!part.trim()) continue;
     const entry = parseRotationEntry(part);
     if (!entry) {
-      throw new Error(
-        `Invalid rotation entry "${part.trim()}". Expected "<provider>:<model>".`,
-      );
+      throw new Error(`Invalid rotation entry "${part.trim()}". Expected "<provider>:<model>".`);
     }
     out.push(entry);
   }

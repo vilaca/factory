@@ -1,13 +1,24 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
-import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import {
+  buildChatBody,
+  fetchOpenAiCatalog,
+  sendOpenAiChat,
+  streamOpenAiChat,
+} from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const PROVIDER_NAME = 'Groq';
-const MISSING_TOKEN_ERROR =
-  'Groq API key required. Set GROQ_API_KEY env var or use --token flag.';
+const MISSING_TOKEN_ERROR = 'Groq API key required. Set GROQ_API_KEY env var or use --token flag.';
 
 interface GroqModel {
   id: string;
@@ -104,9 +115,7 @@ export class GroqProvider implements Provider {
   ): Record<string, unknown> {
     const lower = model.toLowerCase();
     // Groq rejects temperature=0 with a 400 — substitute a tiny epsilon.
-    const adjusted = options?.temperature === 0
-      ? { ...options, temperature: 1e-8 }
-      : options;
+    const adjusted = options?.temperature === 0 ? { ...options, temperature: 1e-8 } : options;
     return buildChatBody({
       model,
       messages,
@@ -176,7 +185,8 @@ function buildModelWarning(modelId: string): string | undefined {
     lower.includes('meta-llama/llama-4-scout') ||
     lower.includes('qwen/qwen3-32b') ||
     lower.includes('openai/gpt-oss-safeguard-20b')
-  ) return 'preview';
+  )
+    return 'preview';
   return undefined;
 }
 
@@ -194,12 +204,14 @@ function estimateModelTier(model: string): ModelTier {
     model.includes('openai/gpt-oss-120b') ||
     model.includes('llama-3.3-70b-versatile') ||
     model.includes('groq/compound')
-  ) return 'strong';
+  )
+    return 'strong';
   if (
     model.includes('openai/gpt-oss-20b') ||
     model.includes('meta-llama/llama-4-scout') ||
     model.includes('qwen/qwen3-32b')
-  ) return 'medium';
+  )
+    return 'medium';
   return 'weak';
 }
 
@@ -212,7 +224,8 @@ function estimateContextWindow(model: string): number {
     model.includes('groq/compound') ||
     model.includes('meta-llama/llama-4-scout') ||
     model.includes('qwen/qwen3-32b')
-  ) return 131072;
+  )
+    return 131072;
   return 8192;
 }
 

@@ -28,7 +28,10 @@ export function shouldInjectSkill(skill: Skill, ctx: MatchContext): boolean {
     for (const pattern of skill.triggers) {
       try {
         const re = new RegExp(pattern, 'i');
-        if (re.test(ctx.userMessage)) { matched = true; break; }
+        if (re.test(ctx.userMessage)) {
+          matched = true;
+          break;
+        }
       } catch {
         // shouldn't happen — loader pre-validates patterns — but stay defensive
       }

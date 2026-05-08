@@ -13,7 +13,12 @@ import { runHeadless } from './ui/headless.js';
 import { renderApp } from './ui/ink/index.js';
 import { buildSystemPrompt } from './core/system-prompt.js';
 import { validateModelToolSupport } from './core/model-validation.js';
-import { appendProviderLog, getLastSessionSelection, getRecentSessions, sessionsDir } from './core/session-log.js';
+import {
+  appendProviderLog,
+  getLastSessionSelection,
+  getRecentSessions,
+  sessionsDir,
+} from './core/session-log.js';
 import { renderWelcome, renderError, animateLogo } from './ui/renderer.js';
 import { getGitBranch, isGitDirty } from './utils/git.js';
 import { errorMessage } from './utils/errors.js';
@@ -26,10 +31,7 @@ import {
   type AuthResult,
   type StartupCredentials,
 } from './cli/auth.js';
-import {
-  buildPickerOptions,
-  findDefaultSelection,
-} from './cli/picker.js';
+import { buildPickerOptions, findDefaultSelection } from './cli/picker.js';
 import { selectStartupSession, selectModelInk } from './cli/startup-menu.js';
 
 const DEBUG = process.env.FACTORY_DEBUG === '1';
@@ -72,8 +74,13 @@ async function main(): Promise<void> {
   // Apply CLI rotation overrides to the in-memory config before everything
   // else reads from it. --save-rotate also writes the parsed chain through
   // to global config so the next launch keeps it.
-  if (cliArgs.rotate !== undefined || cliArgs.saveRotate
-      || cliArgs.noRotate || cliArgs.noRotateKeys || cliArgs.noRotateModels) {
+  if (
+    cliArgs.rotate !== undefined ||
+    cliArgs.saveRotate ||
+    cliArgs.noRotate ||
+    cliArgs.noRotateKeys ||
+    cliArgs.noRotateModels
+  ) {
     const { parseRotationChain } = await import('./cli/parse-rotation.js');
     const existing = config.agent?.rotation ?? {};
     const next = { ...existing };
@@ -128,35 +135,46 @@ async function main(): Promise<void> {
 
   if (config.provider) {
     providerName = config.provider;
-  } else if (
-    !cliArgs.pick &&
-    lastSession &&
-    canResumeLastSession(lastSession, probedModels)
-  ) {
+  } else if (!cliArgs.pick && lastSession && canResumeLastSession(lastSession, probedModels)) {
     // Fast path: jump straight into the prompt with the same provider/model
     // (and key) the user finished on. Use /pick or Ctrl+K mid-session to
     // change, or pass --pick to force the startup menu.
-    dbg(`resuming last session: ${lastSession.provider}/${lastSession.model}${lastSession.keyId ? ` (key=${lastSession.keyId})` : ''}`);
+    dbg(
+      `resuming last session: ${lastSession.provider}/${lastSession.model}${lastSession.keyId ? ` (key=${lastSession.keyId})` : ''}`,
+    );
     providerName = lastSession.provider;
     resumeModel = lastSession.model;
     resumeKeyId = lastSession.keyId;
   } else {
     const recentSessions = await getRecentSessions(10).catch(() => []);
     const startupOptions = buildPickerOptions(probedModels);
-    const defaultFromLast = await findDefaultSelection(lastSession, probedModels, config, credentials);
+    const defaultFromLast = await findDefaultSelection(
+      lastSession,
+      probedModels,
+      config,
+      credentials,
+    );
     const fallbackDefault = startupOptions[0]
       ? { provider: startupOptions[0].descriptor.name }
       : { provider: 'copilot' as StartupProviderName };
     dbg(`opening picker (${recentSessions.length} recent, ${startupOptions.length} providers)`);
-    const selection = await selectStartupSession(recentSessions, startupOptions, defaultFromLast ?? fallbackDefault);
+    const selection = await selectStartupSession(
+      recentSessions,
+      startupOptions,
+      defaultFromLast ?? fallbackDefault,
+    );
     dbg(`picker returned provider=${selection.provider} model=${selection.model ?? '<none>'}`);
     providerName = selection.provider;
     resumeModel = selection.model ?? null;
   }
 
-  const descriptor = descriptorByAlias(providerName) ?? (DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[providerName];
+  const descriptor =
+    descriptorByAlias(providerName) ??
+    (DESCRIPTORS as Record<string, ProviderDescriptor | undefined>)[providerName];
   let provider: Provider;
-  let availableModels: string[] | null = descriptor ? probedModels.get(descriptor.name) ?? null : null;
+  let availableModels: string[] | null = descriptor
+    ? (probedModels.get(descriptor.name) ?? null)
+    : null;
   // The keyId of the multi-key-store entry the launch provider was built
   // with. Threaded through to RunRefs.activeKeyId so per-key stats land
   // under the right entry from turn 1; left undefined for non-store
@@ -164,7 +182,9 @@ async function main(): Promise<void> {
   let activeKeyId: string | undefined;
 
   try {
-    dbg(`ensureAuth flow=${descriptor?.authFlow ?? 'no-descriptor'}${resumeKeyId ? ` keyId=${resumeKeyId}` : ''}`);
+    dbg(
+      `ensureAuth flow=${descriptor?.authFlow ?? 'no-descriptor'}${resumeKeyId ? ` keyId=${resumeKeyId}` : ''}`,
+    );
     const auth: AuthResult = descriptor
       ? await ensureAuth(descriptor, config, cliArgs.token, resumeKeyId)
       : { shouldSave: false };
@@ -187,7 +207,11 @@ async function main(): Promise<void> {
 
     activeKeyId = auth.keyId;
     if (descriptor) {
-      const savedKeyId = await saveCredentialsAfterModelDiscovery(descriptor, auth, availableModels.length > 0);
+      const savedKeyId = await saveCredentialsAfterModelDiscovery(
+        descriptor,
+        auth,
+        availableModels.length > 0,
+      );
       // First-time-save path: addKey just minted a fresh id. Adopt it so
       // the first turn's stats land under the right key.
       if (savedKeyId) activeKeyId = savedKeyId;
@@ -195,11 +219,21 @@ async function main(): Promise<void> {
   } catch (err: unknown) {
     const msg = errorMessage(err);
     dbg(`startup error: ${msg}`);
-    appendProviderLog({ provider: providerName, category: 'startup', action: 'startup-error', outcome: 'error', detail: msg });
+    appendProviderLog({
+      provider: providerName,
+      category: 'startup',
+      action: 'startup-error',
+      outcome: 'error',
+      detail: msg,
+    });
     if (providerName === 'ollama') {
       console.log(renderError('Cannot connect to Ollama. Is it running? (ollama serve)'));
     } else if (providerName === 'llamacpp') {
-      console.log(renderError('Cannot connect to llama.cpp. Is the server running? (llama-server -m <model>)'));
+      console.log(
+        renderError(
+          'Cannot connect to llama.cpp. Is the server running? (llama-server -m <model>)',
+        ),
+      );
     } else {
       console.log(renderError(msg));
     }
@@ -216,7 +250,12 @@ async function main(): Promise<void> {
   } else {
     const lastModelForProvider = lastSession?.provider === providerName ? lastSession.model : null;
     dbg(`opening selectModel (default=${lastModelForProvider ?? '<none>'})`);
-    model = await selectModelInk(availableModels ?? [], lastModelForProvider, provider, providerName);
+    model = await selectModelInk(
+      availableModels ?? [],
+      lastModelForProvider,
+      provider,
+      providerName,
+    );
     dbg(`selectModel returned: ${model}`);
   }
 
@@ -252,8 +291,12 @@ async function main(): Promise<void> {
     const { flushKeyStats } = await import('./core/key-stats.js');
     await flushKeyStats().catch(() => {});
   };
-  process.on('SIGINT', () => { void cleanup().finally(() => process.exit(130)); });
-  process.on('SIGTERM', () => { void cleanup().finally(() => process.exit(0)); });
+  process.on('SIGINT', () => {
+    void cleanup().finally(() => process.exit(130));
+  });
+  process.on('SIGTERM', () => {
+    void cleanup().finally(() => process.exit(0));
+  });
 
   let gitBranch: string | undefined;
   let gitDirty: boolean | null = null;
@@ -261,13 +304,15 @@ async function main(): Promise<void> {
   if (branchRes.status === 'fulfilled') {
     gitBranch = branchRes.value;
   } else {
-    const msg = branchRes.reason instanceof Error ? branchRes.reason.message : String(branchRes.reason);
+    const msg =
+      branchRes.reason instanceof Error ? branchRes.reason.message : String(branchRes.reason);
     console.log(chalk.yellow(`  ⚠ Could not read git branch: ${msg}`));
   }
   if (dirtyRes.status === 'fulfilled') {
     gitDirty = dirtyRes.value;
   } else {
-    const msg = dirtyRes.reason instanceof Error ? dirtyRes.reason.message : String(dirtyRes.reason);
+    const msg =
+      dirtyRes.reason instanceof Error ? dirtyRes.reason.message : String(dirtyRes.reason);
     console.log(chalk.yellow(`  ⚠ Could not check git dirty state: ${msg}`));
   }
 
@@ -291,10 +336,11 @@ async function main(): Promise<void> {
           console.log(chalk.dim(`     ${event}${matcher}: ${entry.command}`));
         }
       }
-      console.log(chalk.yellow(' Hooks run shell commands automatically. Trust this project? [y/N]'));
-      const answer = process.stdout.isTTY && process.stdin.isTTY
-        ? (await promptText(' > ')).toLowerCase()
-        : 'n';
+      console.log(
+        chalk.yellow(' Hooks run shell commands automatically. Trust this project? [y/N]'),
+      );
+      const answer =
+        process.stdout.isTTY && process.stdin.isTTY ? (await promptText(' > ')).toLowerCase() : 'n';
       if (answer === 'y' || answer === 'yes') {
         await recordTrust(cwd, projectHooks);
         console.log(chalk.dim(' Trusted. Will not prompt again unless the hook config changes.'));
@@ -304,7 +350,9 @@ async function main(): Promise<void> {
         // different file and aren't in question.
         if (config.agent?.hooks) {
           const userOnlyHooks: typeof config.agent.hooks = {};
-          for (const [event, entries] of Object.entries(config.agent.hooks) as Array<[string, HookEntry[] | undefined]>) {
+          for (const [event, entries] of Object.entries(config.agent.hooks) as Array<
+            [string, HookEntry[] | undefined]
+          >) {
             const projectEntries = projectHooks[event as keyof typeof projectHooks] ?? [];
             const projectCommands = new Set(projectEntries.map(e => e.command));
             const filtered = (entries ?? []).filter(e => !projectCommands.has(e.command));
@@ -314,7 +362,11 @@ async function main(): Promise<void> {
           }
           config.agent.hooks = userOnlyHooks;
         }
-        console.log(chalk.dim(' Project hooks rejected. Run with --no-hooks to silence this prompt entirely.'));
+        console.log(
+          chalk.dim(
+            ' Project hooks rejected. Run with --no-hooks to silence this prompt entirely.',
+          ),
+        );
       }
     }
   }
@@ -368,11 +420,13 @@ async function main(): Promise<void> {
       import('./core/agent/weak-tier.js'),
     ]);
     const weakModel = selectWeakTier(provider, model);
-    defaultRegistry.register(createDelegateTool({
-      provider,
-      parentModel: model,
-      ...(weakModel ? { weakModel } : {}),
-    }));
+    defaultRegistry.register(
+      createDelegateTool({
+        provider,
+        parentModel: model,
+        ...(weakModel ? { weakModel } : {}),
+      }),
+    );
   }
 
   const welcomeText = renderWelcome(

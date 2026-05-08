@@ -1,7 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ToolCallMessage, ProviderCapabilities, ChatOptions,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ToolCallMessage,
+  ProviderCapabilities,
+  ChatOptions,
 } from './types.js';
 
 export class AnthropicProvider implements Provider {
@@ -12,7 +17,7 @@ export class AnthropicProvider implements Provider {
     const key = apiKey ?? process.env.ANTHROPIC_API_KEY;
     if (!key) {
       throw new Error(
-        'Anthropic API key required. Set ANTHROPIC_API_KEY env var or use --token flag.'
+        'Anthropic API key required. Set ANTHROPIC_API_KEY env var or use --token flag.',
       );
     }
     this.client = new Anthropic({ apiKey: key });
@@ -21,11 +26,7 @@ export class AnthropicProvider implements Provider {
   async listModels(): Promise<string[]> {
     // Note: Anthropic discovery is still a curated allowlist of the main chat
     // families we expect to work well here, not a live API catalog.
-    return [
-      'claude-sonnet-4-6',
-      'claude-opus-4-6',
-      'claude-haiku-4-5-20251001',
-    ];
+    return ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'];
   }
 
   getCapabilities(model: string): ProviderCapabilities {
@@ -110,10 +111,12 @@ export class AnthropicProvider implements Provider {
             args = { _raw: currentToolCall.rawArgs };
           }
           yield {
-            tool_calls: [{
-              id: currentToolCall.id,
-              function: { name: currentToolCall.name, arguments: args },
-            }],
+            tool_calls: [
+              {
+                id: currentToolCall.id,
+                function: { name: currentToolCall.name, arguments: args },
+              },
+            ],
           };
           currentToolCall = null;
         }
@@ -203,10 +206,7 @@ export class AnthropicProvider implements Provider {
  *  - `[..., { name, description, input_schema, cache_control: { type: 'ephemeral' } }]`
  *    where the cache_control on the LAST tool entry marks "cache up to and
  *    including all tool definitions". Default 5-min TTL. */
-export function buildAnthropicTools(
-  tools: ToolDefinition[],
-  cacheLast?: boolean,
-): any[] {
+export function buildAnthropicTools(tools: ToolDefinition[], cacheLast?: boolean): any[] {
   const out: any[] = tools.map(t => ({
     name: t.function.name,
     description: t.function.description ?? '',
@@ -221,9 +221,10 @@ export function buildAnthropicTools(
   return out;
 }
 
-export function splitMessagesForAnthropic(
-  messages: ChatMessage[],
-): { system: string | any[] | null; msgs: any[] } {
+export function splitMessagesForAnthropic(messages: ChatMessage[]): {
+  system: string | any[] | null;
+  msgs: any[];
+} {
   let systemContent: string | null = null;
   let systemCacheBoundary = false;
   const msgs: any[] = [];
@@ -262,7 +263,7 @@ export function splitMessagesForAnthropic(
       if (!msg.tool_call_id) {
         throw new Error(
           'splitMessagesForAnthropic: tool message has no tool_call_id; ' +
-          'every tool_result must reference a tool_use from the prior assistant message',
+            'every tool_result must reference a tool_use from the prior assistant message',
         );
       }
       const block: any = {

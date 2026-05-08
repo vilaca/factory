@@ -17,7 +17,7 @@ export function Spinner({ label, color }: { label: string; color: string }): Rea
   const startedAt = useRef(Date.now());
   useEffect(() => {
     const id = setInterval(() => {
-      setFrame((f) => (f + 1) % SPINNER_FRAMES.length);
+      setFrame(f => (f + 1) % SPINNER_FRAMES.length);
       setElapsed(Date.now() - startedAt.current);
     }, 80);
     return () => clearInterval(id);

@@ -8,10 +8,7 @@ import type { Provider } from '../../providers/types.js';
  * Returns null when the current model is not strong-tier or no weak-tier
  * mapping exists for this provider; callers fall back to the primary model.
  */
-export function selectWeakTier(
-  provider: Provider,
-  currentModel: string,
-): string | null {
+export function selectWeakTier(provider: Provider, currentModel: string): string | null {
   let caps;
   try {
     caps = provider.getCapabilities(currentModel);

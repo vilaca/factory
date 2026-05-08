@@ -3,7 +3,12 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { loadGlobalConfig, loadProjectConfig, loadProjectInstructions, saveGlobalConfig } from '../../src/core/config.js';
+import {
+  loadGlobalConfig,
+  loadProjectConfig,
+  loadProjectInstructions,
+  saveGlobalConfig,
+} from '../../src/core/config.js';
 
 async function withTempProject(
   configContent: string | null,
@@ -24,7 +29,7 @@ async function withTempProject(
 
 describe('loadProjectConfig', () => {
   it('returns empty config when file is missing', async () => {
-    await withTempProject(null, async (cwd) => {
+    await withTempProject(null, async cwd => {
       const cfg = await loadProjectConfig(cwd);
       assert.deepStrictEqual(cfg, {});
     });
@@ -50,7 +55,7 @@ describe('loadProjectConfig', () => {
       agent: { compactionThreshold: 0.7, recencyWindow: 4 },
       permissions: { allowAll: ['Bash', 'Read'] },
     });
-    await withTempProject(content, async (cwd) => {
+    await withTempProject(content, async cwd => {
       const cfg = await loadProjectConfig(cwd);
       assert.strictEqual(cfg.provider, 'ollama');
       assert.strictEqual(cfg.huggingfaceToken, 'hf-test');
@@ -71,7 +76,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects malformed JSON with a path-aware error', async () => {
-    await withTempProject('{"provider": "ollama",}', async (cwd) => {
+    await withTempProject('{"provider": "ollama",}', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /config\.json: invalid JSON/.test(err.message),
@@ -80,7 +85,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects a top-level array', async () => {
-    await withTempProject('[]', async (cwd) => {
+    await withTempProject('[]', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /top-level must be a JSON object/.test(err.message),
@@ -89,7 +94,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects a non-string provider', async () => {
-    await withTempProject('{"provider": 42}', async (cwd) => {
+    await withTempProject('{"provider": 42}', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /"provider" must be a string/.test(err.message),
@@ -98,7 +103,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects compactionThreshold outside 0-1', async () => {
-    await withTempProject('{"agent": {"compactionThreshold": 1.5}}', async (cwd) => {
+    await withTempProject('{"agent": {"compactionThreshold": 1.5}}', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /compactionThreshold.*between 0 and 1/.test(err.message),
@@ -107,7 +112,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects non-integer recencyWindow', async () => {
-    await withTempProject('{"agent": {"recencyWindow": 2.5}}', async (cwd) => {
+    await withTempProject('{"agent": {"recencyWindow": 2.5}}', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /recencyWindow.*non-negative integer/.test(err.message),
@@ -116,7 +121,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects non-array allowAll', async () => {
-    await withTempProject('{"permissions": {"allowAll": "Bash"}}', async (cwd) => {
+    await withTempProject('{"permissions": {"allowAll": "Bash"}}', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /allowAll.*array of strings/.test(err.message),
@@ -125,7 +130,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('rejects an invalid Google AI Studio auth mode', async () => {
-    await withTempProject('{"googleAiStudioAuthMode": "token"}', async (cwd) => {
+    await withTempProject('{"googleAiStudioAuthMode": "token"}', async cwd => {
       await assert.rejects(
         () => loadProjectConfig(cwd),
         (err: Error) => /googleAiStudioAuthMode.*"api-key" or "oauth"/.test(err.message),
@@ -134,7 +139,7 @@ describe('loadProjectConfig', () => {
   });
 
   it('tolerates unknown top-level fields', async () => {
-    await withTempProject('{"futureField": 123, "provider": "ollama"}', async (cwd) => {
+    await withTempProject('{"futureField": 123, "provider": "ollama"}', async cwd => {
       const cfg = await loadProjectConfig(cwd);
       assert.strictEqual(cfg.provider, 'ollama');
     });
@@ -418,30 +423,34 @@ describe('saveGlobalConfig', () => {
     }
   });
 
-  it('repairs loose permissions on a pre-existing config', { skip: process.platform === 'win32' }, async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
+  it(
+    'repairs loose permissions on a pre-existing config',
+    { skip: process.platform === 'win32' },
+    async () => {
+      const prev = process.env.XDG_CONFIG_HOME;
+      const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
+      process.env.XDG_CONFIG_HOME = configHome;
 
-    try {
-      const dir = path.join(configHome, 'factory');
-      const file = path.join(dir, 'config.json');
-      await fs.mkdir(dir, { recursive: true, mode: 0o755 });
-      await fs.writeFile(file, '{"token":"old"}\n', { mode: 0o644 });
-      assert.strictEqual((await fs.stat(file)).mode & 0o777, 0o644);
+      try {
+        const dir = path.join(configHome, 'factory');
+        const file = path.join(dir, 'config.json');
+        await fs.mkdir(dir, { recursive: true, mode: 0o755 });
+        await fs.writeFile(file, '{"token":"old"}\n', { mode: 0o644 });
+        assert.strictEqual((await fs.stat(file)).mode & 0o777, 0o644);
 
-      await saveGlobalConfig({ token: 'new' });
+        await saveGlobalConfig({ token: 'new' });
 
-      assert.strictEqual((await fs.stat(file)).mode & 0o777, 0o600);
-      assert.strictEqual((await fs.stat(dir)).mode & 0o777, 0o700);
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.token, 'new');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
+        assert.strictEqual((await fs.stat(file)).mode & 0o777, 0o600);
+        assert.strictEqual((await fs.stat(dir)).mode & 0o777, 0o700);
+        const cfg = await loadGlobalConfig();
+        assert.strictEqual(cfg.token, 'new');
+      } finally {
+        if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = prev;
+        await fs.rm(configHome, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('produces a valid JSON file under concurrent writes', async () => {
     const prev = process.env.XDG_CONFIG_HOME;

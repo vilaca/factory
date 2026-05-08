@@ -20,7 +20,9 @@ function relativeAge(ts: string | undefined): string {
 
 /** Cache hit rate as a 0-100 integer percent, or null if no input tokens
  *  have been recorded yet. */
-function cacheHitRate(s: { cachedInputTokens?: number; uncachedInputTokens?: number } | undefined): number | null {
+function cacheHitRate(
+  s: { cachedInputTokens?: number; uncachedInputTokens?: number } | undefined,
+): number | null {
   if (!s) return null;
   const cached = s.cachedInputTokens ?? 0;
   const uncached = s.uncachedInputTokens ?? 0;
@@ -65,11 +67,11 @@ export async function dispatchKeys(arg: string, agent: AgentLoopApi): Promise<vo
     const okCount = s?.successCount ?? 0;
     const warnCount = (s?.rateLimitCount ?? 0) + (s?.authErrorCount ?? 0);
     const labelPart = (k.label ? `${k.label} · ` : '') + `…${keyFingerprint(k.token)}`;
-    const usagePart = okCount === 0 && warnCount === 0
-      ? 'never used'
-      : `${okCount} ok / ${warnCount} ⚠`;
+    const usagePart =
+      okCount === 0 && warnCount === 0 ? 'never used' : `${okCount} ok / ${warnCount} ⚠`;
     const hit = cacheHitRate(s);
-    const cachePart = hit === null ? '' : `cache: ${hit}%${isWarm(s?.lastCacheReadAt) ? ' 🔥' : ''}`;
+    const cachePart =
+      hit === null ? '' : `cache: ${hit}%${isWarm(s?.lastCacheReadAt) ? ' 🔥' : ''}`;
     const lastOk = s?.lastSuccessAt ? `last ok: ${relativeAge(s.lastSuccessAt)}` : '';
     const lastFail = s?.lastFailureAt ? `last ⚠: ${relativeAge(s.lastFailureAt)}` : '';
     const tail = [cachePart, lastOk, lastFail].filter(Boolean).join('  ');

@@ -46,7 +46,11 @@ async function readCappedBody(
   // lie or omit the header; the streaming cap below still enforces the limit.
   const contentLength = Number(res.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > maxBytes * 8) {
-    try { await res.body?.cancel(); } catch { /* ignore */ }
+    try {
+      await res.body?.cancel();
+    } catch {
+      /* ignore */
+    }
     throw new Error(`response advertises ${contentLength} bytes (cap ${maxBytes})`);
   }
   const reader = res.body?.getReader();
@@ -72,7 +76,11 @@ async function readCappedBody(
         total += remaining;
       }
       truncated = true;
-      try { await reader.cancel(); } catch { /* ignore */ }
+      try {
+        await reader.cancel();
+      } catch {
+        /* ignore */
+      }
       break;
     }
     chunks.push(value);
@@ -99,10 +107,7 @@ function decodeBody(buf: Uint8Array, contentType: string): string {
   }
 }
 
-export async function fetchUrl(
-  url: string,
-  opts: FetchUrlOptions = {},
-): Promise<FetchUrlResult> {
+export async function fetchUrl(url: string, opts: FetchUrlOptions = {}): Promise<FetchUrlResult> {
   const maxRedirects = opts.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
@@ -136,7 +141,11 @@ export async function fetchUrl(
         redirects += 1;
         current = new URL(loc, current).toString();
         // Drain any body before next hop.
-        try { await res.body?.cancel(); } catch { /* ignore */ }
+        try {
+          await res.body?.cancel();
+        } catch {
+          /* ignore */
+        }
         continue;
       }
       if (!res.ok) {
@@ -157,10 +166,10 @@ const PLAIN_TYPES = ['text/plain', 'text/markdown'];
 
 export function isHtmlType(contentType: string): boolean {
   const t = contentType.toLowerCase();
-  return CONVERTIBLE_TYPES.some((c) => t.includes(c));
+  return CONVERTIBLE_TYPES.some(c => t.includes(c));
 }
 
 export function isPlainTextType(contentType: string): boolean {
   const t = contentType.toLowerCase();
-  return PLAIN_TYPES.some((c) => t.includes(c));
+  return PLAIN_TYPES.some(c => t.includes(c));
 }

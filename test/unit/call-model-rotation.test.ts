@@ -2,7 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { callModel } from '../../src/core/agent/call-model.js';
 import type { ProviderKey } from '../../src/core/config-types.js';
-import type { ChatChunk, ChatMessage, Provider, ProviderCapabilities, ToolDefinition } from '../../src/providers/types.js';
+import type {
+  ChatChunk,
+  ChatMessage,
+  Provider,
+  ProviderCapabilities,
+  ToolDefinition,
+} from '../../src/providers/types.js';
 import type { AgentEvent, RotationOptions } from '../../src/core/agent-types.js';
 
 /**
@@ -37,12 +43,17 @@ function key(id: string, token: string, createdAt = '2024-01-01T00:00:00Z'): Pro
   return { id, token, createdAt };
 }
 
-async function collect(gen: AsyncGenerator<AgentEvent, unknown>): Promise<{ events: AgentEvent[]; result: unknown }> {
+async function collect(
+  gen: AsyncGenerator<AgentEvent, unknown>,
+): Promise<{ events: AgentEvent[]; result: unknown }> {
   const events: AgentEvent[] = [];
   let result: unknown;
   while (true) {
     const next = await gen.next();
-    if (next.done) { result = next.value; break; }
+    if (next.done) {
+      result = next.value;
+      break;
+    }
     events.push(next.value as AgentEvent);
   }
   return { events, result };
@@ -60,18 +71,20 @@ describe('callModel rotation (tier 1)', () => {
     const replacement = buildSequencedProvider('anthropic', [
       [{ content: 'rotated reply', usage: undefined }],
     ]);
-    const keys: ProviderKey[] = [
-      key('a', 'tok-a'),
-      key('b', 'tok-b'),
-    ];
+    const keys: ProviderKey[] = [key('a', 'tok-a'), key('b', 'tok-b')];
     let withKeyCalledFor: string | undefined;
     const rotation: RotationOptions = {
       keys,
       activeKeyId: 'a',
-      withKey: (k) => { withKeyCalledFor = k.id; return replacement; },
+      withKey: k => {
+        withKeyCalledFor = k.id;
+        return replacement;
+      },
     };
 
-    const { events, result } = await collect(callModel(initial, 'm', messages, tools, undefined, rotation));
+    const { events, result } = await collect(
+      callModel(initial, 'm', messages, tools, undefined, rotation),
+    );
 
     // Saw a key-rotation event, then text from the new provider.
     const rotEvent = events.find(e => e.type === 'key-rotation');
@@ -131,8 +144,13 @@ describe('callModel rotation (tier 1)', () => {
 
     // 'socket hang up' is matched as "isStreamish" and falls back to
     // chatNoStream on the *initial* provider (not a key rotation).
-    const { events, result } = await collect(callModel(initial, 'm', messages, tools, undefined, rotation));
-    assert.strictEqual(events.find(e => e.type === 'key-rotation'), undefined);
+    const { events, result } = await collect(
+      callModel(initial, 'm', messages, tools, undefined, rotation),
+    );
+    assert.strictEqual(
+      events.find(e => e.type === 'key-rotation'),
+      undefined,
+    );
     assert.strictEqual((result as { fullContent: string }).fullContent, 'fallback');
   });
 
@@ -176,7 +194,7 @@ describe('callModel rotation (tier 1)', () => {
       withKey: () => initial, // tier-1 has no fallback
       modelsEnabled: true,
       chain: [{ provider: 'groq', model: 'llama-3.3-70b' }],
-      loadKeysForProvider: async (p) => {
+      loadKeysForProvider: async p => {
         loadKeysCalledFor = p;
         return [key('g', 'tok-g')];
       },
@@ -192,7 +210,10 @@ describe('callModel rotation (tier 1)', () => {
 
     // Should see key-rotation-exhausted (tier 1 had nothing), then
     // tuple-rotation (tier 2), then content from the fallback.
-    assert.ok(events.find(e => e.type === 'key-rotation-exhausted'), 'expected key-rotation-exhausted');
+    assert.ok(
+      events.find(e => e.type === 'key-rotation-exhausted'),
+      'expected key-rotation-exhausted',
+    );
     const tupEvent = events.find(e => e.type === 'tuple-rotation');
     assert.ok(tupEvent, 'expected tuple-rotation');
     assert.strictEqual(tupEvent.type === 'tuple-rotation' && tupEvent.from.provider, 'anthropic');
@@ -225,7 +246,7 @@ describe('callModel rotation (tier 1)', () => {
         { provider: 'cerebras', model: 'gpt-oss-120b' },
       ],
       loadKeysForProvider: async () => [key('x', 'tok-x')],
-      withTuple: (p) => tupleProviders[p]!,
+      withTuple: p => tupleProviders[p]!,
     };
 
     let caught: unknown;
@@ -251,20 +272,18 @@ describe('callModel rotation (tier 1)', () => {
   it('skips chain entries with no saved keys', async () => {
     const err = Object.assign(new Error('429'), { status: 429 });
     const initial = buildSequencedProvider('anthropic', [err]);
-    const fallback = buildSequencedProvider('cerebras', [
-      [{ content: 'ok', usage: undefined }],
-    ]);
+    const fallback = buildSequencedProvider('cerebras', [[{ content: 'ok', usage: undefined }]]);
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
       withKey: () => initial,
       modelsEnabled: true,
       chain: [
-        { provider: 'groq', model: 'llama-3.3-70b' },     // empty keys, skipped
-        { provider: 'cerebras', model: 'gpt-oss-120b' },  // valid
+        { provider: 'groq', model: 'llama-3.3-70b' }, // empty keys, skipped
+        { provider: 'cerebras', model: 'gpt-oss-120b' }, // valid
       ],
-      loadKeysForProvider: async (p) => p === 'groq' ? [] : [key('x', 'tok-x')],
-      withTuple: (p) => p === 'cerebras' ? fallback : initial,
+      loadKeysForProvider: async p => (p === 'groq' ? [] : [key('x', 'tok-x')]),
+      withTuple: p => (p === 'cerebras' ? fallback : initial),
     };
 
     const { events, result } = await collect(
@@ -295,7 +314,9 @@ describe('callModel rotation (tier 1)', () => {
         const n = await gen.next();
         if (n.done) break;
       }
-    } catch (e) { caught = e; }
+    } catch (e) {
+      caught = e;
+    }
     assert.ok(caught instanceof Error);
   });
 
@@ -309,7 +330,9 @@ describe('callModel rotation (tier 1)', () => {
     // Wrapper object: TS narrows `let x: T | null = null` back to `null`
     // because closure assignments aren't tracked by control-flow analysis.
     // Object-property access stays at the declared type, so this works.
-    const captured: { value: { provider: string; model: string; reason: string } | null } = { value: null };
+    const captured: { value: { provider: string; model: string; reason: string } | null } = {
+      value: null,
+    };
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
@@ -318,7 +341,7 @@ describe('callModel rotation (tier 1)', () => {
       chain: [],
       loadKeysForProvider: async () => [key('g', 'tok-g')],
       withTuple: () => replacement,
-      promptForFallback: async (ctx) => {
+      promptForFallback: async ctx => {
         captured.value = ctx;
         return { provider: 'groq', model: 'llama-3.3-70b' };
       },
@@ -358,7 +381,9 @@ describe('callModel rotation (tier 1)', () => {
         const n = await gen.next();
         if (n.done) break;
       }
-    } catch (e) { caught = e; }
+    } catch (e) {
+      caught = e;
+    }
     assert.ok(caught instanceof Error);
     assert.match((caught as Error).message, /429/);
   });

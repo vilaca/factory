@@ -9,10 +9,7 @@ export async function refreshGitState(
   if (!deps.refs.current) return;
   const cwd = deps.refs.current.cwd;
   try {
-    const [branch, dirty] = await Promise.all([
-      getGitBranch(cwd),
-      isGitDirty(cwd),
-    ]);
+    const [branch, dirty] = await Promise.all([getGitBranch(cwd), isGitDirty(cwd)]);
     const prevBranch = deps.refs.current.gitBranch;
     const prevDirty = deps.refs.current.gitDirty;
     if (branch === prevBranch && dirty === prevDirty) return;

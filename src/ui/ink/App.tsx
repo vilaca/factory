@@ -13,10 +13,14 @@ import { useTabs } from './tabs/use-tabs.js';
 // `input` is forced to '' for non-alphanumeric keys), so we listen to
 // process.stdin directly at the parent level.
 const FN_KEY_TO_INDEX: ReadonlyMap<string, number> = new Map([
-  ['\x1bOP', 0], ['\x1b[11~', 0],
-  ['\x1bOQ', 1], ['\x1b[12~', 1],
-  ['\x1bOR', 2], ['\x1b[13~', 2],
-  ['\x1bOS', 3], ['\x1b[14~', 3],
+  ['\x1bOP', 0],
+  ['\x1b[11~', 0],
+  ['\x1bOQ', 1],
+  ['\x1b[12~', 1],
+  ['\x1bOR', 2],
+  ['\x1b[13~', 2],
+  ['\x1bOS', 3],
+  ['\x1b[14~', 3],
   ['\x1b[15~', 4],
   ['\x1b[17~', 5],
   ['\x1b[18~', 6],
@@ -72,7 +76,9 @@ function TabbedApp(props: AppProps): React.ReactElement {
       if (idx !== undefined) switchToIndex(idx);
     };
     process.stdin.on('data', handler);
-    return () => { process.stdin.off('data', handler); };
+    return () => {
+      process.stdin.off('data', handler);
+    };
   }, [switchToIndex]);
 
   // Parent-level hotkeys for tab management. Ink fires both this listener and

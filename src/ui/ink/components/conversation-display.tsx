@@ -54,11 +54,7 @@ function isToolCallContinuation(items: DisplayItem[], index: number): boolean {
   const cur = items[index];
   const prev = items[index - 1];
   if (!cur || !prev) return false;
-  return (
-    cur.kind === 'tool-call' &&
-    prev.kind === 'tool-call' &&
-    prev.toolName === cur.toolName
-  );
+  return cur.kind === 'tool-call' && prev.kind === 'tool-call' && prev.toolName === cur.toolName;
 }
 
 /** True when `items[index]` is a tool-call whose matching tool-result is the
@@ -139,27 +135,28 @@ export function ConversationDisplay({
           </PanelLine>
         </>
       )}
-      {pendingToolCall && (() => {
-        const last = items[items.length - 1];
-        const pendingContinuation =
-          !streamingText &&
-          !!last &&
-          last.kind === 'tool-call' &&
-          last.toolName === pendingToolCall.toolName;
-        return (
-          <>
-            {items.length > 0 && !streamingText && !pendingContinuation && <Separator />}
-            <PanelLine>
-              <ToolCallLine
-                icon="🔧"
-                toolName={pendingToolCall.toolName}
-                args={pendingToolCall.args}
-                continuation={pendingContinuation}
-              />
-            </PanelLine>
-          </>
-        );
-      })()}
+      {pendingToolCall &&
+        (() => {
+          const last = items[items.length - 1];
+          const pendingContinuation =
+            !streamingText &&
+            !!last &&
+            last.kind === 'tool-call' &&
+            last.toolName === pendingToolCall.toolName;
+          return (
+            <>
+              {items.length > 0 && !streamingText && !pendingContinuation && <Separator />}
+              <PanelLine>
+                <ToolCallLine
+                  icon="🔧"
+                  toolName={pendingToolCall.toolName}
+                  args={pendingToolCall.args}
+                  continuation={pendingContinuation}
+                />
+              </PanelLine>
+            </>
+          );
+        })()}
       {spinner && (
         <>
           {items.length > 0 && !streamingText && !pendingToolCall && <Separator />}

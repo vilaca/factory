@@ -28,12 +28,15 @@ export interface PathPolicy {
 }
 
 export class PathDenied extends Error {
-  constructor(public readonly attemptedPath: string, public readonly matchedRule: string) {
+  constructor(
+    public readonly attemptedPath: string,
+    public readonly matchedRule: string,
+  ) {
     super(
       `Path denied by security policy: ${attemptedPath} ` +
-      `(matches "${matchedRule}"). This path holds credentials or system ` +
-      `state and is hard-denied by the agent. Read or modify it outside ` +
-      `the agent if you genuinely need to.`,
+        `(matches "${matchedRule}"). This path holds credentials or system ` +
+        `state and is hard-denied by the agent. Read or modify it outside ` +
+        `the agent if you genuinely need to.`,
     );
     this.name = 'PathDenied';
   }
@@ -58,19 +61,19 @@ function builtinDenyPaths(): string[] {
     path.join(home, '.gnupg'),
     path.join(home, '.aws'),
     path.join(home, '.azure'),
-    path.join(home, '.config', 'gh'),         // GitHub CLI token
-    path.join(home, '.config', 'gcloud'),     // gcloud creds
-    path.join(home, '.config', 'factory'),    // our own config
-    path.join(home, '.factory'),              // legacy/sessions dir
+    path.join(home, '.config', 'gh'), // GitHub CLI token
+    path.join(home, '.config', 'gcloud'), // gcloud creds
+    path.join(home, '.config', 'factory'), // our own config
+    path.join(home, '.factory'), // legacy/sessions dir
     path.join(home, '.netrc'),
     path.join(home, '.pgpass'),
-    path.join(home, '.npmrc'),                // often holds NPM_TOKEN
-    path.join(home, '.pypirc'),               // PyPI token
+    path.join(home, '.npmrc'), // often holds NPM_TOKEN
+    path.join(home, '.pypirc'), // PyPI token
     path.join(home, '.cargo', 'credentials'),
     path.join(home, '.cargo', 'credentials.toml'),
-    path.join(home, '.kube'),                 // kubeconfig + tokens
+    path.join(home, '.kube'), // kubeconfig + tokens
     path.join(home, '.docker', 'config.json'),
-    path.join(home, 'Library', 'Application Support', 'gh'),  // macOS gh
+    path.join(home, 'Library', 'Application Support', 'gh'), // macOS gh
 
     // System secret/auth files. List both lexical and macOS-canonical
     // forms because /etc and /var are symlinks into /private on macOS;
@@ -78,7 +81,7 @@ function builtinDenyPaths(): string[] {
     '/etc/shadow',
     '/etc/sudoers',
     '/etc/sudoers.d',
-    '/etc/master.passwd',           // BSD/macOS
+    '/etc/master.passwd', // BSD/macOS
     '/private/etc/shadow',
     '/private/etc/sudoers',
     '/private/etc/sudoers.d',
@@ -145,12 +148,7 @@ async function buildDenySet(policy: PathPolicy = {}): Promise<string[]> {
   const userDenyRealpathed = await Promise.all(userDenyExpanded.map(realpathOrLexical));
   const builtin = builtinDenyPaths();
   const builtinRealpathed = await Promise.all(builtin.map(realpathOrLexical));
-  return [
-    ...builtin,
-    ...builtinRealpathed,
-    ...userDenyExpanded,
-    ...userDenyRealpathed,
-  ];
+  return [...builtin, ...builtinRealpathed, ...userDenyExpanded, ...userDenyRealpathed];
 }
 
 /**
@@ -169,10 +167,7 @@ async function buildDenySet(policy: PathPolicy = {}): Promise<string[]> {
  *     `/tmp/sensitive` (which is a symlink on macOS) and its real path
  *     `/private/tmp/sensitive` both match.
  */
-export async function checkPath(
-  input: string,
-  policy: PathPolicy = {},
-): Promise<PathCheckResult> {
+export async function checkPath(input: string, policy: PathPolicy = {}): Promise<PathCheckResult> {
   const lexical = path.resolve(input);
   const resolved = await resolveForCheck(input);
   const denied = await buildDenySet(policy);

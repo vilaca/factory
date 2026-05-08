@@ -25,22 +25,54 @@ interface StatusBarProps {
 function shortenCwd(cwd: string): string {
   const home = os.homedir();
   if (home && cwd === home) return '~';
-  if (home && cwd.startsWith(home + '/')) return '~/' + cwd.slice(home.length + 1).split('/').slice(-1)[0];
+  if (home && cwd.startsWith(home + '/'))
+    return (
+      '~/' +
+      cwd
+        .slice(home.length + 1)
+        .split('/')
+        .slice(-1)[0]
+    );
   return cwd.split('/').filter(Boolean).slice(-1)[0] ?? cwd;
 }
 
 export function StatusBar(props: StatusBarProps): React.ReactElement {
-  const { planMode, state, providerName, model, totalTokens, tokensAreEstimate, contextWindow, sessionTurns, sessionToolCalls, queueLength, gitBranch, gitDirty, cwd } = props;
-  const tokenPct = totalTokens && contextWindow
-    ? Math.round((totalTokens / contextWindow) * 100)
-    : undefined;
+  const {
+    planMode,
+    state,
+    providerName,
+    model,
+    totalTokens,
+    tokensAreEstimate,
+    contextWindow,
+    sessionTurns,
+    sessionToolCalls,
+    queueLength,
+    gitBranch,
+    gitDirty,
+    cwd,
+  } = props;
+  const tokenPct =
+    totalTokens && contextWindow ? Math.round((totalTokens / contextWindow) * 100) : undefined;
   const suffix = tokensAreEstimate ? ' (est.)' : '';
 
   return (
     <Box paddingX={1}>
       <Text dimColor>
-        {planMode ? <Text color="cyan" bold>PLAN · </Text> : ''}
-        {state === 'awaiting-permission' ? <Text color="yellow" bold>PERMISSION · </Text> : ''}
+        {planMode ? (
+          <Text color="cyan" bold>
+            PLAN ·{' '}
+          </Text>
+        ) : (
+          ''
+        )}
+        {state === 'awaiting-permission' ? (
+          <Text color="yellow" bold>
+            PERMISSION ·{' '}
+          </Text>
+        ) : (
+          ''
+        )}
         {state === 'running' ? <Text color="green">running · </Text> : ''}
         {`${providerName}/${model}`}
         {cwd && (
@@ -56,9 +88,13 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
             {gitDirty && <Text color="yellow">*</Text>}
           </>
         )}
-        {tokenPct !== undefined ? ` · ${totalTokens!.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}` : ''}
+        {tokenPct !== undefined
+          ? ` · ${totalTokens!.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}`
+          : ''}
         {sessionTurns > 0 ? ` · ${sessionTurns} ${sessionTurns === 1 ? 'turn' : 'turns'}` : ''}
-        {sessionToolCalls > 0 ? ` · ${sessionToolCalls} ${sessionToolCalls === 1 ? 'tool' : 'tools'}` : ''}
+        {sessionToolCalls > 0
+          ? ` · ${sessionToolCalls} ${sessionToolCalls === 1 ? 'tool' : 'tools'}`
+          : ''}
         {queueLength > 0 ? ` · 📨 ${queueLength} queued` : ''}
       </Text>
     </Box>

@@ -14,10 +14,12 @@ describe('sanitizeEnv', () => {
     assert.strictEqual(env.OPENAI_API_KEY, undefined);
     assert.strictEqual(env.AWS_SECRET_ACCESS_KEY, undefined);
     assert.strictEqual(env.GITHUB_TOKEN, undefined);
-    assert.deepStrictEqual(
-      dropped.sort(),
-      ['ANTHROPIC_API_KEY', 'AWS_SECRET_ACCESS_KEY', 'GITHUB_TOKEN', 'OPENAI_API_KEY'],
-    );
+    assert.deepStrictEqual(dropped.sort(), [
+      'ANTHROPIC_API_KEY',
+      'AWS_SECRET_ACCESS_KEY',
+      'GITHUB_TOKEN',
+      'OPENAI_API_KEY',
+    ]);
   });
 
   it('keeps the default allowlist', () => {
@@ -47,7 +49,7 @@ describe('sanitizeEnv', () => {
       GIT_AUTHOR_NAME: 'me',
       GIT_DIR: '.git',
       XDG_CONFIG_HOME: '/Users/me/.config',
-      LCMARKETING: 'should drop',  // not LC_, just LC
+      LCMARKETING: 'should drop', // not LC_, just LC
     });
     assert.strictEqual(env.LC_ALL, 'C');
     assert.strictEqual(env.LC_CTYPE, 'UTF-8');
@@ -59,9 +61,9 @@ describe('sanitizeEnv', () => {
 
   it('built-in deny wins over allow-prefix (GIT_ASKPASS)', () => {
     const { env, dropped } = sanitizeEnv({
-      GIT_AUTHOR_NAME: 'me',           // allow
-      GIT_ASKPASS: '/bin/credential-dump',  // deny built-in
-      GIT_SSH_COMMAND: 'ssh -i /tmp/x',     // deny built-in
+      GIT_AUTHOR_NAME: 'me', // allow
+      GIT_ASKPASS: '/bin/credential-dump', // deny built-in
+      GIT_SSH_COMMAND: 'ssh -i /tmp/x', // deny built-in
     });
     assert.strictEqual(env.GIT_AUTHOR_NAME, 'me');
     assert.strictEqual(env.GIT_ASKPASS, undefined);

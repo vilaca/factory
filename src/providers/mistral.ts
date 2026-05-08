@@ -1,8 +1,20 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
-import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import {
+  buildChatBody,
+  fetchOpenAiCatalog,
+  sendOpenAiChat,
+  streamOpenAiChat,
+} from './_openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://api.mistral.ai/v1';
 const CODESTRAL_BASE_URL = 'https://codestral.mistral.ai/v1';
@@ -45,7 +57,9 @@ export class MistralProvider implements Provider {
     this.fallbackModels = options.fallbackModels ?? [];
     const key = options.token ?? process.env[this.envVarName];
     if (!key) {
-      throw new Error(`${this.displayName} API key required. Set ${this.envVarName} env var or use --token flag.`);
+      throw new Error(
+        `${this.displayName} API key required. Set ${this.envVarName} env var or use --token flag.`,
+      );
     }
     this.apiKey = key;
     this.baseUrl = (options.host ?? options.defaultBaseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
@@ -97,7 +111,9 @@ export class MistralProvider implements Provider {
       supportsTools: match?.capabilities?.function_calling ?? supportsToolsByName(lower),
       capabilities: [
         ...(match?.capabilities?.vision || supportsVisionByName(lower) ? ['vision'] : ['text']),
-        ...(match?.capabilities?.function_calling ?? supportsToolsByName(lower) ? ['function_calling'] : []),
+        ...((match?.capabilities?.function_calling ?? supportsToolsByName(lower))
+          ? ['function_calling']
+          : []),
       ],
     };
   }
@@ -165,34 +181,45 @@ export class MistralProvider implements Provider {
         providerName: this.displayName,
       });
     } catch (err) {
-      if (this.fallbackModels.length > 0 && err instanceof Error && /API error 404\b/.test(err.message)) {
+      if (
+        this.fallbackModels.length > 0 &&
+        err instanceof Error &&
+        /API error 404\b/.test(err.message)
+      ) {
         this.modelsCache = dedupeModels(this.fallbackModels);
         return this.modelsCache;
       }
       throw err;
     }
 
-    this.modelsCache = dedupeModels((items as any[])
-      // Note: exclude obvious non-chat families (embedding/moderation/OCR/
-      // transcription/TTS) so the picker stays focused on usable chat models.
-      .filter(item => isSupportedMistralModel(item))
-      .map(item => ({
-        id: typeof item.id === 'string' ? item.id : item.name,
-        name: typeof item.name === 'string' ? item.name : undefined,
-        description: typeof item.description === 'string' ? item.description : undefined,
-        max_context_length: typeof item.max_context_length === 'number'
-          ? item.max_context_length
-          : typeof item.maxContextLength === 'number'
-            ? item.maxContextLength
-            : undefined,
-        capabilities: typeof item.capabilities === 'object' && item.capabilities
-          ? {
-            completion_chat: item.capabilities.completion_chat === true || item.capabilities.chat_completion === true,
-            function_calling: item.capabilities.function_calling === true || item.capabilities.tools === true,
-            vision: item.capabilities.vision === true,
-          }
-          : undefined,
-      })));
+    this.modelsCache = dedupeModels(
+      (items as any[])
+        // Note: exclude obvious non-chat families (embedding/moderation/OCR/
+        // transcription/TTS) so the picker stays focused on usable chat models.
+        .filter(item => isSupportedMistralModel(item))
+        .map(item => ({
+          id: typeof item.id === 'string' ? item.id : item.name,
+          name: typeof item.name === 'string' ? item.name : undefined,
+          description: typeof item.description === 'string' ? item.description : undefined,
+          max_context_length:
+            typeof item.max_context_length === 'number'
+              ? item.max_context_length
+              : typeof item.maxContextLength === 'number'
+                ? item.maxContextLength
+                : undefined,
+          capabilities:
+            typeof item.capabilities === 'object' && item.capabilities
+              ? {
+                  completion_chat:
+                    item.capabilities.completion_chat === true ||
+                    item.capabilities.chat_completion === true,
+                  function_calling:
+                    item.capabilities.function_calling === true || item.capabilities.tools === true,
+                  vision: item.capabilities.vision === true,
+                }
+              : undefined,
+        })),
+    );
 
     return this.modelsCache;
   }
@@ -224,7 +251,8 @@ export class CodestralProvider extends MistralProvider {
 
 function isSupportedMistralModel(item: any): boolean {
   if (!item || typeof item !== 'object') return false;
-  const id = typeof item.id === 'string' ? item.id : typeof item.name === 'string' ? item.name : null;
+  const id =
+    typeof item.id === 'string' ? item.id : typeof item.name === 'string' ? item.name : null;
   if (!id) return false;
   const lower = id.toLowerCase();
   if (/(embed|moderation|ocr|transcri|tts)/i.test(lower)) return false;
@@ -248,8 +276,12 @@ function buildModelDetail(model: MistralModel): string {
 function buildFallbackModelDetail(modelId: string, model?: MistralModel): string {
   const lower = modelId.toLowerCase();
   const details: string[] = [];
-  details.push(model?.capabilities?.vision ?? supportsVisionByName(lower) ? 'vision' : 'text-only');
-  details.push(model?.capabilities?.function_calling ?? supportsToolsByName(lower) ? 'tools' : 'no tools');
+  details.push(
+    (model?.capabilities?.vision ?? supportsVisionByName(lower)) ? 'vision' : 'text-only',
+  );
+  details.push(
+    (model?.capabilities?.function_calling ?? supportsToolsByName(lower)) ? 'tools' : 'no tools',
+  );
   if (supportsReasoningByName(lower)) {
     details.push('reasoning');
   }
@@ -268,20 +300,34 @@ function buildModelWarning(model: MistralModel): string | undefined {
 }
 
 function estimateMistralModelTier(model: string, vision: boolean): ModelTier {
-  if (model.includes('large') || model.includes('medium') || model.includes('magistral-medium')) return 'strong';
-  if (model.includes('small') || model.includes('codestral') || model.includes('devstral') || vision) return 'medium';
+  if (model.includes('large') || model.includes('medium') || model.includes('magistral-medium'))
+    return 'strong';
+  if (
+    model.includes('small') ||
+    model.includes('codestral') ||
+    model.includes('devstral') ||
+    vision
+  )
+    return 'medium';
   return 'weak';
 }
 
 function estimateMistralContextWindow(model: string): number {
   if (model.includes('codestral')) return 256000;
-  if (model.includes('large') || model.includes('medium') || model.includes('small') || model.includes('magistral')) return 128000;
+  if (
+    model.includes('large') ||
+    model.includes('medium') ||
+    model.includes('small') ||
+    model.includes('magistral')
+  )
+    return 128000;
   return 32000;
 }
 
 function estimateMistralMaxOutput(model: string): number {
   if (model.includes('large') || model.includes('medium')) return 32768;
-  if (model.includes('small') || model.includes('codestral') || model.includes('devstral')) return 32768;
+  if (model.includes('small') || model.includes('codestral') || model.includes('devstral'))
+    return 32768;
   return 8192;
 }
 

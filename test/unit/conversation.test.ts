@@ -34,9 +34,11 @@ describe('Conversation', () => {
   });
 
   it('addAssistant includes tool_calls when provided', () => {
-    const toolCalls = [{
-      function: { name: 'Read', arguments: { file_path: '/tmp/test' } },
-    }];
+    const toolCalls = [
+      {
+        function: { name: 'Read', arguments: { file_path: '/tmp/test' } },
+      },
+    ];
     conv.addAssistant('Let me read that.', toolCalls);
     const msgs = conv.getMessages();
     assert.strictEqual(msgs[1].tool_calls?.length, 1);
@@ -86,7 +88,14 @@ describe('Conversation', () => {
     const msgs = conv.getMessages();
     const roles = msgs.map(m => m.role);
     assert.deepStrictEqual(roles, [
-      'system', 'user', 'assistant', 'user', 'assistant', 'tool', 'user', 'assistant',
+      'system',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'tool',
+      'user',
+      'assistant',
     ]);
   });
 });

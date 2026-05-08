@@ -11,7 +11,12 @@ import { getBuildInfo } from '../utils/build-info.js';
 const ext = markedTerminal({ reflowText: false, width: 0, showSectionPrefix: false }) as any;
 const origText = ext.renderer.text;
 ext.renderer.text = function (token: any): string {
-  if (token && typeof token === 'object' && Array.isArray(token.tokens) && token.tokens.length > 0) {
+  if (
+    token &&
+    typeof token === 'object' &&
+    Array.isArray(token.tokens) &&
+    token.tokens.length > 0
+  ) {
     return this.parser.parseInline(token.tokens);
   }
   return origText.call(this, token);
@@ -41,168 +46,68 @@ export function renderMarkdown(text: string): string {
 }
 
 function formatExperimentalFlags(flags: ExperimentalFlags | undefined): string {
-  return EXPERIMENTAL_FLAG_KEYS
-    .map(key => `${key}=${flags?.[key] ? 'on' : 'off'}`)
-    .join(', ');
+  return EXPERIMENTAL_FLAG_KEYS.map(key => `${key}=${flags?.[key] ? 'on' : 'off'}`).join(', ');
 }
 
 const LOGO_LETTERS_LEET: ReadonlyArray<{ color: string; rows: string[] }> = [
   {
     color: '#FFD93D',
-    rows: [
-      '███████╗',
-      '██╔════╝',
-      '█████╗  ',
-      '██╔══╝  ',
-      '██║     ',
-      '╚═╝     ',
-    ],
+    rows: ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '██║     ', '╚═╝     '],
   },
   {
     color: '#FF6BD0',
-    rows: [
-      '██╗  ██╗',
-      '██║  ██║',
-      '███████║',
-      '╚════██║',
-      '     ██║',
-      '     ╚═╝',
-    ],
+    rows: ['██╗  ██╗', '██║  ██║', '███████║', '╚════██║', '     ██║', '     ╚═╝'],
   },
   {
     color: '#00E0FF',
-    rows: [
-      '██╗  ██╗',
-      '██║ ██╔╝',
-      '█████╔╝ ',
-      '██╔═██╗ ',
-      '██║  ██╗',
-      '╚═╝  ╚═╝',
-    ],
+    rows: ['██╗  ██╗', '██║ ██╔╝', '█████╔╝ ', '██╔═██╗ ', '██║  ██╗', '╚═╝  ╚═╝'],
   },
   {
     color: '#7CFF6B',
-    rows: [
-      '███████╗ ',
-      '╚════██║ ',
-      '    ██╔╝ ',
-      '   ██╔╝  ',
-      '   ██║   ',
-      '   ╚═╝   ',
-    ],
+    rows: ['███████╗ ', '╚════██║ ', '    ██╔╝ ', '   ██╔╝  ', '   ██║   ', '   ╚═╝   '],
   },
   {
     color: '#FFA94D',
-    rows: [
-      ' ██████╗ ',
-      '██╔═████╗',
-      '██║██╔██║',
-      '████╔╝██║',
-      '╚██████╔╝',
-      ' ╚═════╝ ',
-    ],
+    rows: [' ██████╗ ', '██╔═████╗', '██║██╔██║', '████╔╝██║', '╚██████╔╝', ' ╚═════╝ '],
   },
   {
     color: '#FF5C5C',
-    rows: [
-      '██████╗ ',
-      '██╔══██╗',
-      '██████╔╝',
-      '██╔══██╗',
-      '██║  ██║',
-      '╚═╝  ╚═╝',
-    ],
+    rows: ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██║  ██║', '╚═╝  ╚═╝'],
   },
   {
     color: '#B266FF',
-    rows: [
-      '██╗   ██╗',
-      '╚██╗ ██╔╝',
-      ' ╚████╔╝ ',
-      '  ╚██╔╝  ',
-      '   ██║   ',
-      '   ╚═╝   ',
-    ],
+    rows: ['██╗   ██╗', '╚██╗ ██╔╝', ' ╚████╔╝ ', '  ╚██╔╝  ', '   ██║   ', '   ╚═╝   '],
   },
 ];
 
 const LOGO_LETTERS: ReadonlyArray<{ color: string; rows: string[] }> = [
   {
     color: '#FFD93D',
-    rows: [
-      '███████╗',
-      '██╔════╝',
-      '█████╗  ',
-      '██╔══╝  ',
-      '██║     ',
-      '╚═╝     ',
-    ],
+    rows: ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '██║     ', '╚═╝     '],
   },
   {
     color: '#FF6BD0',
-    rows: [
-      ' █████╗ ',
-      '██╔══██╗',
-      '███████║',
-      '██╔══██║',
-      '██║  ██║',
-      '╚═╝  ╚═╝',
-    ],
+    rows: [' █████╗ ', '██╔══██╗', '███████║', '██╔══██║', '██║  ██║', '╚═╝  ╚═╝'],
   },
   {
     color: '#00E0FF',
-    rows: [
-      ' ██████╗',
-      '██╔════╝',
-      '██║     ',
-      '██║     ',
-      '╚██████╗',
-      ' ╚═════╝',
-    ],
+    rows: [' ██████╗', '██╔════╝', '██║     ', '██║     ', '╚██████╗', ' ╚═════╝'],
   },
   {
     color: '#7CFF6B',
-    rows: [
-      '████████╗',
-      '╚══██╔══╝',
-      '   ██║   ',
-      '   ██║   ',
-      '   ██║   ',
-      '   ╚═╝   ',
-    ],
+    rows: ['████████╗', '╚══██╔══╝', '   ██║   ', '   ██║   ', '   ██║   ', '   ╚═╝   '],
   },
   {
     color: '#FFA94D',
-    rows: [
-      ' ██████╗ ',
-      '██╔═══██╗',
-      '██║   ██║',
-      '██║   ██║',
-      '╚██████╔╝',
-      ' ╚═════╝ ',
-    ],
+    rows: [' ██████╗ ', '██╔═══██╗', '██║   ██║', '██║   ██║', '╚██████╔╝', ' ╚═════╝ '],
   },
   {
     color: '#FF5C5C',
-    rows: [
-      '██████╗ ',
-      '██╔══██╗',
-      '██████╔╝',
-      '██╔══██╗',
-      '██║  ██║',
-      '╚═╝  ╚═╝',
-    ],
+    rows: ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██║  ██║', '╚═╝  ╚═╝'],
   },
   {
     color: '#B266FF',
-    rows: [
-      '██╗   ██╗',
-      '╚██╗ ██╔╝',
-      ' ╚████╔╝ ',
-      '  ╚██╔╝  ',
-      '   ██║   ',
-      '   ╚═╝   ',
-    ],
+    rows: ['██╗   ██╗', '╚██╗ ██╔╝', ' ╚████╔╝ ', '  ╚██╔╝  ', '   ██║   ', '   ╚═╝   '],
   },
 ];
 
@@ -245,7 +150,9 @@ export function renderWelcome(
   sessionLogDestination?: string,
   gitBranch?: string,
 ): string {
-  const cwdLine = chalk.dim('  CWD:   ') + chalk.white(cwd) +
+  const cwdLine =
+    chalk.dim('  CWD:   ') +
+    chalk.white(cwd) +
     (gitBranch ? chalk.dim('  (') + chalk.cyan(gitBranch) + chalk.dim(')') : '');
   const lines = [
     '',

@@ -13,7 +13,11 @@ function tmpDir(): string {
 }
 
 function cleanup(dir: string): void {
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 }
 
 describe('extractProjectFacts', () => {
@@ -30,14 +34,17 @@ describe('extractProjectFacts', () => {
   it('extracts package.json engines, type, and scripts', async () => {
     const dir = tmpDir();
     try {
-      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-        name: 'demo',
-        version: '1.2.3',
-        engines: { node: '>=18' },
-        type: 'module',
-        main: 'dist/index.js',
-        scripts: { build: 'tsc', test: 'node --test', start: 'node dist/index.js', other: 'x' },
-      }));
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({
+          name: 'demo',
+          version: '1.2.3',
+          engines: { node: '>=18' },
+          type: 'module',
+          main: 'dist/index.js',
+          scripts: { build: 'tsc', test: 'node --test', start: 'node dist/index.js', other: 'x' },
+        }),
+      );
       const facts = await extractProjectFacts(dir);
       assert.ok(facts);
       assert.match(facts!, /demo@1\.2\.3/);
@@ -57,7 +64,9 @@ describe('extractProjectFacts', () => {
   it('extracts tsconfig.json options (handling JSON comments)', async () => {
     const dir = tmpDir();
     try {
-      fs.writeFileSync(path.join(dir, 'tsconfig.json'), `{
+      fs.writeFileSync(
+        path.join(dir, 'tsconfig.json'),
+        `{
   // line comment
   "compilerOptions": {
     /* block comment */
@@ -66,7 +75,8 @@ describe('extractProjectFacts', () => {
     "strict": true,
     "outDir": "dist"
   }
-}`);
+}`,
+      );
       const facts = await extractProjectFacts(dir);
       assert.ok(facts);
       assert.match(facts!, /ES2022/);

@@ -15,8 +15,20 @@ import type { AgentLoopDeps } from './types.js';
 const ROTATION_CACHE_WARMTH_TTL_MS = 5 * 60 * 1000;
 
 const TRIVIAL_PROMPTS = new Set([
-  'ok', 'okay', 'yes', 'no', 'y', 'n', 'go', 'go on',
-  'do it', 'do the call', 'do the calls', 'continue', 'next', 'sure',
+  'ok',
+  'okay',
+  'yes',
+  'no',
+  'y',
+  'n',
+  'go',
+  'go on',
+  'do it',
+  'do the call',
+  'do the calls',
+  'continue',
+  'next',
+  'sure',
 ]);
 const MAX_REPLAYS_PER_PROMPT = 2;
 
@@ -69,26 +81,27 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
   return {
     keys,
     activeKeyId: refs.activeKeyId,
-    withKey: (key) => createProvider(refs.provider.name, {
-      token: key.token,
-      ...(descriptor.needsAccountId && key.extras?.accountId
-        ? { accountId: key.extras.accountId }
-        : {}),
-    }),
-    onActiveKeyChange: (id) => {
+    withKey: key =>
+      createProvider(refs.provider.name, {
+        token: key.token,
+        ...(descriptor.needsAccountId && key.extras?.accountId
+          ? { accountId: key.extras.accountId }
+          : {}),
+      }),
+    onActiveKeyChange: id => {
       if (deps.refs.current) deps.refs.current.activeKeyId = id;
     },
-    onProviderChange: (next) => {
+    onProviderChange: next => {
       if (deps.refs.current) deps.refs.current.provider = next;
     },
-    onModelChange: (m) => {
+    onModelChange: m => {
       if (deps.refs.current) deps.refs.current.model = m;
     },
     failureLog: refs.keyFailureLog,
     getWarmthLog: () => getWarmthLog(refs.provider.name, ROTATION_CACHE_WARMTH_TTL_MS),
     modelsEnabled,
     chain,
-    loadKeysForProvider: async (providerName) => {
+    loadKeysForProvider: async providerName => {
       const desc = descriptorByAlias(providerName);
       if (!desc) return [];
       const c = await loadGlobalConfig();
@@ -106,10 +119,7 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
   };
 }
 
-export async function runAgentLoopInternal(
-  userInput: string,
-  deps: AgentLoopDeps,
-): Promise<void> {
+export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDeps): Promise<void> {
   if (!deps.refs.current) return;
   deps.refs.current.abort = new AbortController();
   deps.setThinking(true);
@@ -176,10 +186,16 @@ export async function runAgentLoopInternal(
     }
     handleAgentEvent(event, deps, {
       getStreamingBuffer: () => assistantBuffer,
-      setStreamingBuffer: (s) => { assistantBuffer = s; },
+      setStreamingBuffer: s => {
+        assistantBuffer = s;
+      },
       addSuccessfulToolCall: () => successfulToolCallsThisRun++,
-      markAutoRetryExhausted: () => { autoRetryExhaustedThisRun = true; },
-      markTokenLimitHalt: () => { tokenLimitHaltThisRun = true; },
+      markAutoRetryExhausted: () => {
+        autoRetryExhaustedThisRun = true;
+      },
+      markTokenLimitHalt: () => {
+        tokenLimitHaltThisRun = true;
+      },
     });
   }
 
@@ -196,11 +212,14 @@ export async function runAgentLoopInternal(
     const used = deps.refs.current.tokenLimitReplayCounts.get(replay) ?? 0;
     if (used < 1) {
       deps.refs.current.tokenLimitReplayCounts.set(replay, used + 1);
-      deps.addNotice('warn', '⏵ Context window full — aggressively compacted; replaying prompt once.');
+      deps.addNotice(
+        'warn',
+        '⏵ Context window full — aggressively compacted; replaying prompt once.',
+      );
       await runAgentLoopInternal(replay, deps);
       return;
     }
-    deps.addNotice('danger', '⚠ Compaction couldn\'t free enough context. Use /clear and rephrase.');
+    deps.addNotice('danger', "⚠ Compaction couldn't free enough context. Use /clear and rephrase.");
   }
 
   // Auto-recovery: clear+replay if no successful tool call this run.
@@ -213,23 +232,23 @@ export async function runAgentLoopInternal(
     const used = deps.refs.current.replayCounts.get(replay) ?? 0;
     if (used < MAX_REPLAYS_PER_PROMPT) {
       deps.refs.current.replayCounts.set(replay, used + 1);
-      deps.addNotice('danger',
+      deps.addNotice(
+        'danger',
         `⚠ Auto-recovery: clearing conversation and replaying the last substantive prompt (attempt ${used + 1}/${MAX_REPLAYS_PER_PROMPT}).`,
       );
       deps.refs.current.conversation.clear();
       await runAgentLoopInternal(replay, deps);
       return;
     }
-    deps.addNotice('danger',
+    deps.addNotice(
+      'danger',
       `⚠ Auto-recovery exhausted after ${MAX_REPLAYS_PER_PROMPT} replays — model couldn't make progress on this prompt. Giving up; please rephrase or take over manually.`,
     );
   }
 
   if (deps.refs.current.planMode && deps.getPlannedCalls().length > 0) {
     const count = deps.getPlannedCalls().length;
-    deps.addNotice('cyan',
-      `Proposed plan: ${count} change${count === 1 ? '' : 's'}.`,
-    );
+    deps.addNotice('cyan', `Proposed plan: ${count} change${count === 1 ? '' : 's'}.`);
     deps.addNotice('info', 'Type y to approve, n to drop, or describe revisions.');
   }
 
@@ -240,10 +259,7 @@ export async function runAgentLoopInternal(
   deps.setCompacting(null);
 }
 
-export async function processInput(
-  trimmed: string,
-  deps: AgentLoopDeps,
-): Promise<void> {
+export async function processInput(trimmed: string, deps: AgentLoopDeps): Promise<void> {
   if (!deps.refs.current) return;
 
   deps.refs.current.sessionLogger?.logUserInput(trimmed);
@@ -262,7 +278,10 @@ export async function processInput(
     const text = skills.formatInjection(matches);
     if (text) {
       deps.refs.current.conversation.addUser(`[System: ${text}]`);
-      deps.refs.current.sessionLogger?.logWarning('skills', `injected: ${matches.map(m => m.skill.name).join(', ')}`);
+      deps.refs.current.sessionLogger?.logWarning(
+        'skills',
+        `injected: ${matches.map(m => m.skill.name).join(', ')}`,
+      );
     }
   }
 

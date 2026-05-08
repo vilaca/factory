@@ -32,37 +32,25 @@ async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
 
 describe('parseSseStream', () => {
   it('parses a complete stream of single-line events', async () => {
-    const reader = makeReader([
-      'data: {"a":1}\n',
-      'data: {"b":2}\n',
-      'data: [DONE]\n',
-    ]);
+    const reader = makeReader(['data: {"a":1}\n', 'data: {"b":2}\n', 'data: [DONE]\n']);
     const items = await collect(parseSseStream(reader));
     assert.deepStrictEqual(items, [{ a: 1 }, { b: 2 }]);
   });
 
   it('buffers across chunk boundaries', async () => {
-    const reader = makeReader([
-      'data: {"a"',
-      ':1}\ndata: {',
-      '"b":2}\n',
-    ]);
+    const reader = makeReader(['data: {"a"', ':1}\ndata: {', '"b":2}\n']);
     const items = await collect(parseSseStream(reader));
     assert.deepStrictEqual(items, [{ a: 1 }, { b: 2 }]);
   });
 
   it('skips blank lines and lines without the data: prefix', async () => {
-    const reader = makeReader([
-      '\n: comment\nevent: foo\ndata: {"ok":true}\n\n',
-    ]);
+    const reader = makeReader(['\n: comment\nevent: foo\ndata: {"ok":true}\n\n']);
     const items = await collect(parseSseStream(reader));
     assert.deepStrictEqual(items, [{ ok: true }]);
   });
 
   it('skips lines that fail to JSON-parse rather than throwing', async () => {
-    const reader = makeReader([
-      'data: not-json\ndata: {"ok":true}\n',
-    ]);
+    const reader = makeReader(['data: not-json\ndata: {"ok":true}\n']);
     const items = await collect(parseSseStream(reader));
     assert.deepStrictEqual(items, [{ ok: true }]);
   });
@@ -71,13 +59,17 @@ describe('parseSseStream', () => {
 describe('mergeStreamedToolCalls / finalizeToolCalls', () => {
   it('accumulates a single tool call from name + argument deltas', () => {
     const acc: any[] = [];
-    mergeStreamedToolCalls(acc, [{ index: 0, id: 'call_1', function: { name: 'Re', arguments: '{"f' } }]);
+    mergeStreamedToolCalls(acc, [
+      { index: 0, id: 'call_1', function: { name: 'Re', arguments: '{"f' } },
+    ]);
     mergeStreamedToolCalls(acc, [{ index: 0, function: { name: 'ad', arguments: 'oo":1}' } }]);
     const finalized = finalizeToolCalls(acc);
-    assert.deepStrictEqual(finalized, [{
-      id: 'call_1',
-      function: { name: 'Read', arguments: { foo: 1 } },
-    }]);
+    assert.deepStrictEqual(finalized, [
+      {
+        id: 'call_1',
+        function: { name: 'Read', arguments: { foo: 1 } },
+      },
+    ]);
   });
 
   it('handles multiple parallel tool calls by index', () => {
@@ -110,7 +102,9 @@ describe('mergeStreamedToolCalls / finalizeToolCalls', () => {
 
 describe('extractUsage', () => {
   it('maps the OpenAI usage shape to TokenUsage', () => {
-    const usage = extractUsage({ usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } });
+    const usage = extractUsage({
+      usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    });
     assert.deepStrictEqual(usage, { promptTokens: 10, completionTokens: 20, totalTokens: 30 });
   });
 
@@ -121,7 +115,9 @@ describe('extractUsage', () => {
 
   it('defaults missing fields to 0', () => {
     assert.deepStrictEqual(extractUsage({ usage: { prompt_tokens: 5 } }), {
-      promptTokens: 5, completionTokens: 0, totalTokens: 0,
+      promptTokens: 5,
+      completionTokens: 0,
+      totalTokens: 0,
     });
   });
 
@@ -143,17 +139,19 @@ describe('extractUsage', () => {
   });
 
   it('omits cachedPromptTokens when prompt_tokens_details is absent', () => {
-    const usage = extractUsage({ usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } });
+    const usage = extractUsage({
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    });
     assert.strictEqual((usage as any).cachedPromptTokens, undefined);
   });
 });
 
 describe('formatMessage', () => {
   it('formats a plain user message', () => {
-    assert.deepStrictEqual(
-      formatMessage({ role: 'user', content: 'hi' }),
-      { role: 'user', content: 'hi' },
-    );
+    assert.deepStrictEqual(formatMessage({ role: 'user', content: 'hi' }), {
+      role: 'user',
+      content: 'hi',
+    });
   });
 
   it('serialises tool_calls with stringified arguments', () => {
@@ -190,7 +188,9 @@ describe('buildChatBody', () => {
 
   it('honours maxTokensField=max_tokens for legacy providers', () => {
     const body = buildChatBody({
-      model: 'm', messages: [], stream: false,
+      model: 'm',
+      messages: [],
+      stream: false,
       options: { maxTokens: 100 },
       maxTokensField: 'max_tokens',
     });
@@ -200,7 +200,9 @@ describe('buildChatBody', () => {
 
   it('defaults to max_completion_tokens', () => {
     const body = buildChatBody({
-      model: 'm', messages: [], stream: false,
+      model: 'm',
+      messages: [],
+      stream: false,
       options: { maxTokens: 200 },
     });
     assert.strictEqual(body.max_completion_tokens, 200);
@@ -208,7 +210,9 @@ describe('buildChatBody', () => {
 
   it('writes parallel_tool_calls=false explicitly when supplied', () => {
     const body = buildChatBody({
-      model: 'm', messages: [], stream: false,
+      model: 'm',
+      messages: [],
+      stream: false,
       tools: [{ type: 'function', function: { name: 'X', description: '', parameters: {} } }],
       parallelToolCalls: false,
     });
@@ -217,7 +221,9 @@ describe('buildChatBody', () => {
 
   it('merges extra fields', () => {
     const body = buildChatBody({
-      model: 'm', messages: [], stream: false,
+      model: 'm',
+      messages: [],
+      stream: false,
       extra: { reasoning_effort: 'high' },
     });
     assert.strictEqual(body.reasoning_effort, 'high');

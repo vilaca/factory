@@ -1,6 +1,13 @@
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
 import type { GoogleAiStudioAuthMode } from '../core/config-types.js';
 import { appendProviderLog } from '../core/session-log.js';
@@ -174,7 +181,7 @@ export class GoogleAiStudioProvider implements Provider {
       const res = await fetch(url, {
         headers: {
           ...(await this.auth.getModelsHeaders()),
-          'Accept': 'application/json',
+          Accept: 'application/json',
         },
       });
 
@@ -191,11 +198,13 @@ export class GoogleAiStudioProvider implements Provider {
         throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${await res.text()}`);
       }
 
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
       const pageModels = Array.isArray(data?.models) ? data.models : [];
       // Note: we intentionally keep only generateContent-capable text/chat
       // models and drop embeddings, image/video, speech/music, and live APIs.
-      const supportedModels = pageModels.filter((item: any) => isSupportedGoogleAiStudioModel(item));
+      const supportedModels = pageModels.filter((item: any) =>
+        isSupportedGoogleAiStudioModel(item),
+      );
       appendProviderLog({
         provider: 'googleaistudio',
         category: 'diagnostic',
@@ -207,23 +216,35 @@ export class GoogleAiStudioProvider implements Provider {
           provider: 'googleaistudio',
           category: 'diagnostic',
           action: 'sample-model-ids',
-          detail: pageModels.slice(0, 10).map((item: any) => item?.baseModelId ?? item?.name ?? '<unknown>').join(', '),
+          detail: pageModels
+            .slice(0, 10)
+            .map((item: any) => item?.baseModelId ?? item?.name ?? '<unknown>')
+            .join(', '),
         });
       }
-      models.push(...supportedModels.map((item: any) => ({
-        name: item.name,
-        baseModelId: getGoogleAiStudioModelId(item)!,
-        displayName: typeof item.displayName === 'string' ? item.displayName : undefined,
-        description: typeof item.description === 'string' ? item.description : undefined,
-        inputTokenLimit: typeof item.inputTokenLimit === 'number' ? item.inputTokenLimit : undefined,
-        outputTokenLimit: typeof item.outputTokenLimit === 'number' ? item.outputTokenLimit : undefined,
-        supportedGenerationMethods: Array.isArray(item.supportedGenerationMethods)
-          ? item.supportedGenerationMethods.filter((value: unknown): value is string => typeof value === 'string')
-          : undefined,
-        thinking: item.thinking === true,
-      })));
+      models.push(
+        ...supportedModels.map((item: any) => ({
+          name: item.name,
+          baseModelId: getGoogleAiStudioModelId(item)!,
+          displayName: typeof item.displayName === 'string' ? item.displayName : undefined,
+          description: typeof item.description === 'string' ? item.description : undefined,
+          inputTokenLimit:
+            typeof item.inputTokenLimit === 'number' ? item.inputTokenLimit : undefined,
+          outputTokenLimit:
+            typeof item.outputTokenLimit === 'number' ? item.outputTokenLimit : undefined,
+          supportedGenerationMethods: Array.isArray(item.supportedGenerationMethods)
+            ? item.supportedGenerationMethods.filter(
+                (value: unknown): value is string => typeof value === 'string',
+              )
+            : undefined,
+          thinking: item.thinking === true,
+        })),
+      );
 
-      pageToken = typeof data?.nextPageToken === 'string' && data.nextPageToken ? data.nextPageToken : undefined;
+      pageToken =
+        typeof data?.nextPageToken === 'string' && data.nextPageToken
+          ? data.nextPageToken
+          : undefined;
     } while (pageToken);
 
     this.modelsCache = dedupeModels(models);
@@ -237,7 +258,9 @@ function isSupportedGoogleAiStudioModel(item: any): boolean {
   if (typeof item.name !== 'string' || !modelId) return false;
 
   const methods = Array.isArray(item.supportedGenerationMethods)
-    ? item.supportedGenerationMethods.filter((value: unknown): value is string => typeof value === 'string')
+    ? item.supportedGenerationMethods.filter(
+        (value: unknown): value is string => typeof value === 'string',
+      )
     : [];
   if (!methods.includes('generateContent')) return false;
 

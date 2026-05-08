@@ -1,7 +1,15 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {
-  Provider, ChatMessage, ChatChunk, ToolDefinition,
-  ToolCallMessage, ProviderCapabilities, ChatOptions, ModelInfo, ModelPickerInfo, ModelTier,
+  Provider,
+  ChatMessage,
+  ChatChunk,
+  ToolDefinition,
+  ToolCallMessage,
+  ProviderCapabilities,
+  ChatOptions,
+  ModelInfo,
+  ModelPickerInfo,
+  ModelTier,
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
@@ -10,7 +18,11 @@ const PROVIDER_NAME = 'OpenCode Zen';
 const MISSING_TOKEN_ERROR =
   'OpenCode Zen API key required. Set OPENCODE_ZEN_API_KEY or OPENCODE_API_KEY env var or use --token flag.';
 
-type OpenCodeZenRoute = 'chat-completions' | 'anthropic-messages' | 'google-native' | 'openai-responses';
+type OpenCodeZenRoute =
+  | 'chat-completions'
+  | 'anthropic-messages'
+  | 'google-native'
+  | 'openai-responses';
 
 interface OpenCodeZenModel {
   id: string;
@@ -50,7 +62,8 @@ export class OpenCodeZenProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
-    const route = this.modelsCache?.find(item => item.id === model)?.route ?? detectOpenCodeZenRoute(model);
+    const route =
+      this.modelsCache?.find(item => item.id === model)?.route ?? detectOpenCodeZenRoute(model);
     const supportsTools = route !== 'openai-responses' && supportsToolsByName(lower);
 
     return {
@@ -67,7 +80,8 @@ export class OpenCodeZenProvider implements Provider {
   async getModelInfo(model: string): Promise<ModelInfo> {
     await this.getCatalog();
     const lower = model.toLowerCase();
-    const route = this.modelsCache?.find(item => item.id === model)?.route ?? detectOpenCodeZenRoute(model);
+    const route =
+      this.modelsCache?.find(item => item.id === model)?.route ?? detectOpenCodeZenRoute(model);
     return {
       supportsTools: route !== 'openai-responses' && supportsToolsByName(lower),
       capabilities: buildCapabilities(lower, route),
@@ -127,7 +141,14 @@ export class OpenCodeZenProvider implements Provider {
     yield* streamOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.requireOpenAiAuthHeaders(),
-      body: buildChatBody({ model, messages, tools, stream: true, options, maxTokensField: 'max_tokens' }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: true,
+        options,
+        maxTokensField: 'max_tokens',
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -142,7 +163,14 @@ export class OpenCodeZenProvider implements Provider {
     return sendOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.requireOpenAiAuthHeaders(),
-      body: buildChatBody({ model, messages, tools, stream: false, options, maxTokensField: 'max_tokens' }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: false,
+        options,
+        maxTokensField: 'max_tokens',
+      }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
     });
@@ -201,13 +229,15 @@ export class OpenCodeZenProvider implements Provider {
       } else if (event.type === 'content_block_stop') {
         if (currentToolCall) {
           yield {
-            tool_calls: [{
-              id: currentToolCall.id,
-              function: {
-                name: currentToolCall.name,
-                arguments: parseToolArgs(currentToolCall.rawArgs),
+            tool_calls: [
+              {
+                id: currentToolCall.id,
+                function: {
+                  name: currentToolCall.name,
+                  arguments: parseToolArgs(currentToolCall.rawArgs),
+                },
               },
-            }],
+            ],
           };
           currentToolCall = null;
         }
@@ -280,7 +310,9 @@ export class OpenCodeZenProvider implements Provider {
       usage: {
         promptTokens: (response as any).usage?.input_tokens ?? 0,
         completionTokens: (response as any).usage?.output_tokens ?? 0,
-        totalTokens: ((response as any).usage?.input_tokens ?? 0) + ((response as any).usage?.output_tokens ?? 0),
+        totalTokens:
+          ((response as any).usage?.input_tokens ?? 0) +
+          ((response as any).usage?.output_tokens ?? 0),
       },
     };
   }
@@ -331,7 +363,11 @@ export class OpenCodeZenProvider implements Provider {
         }
 
         usage = extractGoogleUsage(parsed) ?? usage;
-        const { content, toolCalls, nextToolIndex } = extractGoogleResponseParts(parsed, seenToolCalls, toolIndex);
+        const { content, toolCalls, nextToolIndex } = extractGoogleResponseParts(
+          parsed,
+          seenToolCalls,
+          toolIndex,
+        );
         toolIndex = nextToolIndex;
 
         if (content) {
@@ -365,7 +401,7 @@ export class OpenCodeZenProvider implements Provider {
       throw new Error(`OpenCode Zen API error ${res.status}: ${await res.text()}`);
     }
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     const { content, toolCalls } = extractGoogleResponseParts(data, new Set<string>(), 0);
     return {
       content: content || undefined,
@@ -383,7 +419,7 @@ export class OpenCodeZenProvider implements Provider {
     return {
       'Content-Type': 'application/json',
       'x-goog-api-key': this.apiKey,
-      'Accept': 'application/json',
+      Accept: 'application/json',
     };
   }
 
@@ -399,13 +435,15 @@ export class OpenCodeZenProvider implements Provider {
       body.systemInstruction = systemInstruction;
     }
     if (tools && tools.length > 0) {
-      body.tools = [{
-        functionDeclarations: tools.map(tool => ({
-          name: tool.function.name,
-          description: tool.function.description ?? '',
-          parameters: tool.function.parameters,
-        })),
-      }];
+      body.tools = [
+        {
+          functionDeclarations: tools.map(tool => ({
+            name: tool.function.name,
+            description: tool.function.description ?? '',
+            parameters: tool.function.parameters,
+          })),
+        },
+      ];
     }
 
     const generationConfig: Record<string, unknown> = {};
@@ -464,12 +502,14 @@ export class OpenCodeZenProvider implements Provider {
         const toolName = message.tool_call_id ? toolCallNames.get(message.tool_call_id) : undefined;
         contents.push({
           role: 'user',
-          parts: [{
-            functionResponse: {
-              name: toolName ?? 'tool',
-              response: { content: message.content },
+          parts: [
+            {
+              functionResponse: {
+                name: toolName ?? 'tool',
+                response: { content: message.content },
+              },
             },
-          }],
+          ],
         });
         continue;
       }
@@ -517,11 +557,13 @@ export class OpenCodeZenProvider implements Provider {
         }
         msgs.push({
           role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: toolUseId,
-            content: msg.content,
-          }],
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: toolUseId,
+              content: msg.content,
+            },
+          ],
         });
       } else {
         msgs.push({ role: msg.role, content: msg.content });
@@ -560,7 +602,7 @@ export class OpenCodeZenProvider implements Provider {
       throw new Error(`OpenCode Zen API error ${res.status}: ${await res.text()}`);
     }
 
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     const rawItems = Array.isArray(data?.data) ? data.data : [];
     this.modelsCache = rawItems
       // Note: hide Zen models that route through OpenAI's /responses API until
@@ -606,7 +648,7 @@ function detectOpenCodeZenRoute(model: string): OpenCodeZenRoute {
 
 function unsupportedOpenCodeZenRouteError(model: string): Error {
   return new Error(
-    `OpenCode Zen model "${model}" uses the /responses API, which this CLI does not support yet.`
+    `OpenCode Zen model "${model}" uses the /responses API, which this CLI does not support yet.`,
   );
 }
 
@@ -690,8 +732,10 @@ function estimateMaxOutput(model: string): number {
   if (model.includes('claude-sonnet')) return 16000;
   if (model.includes('claude-haiku')) return 8192;
   if (model.includes('gemini-')) return 65536;
-  if (model.includes('qwen3.5-plus') || model.includes('kimi-k2.6') || model.includes('kimi-k2.5')) return 32768;
-  if (model.includes('glm-5.1') || model.includes('glm-5') || model.includes('big-pickle')) return 32768;
+  if (model.includes('qwen3.5-plus') || model.includes('kimi-k2.6') || model.includes('kimi-k2.5'))
+    return 32768;
+  if (model.includes('glm-5.1') || model.includes('glm-5') || model.includes('big-pickle'))
+    return 32768;
   return 8192;
 }
 
@@ -747,7 +791,7 @@ function extractGoogleUsage(data: any): ChatChunk['usage'] {
   return {
     promptTokens,
     completionTokens,
-    totalTokens: data.usageMetadata.totalTokenCount ?? (promptTokens + completionTokens),
+    totalTokens: data.usageMetadata.totalTokenCount ?? promptTokens + completionTokens,
   };
 }
 
@@ -756,7 +800,8 @@ function extractGoogleResponseParts(
   seenToolCalls: Set<string>,
   startIndex: number,
 ): { content: string; toolCalls: ToolCallMessage[]; nextToolIndex: number } {
-  const parts = data?.candidates?.flatMap((candidate: any) => candidate?.content?.parts ?? []) ?? [];
+  const parts =
+    data?.candidates?.flatMap((candidate: any) => candidate?.content?.parts ?? []) ?? [];
   let content = '';
   const toolCalls: ToolCallMessage[] = [];
   let nextToolIndex = startIndex;

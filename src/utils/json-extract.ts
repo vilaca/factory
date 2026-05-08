@@ -24,13 +24,19 @@ function* iterateJsonObjectRanges(text: string): Generator<{ start: number; end:
   let escape = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (escape) { escape = false; continue; }
+    if (escape) {
+      escape = false;
+      continue;
+    }
     if (inString) {
       if (ch === '\\') escape = true;
       else if (ch === '"') inString = false;
       continue;
     }
-    if (ch === '"') { inString = true; continue; }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
     if (ch === '{') {
       if (depth === 0) start = i;
       depth++;

@@ -9,7 +9,8 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Write,
-    description: 'Write content to a file. Creates the file if it does not exist, or overwrites it if it does. Creates parent directories as needed.',
+    description:
+      'Write content to a file. Creates the file if it does not exist, or overwrites it if it does. Creates parent directories as needed.',
     parameters: {
       type: 'object',
       required: ['file_path', 'content'],

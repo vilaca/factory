@@ -105,9 +105,7 @@ interface SubagentRunOptions {
  * (which is what the Delegate tool surfaces to the parent agent) along with
  * the raw event stream for logging.
  */
-export async function runSubagent(
-  options: SubagentRunOptions,
-): Promise<SubagentResult> {
+export async function runSubagent(options: SubagentRunOptions): Promise<SubagentResult> {
   const registry = options.registry ?? buildSubagentRegistry();
   const runner = options.runner ?? runAgent;
 

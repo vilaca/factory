@@ -57,10 +57,11 @@ const GIT_STATUS_MAX_BUFFER = 4 * 1024 * 1024;
  */
 export async function isGitDirty(cwd: string): Promise<boolean | null> {
   if (!(await isGitRepo(cwd))) return null;
-  const { stdout } = await execFileAsync(
-    'git', ['status', '--porcelain'],
-    { cwd, timeout: GIT_STATUS_TIMEOUT_MS, maxBuffer: GIT_STATUS_MAX_BUFFER },
-  );
+  const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
+    cwd,
+    timeout: GIT_STATUS_TIMEOUT_MS,
+    maxBuffer: GIT_STATUS_MAX_BUFFER,
+  });
   return stdout.trim().length > 0;
 }
 

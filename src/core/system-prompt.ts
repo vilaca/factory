@@ -52,7 +52,9 @@ export async function buildSystemPrompt(
 
   const projectFacts = await extractProjectFacts(cwd);
   if (projectFacts) {
-    sections.push(`## Project Facts (auto-detected)\n${projectFacts}\n\nWhen changing version-like or configuration values, treat the source-of-truth above as authoritative — do not guess.`);
+    sections.push(
+      `## Project Facts (auto-detected)\n${projectFacts}\n\nWhen changing version-like or configuration values, treat the source-of-truth above as authoritative — do not guess.`,
+    );
   }
 
   if (projectInstructions) {

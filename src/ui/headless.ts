@@ -134,7 +134,12 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       const r = await runHook(
         'SessionStart',
         { provider: options.provider.name, model: options.model, cwd },
-        { cwd, config: options.agentConfig?.hooks, envPolicy: options.envPolicy, onStderr: onHookStderr },
+        {
+          cwd,
+          config: options.agentConfig?.hooks,
+          envPolicy: options.envPolicy,
+          onStderr: onHookStderr,
+        },
       );
       for (const e of r.errors) onHookError('SessionStart', e);
       for (const hookCommand of r.firedCommands) {
@@ -149,7 +154,10 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     }
   }
 
-  const conversation = new Conversation(options.systemPrompt, options.agentConfig?.maxToolResultTokens);
+  const conversation = new Conversation(
+    options.systemPrompt,
+    options.agentConfig?.maxToolResultTokens,
+  );
   // Match the TUI seeding so the prefix shape is identical across modes —
   // see buildEnvironmentMessage docs for why this lives outside the
   // system prompt now.
@@ -267,9 +275,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           break;
         case 'compaction-start':
           process.stderr.write(
-            event.aggressive
-              ? '  ⊕ aggressively compacting…\n'
-              : '  ⊕ compacting…\n',
+            event.aggressive ? '  ⊕ aggressively compacting…\n' : '  ⊕ compacting…\n',
           );
           break;
         case 'compaction':
@@ -280,7 +286,9 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           break;
         case 'key-rotation': {
           const fromLabel = event.from
-            ? (event.from.label ? `${event.from.label} · …${event.from.fingerprint}` : `…${event.from.fingerprint}`)
+            ? event.from.label
+              ? `${event.from.label} · …${event.from.fingerprint}`
+              : `…${event.from.fingerprint}`
             : '<unknown>';
           const toLabel = event.to.label
             ? `${event.to.label} · …${event.to.fingerprint}`
@@ -310,7 +318,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           // Model bailed after a tool failure and couldn't recover. Piped
           // output may be truncated mid-task — surface so CI doesn't treat
           // a partial response as a successful one.
-          process.stderr.write('  ⚠ auto-retry exhausted — model couldn\'t recover\n');
+          process.stderr.write("  ⚠ auto-retry exhausted — model couldn't recover\n");
           break;
         case 'all-denied-halt':
           process.stderr.write(
@@ -358,7 +366,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     if (permissionDeniedTool && exitCode === 0) {
       process.stderr.write(
         `factory: tool '${permissionDeniedTool}' requires permission but stdin is not a TTY. ` +
-        `Add '${permissionDeniedTool}' to permissions.allowAll in ~/.factory/config.json to allow it in headless mode.\n`,
+          `Add '${permissionDeniedTool}' to permissions.allowAll in ~/.factory/config.json to allow it in headless mode.\n`,
       );
       exitCode = 3;
     }
@@ -367,7 +375,12 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         const r = await runHook(
           'SessionEnd',
           { provider: options.provider.name, model: options.model, cwd },
-          { cwd, config: options.agentConfig?.hooks, envPolicy: options.envPolicy, onStderr: onHookStderr },
+          {
+            cwd,
+            config: options.agentConfig?.hooks,
+            envPolicy: options.envPolicy,
+            onStderr: onHookStderr,
+          },
         );
         for (const e of r.errors) onHookError('SessionEnd', e);
       } catch (err: unknown) {

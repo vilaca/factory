@@ -122,7 +122,9 @@ export function parseSkillFile(
   // Validate regex compiles upfront so a bad pattern is caught at load time
   // rather than every turn.
   for (const t of triggers as string[]) {
-    try { new RegExp(t, 'i'); } catch (e: unknown) {
+    try {
+      new RegExp(t, 'i');
+    } catch (e: unknown) {
       throw new Error(`invalid regex in "triggers": ${t} (${errorMessage(e)})`);
     }
   }
@@ -144,7 +146,10 @@ export function parseSkillFile(
   };
 }
 
-interface Split { frontmatter: string; body: string; }
+interface Split {
+  frontmatter: string;
+  body: string;
+}
 
 function splitFrontmatter(raw: string): Split | null {
   // Allow optional BOM and leading whitespace; require --- on its own line at the top.
@@ -171,7 +176,10 @@ export function parseFrontmatter(text: string): Record<string, FmValue> {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    if (line.trim() === '' || line.trim().startsWith('#')) { i++; continue; }
+    if (line.trim() === '' || line.trim().startsWith('#')) {
+      i++;
+      continue;
+    }
     const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
     if (!m) {
       throw new Error(`malformed frontmatter line: "${line}"`);
@@ -222,8 +230,10 @@ function parseScalarOrBool(raw: string): string | boolean {
 
 function parseScalar(raw: string): string {
   const trimmed = raw.trim();
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
     const inner = trimmed.slice(1, -1);
     if (trimmed.startsWith('"')) {
       // Minimal escape handling — \\, \", \n, \t. Anything else passes through.
@@ -245,7 +255,11 @@ function splitTopLevelCommas(s: string): string[] {
   let inDouble = false;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
-    if (ch === '\\' && i + 1 < s.length) { buf += ch + s[i + 1]; i++; continue; }
+    if (ch === '\\' && i + 1 < s.length) {
+      buf += ch + s[i + 1];
+      i++;
+      continue;
+    }
     if (ch === "'" && !inDouble) inSingle = !inSingle;
     else if (ch === '"' && !inSingle) inDouble = !inDouble;
     if (ch === ',' && !inSingle && !inDouble) {

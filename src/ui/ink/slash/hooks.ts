@@ -2,10 +2,16 @@ import type { AgentLoopApi } from '../use-agent-loop.js';
 import type { HooksConfig } from '../../../core/config-types.js';
 import { listAllHooks } from '../../../core/hooks/discovery.js';
 
-export async function dispatchHooks(agent: AgentLoopApi, hooksConfig: HooksConfig | undefined): Promise<void> {
+export async function dispatchHooks(
+  agent: AgentLoopApi,
+  hooksConfig: HooksConfig | undefined,
+): Promise<void> {
   const all = listAllHooks(hooksConfig);
   if (all.length === 0) {
-    agent.addNotice('info', 'No hooks configured. Add an `agent.hooks.<EventName>` block to ~/.factory/config.json or .factory/config.json.');
+    agent.addNotice(
+      'info',
+      'No hooks configured. Add an `agent.hooks.<EventName>` block to ~/.factory/config.json or .factory/config.json.',
+    );
     return;
   }
 

@@ -19,7 +19,11 @@ function tmpFile(prefix: string, content?: string): string {
 }
 
 function cleanup(filePath: string): void {
-  try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+  try {
+    fs.unlinkSync(filePath);
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── Read tool ──────────────────────────────────────────────────────────
@@ -167,7 +171,11 @@ describe('Write tool', () => {
     } finally {
       cleanup(fp);
       // Clean up the nested dirs
-      try { fs.rmSync(path.dirname(path.dirname(fp)), { recursive: true }); } catch { /* ignore */ }
+      try {
+        fs.rmSync(path.dirname(path.dirname(fp)), { recursive: true });
+      } catch {
+        /* ignore */
+      }
     }
   });
 
@@ -187,7 +195,10 @@ describe('Write tool', () => {
       for (const bad of [123, { foo: 'bar' }, ['a', 'b'], true]) {
         const result = await write.execute({ file_path: fp, content: bad });
         assert.strictEqual(result.success, false, `should reject ${typeof bad}`);
-        assert.ok(result.output.includes('must be a string'), `wrong message for ${typeof bad}: ${result.output}`);
+        assert.ok(
+          result.output.includes('must be a string'),
+          `wrong message for ${typeof bad}: ${result.output}`,
+        );
       }
     } finally {
       cleanup(fp);
@@ -265,7 +276,11 @@ describe('Edit tool', () => {
     try {
       const wrongIndent = 'if (x) {\n  return 1;\n}';
       const newCode = 'if (x) {\n  return 2;\n}';
-      const result = await edit.execute({ file_path: fp, old_string: wrongIndent, new_string: newCode });
+      const result = await edit.execute({
+        file_path: fp,
+        old_string: wrongIndent,
+        new_string: newCode,
+      });
       assert.strictEqual(result.success, true);
       assert.match(result.output, /auto-corrected/i);
       const updated = fs.readFileSync(fp, 'utf-8');
@@ -293,12 +308,16 @@ describe('Edit tool', () => {
       // File on disk should be unchanged.
       assert.strictEqual(fs.readFileSync(jsonFp, 'utf-8'), before);
     } finally {
-      try { fs.unlinkSync(jsonFp); } catch { /* ignore */ }
+      try {
+        fs.unlinkSync(jsonFp);
+      } catch {
+        /* ignore */
+      }
     }
   });
 
   it('reports ambiguous fuzzy matches without applying a change', async () => {
-    const fileContent = "block A:\n  foo\n    bar\nblock B:\n      foo\n    bar\n";
+    const fileContent = 'block A:\n  foo\n    bar\nblock B:\n      foo\n    bar\n';
     const fp = tmpFile('edit-fuzzy-multi', fileContent);
     try {
       const result = await edit.execute({
@@ -348,9 +367,17 @@ describe('Edit tool', () => {
     for (const newStr of cases) {
       const fp = tmpFile('edit-dollar', 'X: PLACEHOLDER\n');
       try {
-        const result = await edit.execute({ file_path: fp, old_string: 'PLACEHOLDER', new_string: newStr });
+        const result = await edit.execute({
+          file_path: fp,
+          old_string: 'PLACEHOLDER',
+          new_string: newStr,
+        });
         assert.strictEqual(result.success, true, `edit failed for ${newStr}`);
-        assert.strictEqual(fs.readFileSync(fp, 'utf-8'), `X: ${newStr}\n`, `wrong content for ${newStr}`);
+        assert.strictEqual(
+          fs.readFileSync(fp, 'utf-8'),
+          `X: ${newStr}\n`,
+          `wrong content for ${newStr}`,
+        );
       } finally {
         cleanup(fp);
       }
@@ -455,7 +482,10 @@ describe('Glob tool', () => {
   });
 
   it('returns no match message for unmatched pattern', async () => {
-    const result = await glob.execute({ pattern: '*.nonexistent_extension_xyz', path: os.tmpdir() });
+    const result = await glob.execute({
+      pattern: '*.nonexistent_extension_xyz',
+      path: os.tmpdir(),
+    });
     assert.strictEqual(result.success, true);
     assert.ok(result.output.includes('No files matched'));
   });
@@ -510,12 +540,19 @@ describe('Grep tool', () => {
     const lines = Array.from({ length: 1500 }, (_, i) => `match-${i}: hit-marker-zzz`);
     fs.writeFileSync(fp, lines.join('\n') + '\n');
     try {
-      const result = await grep.execute({ pattern: 'hit-marker-zzz', path: tmp, include_content: true });
+      const result = await grep.execute({
+        pattern: 'hit-marker-zzz',
+        path: tmp,
+        include_content: true,
+      });
       assert.strictEqual(result.success, true);
       const outLines = result.output.split('\n');
       // Footer line + cap of 1000 = 1001 lines total.
       assert.strictEqual(outLines.length, 1001, `expected 1001 lines, got ${outLines.length}`);
-      assert.ok(result.output.includes('truncated'), `expected truncation footer in: ${result.output.slice(-200)}`);
+      assert.ok(
+        result.output.includes('truncated'),
+        `expected truncation footer in: ${result.output.slice(-200)}`,
+      );
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -596,7 +633,11 @@ describe('File tool symlink behavior', () => {
     } finally {
       cleanup(link);
       cleanup(outsideFile);
-      try { fs.rmSync(outsideDir, { recursive: true }); } catch { /* ignore */ }
+      try {
+        fs.rmSync(outsideDir, { recursive: true });
+      } catch {
+        /* ignore */
+      }
     }
   });
 });
@@ -643,7 +684,10 @@ describe('Search tools: deny-list enforcement', () => {
       assert.strictEqual(result.success, true);
       assert.ok(result.output.includes('ok.txt'), `expected ok.txt in: ${result.output}`);
       assert.ok(!result.output.includes('leak.txt'), `leaked denied path in: ${result.output}`);
-      assert.ok(result.output.includes('suppressed'), `expected suppression note in: ${result.output}`);
+      assert.ok(
+        result.output.includes('suppressed'),
+        `expected suppression note in: ${result.output}`,
+      );
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -680,7 +724,10 @@ describe('Search tools: deny-list enforcement', () => {
       assert.strictEqual(result.success, true);
       assert.ok(result.output.includes('ok.txt'), `expected ok.txt in: ${result.output}`);
       assert.ok(!result.output.includes('leak.txt'), `leaked denied path in: ${result.output}`);
-      assert.ok(result.output.includes('suppressed'), `expected suppression note in: ${result.output}`);
+      assert.ok(
+        result.output.includes('suppressed'),
+        `expected suppression note in: ${result.output}`,
+      );
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

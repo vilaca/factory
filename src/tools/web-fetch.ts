@@ -30,7 +30,10 @@ const definition: ToolDefinition = {
 async function execute(args: Record<string, unknown>, _ctx?: ToolContext): Promise<ToolResult> {
   const raw = typeof args.url === 'string' ? args.url.trim() : '';
   if (!raw) {
-    return { success: false, output: 'WebFetch: "url" is required and must be a non-empty string.' };
+    return {
+      success: false,
+      output: 'WebFetch: "url" is required and must be a non-empty string.',
+    };
   }
   let parsed: URL;
   try {
@@ -39,7 +42,10 @@ async function execute(args: Record<string, unknown>, _ctx?: ToolContext): Promi
     return { success: false, output: `WebFetch: invalid URL "${raw}".` };
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { success: false, output: `WebFetch: unsupported protocol "${parsed.protocol}". Only http: and https: are allowed.` };
+    return {
+      success: false,
+      output: `WebFetch: unsupported protocol "${parsed.protocol}". Only http: and https: are allowed.`,
+    };
   }
 
   let result;
@@ -68,7 +74,9 @@ async function execute(args: Record<string, unknown>, _ctx?: ToolContext): Promi
   let final = body + truncatedTail;
   if (final.length > MODEL_OUTPUT_CAP) {
     const dropped = final.length - MODEL_OUTPUT_CAP;
-    final = final.slice(0, MODEL_OUTPUT_CAP) + `\n... [truncated ${dropped} chars to fit the WebFetch output cap]`;
+    final =
+      final.slice(0, MODEL_OUTPUT_CAP) +
+      `\n... [truncated ${dropped} chars to fit the WebFetch output cap]`;
   }
 
   // Prefix the final URL on the first line so the model knows where this

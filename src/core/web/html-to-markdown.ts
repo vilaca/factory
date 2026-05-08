@@ -46,14 +46,22 @@ export function decodeEntities(s: string): string {
     if (body.startsWith('#x') || body.startsWith('#X')) {
       const cp = parseInt(body.slice(2), 16);
       if (Number.isFinite(cp)) {
-        try { return String.fromCodePoint(cp); } catch { return m; }
+        try {
+          return String.fromCodePoint(cp);
+        } catch {
+          return m;
+        }
       }
       return m;
     }
     if (body.startsWith('#')) {
       const cp = parseInt(body.slice(1), 10);
       if (Number.isFinite(cp)) {
-        try { return String.fromCodePoint(cp); } catch { return m; }
+        try {
+          return String.fromCodePoint(cp);
+        } catch {
+          return m;
+        }
       }
       return m;
     }
@@ -63,7 +71,15 @@ export function decodeEntities(s: string): string {
 }
 
 const STRIP_TAGS = new Set([
-  'script', 'style', 'nav', 'footer', 'header', 'aside', 'form', 'svg', 'iframe',
+  'script',
+  'style',
+  'nav',
+  'footer',
+  'header',
+  'aside',
+  'form',
+  'svg',
+  'iframe',
 ]);
 
 /** Remove <!-- comments -->, <!doctype>, <?xml?>, and CDATA. */
@@ -102,8 +118,18 @@ function pickContentRegion(html: string): string {
   return html;
 }
 
-interface TagToken { kind: 'tag'; raw: string; name: string; closing: boolean; selfClosing: boolean; attrs: string }
-interface TextToken { kind: 'text'; text: string }
+interface TagToken {
+  kind: 'tag';
+  raw: string;
+  name: string;
+  closing: boolean;
+  selfClosing: boolean;
+  attrs: string;
+}
+interface TextToken {
+  kind: 'text';
+  text: string;
+}
 type Token = TagToken | TextToken;
 
 function tokenize(html: string): Token[] {
@@ -129,8 +155,20 @@ function tokenize(html: string): Token[] {
 }
 
 const VOID_TAGS = new Set([
-  'br', 'hr', 'img', 'input', 'meta', 'link', 'area', 'base', 'col', 'embed',
-  'param', 'source', 'track', 'wbr',
+  'br',
+  'hr',
+  'img',
+  'input',
+  'meta',
+  'link',
+  'area',
+  'base',
+  'col',
+  'embed',
+  'param',
+  'source',
+  'track',
+  'wbr',
 ]);
 
 function getAttr(attrs: string, name: string): string | undefined {
@@ -149,8 +187,12 @@ interface Ctx {
   bufStack: string[][];
 }
 
-function pushBuf(ctx: Ctx): void { ctx.bufStack.push([]); }
-function popBuf(ctx: Ctx): string { return (ctx.bufStack.pop() ?? []).join(''); }
+function pushBuf(ctx: Ctx): void {
+  ctx.bufStack.push([]);
+}
+function popBuf(ctx: Ctx): string {
+  return (ctx.bufStack.pop() ?? []).join('');
+}
 function emit(ctx: Ctx, s: string): void {
   if (ctx.bufStack.length > 0) ctx.bufStack[ctx.bufStack.length - 1].push(s);
   else ctx.out.push(s);
@@ -198,17 +240,24 @@ function openTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
       emit(ctx, '\n\n');
       openStack.push(n);
       return;
-    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6': {
+    case 'h1':
+    case 'h2':
+    case 'h3':
+    case 'h4':
+    case 'h5':
+    case 'h6': {
       const level = parseInt(n[1], 10);
       emit(ctx, '\n\n' + '#'.repeat(level) + ' ');
       openStack.push(n);
       return;
     }
-    case 'strong': case 'b':
+    case 'strong':
+    case 'b':
       emit(ctx, '**');
       openStack.push(n);
       return;
-    case 'em': case 'i':
+    case 'em':
+    case 'i':
       emit(ctx, '*');
       openStack.push(n);
       return;
@@ -254,7 +303,8 @@ function openTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
       emit(ctx, '\n| ');
       openStack.push(n);
       return;
-    case 'td': case 'th':
+    case 'td':
+    case 'th':
       // Cells are separated by " | "; the tr opener already emitted "| ".
       openStack.push(n);
       return;
@@ -283,20 +333,32 @@ function closeTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
   for (let i = openStack.length - 1; i >= 0; i--) {
     const top = openStack[i];
     const topName = top.startsWith('a:') ? 'a' : top;
-    if (topName === n) { idx = i; break; }
+    if (topName === n) {
+      idx = i;
+      break;
+    }
   }
 
   switch (n) {
-    case 'p': case 'div': case 'section':
+    case 'p':
+    case 'div':
+    case 'section':
       emit(ctx, '\n\n');
       break;
-    case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
+    case 'h1':
+    case 'h2':
+    case 'h3':
+    case 'h4':
+    case 'h5':
+    case 'h6':
       emit(ctx, '\n\n');
       break;
-    case 'strong': case 'b':
+    case 'strong':
+    case 'b':
       emit(ctx, '**');
       break;
-    case 'em': case 'i':
+    case 'em':
+    case 'i':
       emit(ctx, '*');
       break;
     case 'code':
@@ -306,7 +368,8 @@ function closeTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
       ctx.inPre = false;
       emit(ctx, '\n```\n\n');
       break;
-    case 'ul': case 'ol':
+    case 'ul':
+    case 'ol':
       ctx.listStack.pop();
       emit(ctx, '\n');
       break;
@@ -327,7 +390,8 @@ function closeTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
     case 'tr':
       emit(ctx, ' |');
       break;
-    case 'td': case 'th':
+    case 'td':
+    case 'th':
       emit(ctx, ' | ');
       break;
     case 'blockquote':
@@ -343,7 +407,10 @@ function tidy(s: string): string {
   let out = s;
   // Trim trailing whitespace on each line (preserve in fenced code blocks
   // is non-trivial; keep it simple — readability beats fidelity).
-  out = out.split('\n').map((l) => l.replace(/[ \t]+$/g, '')).join('\n');
+  out = out
+    .split('\n')
+    .map(l => l.replace(/[ \t]+$/g, ''))
+    .join('\n');
   // Collapse runs of >2 blank lines to exactly 2.
   out = out.replace(/\n{3,}/g, '\n\n');
   // Strip leading/trailing blank lines.

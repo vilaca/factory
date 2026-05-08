@@ -36,7 +36,9 @@ describe('TabsRegistry', () => {
   it('unregister removes the entry and notifies subscribers', () => {
     const r = new TabsRegistry();
     let count = 0;
-    r.subscribe(() => { count++; });
+    r.subscribe(() => {
+      count++;
+    });
     r.register(1, () => stubApi());
     r.register(2, () => stubApi());
     assert.strictEqual(r.size(), 2);
@@ -50,7 +52,9 @@ describe('TabsRegistry', () => {
   it('unregister of an unknown id is a no-op (no notify)', () => {
     const r = new TabsRegistry();
     let count = 0;
-    r.subscribe(() => { count++; });
+    r.subscribe(() => {
+      count++;
+    });
     r.unregister(999);
     assert.strictEqual(count, 0);
   });
@@ -58,7 +62,9 @@ describe('TabsRegistry', () => {
   it('subscribe returns an unsubscribe function', () => {
     const r = new TabsRegistry();
     let count = 0;
-    const unsub = r.subscribe(() => { count++; });
+    const unsub = r.subscribe(() => {
+      count++;
+    });
     r.register(1, () => stubApi());
     const after = count;
     unsub();

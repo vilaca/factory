@@ -30,11 +30,7 @@ after(async () => {
 
 describe('runHook', () => {
   it('is a no-op when no entries are configured', async () => {
-    const result = await runHook(
-      'SessionStart',
-      { foo: 'bar' },
-      { cwd: tmpDir, entries: [] },
-    );
+    const result = await runHook('SessionStart', { foo: 'bar' }, { cwd: tmpDir, entries: [] });
     assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.errors.length, 0);
     assert.strictEqual(result.errorMessage, undefined);
@@ -76,11 +72,7 @@ describe('runHook', () => {
       'malformed.sh',
       `#!/bin/sh\ncat >/dev/null\necho '{not-valid-json'\n`,
     );
-    const result = await runHook(
-      'PostToolUse',
-      {},
-      { cwd: tmpDir, entries: [entry(script)] },
-    );
+    const result = await runHook('PostToolUse', {}, { cwd: tmpDir, entries: [entry(script)] });
     assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.errors.length, 1);
     assert.match(result.errors[0], /malformed JSON/);
@@ -91,11 +83,7 @@ describe('runHook', () => {
       'plain.sh',
       `#!/bin/sh\ncat >/dev/null\necho 'Welcome back'\n`,
     );
-    const result = await runHook(
-      'SessionStart',
-      {},
-      { cwd: tmpDir, entries: [entry(script)] },
-    );
+    const result = await runHook('SessionStart', {}, { cwd: tmpDir, entries: [entry(script)] });
     assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.errors.length, 0);
     assert.strictEqual(result.notice, 'Welcome back');
@@ -104,15 +92,8 @@ describe('runHook', () => {
 
   it('caps an oversized plain-text notice', async () => {
     const longLine = 'x'.repeat(500);
-    const script = await writeScript(
-      'long.sh',
-      `#!/bin/sh\ncat >/dev/null\necho '${longLine}'\n`,
-    );
-    const result = await runHook(
-      'SessionStart',
-      {},
-      { cwd: tmpDir, entries: [entry(script)] },
-    );
+    const script = await writeScript('long.sh', `#!/bin/sh\ncat >/dev/null\necho '${longLine}'\n`);
+    const result = await runHook('SessionStart', {}, { cwd: tmpDir, entries: [entry(script)] });
     assert.strictEqual(result.errors.length, 0);
     assert.ok(result.notice && result.notice.length <= 201, `got ${result.notice?.length}`);
     assert.ok(result.notice?.endsWith('…'));
@@ -129,10 +110,7 @@ describe('runHook', () => {
   });
 
   it('kills the hook on entry-level timeout and reports it as an error', async () => {
-    const script = await writeScript(
-      'sleeper.sh',
-      `#!/bin/sh\nsleep 10\necho '{}'\n`,
-    );
+    const script = await writeScript('sleeper.sh', `#!/bin/sh\nsleep 10\necho '{}'\n`);
     const start = Date.now();
     const result = await runHook(
       'SessionStart',
@@ -174,11 +152,7 @@ describe('runHook', () => {
       'b.sh',
       `#!/bin/sh\ncat >/dev/null\necho '{"errorMessage": "from-b"}'\n`,
     );
-    const result = await runHook(
-      'PreToolUse',
-      {},
-      { cwd: tmpDir, entries: [entry(a), entry(b)] },
-    );
+    const result = await runHook('PreToolUse', {}, { cwd: tmpDir, entries: [entry(a), entry(b)] });
     assert.strictEqual(result.cancel, true);
     assert.strictEqual(result.errorMessage, 'from-b');
   });
@@ -215,16 +189,16 @@ describe('runHook', () => {
         'env-dump.sh',
         `#!/bin/sh\ncat >/dev/null\nprintenv > "${outFile}"\necho '{}'\n`,
       );
-      await runHook(
-        'SessionStart',
-        {},
-        { cwd: tmpDir, entries: [entry(script)] },
-      );
+      await runHook('SessionStart', {}, { cwd: tmpDir, entries: [entry(script)] });
       const captured = await fs.readFile(outFile, 'utf-8');
-      assert.ok(!captured.includes('leaked-token-value'),
-        `FACTORY_-prefixed var leaked into hook env:\n${captured}`);
-      assert.ok(!captured.includes(fakeOther),
-        `non-allowlisted var leaked into hook env:\n${captured}`);
+      assert.ok(
+        !captured.includes('leaked-token-value'),
+        `FACTORY_-prefixed var leaked into hook env:\n${captured}`,
+      );
+      assert.ok(
+        !captured.includes(fakeOther),
+        `non-allowlisted var leaked into hook env:\n${captured}`,
+      );
       // Sanity: PATH IS allowlisted, should still be visible.
       assert.match(captured, /^PATH=/m);
     } finally {
@@ -255,21 +229,14 @@ describe('runHook', () => {
       'env-no-tool.sh',
       `#!/bin/sh\ncat >/dev/null\nprintenv FACTORY_TOOL_NAME > "${outFile}" || echo '<unset>' > "${outFile}"\necho '{}'\n`,
     );
-    await runHook(
-      'SessionStart',
-      {},
-      { cwd: tmpDir, entries: [entry(script)] },
-    );
+    await runHook('SessionStart', {}, { cwd: tmpDir, entries: [entry(script)] });
     const captured = (await fs.readFile(outFile, 'utf-8')).trim();
     assert.strictEqual(captured, '<unset>');
   });
 
   it('passes the event JSON payload on stdin', async () => {
     const outFile = path.join(tmpDir, 'stdin-capture.txt');
-    const script = await writeScript(
-      'capture.sh',
-      `#!/bin/sh\ncat > "${outFile}"\necho '{}'\n`,
-    );
+    const script = await writeScript('capture.sh', `#!/bin/sh\ncat > "${outFile}"\necho '{}'\n`);
     await runHook(
       'UserPromptSubmit',
       { userInput: 'hello world' },
@@ -315,13 +282,13 @@ describe('resolveHooks', () => {
 
   it('skips matcher-bearing entries when matchValue is undefined', () => {
     const config: HooksConfig = {
-      SessionStart: [
-        { matcher: 'anything', command: 'has-matcher' },
-        { command: 'no-matcher' },
-      ],
+      SessionStart: [{ matcher: 'anything', command: 'has-matcher' }, { command: 'no-matcher' }],
     };
     const result = resolveHooks('SessionStart', config);
-    assert.deepStrictEqual(result.map(e => e.command), ['no-matcher']);
+    assert.deepStrictEqual(
+      result.map(e => e.command),
+      ['no-matcher'],
+    );
   });
 });
 
@@ -329,17 +296,17 @@ describe('listAllHooks', () => {
   it('flattens every event into {event, entry} tuples', () => {
     const config: HooksConfig = {
       SessionStart: [{ command: 'start' }],
-      PreToolUse: [
-        { matcher: 'Bash', command: 'pre-bash' },
-        { command: 'pre-all' },
-      ],
+      PreToolUse: [{ matcher: 'Bash', command: 'pre-bash' }, { command: 'pre-all' }],
     };
     const all = listAllHooks(config);
-    assert.deepStrictEqual(all.map(({ event, entry }) => ({ event, command: entry.command })), [
-      { event: 'SessionStart', command: 'start' },
-      { event: 'PreToolUse', command: 'pre-bash' },
-      { event: 'PreToolUse', command: 'pre-all' },
-    ]);
+    assert.deepStrictEqual(
+      all.map(({ event, entry }) => ({ event, command: entry.command })),
+      [
+        { event: 'SessionStart', command: 'start' },
+        { event: 'PreToolUse', command: 'pre-bash' },
+        { event: 'PreToolUse', command: 'pre-all' },
+      ],
+    );
   });
 
   it('returns [] for undefined / empty config', () => {

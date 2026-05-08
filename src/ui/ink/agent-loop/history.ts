@@ -10,10 +10,7 @@ export function recordHistory(refs: { current: RunRefs | null }, text: string): 
   }
 }
 
-export function historyUp(
-  refs: { current: RunRefs | null },
-  currentInput: string,
-): string | null {
+export function historyUp(refs: { current: RunRefs | null }, currentInput: string): string | null {
   if (!refs.current) return null;
   const history = refs.current.pastHistory;
   if (history.length === 0) return null;

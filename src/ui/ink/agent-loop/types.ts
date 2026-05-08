@@ -1,4 +1,10 @@
-import type { AgentConfig, BashRuleConfig, ExperimentalFlags, HooksConfig, RotationEntry } from '../../../core/config-types.js';
+import type {
+  AgentConfig,
+  BashRuleConfig,
+  ExperimentalFlags,
+  HooksConfig,
+  RotationEntry,
+} from '../../../core/config-types.js';
 import type { Conversation } from '../../../core/conversation.js';
 import type { ContextManager } from '../../../core/context-manager.js';
 import type { FileCache } from '../../../core/agent/file-cache.js';
@@ -229,13 +235,17 @@ export interface AgentLoopDeps {
   setCompacting(c: { aggressive: boolean } | null): void;
   setSessionTurns(updater: (n: number) => number): void;
   setSessionToolCalls(updater: (n: number) => number): void;
-  setLastUsage(u: {
-    totalTokens?: number;
-    completionTokens?: number;
-    cachedPromptTokens?: number;
-    cacheCreationTokens?: number;
-    promptTokens?: number;
-  } | undefined): void;
+  setLastUsage(
+    u:
+      | {
+          totalTokens?: number;
+          completionTokens?: number;
+          cachedPromptTokens?: number;
+          cacheCreationTokens?: number;
+          promptTokens?: number;
+        }
+      | undefined,
+  ): void;
   setPermissionRequest(r: PermissionRequestState | undefined): void;
   setPendingToolCall(v: ToolCallSummary | null): void;
   setPlannedCalls(updater: (prev: ToolCallSummary[]) => ToolCallSummary[]): void;

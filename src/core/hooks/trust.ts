@@ -56,7 +56,9 @@ function canonicalize(value: unknown): string {
     return '[' + value.map(canonicalize).join(',') + ']';
   }
   const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).filter(k => obj[k] !== undefined).sort();
+  const keys = Object.keys(obj)
+    .filter(k => obj[k] !== undefined)
+    .sort();
   return '{' + keys.map(k => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
 }
 

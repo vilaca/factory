@@ -12,7 +12,7 @@ export function exitStartupSelection(): never {
 }
 
 export async function promptText(message: string, opts?: { secret?: boolean }): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const output = process.stdout;
     const rl = readline.createInterface({ input: process.stdin, output });
     const masked = rl as readline.Interface & { _writeToOutput?: (value: string) => void };
@@ -31,7 +31,7 @@ export async function promptText(message: string, opts?: { secret?: boolean }): 
       };
     }
 
-    rl.question(message, (answer) => {
+    rl.question(message, answer => {
       masked._writeToOutput = originalWrite;
       rl.close();
       resolve(answer.trim());

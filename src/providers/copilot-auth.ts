@@ -8,9 +8,13 @@ function readPackageVersion(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
     try {
-      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8')) as { version?: string };
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf-8')) as {
+        version?: string;
+      };
       if (pkg.version) return pkg.version;
-    } catch { /* not found here, keep walking */ }
+    } catch {
+      /* not found here, keep walking */
+    }
     dir = dirname(dir);
   }
   return 'unknown';
@@ -118,8 +122,8 @@ export class CopilotAuthManager {
 
     const response = await fetch(`${githubApiBaseUrl()}/copilot_internal/v2/token`, {
       headers: {
-        'Authorization': `token ${this.githubToken}`,
-        'Accept': 'application/json',
+        Authorization: `token ${this.githubToken}`,
+        Accept: 'application/json',
         'Editor-Version': 'vscode/1.99.0',
         'Editor-Plugin-Version': 'copilot-chat/0.26.7',
         'Copilot-Integration-Id': COPILOT_INTEGRATION_ID,
@@ -133,7 +137,7 @@ export class CopilotAuthManager {
       throw new Error(`GitHub Copilot token exchange failed (${response.status}): ${text}`);
     }
 
-    const data = await response.json() as CopilotTokenResponse;
+    const data = (await response.json()) as CopilotTokenResponse;
     if (!data.token) {
       throw new Error('GitHub Copilot token exchange returned no token.');
     }
@@ -141,7 +145,9 @@ export class CopilotAuthManager {
     this.session = {
       token: data.token,
       expiresAtMs: data.expires_at * 1000,
-      apiBaseUrl: normalizeBaseUrl(this.hostOverride ?? data.endpoints?.api ?? 'https://api.githubcopilot.com'),
+      apiBaseUrl: normalizeBaseUrl(
+        this.hostOverride ?? data.endpoints?.api ?? 'https://api.githubcopilot.com',
+      ),
       chatEnabled: data.chat_enabled !== false,
     };
     return this.session;
@@ -149,7 +155,7 @@ export class CopilotAuthManager {
 
   authHeaders(token: string): Record<string, string> {
     return {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Copilot-Integration-Id': COPILOT_INTEGRATION_ID,
       'X-GitHub-Api-Version': COPILOT_API_VERSION,
       'Editor-Version': 'vscode/1.99.0',
@@ -162,7 +168,7 @@ export class CopilotAuthManager {
     const response = await fetch(`${githubLoginBaseUrl()}/login/device/code`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': USER_AGENT,
       },
@@ -180,7 +186,10 @@ export class CopilotAuthManager {
     return response.json() as Promise<DeviceCodeResponse>;
   }
 
-  private async pollForAccessToken(device: DeviceCodeResponse, signal?: AbortSignal): Promise<string> {
+  private async pollForAccessToken(
+    device: DeviceCodeResponse,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const expiresAt = Date.now() + device.expires_in * 1000;
     let intervalSec = Math.max(device.interval, 1);
 
@@ -190,7 +199,7 @@ export class CopilotAuthManager {
       const response = await fetch(`${githubLoginBaseUrl()}/login/oauth/access_token`, {
         method: 'POST',
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': USER_AGENT,
         },
@@ -207,7 +216,7 @@ export class CopilotAuthManager {
         throw new Error(`GitHub device flow token exchange failed (${response.status}): ${text}`);
       }
 
-      const data = await response.json() as AccessTokenResponse;
+      const data = (await response.json()) as AccessTokenResponse;
       if (data.access_token) {
         return data.access_token;
       }
@@ -245,7 +254,9 @@ export function inferCopilotCredentialKind(token?: string): 'github' | 'copilot'
 }
 
 function githubLoginBaseUrl(): string {
-  return normalizeBaseUrl(process.env.FACTORY_GITHUB_LOGIN_BASE_URL ?? DEFAULT_GITHUB_LOGIN_BASE_URL);
+  return normalizeBaseUrl(
+    process.env.FACTORY_GITHUB_LOGIN_BASE_URL ?? DEFAULT_GITHUB_LOGIN_BASE_URL,
+  );
 }
 
 function githubApiBaseUrl(): string {

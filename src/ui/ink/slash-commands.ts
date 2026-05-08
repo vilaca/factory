@@ -84,7 +84,10 @@ export async function dispatchSlashCommand(
           bold: tab.id === tabs.activeId,
         });
       });
-      lines.push({ level: 'info', text: 'Switch with /switch <n|label>, Ctrl+N (next), Ctrl+P (prev). Open with /new or Ctrl+T.' });
+      lines.push({
+        level: 'info',
+        text: 'Switch with /switch <n|label>, Ctrl+N (next), Ctrl+P (prev). Open with /new or Ctrl+T.',
+      });
       agent.addNoticeBlock(lines);
       return true;
     }
@@ -95,7 +98,10 @@ export async function dispatchSlashCommand(
       }
       const a = arg.trim();
       if (!a) {
-        agent.addNotice('warn', `Usage: /switch <n|label>  (1..${tabs.tabs.length}, or tab label / prefix)`);
+        agent.addNotice(
+          'warn',
+          `Usage: /switch <n|label>  (1..${tabs.tabs.length}, or tab label / prefix)`,
+        );
         return true;
       }
       // Pure integer → index switch.
@@ -192,7 +198,10 @@ export async function dispatchSlashCommand(
       } else {
         agent.addNoticeBlock([
           { level: 'info', text: `Current: ${refs.current.provider.name} / ${refs.current.model}` },
-          { level: 'info', text: 'Switch with /pick (or Ctrl+K). Power users: /model <provider>:<model>.' },
+          {
+            level: 'info',
+            text: 'Switch with /pick (or Ctrl+K). Power users: /model <provider>:<model>.',
+          },
         ]);
       }
       return true;
@@ -227,9 +236,12 @@ export async function dispatchSlashCommand(
         return true;
       }
       const next = ctx.toggleFullOutput();
-      agent.addNotice('info', next
-        ? 'Full tool output enabled (going forward).'
-        : 'Full tool output disabled — back to preview.');
+      agent.addNotice(
+        'info',
+        next
+          ? 'Full tool output enabled (going forward).'
+          : 'Full tool output disabled — back to preview.',
+      );
       return true;
     }
     case '/skills':
@@ -260,14 +272,17 @@ function printHelp(agent: AgentLoopApi): void {
     ['/tabs', 'List open tabs'],
     ['/switch <n|label>', 'Switch to tab by index, label, or unique prefix'],
     ['/clear', 'Clear conversation history'],
-    ['/model [<name>]', 'Show current provider/model, or switch model. Accepts <provider>:<model>.'],
+    [
+      '/model [<name>]',
+      'Show current provider/model, or switch model. Accepts <provider>:<model>.',
+    ],
     ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
     ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
     ['/keys [<provider>]', 'Show saved keys with usage / rate-limit / cache-hit counters'],
     ['/stats', 'Cache hit rate, compaction events, largest tool results for the current session'],
     ['/hooks', 'List configured hooks from agent.hooks config'],
     ['/full', 'Toggle full vs preview tool output (going forward)'],
-    ['/cwd [dir]', 'Show or change this tab\'s working directory'],
+    ['/cwd [dir]', "Show or change this tab's working directory"],
     ['/permissions', 'Reset tool permissions'],
     ['/plan', 'Toggle plan mode (or show queue if one exists)'],
     ['/queue', 'Show the queued plan'],
@@ -312,7 +327,7 @@ function handleExpCommand(agent: AgentLoopApi, arg: string): void {
   if (!arg) {
     agent.addNoticeBlock([
       { level: 'cyan', text: 'Experimental flags:' },
-      ...EXPERIMENTAL_FLAG_KEYS.map((key) => ({
+      ...EXPERIMENTAL_FLAG_KEYS.map(key => ({
         level: 'info' as const,
         text: `  ${key.padEnd(18)} ${exp[key] ? 'on' : 'off'}`,
       })),
@@ -352,7 +367,10 @@ function handleSkillsList(agent: AgentLoopApi): void {
   }
   const skills = reg.list();
   if (skills.length === 0) {
-    agent.addNotice('info', 'No skills loaded. Drop .md files into .factory/skills/ (project) or ~/.factory/skills/ (global).');
+    agent.addNotice(
+      'info',
+      'No skills loaded. Drop .md files into .factory/skills/ (project) or ~/.factory/skills/ (global).',
+    );
     return;
   }
   const lines: { level: 'info' | 'cyan'; text: string }[] = [
@@ -361,10 +379,14 @@ function handleSkillsList(agent: AgentLoopApi): void {
   for (const s of skills) {
     const flags = [
       s.alwaysOn ? 'always-on' : null,
-      s.triggers.length > 0 ? `${s.triggers.length} trigger${s.triggers.length === 1 ? '' : 's'}` : null,
+      s.triggers.length > 0
+        ? `${s.triggers.length} trigger${s.triggers.length === 1 ? '' : 's'}`
+        : null,
       s.tools.length > 0 ? `tools=[${s.tools.join(',')}]` : null,
       s.scope,
-    ].filter(Boolean).join(', ');
+    ]
+      .filter(Boolean)
+      .join(', ');
     lines.push({ level: 'cyan', text: `  ${s.name}` });
     lines.push({ level: 'info', text: `    ${s.description}` });
     lines.push({ level: 'info', text: `    [${flags}]` });
@@ -392,7 +414,10 @@ function handleSkillShow(agent: AgentLoopApi, arg: string): void {
   }
   const lines: { level: 'info' | 'cyan'; text: string }[] = [
     { level: 'cyan', text: `${skill.name} — ${skill.description}` },
-    { level: 'info', text: `(source: ${skill.sourcePath}, scope: ${skill.scope}, alwaysOn: ${skill.alwaysOn})` },
+    {
+      level: 'info',
+      text: `(source: ${skill.sourcePath}, scope: ${skill.scope}, alwaysOn: ${skill.alwaysOn})`,
+    },
   ];
   for (const line of skill.body.split('\n')) {
     lines.push({ level: 'info', text: line });

@@ -55,18 +55,24 @@ function sanitizeToolCalls(
   toolCalls: Array<ToolCallMessage | null | undefined>,
 ): ToolCallMessage[] {
   return toolCalls.flatMap(toolCall => {
-    if (!toolCall?.function || typeof toolCall.function.name !== 'string' || !toolCall.function.name) {
+    if (
+      !toolCall?.function ||
+      typeof toolCall.function.name !== 'string' ||
+      !toolCall.function.name
+    ) {
       return [];
     }
 
     const args = toolCall.function.arguments;
-    return [{
-      id: toolCall.id,
-      function: {
-        name: toolCall.function.name,
-        arguments: args && typeof args === 'object' && !Array.isArray(args) ? args : {},
+    return [
+      {
+        id: toolCall.id,
+        function: {
+          name: toolCall.function.name,
+          arguments: args && typeof args === 'object' && !Array.isArray(args) ? args : {},
+        },
       },
-    }];
+    ];
   });
 }
 
@@ -186,9 +192,19 @@ export async function* callModel(
       }
       break; // success
     } catch (err: unknown) {
-      if (signal?.aborted || internal.signal.aborted || (isError(err) && err.name === 'AbortError')) {
+      if (
+        signal?.aborted ||
+        internal.signal.aborted ||
+        (isError(err) && err.name === 'AbortError')
+      ) {
         if (signal) signal.removeEventListener('abort', cascade);
-        return { fullContent, toolCalls: sanitizeToolCalls(toolCalls), lastUsage, aborted: true, doneReason };
+        return {
+          fullContent,
+          toolCalls: sanitizeToolCalls(toolCalls),
+          lastUsage,
+          aborted: true,
+          doneReason,
+        };
       }
       // Rotation: only meaningful when no tokens have streamed yet
       // (otherwise we'd duplicate output on retry).
@@ -207,16 +223,22 @@ export async function* callModel(
               warmthLog,
             });
             if (next) {
-              const fromKey = activeKeyId
-                ? activeKeys.find(k => k.id === activeKeyId)
-                : undefined;
+              const fromKey = activeKeyId ? activeKeys.find(k => k.id === activeKeyId) : undefined;
               yield {
                 type: 'key-rotation',
                 provider: provider.name,
                 from: fromKey
-                  ? { keyId: fromKey.id, fingerprint: keyFingerprint(fromKey.token), ...(fromKey.label ? { label: fromKey.label } : {}) }
+                  ? {
+                      keyId: fromKey.id,
+                      fingerprint: keyFingerprint(fromKey.token),
+                      ...(fromKey.label ? { label: fromKey.label } : {}),
+                    }
                   : null,
-                to: { keyId: next.id, fingerprint: keyFingerprint(next.token), ...(next.label ? { label: next.label } : {}) },
+                to: {
+                  keyId: next.id,
+                  fingerprint: keyFingerprint(next.token),
+                  ...(next.label ? { label: next.label } : {}),
+                },
                 reason,
               };
               triedKeyIds.add(next.id);
@@ -238,8 +260,10 @@ export async function* callModel(
           // ─── Tier 2: advance to the next entry in the chain ────────
           if (
             rotation.modelsEnabled !== false &&
-            rotation.chain && rotation.chain.length > 0 &&
-            rotation.loadKeysForProvider && rotation.withTuple
+            rotation.chain &&
+            rotation.chain.length > 0 &&
+            rotation.loadKeysForProvider &&
+            rotation.withTuple
           ) {
             const advance = await advanceTuple(rotation, triedTuples);
             if (advance) {
@@ -278,7 +302,9 @@ export async function* callModel(
           //  the user; we just await whatever entry it returns.
           if (rotation.promptForFallback && rotation.loadKeysForProvider && rotation.withTuple) {
             const promptedEntry = await rotation.promptForFallback({
-              provider: provider.name, model, reason,
+              provider: provider.name,
+              model,
+              reason,
             });
             if (promptedEntry) {
               const promptedKey = `${promptedEntry.provider}:${promptedEntry.model}`;
@@ -332,10 +358,16 @@ export async function* callModel(
       // Existing isStreamish fallback: stream-only failures and transient
       // connection drops retry non-streamed once on the same provider.
       const msg = errorMessage(err);
-      const isStreamish = msg.includes('stream') || msg.includes('connection dropped') ||
-        msg.includes('socket hang up') || msg.includes('fetch failed');
+      const isStreamish =
+        msg.includes('stream') ||
+        msg.includes('connection dropped') ||
+        msg.includes('socket hang up') ||
+        msg.includes('fetch failed');
       if (isStreamish) {
-        const response = await provider.chatNoStream(model, annotated, tools, { signal, cacheTools: true });
+        const response = await provider.chatNoStream(model, annotated, tools, {
+          signal,
+          cacheTools: true,
+        });
         fullContent = response.content ?? '';
         toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
         if (response.usage) {

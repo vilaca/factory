@@ -69,7 +69,7 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
     // rm with -r/-R/--recursive AND -f/--force, targeting / or /* or
     // common dangerous absolute roots. Tolerates flag ordering and
     // long-form variants.
-    test: (cmd) => {
+    test: cmd => {
       if (!/\brm\b/.test(cmd)) return false;
       const hasRecursive = /(-[a-zA-Z]*r[a-zA-Z]*|--recursive)/.test(cmd);
       const hasForce = /(-[a-zA-Z]*f[a-zA-Z]*|--force)/.test(cmd);
@@ -81,7 +81,7 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
   },
   {
     id: 'fork-bomb',
-    test: (cmd) => /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(cmd),
+    test: cmd => /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(cmd),
     reason: 'fork bomb',
   },
   {
@@ -89,7 +89,7 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
     // curl/wget/fetch piped into sh/bash/zsh — the canonical
     // remote-code-execution pattern. We block both the `| sh` and
     // `$(curl ...)` execution forms.
-    test: (cmd) => {
+    test: cmd => {
       const fetcher = /\b(curl|wget|fetch)\b[^|;&`]*/;
       const intoShell = /\|\s*(sh|bash|zsh|ksh|fish|dash)\b/;
       if (fetcher.test(cmd) && intoShell.test(cmd)) return true;
@@ -102,31 +102,33 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
   },
   {
     id: 'dd-to-device',
-    test: (cmd) => /\bdd\b[^|;&]*\bof=\/dev\/(sd|nvme|hd|vd|disk|rdisk)/.test(cmd),
+    test: cmd => /\bdd\b[^|;&]*\bof=\/dev\/(sd|nvme|hd|vd|disk|rdisk)/.test(cmd),
     reason: 'raw write to a block device (data destruction)',
   },
   {
     id: 'mkfs',
-    test: (cmd) => /\bmkfs(\.[a-z0-9]+)?\b\s+\/dev\//.test(cmd),
+    test: cmd => /\bmkfs(\.[a-z0-9]+)?\b\s+\/dev\//.test(cmd),
     reason: 'reformatting a filesystem',
   },
   {
     id: 'chmod-777-root',
-    test: (cmd) => /\bchmod\b[^|;&]*\s(-R\s+)?7{3,4}\s+(\/|\/\*|~|\$HOME)(\s|$)/.test(cmd),
+    test: cmd => /\bchmod\b[^|;&]*\s(-R\s+)?7{3,4}\s+(\/|\/\*|~|\$HOME)(\s|$)/.test(cmd),
     reason: 'world-writable on filesystem root or $HOME',
   },
   {
     id: 'redirect-to-device',
-    test: (cmd) => />\s*\/dev\/(sd|nvme|hd|vd|disk|rdisk)[a-z0-9]/.test(cmd),
+    test: cmd => />\s*\/dev\/(sd|nvme|hd|vd|disk|rdisk)[a-z0-9]/.test(cmd),
     reason: 'shell redirect into a raw block device',
   },
   {
     id: 'force-push-protected',
     // git push --force / -f targeting main/master/release branches.
     // Common when an agent "fixes" a botched merge.
-    test: (cmd) => {
+    test: cmd => {
       if (!/\bgit\s+push\b/.test(cmd)) return false;
-      const forced = /(--force(?!-with-lease)|--force-with-lease=[^ ]*|(?<![\w-])-f(?![\w-]))/.test(cmd);
+      const forced = /(--force(?!-with-lease)|--force-with-lease=[^ ]*|(?<![\w-])-f(?![\w-]))/.test(
+        cmd,
+      );
       if (!forced) return false;
       return /\b(main|master|release|prod|production)\b/.test(cmd);
     },
@@ -134,7 +136,10 @@ const FORBIDDEN: readonly ForbiddenPattern[] = [
   },
 ];
 
-export function matchUserRule(cmd: string, rules: BashRule[]): { rule: BashRule; index: number } | null {
+export function matchUserRule(
+  cmd: string,
+  rules: BashRule[],
+): { rule: BashRule; index: number } | null {
   for (let i = 0; i < rules.length; i++) {
     if (globToRegex(rules[i].pattern).test(cmd)) {
       return { rule: rules[i], index: i };
@@ -160,7 +165,8 @@ export function evaluateBash(cmd: string, userRules: BashRule[] = []): BashEvalu
   if (forbidden) {
     return {
       decision: 'deny',
-      reason: `Bash command blocked by built-in safety policy: ${forbidden.reason}. ` +
+      reason:
+        `Bash command blocked by built-in safety policy: ${forbidden.reason}. ` +
         `This rule cannot be overridden — modify the request or run the command outside the agent.`,
       source: `forbidden:${forbidden.id}`,
     };
@@ -171,8 +177,10 @@ export function evaluateBash(cmd: string, userRules: BashRule[] = []): BashEvalu
     if (rule.decision === 'deny') {
       return {
         decision: 'deny',
-        reason: `Bash command blocked by user rule "${rule.pattern}"` +
-          (rule.note ? ` (${rule.note})` : '') + '.',
+        reason:
+          `Bash command blocked by user rule "${rule.pattern}"` +
+          (rule.note ? ` (${rule.note})` : '') +
+          '.',
         source: `user:${index}`,
       };
     }

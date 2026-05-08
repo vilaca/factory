@@ -37,29 +37,35 @@ function handleShow(req: http.IncomingMessage, res: http.ServerResponse): void {
   req.on('data', () => {});
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      modelfile: '',
-      parameters: '',
-      template: '',
-      details: { format: 'gguf', family: 'test', parameter_size: '7B' },
-      capabilities: modelCapabilities,
-    }));
+    res.end(
+      JSON.stringify({
+        modelfile: '',
+        parameters: '',
+        template: '',
+        details: { format: 'gguf', family: 'test', parameter_size: '7B' },
+        capabilities: modelCapabilities,
+      }),
+    );
   });
 }
 
 function handleTags(_req: http.IncomingMessage, res: http.ServerResponse): void {
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({
-    models: [
-      { name: 'test-model:latest', size: 1000000, digest: 'abc123' },
-      { name: 'another-model:latest', size: 2000000, digest: 'def456' },
-    ],
-  }));
+  res.end(
+    JSON.stringify({
+      models: [
+        { name: 'test-model:latest', size: 1000000, digest: 'abc123' },
+        { name: 'another-model:latest', size: 2000000, digest: 'def456' },
+      ],
+    }),
+  );
 }
 
 function handleChat(req: http.IncomingMessage, res: http.ServerResponse): void {
   let body = '';
-  req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+  req.on('data', (chunk: Buffer) => {
+    body += chunk.toString();
+  });
   req.on('end', () => {
     let parsed: any;
     try {
@@ -116,12 +122,14 @@ function handleChat(req: http.IncomingMessage, res: http.ServerResponse): void {
         message.tool_calls = mockResp.tool_calls;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        model: parsed.model,
-        created_at: new Date().toISOString(),
-        message,
-        done: true,
-      }));
+      res.end(
+        JSON.stringify({
+          model: parsed.model,
+          created_at: new Date().toISOString(),
+          message,
+          done: true,
+        }),
+      );
     }
   });
 }
@@ -144,7 +152,7 @@ export function createMockServer(): http.Server {
 }
 
 export function startMockServer(port = 0): Promise<{ server: http.Server; port: number }> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const server = createMockServer();
     server.listen(port, '127.0.0.1', () => {
       const addr = server.address() as { port: number };
@@ -154,7 +162,7 @@ export function startMockServer(port = 0): Promise<{ server: http.Server; port: 
 }
 
 export function stopMockServer(server: http.Server): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     server.close(() => resolve());
   });
 }

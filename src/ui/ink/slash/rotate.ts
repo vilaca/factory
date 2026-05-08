@@ -164,11 +164,17 @@ function showChain(agent: AgentLoopApi): void {
     lines.push({ level: 'info', text: '' });
     lines.push({ level: 'info', text: 'Other configured chains:' });
     if (hasOtherDefault) {
-      lines.push({ level: 'info', text: `  default                                 (${refs.rotation.default.length} entr${refs.rotation.default.length === 1 ? 'y' : 'ies'})` });
+      lines.push({
+        level: 'info',
+        text: `  default                                 (${refs.rotation.default.length} entr${refs.rotation.default.length === 1 ? 'y' : 'ies'})`,
+      });
     }
     for (const k of otherKeys.sort()) {
       const list = refs.rotation.overrides[k] ?? [];
-      lines.push({ level: 'info', text: `  ${k.padEnd(40)} (${list.length} entr${list.length === 1 ? 'y' : 'ies'})` });
+      lines.push({
+        level: 'info',
+        text: `  ${k.padEnd(40)} (${list.length} entr${list.length === 1 ? 'y' : 'ies'})`,
+      });
     }
   }
 
@@ -176,11 +182,19 @@ function showChain(agent: AgentLoopApi): void {
   if (!refs.rotation.keysEnabled && !refs.rotation.modelsEnabled) {
     lines.push({ level: 'warn', text: '  Rotation is fully disabled (--no-rotate).' });
   } else {
-    if (!refs.rotation.keysEnabled) lines.push({ level: 'warn', text: '  Key rotation disabled (--no-rotate-keys).' });
-    if (!refs.rotation.modelsEnabled) lines.push({ level: 'warn', text: '  Model rotation disabled (--no-rotate-models).' });
+    if (!refs.rotation.keysEnabled)
+      lines.push({ level: 'warn', text: '  Key rotation disabled (--no-rotate-keys).' });
+    if (!refs.rotation.modelsEnabled)
+      lines.push({ level: 'warn', text: '  Model rotation disabled (--no-rotate-models).' });
   }
-  lines.push({ level: 'info', text: '  Add: /rotate add <provider:model> · Remove: /rotate remove <n>' });
-  lines.push({ level: 'info', text: '  Edit default: /rotate add --default ... · Edit other scope: /rotate add --for <p:m> ...' });
+  lines.push({
+    level: 'info',
+    text: '  Add: /rotate add <provider:model> · Remove: /rotate remove <n>',
+  });
+  lines.push({
+    level: 'info',
+    text: '  Edit default: /rotate add --default ... · Edit other scope: /rotate add --for <p:m> ...',
+  });
   lines.push({ level: 'info', text: '  Reset to the head of the chain: /rotate refresh' });
 
   agent.addNoticeBlock(lines);
@@ -235,10 +249,8 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
         // No keys loadable — refresh stays on whatever credential the
         // runtime resolves at the next call.
       }
-      const drifted =
-        refs.provider.name !== primary.provider || refs.model !== primary.model;
-      const keyChanged =
-        firstKeyId !== undefined && firstKeyId !== refs.activeKeyId;
+      const drifted = refs.provider.name !== primary.provider || refs.model !== primary.model;
+      const keyChanged = firstKeyId !== undefined && firstKeyId !== refs.activeKeyId;
       if (drifted || keyChanged) {
         await agent.setProviderByName(primary.provider, primary.model, firstKeyId);
         // setProviderByName re-set primary to the same tuple; the explicit
@@ -273,7 +285,10 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
       }
       const entry = resolveEntry(flags.rest[0]!, agent);
       if (!entry) {
-        agent.addNotice('warn', `Could not parse "${flags.rest[0]}". Expected <provider>:<model> or a bare model when a primary is active.`);
+        agent.addNotice(
+          'warn',
+          `Could not parse "${flags.rest[0]}". Expected <provider>:<model> or a bare model when a primary is active.`,
+        );
         return;
       }
       const err = validateEntry(entry);
@@ -287,7 +302,9 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
         return;
       }
       const current = readChain(agent, target);
-      const dupIndex = current.findIndex(e => e.provider === entry.provider && e.model === entry.model);
+      const dupIndex = current.findIndex(
+        e => e.provider === entry.provider && e.model === entry.model,
+      );
       if (dupIndex >= 0) {
         agent.addNotice('warn', `Already in chain at position ${dupIndex + 1}.`);
         return;
@@ -298,10 +315,16 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
       const scope = activeScope(agent);
       const isSelfRef = scope && entry.provider === scope.provider && entry.model === scope.model;
       const lines: { level: 'info' | 'warn'; text: string }[] = [
-        { level: 'info', text: `Added ${entry.provider} / ${entry.model} to ${describeTarget(target)} chain.` },
+        {
+          level: 'info',
+          text: `Added ${entry.provider} / ${entry.model} to ${describeTarget(target)} chain.`,
+        },
       ];
       if (isSelfRef) {
-        lines.push({ level: 'warn', text: '  Note: this is your active selection; rotation only fires when it fails.' });
+        lines.push({
+          level: 'warn',
+          text: '  Note: this is your active selection; rotation only fires when it fails.',
+        });
       }
       agent.addNoticeBlock(lines);
       return;
@@ -310,7 +333,10 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
     case 'insert': {
       const flags = parseFlags(rest);
       if (flags.rest.length !== 2) {
-        agent.addNotice('warn', 'Usage: /rotate insert [--default | --for <p:m>] <n> <provider:model>');
+        agent.addNotice(
+          'warn',
+          'Usage: /rotate insert [--default | --for <p:m>] <n> <provider:model>',
+        );
         return;
       }
       const n = parseIndex(flags.rest[0]!);
@@ -342,7 +368,10 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
       const next = [...current.slice(0, idx), entry, ...current.slice(idx)];
       writeChain(agent, target, next);
       await persist(agent);
-      agent.addNotice('info', `Inserted ${entry.provider} / ${entry.model} at position ${idx + 1} (${describeTarget(target)}).`);
+      agent.addNotice(
+        'info',
+        `Inserted ${entry.provider} / ${entry.model} at position ${idx + 1} (${describeTarget(target)}).`,
+      );
       return;
     }
 
@@ -366,7 +395,10 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
       const removed = current[n - 1]!;
       writeChain(agent, target, [...current.slice(0, n - 1), ...current.slice(n)]);
       await persist(agent);
-      agent.addNotice('info', `Removed ${removed.provider} / ${removed.model} from ${describeTarget(target)} chain.`);
+      agent.addNotice(
+        'info',
+        `Removed ${removed.provider} / ${removed.model} from ${describeTarget(target)} chain.`,
+      );
       return;
     }
 
@@ -398,6 +430,9 @@ export async function dispatchRotate(arg: string, agent: AgentLoopApi): Promise<
     }
 
     default:
-      agent.addNotice('warn', `Unknown /rotate subcommand "${sub}". Try: add, insert, remove, move, clear, refresh (or no args to view).`);
+      agent.addNotice(
+        'warn',
+        `Unknown /rotate subcommand "${sub}". Try: add, insert, remove, move, clear, refresh (or no args to view).`,
+      );
   }
 }

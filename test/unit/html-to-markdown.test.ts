@@ -63,7 +63,9 @@ describe('htmlToMarkdown', () => {
   });
 
   it('converts strong/b to ** and em/i to *', () => {
-    const md = htmlToMarkdown('<p><strong>bold</strong> and <em>italic</em> and <b>B</b> <i>I</i></p>');
+    const md = htmlToMarkdown(
+      '<p><strong>bold</strong> and <em>italic</em> and <b>B</b> <i>I</i></p>',
+    );
     assert.match(md, /\*\*bold\*\*/);
     assert.match(md, /\*italic\*/);
     assert.match(md, /\*\*B\*\*/);
@@ -85,8 +87,8 @@ describe('htmlToMarkdown', () => {
 
   it('strips <script> and <style> blocks', () => {
     const md = htmlToMarkdown(
-      '<html><head><style>.a{color:red}</style><script>alert(1)</script></head>'
-        + '<body><p>visible</p></body></html>',
+      '<html><head><style>.a{color:red}</style><script>alert(1)</script></head>' +
+        '<body><p>visible</p></body></html>',
     );
     assert.match(md, /visible/);
     assert.doesNotMatch(md, /alert/);
@@ -95,9 +97,9 @@ describe('htmlToMarkdown', () => {
 
   it('strips nav/header/footer/aside/form/svg/iframe', () => {
     const md = htmlToMarkdown(
-      '<body><nav>NAV</nav><header>HEAD</header><aside>SIDE</aside>'
-        + '<form><input/></form><svg><circle/></svg><iframe src=x></iframe>'
-        + '<p>keep</p><footer>FOOT</footer></body>',
+      '<body><nav>NAV</nav><header>HEAD</header><aside>SIDE</aside>' +
+        '<form><input/></form><svg><circle/></svg><iframe src=x></iframe>' +
+        '<p>keep</p><footer>FOOT</footer></body>',
     );
     assert.match(md, /keep/);
     for (const stripped of ['NAV', 'HEAD', 'SIDE', 'FOOT']) {
