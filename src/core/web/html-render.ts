@@ -24,7 +24,7 @@ function popBuf(ctx: Ctx): string {
   return (ctx.bufStack.pop() ?? []).join('');
 }
 function emit(ctx: Ctx, s: string): void {
-  if (ctx.bufStack.length > 0) ctx.bufStack[ctx.bufStack.length - 1].push(s);
+  if (ctx.bufStack.length > 0) ctx.bufStack[ctx.bufStack.length - 1]!.push(s);
   else ctx.out.push(s);
 }
 
@@ -50,7 +50,7 @@ function openTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
     case 'h4':
     case 'h5':
     case 'h6': {
-      const level = parseInt(n[1], 10);
+      const level = parseInt(n[1]!, 10);
       emit(ctx, '\n\n' + '#'.repeat(level) + ' ');
       openStack.push(n);
       return;
@@ -136,7 +136,7 @@ function closeTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
   // Tolerate mismatched HTML by popping unknown openers we can't match.
   let idx = -1;
   for (let i = openStack.length - 1; i >= 0; i--) {
-    const top = openStack[i];
+    const top = openStack[i]!;
     const topName = top.startsWith('a:') ? 'a' : top;
     if (topName === n) {
       idx = i;
@@ -185,7 +185,7 @@ function closeTag(t: TagToken, ctx: Ctx, openStack: string[]): void {
       const text = popBuf(ctx);
       let href = '';
       if (idx >= 0) {
-        const opener = openStack[idx];
+        const opener = openStack[idx]!;
         href = opener.startsWith('a:') ? opener.slice(2) : '';
       }
       if (href) emit(ctx, `[${text.trim()}](${href})`);

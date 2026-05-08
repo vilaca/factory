@@ -198,12 +198,12 @@ export class GoogleAiStudioProvider implements Provider {
         throw new Error(`${PROVIDER_NAME} API error ${res.status}: ${await res.text()}`);
       }
 
-      const data = (await res.json()) as any;
-      const pageModels = Array.isArray(data?.models) ? data.models : [];
+      const data = (await res.json()) as { models?: unknown[]; nextPageToken?: string };
+      const pageModels: unknown[] = Array.isArray(data?.models) ? data.models : [];
       // Note: we intentionally keep only generateContent-capable text/chat
       // models and drop embeddings, image/video, speech/music, and live APIs.
-      const supportedModels = pageModels.filter((item: any) =>
-        isSupportedGoogleAiStudioModel(item),
+      const supportedModels = pageModels.filter(
+        (item): item is GoogleAiStudioModelItem => isSupportedGoogleAiStudioModel(item),
       );
       appendProviderLog({
         provider: 'googleaistudio',
@@ -218,13 +218,16 @@ export class GoogleAiStudioProvider implements Provider {
           action: 'sample-model-ids',
           detail: pageModels
             .slice(0, 10)
-            .map((item: any) => item?.baseModelId ?? item?.name ?? '<unknown>')
+            .map(item => {
+              const i = (item ?? {}) as GoogleAiStudioModelItem;
+              return i.baseModelId ?? i.name ?? '<unknown>';
+            })
             .join(', '),
         });
       }
       models.push(
-        ...supportedModels.map((item: any) => ({
-          name: item.name,
+        ...supportedModels.map(item => ({
+          name: item.name!,
           baseModelId: getGoogleAiStudioModelId(item)!,
           displayName: typeof item.displayName === 'string' ? item.displayName : undefined,
           description: typeof item.description === 'string' ? item.description : undefined,
@@ -252,19 +255,31 @@ export class GoogleAiStudioProvider implements Provider {
   }
 }
 
-function isSupportedGoogleAiStudioModel(item: any): boolean {
-  if (!item || typeof item !== 'object') return false;
-  const modelId = getGoogleAiStudioModelId(item);
-  if (typeof item.name !== 'string' || !modelId) return false;
+interface GoogleAiStudioModelItem {
+  name?: string;
+  baseModelId?: string;
+  displayName?: string;
+  description?: string;
+  inputTokenLimit?: number;
+  outputTokenLimit?: number;
+  supportedGenerationMethods?: unknown[];
+  thinking?: boolean;
+}
 
-  const methods = Array.isArray(item.supportedGenerationMethods)
-    ? item.supportedGenerationMethods.filter(
+function isSupportedGoogleAiStudioModel(item: unknown): item is GoogleAiStudioModelItem {
+  if (!item || typeof item !== 'object') return false;
+  const i = item as GoogleAiStudioModelItem;
+  const modelId = getGoogleAiStudioModelId(i);
+  if (typeof i.name !== 'string' || !modelId) return false;
+
+  const methods = Array.isArray(i.supportedGenerationMethods)
+    ? i.supportedGenerationMethods.filter(
         (value: unknown): value is string => typeof value === 'string',
       )
     : [];
   if (!methods.includes('generateContent')) return false;
 
-  const searchableId = `${item.name} ${modelId} ${item.displayName ?? ''}`.toLowerCase();
+  const searchableId = `${i.name} ${modelId} ${i.displayName ?? ''}`.toLowerCase();
   if (/(embedding|imagen|veo|lyria|robotics)/i.test(searchableId)) {
     return false;
   }
@@ -275,11 +290,11 @@ function isSupportedGoogleAiStudioModel(item: any): boolean {
   return true;
 }
 
-function getGoogleAiStudioModelId(item: any): string | null {
-  if (typeof item?.baseModelId === 'string' && item.baseModelId) {
+function getGoogleAiStudioModelId(item: GoogleAiStudioModelItem): string | null {
+  if (typeof item.baseModelId === 'string' && item.baseModelId) {
     return item.baseModelId;
   }
-  if (typeof item?.name === 'string' && item.name.startsWith('models/')) {
+  if (typeof item.name === 'string' && item.name.startsWith('models/')) {
     return item.name.slice('models/'.length);
   }
   return null;

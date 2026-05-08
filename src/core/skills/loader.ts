@@ -175,7 +175,7 @@ export function parseFrontmatter(text: string): Record<string, FmValue> {
   const lines = text.split(/\r?\n/);
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
     if (line.trim() === '' || line.trim().startsWith('#')) {
       i++;
       continue;
@@ -184,7 +184,7 @@ export function parseFrontmatter(text: string): Record<string, FmValue> {
     if (!m) {
       throw new Error(`malformed frontmatter line: "${line}"`);
     }
-    const key = m[1];
+    const key = m[1]!;
     const rest = m[2];
 
     if (rest === '' || rest === undefined) {
@@ -192,7 +192,7 @@ export function parseFrontmatter(text: string): Record<string, FmValue> {
       const list: string[] = [];
       i++;
       while (i < lines.length) {
-        const next = lines[i];
+        const next = lines[i]!;
         if (/^\s*-\s+/.test(next)) {
           const value = next.replace(/^\s*-\s+/, '');
           list.push(parseScalar(value));

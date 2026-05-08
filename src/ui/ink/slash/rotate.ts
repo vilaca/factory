@@ -36,11 +36,12 @@ interface FlagParse {
 function parseFlags(parts: string[]): FlagParse {
   const out: FlagParse = { forDefault: false, rest: [] };
   for (let i = 0; i < parts.length; i++) {
-    const a = parts[i];
+    const a = parts[i]!;
     if (a === '--default') {
       out.forDefault = true;
     } else if (a === '--for') {
-      out.forScope = parts[++i];
+      const next = parts[++i];
+      if (next !== undefined) out.forScope = next;
     } else {
       out.rest.push(a);
     }

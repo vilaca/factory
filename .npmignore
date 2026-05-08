@@ -1,0 +1,38 @@
+# Defense in depth on top of package.json `files` allowlist.
+# Anything that should ship is in `dist/`, README.md, LICENSE.
+
+src/
+test/
+dist-test/
+coverage/
+docs/
+node_modules/
+
+# Project files not relevant to consumers
+IDEAS.md
+SECURITY.md
+CONTRIBUTING.md
+ARCHITECTURE.md
+CHANGELOG.md
+.editorconfig
+.prettierrc.json
+.prettierignore
+.nvmrc
+.gitattributes
+.gitignore
+.c8rc.json
+eslint.config.js
+tsconfig.json
+tsconfig.test.json
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# CI/dev tooling
+.github/
+.claude/
+.vscode/
+.idea/
+
+# Misc
+*.log
+.DS_Store

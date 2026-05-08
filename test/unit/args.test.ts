@@ -1,19 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { printUsage } from '../../src/cli/args.js';
+import { parseArgs, printUsage, printVersion } from '../../src/cli/args.js';
 
-function captureUsage(): string {
+function captureConsoleLog(fn: () => void): string {
   const original = console.log;
   const chunks: string[] = [];
   console.log = (...args: unknown[]) => {
     chunks.push(args.map(a => String(a)).join(' '));
   };
   try {
-    printUsage();
+    fn();
   } finally {
     console.log = original;
   }
   return chunks.join('\n');
+}
+
+function captureUsage(): string {
+  return captureConsoleLog(printUsage);
 }
 
 describe('printUsage', () => {
@@ -34,5 +38,36 @@ describe('printUsage', () => {
     const output = captureUsage();
     assert.ok(output.includes('copilot'), 'expected "copilot" in usage output');
     assert.ok(output.includes('gpt-4.1'), 'expected "gpt-4.1" copilot example');
+  });
+
+  it('shows version, --version, and --debug in usage output', () => {
+    const output = captureUsage();
+    assert.ok(/v\d/.test(output), 'expected version number in usage banner');
+    assert.ok(output.includes('--version'), 'expected --version flag in help');
+    assert.ok(output.includes('--debug'), 'expected --debug flag in help');
+  });
+});
+
+describe('printVersion', () => {
+  it('prints "factory <semver>" with no extra noise', () => {
+    const output = captureConsoleLog(printVersion);
+    assert.match(output, /^factory \d+\.\d+\.\d+(-[\w.]+)?$/);
+  });
+});
+
+describe('parseArgs', () => {
+  it('parses --version and -V', () => {
+    assert.strictEqual(parseArgs(['--version']).version, true);
+    assert.strictEqual(parseArgs(['-V']).version, true);
+  });
+
+  it('parses --debug', () => {
+    assert.strictEqual(parseArgs(['--debug']).debug, true);
+    assert.strictEqual(parseArgs([]).debug, undefined);
+  });
+
+  it('parses --help and -h', () => {
+    assert.strictEqual(parseArgs(['--help']).help, true);
+    assert.strictEqual(parseArgs(['-h']).help, true);
   });
 });

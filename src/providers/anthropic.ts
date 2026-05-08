@@ -3,11 +3,19 @@ import type {
   Provider,
   ChatMessage,
   ChatChunk,
+  TokenUsage,
   ToolDefinition,
   ToolCallMessage,
   ProviderCapabilities,
   ChatOptions,
 } from './types.js';
+
+type StreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
+type NonStreamingParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
+type MessageParam = Anthropic.Messages.MessageParam;
+type ToolUnion = Anthropic.Messages.ToolUnion;
+type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
+type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
 
 export class AnthropicProvider implements Provider {
   name = 'anthropic';
@@ -74,17 +82,16 @@ export class AnthropicProvider implements Provider {
   ): AsyncGenerator<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
 
-    const params: any = {
+    const params: StreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? 8192,
-      system: system ?? undefined,
       messages: msgs,
       stream: true,
+      ...(system !== null ? { system } : {}),
+      ...(tools && tools.length > 0
+        ? { tools: buildAnthropicTools(tools, options?.cacheTools) }
+        : {}),
     };
-
-    if (tools && tools.length > 0) {
-      params.tools = buildAnthropicTools(tools, options?.cacheTools);
-    }
 
     const stream = this.client.messages.stream(params);
 
@@ -92,12 +99,12 @@ export class AnthropicProvider implements Provider {
 
     for await (const event of stream) {
       if (event.type === 'content_block_start') {
-        const block = event.content_block as any;
+        const block = event.content_block;
         if (block.type === 'tool_use') {
           currentToolCall = { id: block.id, name: block.name, rawArgs: '' };
         }
       } else if (event.type === 'content_block_delta') {
-        const delta = event.delta as any;
+        const delta = event.delta;
         if (delta.type === 'text_delta') {
           yield { content: delta.text };
         } else if (delta.type === 'input_json_delta' && currentToolCall) {
@@ -124,19 +131,19 @@ export class AnthropicProvider implements Provider {
       } else if (event.type === 'message_stop') {
         yield { done: true };
       } else if (event.type === 'message_delta') {
-        const delta = event as any;
-        if (delta.usage) {
-          const cacheRead = delta.usage.cache_read_input_tokens;
-          const cacheCreation = delta.usage.cache_creation_input_tokens;
-          const usage: any = {
-            promptTokens: delta.usage.input_tokens ?? 0,
-            completionTokens: delta.usage.output_tokens ?? 0,
-            totalTokens: (delta.usage.input_tokens ?? 0) + (delta.usage.output_tokens ?? 0),
-          };
-          if (typeof cacheRead === 'number') usage.cachedPromptTokens = cacheRead;
-          if (typeof cacheCreation === 'number') usage.cacheCreationTokens = cacheCreation;
-          yield { done: true, usage };
-        }
+        const u = event.usage;
+        const usage: TokenUsage = {
+          promptTokens: u.input_tokens ?? 0,
+          completionTokens: u.output_tokens ?? 0,
+          totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+          ...(typeof u.cache_read_input_tokens === 'number'
+            ? { cachedPromptTokens: u.cache_read_input_tokens }
+            : {}),
+          ...(typeof u.cache_creation_input_tokens === 'number'
+            ? { cacheCreationTokens: u.cache_creation_input_tokens }
+            : {}),
+        };
+        yield { done: true, usage };
       }
     }
   }
@@ -149,16 +156,15 @@ export class AnthropicProvider implements Provider {
   ): Promise<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
 
-    const params: any = {
+    const params: NonStreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? 8192,
-      system: system ?? undefined,
       messages: msgs,
+      ...(system !== null ? { system } : {}),
+      ...(tools && tools.length > 0
+        ? { tools: buildAnthropicTools(tools, options?.cacheTools) }
+        : {}),
     };
-
-    if (tools && tools.length > 0) {
-      params.tools = buildAnthropicTools(tools, options?.cacheTools);
-    }
 
     const response = await this.client.messages.create(params);
 
@@ -179,16 +185,18 @@ export class AnthropicProvider implements Provider {
       }
     }
 
-    const respUsage = (response as any).usage ?? {};
-    const cacheRead = respUsage.cache_read_input_tokens;
-    const cacheCreation = respUsage.cache_creation_input_tokens;
-    const usage: any = {
-      promptTokens: respUsage.input_tokens ?? 0,
-      completionTokens: respUsage.output_tokens ?? 0,
-      totalTokens: (respUsage.input_tokens ?? 0) + (respUsage.output_tokens ?? 0),
+    const u = response.usage;
+    const usage: TokenUsage = {
+      promptTokens: u.input_tokens ?? 0,
+      completionTokens: u.output_tokens ?? 0,
+      totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+      ...(typeof u.cache_read_input_tokens === 'number'
+        ? { cachedPromptTokens: u.cache_read_input_tokens }
+        : {}),
+      ...(typeof u.cache_creation_input_tokens === 'number'
+        ? { cacheCreationTokens: u.cache_creation_input_tokens }
+        : {}),
     };
-    if (typeof cacheRead === 'number') usage.cachedPromptTokens = cacheRead;
-    if (typeof cacheCreation === 'number') usage.cacheCreationTokens = cacheCreation;
     return {
       content: content || undefined,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
@@ -197,7 +205,9 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  private splitMessages(messages: ChatMessage[]): { system: string | any[] | null; msgs: any[] } {
+  private splitMessages(
+    messages: ChatMessage[],
+  ): { system: StreamingParams['system'] | null; msgs: MessageParam[] } {
     return splitMessagesForAnthropic(messages);
   }
 }
@@ -207,36 +217,36 @@ export class AnthropicProvider implements Provider {
  *  - `[..., { name, description, input_schema, cache_control: { type: 'ephemeral' } }]`
  *    where the cache_control on the LAST tool entry marks "cache up to and
  *    including all tool definitions". Default 5-min TTL. */
-export function buildAnthropicTools(tools: ToolDefinition[], cacheLast?: boolean): any[] {
-  const out: any[] = tools.map(t => ({
+export function buildAnthropicTools(tools: ToolDefinition[], cacheLast?: boolean): ToolUnion[] {
+  const out: ToolUnion[] = tools.map(t => ({
     name: t.function.name,
     description: t.function.description ?? '',
-    input_schema: t.function.parameters,
+    input_schema: t.function.parameters as Anthropic.Messages.Tool.InputSchema,
   }));
   if (cacheLast && out.length > 0) {
     out[out.length - 1] = {
-      ...out[out.length - 1],
+      ...out[out.length - 1]!,
       cache_control: { type: 'ephemeral' },
-    };
+    } as ToolUnion;
   }
   return out;
 }
 
 // eslint-disable-next-line sonarjs/cognitive-complexity -- TODO(complexity): split system/cache/role-walk extraction.
 export function splitMessagesForAnthropic(messages: ChatMessage[]): {
-  system: string | any[] | null;
-  msgs: any[];
+  system: StreamingParams['system'] | null;
+  msgs: MessageParam[];
 } {
   let systemContent: string | null = null;
   let systemCacheBoundary = false;
-  const msgs: any[] = [];
+  const msgs: MessageParam[] = [];
 
   for (const msg of messages) {
     if (msg.role === 'system') {
       systemContent = msg.content;
       if (msg.cacheBoundary) systemCacheBoundary = true;
     } else if (msg.role === 'assistant' && msg.tool_calls) {
-      const content: any[] = [];
+      const content: ContentBlockParam[] = [];
       if (msg.content) {
         content.push({ type: 'text', text: msg.content });
       }
@@ -250,9 +260,9 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       }
       if (msg.cacheBoundary && content.length > 0) {
         content[content.length - 1] = {
-          ...content[content.length - 1],
+          ...content[content.length - 1]!,
           cache_control: { type: 'ephemeral' },
-        };
+        } as ContentBlockParam;
       }
       msgs.push({ role: 'assistant', content });
     } else if (msg.role === 'tool') {
@@ -268,14 +278,12 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
             'every tool_result must reference a tool_use from the prior assistant message',
         );
       }
-      const block: any = {
+      const block: ToolResultBlockParam = {
         type: 'tool_result',
         tool_use_id: msg.tool_call_id,
         content: msg.content,
+        ...(msg.cacheBoundary ? { cache_control: { type: 'ephemeral' } } : {}),
       };
-      if (msg.cacheBoundary) {
-        block.cache_control = { type: 'ephemeral' };
-      }
       // Anthropic requires all tool_results from one turn to share a single
       // user message that immediately follows the assistant's tool_use
       // blocks. Coalesce consecutive tool messages into one user message.
@@ -283,7 +291,7 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       if (
         last?.role === 'user' &&
         Array.isArray(last.content) &&
-        last.content.every((b: any) => b?.type === 'tool_result')
+        last.content.every(b => b?.type === 'tool_result')
       ) {
         last.content.push(block);
       } else {
@@ -304,7 +312,7 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
     }
   }
 
-  let system: string | any[] | null;
+  let system: StreamingParams['system'] | null;
   if (systemContent === null) {
     system = null;
   } else if (systemCacheBoundary) {

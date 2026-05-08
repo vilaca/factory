@@ -14,6 +14,11 @@ import type {
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
 
+type AnthropicStreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
+type AnthropicNonStreamingParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
+type AnthropicMessageParam = Anthropic.Messages.MessageParam;
+type AnthropicContentBlockParam = Anthropic.Messages.ContentBlockParam;
+
 const DEFAULT_BASE_URL = 'https://opencode.ai/zen/v1';
 const PROVIDER_NAME = 'OpenCode Zen';
 const MISSING_TOKEN_ERROR =
@@ -192,21 +197,22 @@ export class OpenCodeZenProvider implements Provider {
   ): AsyncGenerator<ChatChunk> {
     const { system, msgs } = this.splitAnthropicMessages(messages);
 
-    const params: any = {
+    const params: AnthropicStreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? estimateMaxOutput(model.toLowerCase()),
-      system: system ?? undefined,
       messages: msgs,
       stream: true,
+      ...(system !== null ? { system } : {}),
+      ...(tools && tools.length > 0
+        ? {
+            tools: tools.map(t => ({
+              name: t.function.name,
+              description: t.function.description ?? '',
+              input_schema: t.function.parameters as Anthropic.Messages.Tool.InputSchema,
+            })),
+          }
+        : {}),
     };
-
-    if (tools && tools.length > 0) {
-      params.tools = tools.map(t => ({
-        name: t.function.name,
-        description: t.function.description ?? '',
-        input_schema: t.function.parameters,
-      }));
-    }
 
     const stream = this.getAnthropicClient().messages.stream(params, {
       signal: options?.signal,
@@ -216,12 +222,12 @@ export class OpenCodeZenProvider implements Provider {
 
     for await (const event of stream) {
       if (event.type === 'content_block_start') {
-        const block = event.content_block as any;
+        const block = event.content_block;
         if (block.type === 'tool_use') {
           currentToolCall = { id: block.id, name: block.name, rawArgs: '' };
         }
       } else if (event.type === 'content_block_delta') {
-        const delta = event.delta as any;
+        const delta = event.delta;
         if (delta.type === 'text_delta') {
           yield { content: delta.text };
         } else if (delta.type === 'input_json_delta' && currentToolCall) {
@@ -245,17 +251,15 @@ export class OpenCodeZenProvider implements Provider {
       } else if (event.type === 'message_stop') {
         yield { done: true };
       } else if (event.type === 'message_delta') {
-        const delta = event as any;
-        if (delta.usage) {
-          yield {
-            done: true,
-            usage: {
-              promptTokens: delta.usage.input_tokens ?? 0,
-              completionTokens: delta.usage.output_tokens ?? 0,
-              totalTokens: (delta.usage.input_tokens ?? 0) + (delta.usage.output_tokens ?? 0),
-            },
-          };
-        }
+        const u = event.usage;
+        yield {
+          done: true,
+          usage: {
+            promptTokens: u.input_tokens ?? 0,
+            completionTokens: u.output_tokens ?? 0,
+            totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
+          },
+        };
       }
     }
   }
@@ -268,20 +272,21 @@ export class OpenCodeZenProvider implements Provider {
   ): Promise<ChatChunk> {
     const { system, msgs } = this.splitAnthropicMessages(messages);
 
-    const params: any = {
+    const params: AnthropicNonStreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? estimateMaxOutput(model.toLowerCase()),
-      system: system ?? undefined,
       messages: msgs,
+      ...(system !== null ? { system } : {}),
+      ...(tools && tools.length > 0
+        ? {
+            tools: tools.map(t => ({
+              name: t.function.name,
+              description: t.function.description ?? '',
+              input_schema: t.function.parameters as Anthropic.Messages.Tool.InputSchema,
+            })),
+          }
+        : {}),
     };
-
-    if (tools && tools.length > 0) {
-      params.tools = tools.map(t => ({
-        name: t.function.name,
-        description: t.function.description ?? '',
-        input_schema: t.function.parameters,
-      }));
-    }
 
     const response = await this.getAnthropicClient().messages.create(params, {
       signal: options?.signal,
@@ -304,16 +309,15 @@ export class OpenCodeZenProvider implements Provider {
       }
     }
 
+    const u = response.usage;
     return {
       content: content || undefined,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       done: true,
       usage: {
-        promptTokens: (response as any).usage?.input_tokens ?? 0,
-        completionTokens: (response as any).usage?.output_tokens ?? 0,
-        totalTokens:
-          ((response as any).usage?.input_tokens ?? 0) +
-          ((response as any).usage?.output_tokens ?? 0),
+        promptTokens: u.input_tokens ?? 0,
+        completionTokens: u.output_tokens ?? 0,
+        totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
       },
     };
   }
@@ -356,9 +360,9 @@ export class OpenCodeZenProvider implements Provider {
         const trimmed = line.trim();
         if (!trimmed || !trimmed.startsWith('data: ')) continue;
 
-        let parsed: any;
+        let parsed: GoogleStreamPayload;
         try {
-          parsed = JSON.parse(trimmed.slice(6));
+          parsed = JSON.parse(trimmed.slice(6)) as GoogleStreamPayload;
         } catch {
           continue;
         }
@@ -378,7 +382,7 @@ export class OpenCodeZenProvider implements Provider {
           yield { tool_calls: toolCalls };
         }
 
-        if (parsed.candidates?.some((candidate: any) => candidate?.finishReason)) {
+        if (parsed.candidates?.some(candidate => !!candidate?.finishReason)) {
           yield { done: true, usage };
         }
       }
@@ -402,7 +406,7 @@ export class OpenCodeZenProvider implements Provider {
       throw new Error(`OpenCode Zen API error ${res.status}: ${await res.text()}`);
     }
 
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as GoogleStreamPayload;
     const { content, toolCalls } = extractGoogleResponseParts(data, new Set<string>(), 0);
     return {
       content: content || undefined,
@@ -527,15 +531,18 @@ export class OpenCodeZenProvider implements Provider {
     };
   }
 
-  private splitAnthropicMessages(messages: ChatMessage[]): { system: string | null; msgs: any[] } {
+  private splitAnthropicMessages(messages: ChatMessage[]): {
+    system: string | null;
+    msgs: AnthropicMessageParam[];
+  } {
     let system: string | null = null;
-    const msgs: any[] = [];
+    const msgs: AnthropicMessageParam[] = [];
 
     for (const msg of messages) {
       if (msg.role === 'system') {
         system = msg.content;
       } else if (msg.role === 'assistant' && msg.tool_calls) {
-        const content: any[] = [];
+        const content: AnthropicContentBlockParam[] = [];
         if (msg.content) {
           content.push({ type: 'text', text: msg.content });
         }
@@ -551,10 +558,14 @@ export class OpenCodeZenProvider implements Provider {
       } else if (msg.role === 'tool') {
         const lastAssistant = msgs[msgs.length - 1];
         let toolUseId = 'unknown';
-        if (lastAssistant?.role === 'assistant') {
-          const blocks = Array.isArray(lastAssistant.content) ? lastAssistant.content : [];
-          const toolUse = blocks.findLast?.((block: any) => block.type === 'tool_use');
-          if (toolUse) toolUseId = toolUse.id;
+        if (lastAssistant?.role === 'assistant' && Array.isArray(lastAssistant.content)) {
+          for (let j = lastAssistant.content.length - 1; j >= 0; j--) {
+            const b = lastAssistant.content[j]!;
+            if (b.type === 'tool_use') {
+              toolUseId = b.id;
+              break;
+            }
+          }
         }
         msgs.push({
           role: 'user',
@@ -603,13 +614,13 @@ export class OpenCodeZenProvider implements Provider {
       throw new Error(`OpenCode Zen API error ${res.status}: ${await res.text()}`);
     }
 
-    const data = (await res.json()) as any;
-    const rawItems = Array.isArray(data?.data) ? data.data : [];
+    const data = (await res.json()) as { data?: unknown[] };
+    const rawItems: unknown[] = Array.isArray(data?.data) ? data.data : [];
     this.modelsCache = rawItems
       // Note: hide Zen models that route through OpenAI's /responses API until
       // the provider layer can preserve Responses-native events and tool items.
-      .filter((item: any) => isSupportedOpenCodeZenModel(item))
-      .map((item: any) => ({
+      .filter(isSupportedOpenCodeZenModel)
+      .map(item => ({
         id: item.id,
         owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
         route: detectOpenCodeZenRoute(item.id),
@@ -623,11 +634,11 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '');
 }
 
-function isSupportedOpenCodeZenModel(item: any): item is { id: string; owned_by?: string } {
-  if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id) {
-    return false;
-  }
-  return detectOpenCodeZenRoute(item.id) !== 'openai-responses';
+function isSupportedOpenCodeZenModel(item: unknown): item is { id: string; owned_by?: string } {
+  if (!item || typeof item !== 'object') return false;
+  const i = item as { id?: unknown };
+  if (typeof i.id !== 'string' || !i.id) return false;
+  return detectOpenCodeZenRoute(i.id) !== 'openai-responses';
 }
 
 function detectOpenCodeZenRoute(model: string): OpenCodeZenRoute {
@@ -785,7 +796,24 @@ function parseToolArgs(raw?: string): Record<string, unknown> {
   }
 }
 
-function extractGoogleUsage(data: any): ChatChunk['usage'] {
+interface GoogleStreamPart {
+  text?: string;
+  functionCall?: { name?: string; args?: unknown };
+}
+interface GoogleStreamCandidate {
+  content?: { parts?: GoogleStreamPart[] };
+  finishReason?: string;
+}
+interface GoogleStreamPayload {
+  candidates?: GoogleStreamCandidate[];
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
+}
+
+function extractGoogleUsage(data: GoogleStreamPayload | undefined): ChatChunk['usage'] {
   if (!data?.usageMetadata) return undefined;
   const promptTokens = data.usageMetadata.promptTokenCount ?? 0;
   const completionTokens = data.usageMetadata.candidatesTokenCount ?? 0;
@@ -797,12 +825,12 @@ function extractGoogleUsage(data: any): ChatChunk['usage'] {
 }
 
 function extractGoogleResponseParts(
-  data: any,
+  data: GoogleStreamPayload,
   seenToolCalls: Set<string>,
   startIndex: number,
 ): { content: string; toolCalls: ToolCallMessage[]; nextToolIndex: number } {
-  const parts =
-    data?.candidates?.flatMap((candidate: any) => candidate?.content?.parts ?? []) ?? [];
+  const parts: GoogleStreamPart[] =
+    data?.candidates?.flatMap(candidate => candidate?.content?.parts ?? []) ?? [];
   let content = '';
   const toolCalls: ToolCallMessage[] = [];
   let nextToolIndex = startIndex;

@@ -22,7 +22,7 @@ import {
 import { renderWelcome, renderError, animateLogo } from './ui/renderer.js';
 import { getGitBranch, isGitDirty } from './utils/git.js';
 import { errorMessage } from './utils/errors.js';
-import { parseArgs, printUsage } from './cli/args.js';
+import { parseArgs, printUsage, printVersion } from './cli/args.js';
 import {
   ensureAuth,
   probeAllProviders,
@@ -34,9 +34,8 @@ import {
 import { buildPickerOptions, findDefaultSelection } from './cli/picker.js';
 import { selectStartupSession, selectModelInk } from './cli/startup-menu.js';
 
-const DEBUG = process.env.FACTORY_DEBUG === '1';
 function dbg(message: string): void {
-  if (DEBUG) process.stderr.write(`[factory:debug] ${message}\n`);
+  if (process.env.FACTORY_DEBUG === '1') process.stderr.write(`[factory:debug] ${message}\n`);
 }
 
 function canResumeLastSession(
@@ -53,6 +52,15 @@ function canResumeLastSession(
 // eslint-disable-next-line max-lines-per-function, max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split startup phases (rotation / auth / picker / mode dispatch).
 async function main(): Promise<void> {
   const cliArgs = parseArgs(process.argv.slice(2));
+
+  if (cliArgs.debug) {
+    process.env.FACTORY_DEBUG = '1';
+  }
+
+  if (cliArgs.version) {
+    printVersion();
+    process.exit(0);
+  }
 
   if (cliArgs.help) {
     printUsage();
@@ -498,6 +506,16 @@ async function main(): Promise<void> {
     await runHeadless(appOptions);
   }
 }
+
+process.on('unhandledRejection', (reason: unknown) => {
+  console.error(renderError(`unhandledRejection: ${errorMessage(reason)}`));
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err: Error) => {
+  console.error(renderError(`uncaughtException: ${errorMessage(err)}`));
+  process.exit(1);
+});
 
 main().catch((err: unknown) => {
   console.error(renderError(errorMessage(err)));

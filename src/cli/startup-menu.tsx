@@ -162,7 +162,7 @@ export async function selectModelInk(
   if (models.length === 0) {
     throw new Error('No models available.');
   }
-  if (models.length === 1) return models[0];
+  if (models.length === 1) return models[0]!;
 
   const debug = process.env.FACTORY_DEBUG === '1';
   const dbg = (msg: string): void => {

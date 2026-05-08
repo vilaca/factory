@@ -141,8 +141,9 @@ export function matchUserRule(
   rules: BashRule[],
 ): { rule: BashRule; index: number } | null {
   for (let i = 0; i < rules.length; i++) {
-    if (globToRegex(rules[i].pattern).test(cmd)) {
-      return { rule: rules[i], index: i };
+    const r = rules[i]!;
+    if (globToRegex(r.pattern).test(cmd)) {
+      return { rule: r, index: i };
     }
   }
   return null;

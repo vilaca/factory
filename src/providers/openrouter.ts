@@ -180,10 +180,10 @@ export class OpenRouterProvider implements Provider {
       providerName: PROVIDER_NAME,
     });
 
-    const models = (items as any[])
+    const models = items
       // Note: keep only models whose declared modalities include text I/O,
       // since this CLI currently talks in chat-completions-style text turns.
-      .filter(item => isChatCapableModel(item))
+      .filter(isChatCapableModel)
       .map(item => ({
         id: item.id,
         context_length: typeof item.context_length === 'number' ? item.context_length : undefined,
@@ -254,22 +254,22 @@ export function routesToAnthropic(model: string): boolean {
   return /^anthropic\//i.test(model);
 }
 
-function isChatCapableModel(item: any): item is OpenRouterModel & { id: string } {
-  if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id) {
-    return false;
-  }
+function isChatCapableModel(item: unknown): item is OpenRouterModel & { id: string } {
+  if (!item || typeof item !== 'object') return false;
+  const i = item as OpenRouterModel;
+  if (typeof i.id !== 'string' || !i.id) return false;
 
   const modality =
-    typeof item.architecture?.modality === 'string' ? item.architecture.modality.toLowerCase() : '';
+    typeof i.architecture?.modality === 'string' ? i.architecture.modality.toLowerCase() : '';
   if (modality && !modality.includes('text')) {
     return false;
   }
 
-  const inputModalities = Array.isArray(item.architecture?.input_modalities)
-    ? item.architecture.input_modalities.map((value: unknown) => String(value).toLowerCase())
+  const inputModalities = Array.isArray(i.architecture?.input_modalities)
+    ? i.architecture.input_modalities.map((value: unknown) => String(value).toLowerCase())
     : [];
-  const outputModalities = Array.isArray(item.architecture?.output_modalities)
-    ? item.architecture.output_modalities.map((value: unknown) => String(value).toLowerCase())
+  const outputModalities = Array.isArray(i.architecture?.output_modalities)
+    ? i.architecture.output_modalities.map((value: unknown) => String(value).toLowerCase())
     : [];
 
   if (inputModalities.length > 0 && !inputModalities.includes('text')) {

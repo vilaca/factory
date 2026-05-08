@@ -85,8 +85,8 @@ export function parseTextToolCalls(
     let paramMatch: RegExpExecArray | null;
     PARAMETER_TAG_PATTERN.lastIndex = 0;
     while ((paramMatch = PARAMETER_TAG_PATTERN.exec(body)) !== null) {
-      const key = paramMatch[1];
-      const raw = paramMatch[2].trim();
+      const key = paramMatch[1]!;
+      const raw = paramMatch[2]!.trim();
       // Try to parse the value as JSON (handles numbers, bools, arrays, objects).
       // Fall back to the raw string if it isn't valid JSON.
       try {

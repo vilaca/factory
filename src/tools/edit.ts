@@ -186,7 +186,7 @@ function fuzzyMatch(content: string, oldString: string): FuzzyResult {
   for (let i = 0; i + normNeedle.length <= fileLines.length; i++) {
     let ok = true;
     for (let j = 0; j < normNeedle.length; j++) {
-      if (fileLines[i + j].trim() !== normNeedle[j]) {
+      if (fileLines[i + j]!.trim() !== normNeedle[j]) {
         ok = false;
         break;
       }
@@ -195,7 +195,7 @@ function fuzzyMatch(content: string, oldString: string): FuzzyResult {
   }
 
   if (matches.length === 1) {
-    const start = matches[0];
+    const start = matches[0]!;
     const matched = fileLines.slice(start, start + normNeedle.length).join('\n');
     return { kind: 'unique', matched, line: start + 1 };
   }
@@ -210,8 +210,8 @@ function leadingWhitespace(line: string): string {
 }
 
 function reindent(oldString: string, matched: string, newString: string): string {
-  const oldIndent = leadingWhitespace(oldString.split('\n')[0]);
-  const matchedIndent = leadingWhitespace(matched.split('\n')[0]);
+  const oldIndent = leadingWhitespace(oldString.split('\n')[0]!);
+  const matchedIndent = leadingWhitespace(matched.split('\n')[0]!);
   if (oldIndent === matchedIndent) return newString;
 
   const newLines = newString.split('\n');

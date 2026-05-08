@@ -11,6 +11,25 @@ interface SessionStats {
   largestToolResults: { tool: string; tokens: number }[];
 }
 
+/** JSONL line schema we read from the session log. We only consume the
+ *  `agent-event` flavour; other types (e.g. `session-start`, `model-change`)
+ *  are skipped via the `type !== 'agent-event'` guard. */
+interface AgentEventUsage {
+  promptTokens?: number;
+  cachedPromptTokens?: number;
+  cacheCreationTokens?: number;
+}
+interface AgentEvent {
+  type: string;
+  usage?: AgentEventUsage;
+  toolName?: string;
+  result?: { output?: string };
+}
+interface SessionLogEntry {
+  type: string;
+  event?: AgentEvent;
+}
+
 const TOKENS_PER_CHAR = 0.25;
 
 /** /stats — read the current session JSONL and report cache + cost
@@ -53,9 +72,9 @@ function parseSession(raw: string): SessionStats {
   for (const line of raw.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    let entry: any;
+    let entry: SessionLogEntry;
     try {
-      entry = JSON.parse(trimmed);
+      entry = JSON.parse(trimmed) as SessionLogEntry;
     } catch {
       continue;
     }

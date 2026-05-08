@@ -1,9 +1,10 @@
 /**
  * HTML tokenizer + entity decoder + content-region picker.
  *
- * Splits the source string into a flat list of tag/text tokens, decodes
- * named and numeric HTML entities, and exposes the small constants
- * (VOID_TAGS, STRIP_TAGS) the renderer also reads.
+ * Splits the source string into a flat list of tag/text tokens and decodes
+ * named and numeric HTML entities. Internal void/strip-tag sets stay
+ * file-private; the renderer only consumes the exported `Token`/`TagToken`
+ * types and the helper functions.
  */
 
 const NAMED_ENTITIES: Record<string, string> = {
@@ -70,7 +71,7 @@ const STRIP_TAGS = new Set([
   'iframe',
 ]);
 
-export const VOID_TAGS = new Set([
+const VOID_TAGS = new Set([
   'br',
   'hr',
   'img',
@@ -131,7 +132,7 @@ export interface TagToken {
   selfClosing: boolean;
   attrs: string;
 }
-export interface TextToken {
+interface TextToken {
   kind: 'text';
   text: string;
 }
@@ -147,10 +148,10 @@ export function tokenize(html: string): Token[] {
       tokens.push({ kind: 'text', text: html.slice(lastIndex, m.index) });
     }
     const raw = m[0];
-    const name = m[1].toLowerCase();
+    const name = m[1]!.toLowerCase();
     const closing = raw.startsWith('</');
     const selfClosing = m[3] === '/' || VOID_TAGS.has(name);
-    tokens.push({ kind: 'tag', raw, name, closing, selfClosing, attrs: m[2] });
+    tokens.push({ kind: 'tag', raw, name, closing, selfClosing, attrs: m[2] ?? '' });
     lastIndex = re.lastIndex;
   }
   if (lastIndex < html.length) {

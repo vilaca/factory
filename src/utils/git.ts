@@ -26,7 +26,7 @@ async function resolveGitDir(cwd: string): Promise<string | undefined> {
     const contents = await fs.readFile(dotGit, 'utf8');
     const match = contents.match(/^gitdir:\s*(.+)$/m);
     if (!match) throw new Error(`malformed worktree pointer: ${dotGit}`);
-    return path.resolve(cwd, match[1].trim());
+    return path.resolve(cwd, match[1]!.trim());
   }
   return undefined;
 }

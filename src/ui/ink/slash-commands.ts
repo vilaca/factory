@@ -15,253 +15,236 @@ interface SlashCommandContext {
   toggleFullOutput?: () => boolean;
 }
 
-// eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): table-drive slash dispatch (registry of {name -> handler}).
+type SlashHandler = (arg: string, ctx: SlashCommandContext) => void | Promise<void>;
+
+function handleExit(_arg: string, ctx: SlashCommandContext): void {
+  const { agent, exit, tabs } = ctx;
+  // With multiple tabs open, /exit closes the active one; only the last
+  // tab triggers a process exit. Without tabs context, exit the process.
+  if (tabs && tabs.tabs.length > 1) {
+    agent.abort();
+    tabs.closeTab(tabs.activeId);
+    return;
+  }
+  // Abort any in-flight model stream first — without this, Ink unmounts but
+  // Node sits waiting for the open HTTP socket to drain before exiting.
+  agent.abort();
+  exit();
+  // If anything (an unflushed stream, a stubborn provider HTTP request, a
+  // still-running tool subprocess) keeps the event loop alive past a grace
+  // period, force the exit.
+  setTimeout(() => process.exit(0), 1000).unref();
+}
+
+function handleNew(arg: string, { agent, tabs }: SlashCommandContext): void {
+  if (!tabs) return agent.addNotice('warn', 'Tabs not available.');
+  const label = arg.trim() || undefined;
+  tabs.openTab(label);
+}
+
+function handleClose(_arg: string, { agent, tabs }: SlashCommandContext): void {
+  if (!tabs) return agent.addNotice('warn', 'Tabs not available.');
+  if (tabs.tabs.length === 1) return agent.addNotice('info', 'Last tab — use /exit to quit.');
+  agent.abort();
+  tabs.closeTab(tabs.activeId);
+}
+
+function handleTabs(_arg: string, { agent, tabs }: SlashCommandContext): void {
+  if (!tabs) return agent.addNotice('warn', 'Tabs not available.');
+  const lines: { level: 'cyan' | 'info'; text: string; bold?: boolean }[] = [
+    { level: 'cyan', text: `Open tabs (${tabs.tabs.length}):` },
+  ];
+  tabs.tabs.forEach((tab, i) => {
+    lines.push({
+      level: 'info',
+      text: `  ${i + 1}: ${tab.label}`,
+      bold: tab.id === tabs.activeId,
+    });
+  });
+  lines.push({
+    level: 'info',
+    text: 'Switch with /switch <n|label>, Ctrl+N (next), Ctrl+P (prev). Open with /new or Ctrl+T.',
+  });
+  agent.addNoticeBlock(lines);
+}
+
+function handleSwitch(arg: string, { agent, tabs }: SlashCommandContext): void {
+  if (!tabs) return agent.addNotice('warn', 'Tabs not available.');
+  const a = arg.trim();
+  if (!a) {
+    return agent.addNotice(
+      'warn',
+      `Usage: /switch <n|label>  (1..${tabs.tabs.length}, or tab label / prefix)`,
+    );
+  }
+  // Pure integer → index switch.
+  if (/^\d+$/.test(a)) {
+    const n = Number.parseInt(a, 10);
+    if (n < 1 || n > tabs.tabs.length) {
+      return agent.addNotice('warn', `Tab ${n} doesn't exist (1..${tabs.tabs.length})`);
+    }
+    tabs.switchToIndex(n - 1);
+    return;
+  }
+  // Exact label match — preferred when labels alone disambiguate.
+  const exact = tabs.tabs.filter(t => t.label === a);
+  if (exact.length === 1) {
+    tabs.switchTo(exact[0]!.id);
+    return;
+  }
+  if (exact.length > 1) {
+    return agent.addNotice('warn', `Multiple tabs labelled "${a}" — switch by index instead.`);
+  }
+  // Unique prefix match.
+  const prefix = tabs.tabs.filter(t => t.label.startsWith(a));
+  if (prefix.length === 1) {
+    tabs.switchTo(prefix[0]!.id);
+    return;
+  }
+  if (prefix.length > 1) {
+    const labels = prefix.map(t => t.label).join(', ');
+    return agent.addNotice('warn', `Ambiguous "${a}": matches ${labels}`);
+  }
+  agent.addNotice('warn', `No tab matches "${a}".`);
+}
+
+function handlePlan({ agent }: SlashCommandContext): void {
+  if (agent.plannedCalls.length > 0) printPlanQueue(agent);
+  else agent.togglePlanMode();
+}
+
+async function handleApprove(_arg: string, { agent }: SlashCommandContext): Promise<void> {
+  const refs = agent.refs.current;
+  if (!refs?.planMode || agent.plannedCalls.length === 0) {
+    agent.addNotice('info', 'No plan to approve.');
+    return;
+  }
+  await agent.approvePlan();
+}
+
+function handleCancel({ agent }: SlashCommandContext): void {
+  const refs = agent.refs.current;
+  if (refs?.planMode && agent.plannedCalls.length > 0) {
+    agent.cancelPlan();
+    agent.addNotice('info', 'Plan dropped.');
+  } else {
+    agent.addNotice('info', 'No plan to cancel.');
+  }
+}
+
+function handleLog({ agent }: SlashCommandContext): void {
+  const refs = agent.refs.current!;
+  if (refs.sessionLogger) {
+    agent.addNotice('info', `Session log: ${refs.sessionLogger.filePath}`);
+  } else {
+    agent.addNotice('info', 'Session logging is disabled.');
+  }
+}
+
+function handleCorrect(arg: string, { agent }: SlashCommandContext): void {
+  const refs = agent.refs.current!;
+  let next: boolean;
+  if (arg === 'on') next = true;
+  else if (arg === 'off') next = false;
+  else if (!arg) next = !refs.enableCorrector;
+  else return agent.addNotice('info', 'Usage: /correct on|off');
+  agent.setCorrector(next);
+}
+
+async function handleModel(arg: string, { agent }: SlashCommandContext): Promise<void> {
+  const refs = agent.refs.current!;
+  if (arg) {
+    await agent.setModelByName(arg);
+    return;
+  }
+  agent.addNoticeBlock([
+    { level: 'info', text: `Current: ${refs.provider.name} / ${refs.model}` },
+    {
+      level: 'info',
+      text: 'Switch with /pick (or Ctrl+K). Power users: /model <provider>:<model>.',
+    },
+  ]);
+}
+
+function handlePick(_arg: string, ctx: SlashCommandContext): void {
+  if (ctx.openPicker) ctx.openPicker();
+  else ctx.agent.addNotice('warn', 'Picker not available in this context.');
+}
+
+async function handleHooks(_arg: string, { agent }: SlashCommandContext): Promise<void> {
+  const refs = agent.refs.current!;
+  await dispatchHooks(agent, refs.hooksConfig);
+}
+
+function handleFull(_arg: string, ctx: SlashCommandContext): void {
+  if (!ctx.toggleFullOutput) {
+    return ctx.agent.addNotice('warn', 'Full-output toggle not available in this context.');
+  }
+  const next = ctx.toggleFullOutput();
+  ctx.agent.addNotice(
+    'info',
+    next
+      ? 'Full tool output enabled (going forward).'
+      : 'Full tool output disabled — back to preview.',
+  );
+}
+
+function handleEmoji(arg: string, { agent }: SlashCommandContext): void {
+  const trimmed = arg.trim();
+  if (trimmed) agent.setUserEmoji(trimmed);
+  else agent.toggleEmojiMode();
+}
+
+const HANDLERS: Record<string, SlashHandler> = {
+  '/exit': handleExit,
+  '/quit': handleExit,
+  '/q': handleExit,
+  '/new': handleNew,
+  '/close': handleClose,
+  '/tabs': handleTabs,
+  '/switch': handleSwitch,
+  '/clear': (_arg, { agent }) => agent.clearConversation(),
+  '/help': (_arg, { agent }) => printHelp(agent),
+  '/permissions': (_arg, { agent }) => {
+    agent.resetPermissions();
+    agent.addNotice('info', 'Permissions reset.');
+  },
+  '/plan': (_arg, ctx) => handlePlan(ctx),
+  '/queue': (_arg, { agent }) => printPlanQueue(agent),
+  '/approve': handleApprove,
+  '/cancel': (_arg, ctx) => handleCancel(ctx),
+  '/log': (_arg, ctx) => handleLog(ctx),
+  '/correct': handleCorrect,
+  '/model': handleModel,
+  '/cwd': (arg, { agent }) => agent.setCwd(arg),
+  '/exp': (arg, { agent }) => handleExpCommand(agent, arg),
+  '/pick': handlePick,
+  '/rotate': (arg, { agent }) => dispatchRotate(arg, agent),
+  '/keys': (arg, { agent }) => dispatchKeys(arg, agent),
+  '/stats': (arg, { agent }) => dispatchStats(arg, agent),
+  '/hooks': handleHooks,
+  '/full': handleFull,
+  '/skills': (_arg, { agent }) => handleSkillsList(agent),
+  '/skill': (arg, { agent }) => handleSkillShow(agent, arg),
+  // Easter egg — intentionally omitted from /help. `/emoji` toggles emoji
+  // mode; `/emoji <glyph>` overrides the user prompt icon. Do not document.
+  '/emoji': handleEmoji,
+};
+
 export async function dispatchSlashCommand(
   cmd: string,
   arg: string,
   ctx: SlashCommandContext,
 ): Promise<boolean> {
-  const { agent, exit, tabs } = ctx;
-  const refs = agent.refs;
-  if (!refs.current) return false;
+  if (!ctx.agent.refs.current) return false;
 
-  switch (cmd) {
-    case '/exit':
-    case '/quit':
-    case '/q':
-      // With multiple tabs open, /exit closes the active one; only the last
-      // tab triggers a process exit. Without tabs context (legacy callers),
-      // fall through to the original exit-process behavior.
-      if (tabs && tabs.tabs.length > 1) {
-        agent.abort();
-        tabs.closeTab(tabs.activeId);
-        return true;
-      }
-      // Abort any in-flight model stream first — without this, Ink unmounts
-      // but Node sits waiting for the open HTTP socket to drain before
-      // actually exiting, which looks like /q is hung.
-      agent.abort();
-      exit();
-      // If anything (an unflushed stream, a stubborn provider HTTP request,
-      // a still-running tool subprocess) keeps the event loop alive past a
-      // grace period, force the exit. The abort above should have done the
-      // job, but this ensures the user always gets out promptly.
-      setTimeout(() => process.exit(0), 1000).unref();
-      return true;
-    case '/new': {
-      if (!tabs) {
-        agent.addNotice('warn', 'Tabs not available.');
-        return true;
-      }
-      const label = arg.trim() || undefined;
-      tabs.openTab(label);
-      return true;
-    }
-    case '/close': {
-      if (!tabs) {
-        agent.addNotice('warn', 'Tabs not available.');
-        return true;
-      }
-      if (tabs.tabs.length === 1) {
-        agent.addNotice('info', 'Last tab — use /exit to quit.');
-        return true;
-      }
-      agent.abort();
-      tabs.closeTab(tabs.activeId);
-      return true;
-    }
-    case '/tabs': {
-      if (!tabs) {
-        agent.addNotice('warn', 'Tabs not available.');
-        return true;
-      }
-      const lines: { level: 'cyan' | 'info'; text: string; bold?: boolean }[] = [
-        { level: 'cyan', text: `Open tabs (${tabs.tabs.length}):` },
-      ];
-      tabs.tabs.forEach((tab, i) => {
-        lines.push({
-          level: 'info',
-          text: `  ${i + 1}: ${tab.label}`,
-          bold: tab.id === tabs.activeId,
-        });
-      });
-      lines.push({
-        level: 'info',
-        text: 'Switch with /switch <n|label>, Ctrl+N (next), Ctrl+P (prev). Open with /new or Ctrl+T.',
-      });
-      agent.addNoticeBlock(lines);
-      return true;
-    }
-    case '/switch': {
-      if (!tabs) {
-        agent.addNotice('warn', 'Tabs not available.');
-        return true;
-      }
-      const a = arg.trim();
-      if (!a) {
-        agent.addNotice(
-          'warn',
-          `Usage: /switch <n|label>  (1..${tabs.tabs.length}, or tab label / prefix)`,
-        );
-        return true;
-      }
-      // Pure integer → index switch.
-      if (/^\d+$/.test(a)) {
-        const n = Number.parseInt(a, 10);
-        if (n < 1 || n > tabs.tabs.length) {
-          agent.addNotice('warn', `Tab ${n} doesn't exist (1..${tabs.tabs.length})`);
-          return true;
-        }
-        tabs.switchToIndex(n - 1);
-        return true;
-      }
-      // Exact label match — preferred when labels alone disambiguate.
-      const exact = tabs.tabs.filter(t => t.label === a);
-      if (exact.length === 1) {
-        tabs.switchTo(exact[0]!.id);
-        return true;
-      }
-      if (exact.length > 1) {
-        agent.addNotice('warn', `Multiple tabs labelled "${a}" — switch by index instead.`);
-        return true;
-      }
-      // Unique prefix match. Allows `/switch sa` for a tab labelled "sandbox".
-      const prefix = tabs.tabs.filter(t => t.label.startsWith(a));
-      if (prefix.length === 1) {
-        tabs.switchTo(prefix[0]!.id);
-        return true;
-      }
-      if (prefix.length > 1) {
-        const labels = prefix.map(t => t.label).join(', ');
-        agent.addNotice('warn', `Ambiguous "${a}": matches ${labels}`);
-        return true;
-      }
-      agent.addNotice('warn', `No tab matches "${a}".`);
-      return true;
-    }
-    case '/clear':
-      agent.clearConversation();
-      return true;
-    case '/help':
-      printHelp(agent);
-      return true;
-    case '/permissions':
-      agent.resetPermissions();
-      agent.addNotice('info', 'Permissions reset.');
-      return true;
-    case '/plan':
-      if (agent.plannedCalls.length > 0) {
-        printPlanQueue(agent);
-      } else {
-        agent.togglePlanMode();
-      }
-      return true;
-    case '/queue':
-      printPlanQueue(agent);
-      return true;
-    case '/approve':
-      if (!refs.current.planMode || agent.plannedCalls.length === 0) {
-        agent.addNotice('info', 'No plan to approve.');
-        return true;
-      }
-      await agent.approvePlan();
-      return true;
-    case '/cancel':
-      if (refs.current.planMode && agent.plannedCalls.length > 0) {
-        agent.cancelPlan();
-        agent.addNotice('info', 'Plan dropped.');
-      } else {
-        agent.addNotice('info', 'No plan to cancel.');
-      }
-      return true;
-    case '/log':
-      if (refs.current.sessionLogger) {
-        agent.addNotice('info', `Session log: ${refs.current.sessionLogger.filePath}`);
-      } else {
-        agent.addNotice('info', 'Session logging is disabled.');
-      }
-      return true;
-    case '/correct': {
-      let next: boolean;
-      if (arg === 'on') next = true;
-      else if (arg === 'off') next = false;
-      else if (!arg) next = !refs.current.enableCorrector;
-      else {
-        agent.addNotice('info', 'Usage: /correct on|off');
-        return true;
-      }
-      agent.setCorrector(next);
-      return true;
-    }
-    case '/model':
-      if (arg) {
-        await agent.setModelByName(arg);
-      } else {
-        agent.addNoticeBlock([
-          { level: 'info', text: `Current: ${refs.current.provider.name} / ${refs.current.model}` },
-          {
-            level: 'info',
-            text: 'Switch with /pick (or Ctrl+K). Power users: /model <provider>:<model>.',
-          },
-        ]);
-      }
-      return true;
-    case '/cwd':
-      agent.setCwd(arg);
-      return true;
-    case '/exp':
-      handleExpCommand(agent, arg);
-      return true;
-    case '/pick':
-      if (ctx.openPicker) {
-        ctx.openPicker();
-      } else {
-        agent.addNotice('warn', 'Picker not available in this context.');
-      }
-      return true;
-    case '/rotate':
-      await dispatchRotate(arg, agent);
-      return true;
-    case '/keys':
-      await dispatchKeys(arg, agent);
-      return true;
-    case '/stats':
-      await dispatchStats(arg, agent);
-      return true;
-    case '/hooks':
-      await dispatchHooks(agent, refs.current.hooksConfig);
-      return true;
-    case '/full': {
-      if (!ctx.toggleFullOutput) {
-        agent.addNotice('warn', 'Full-output toggle not available in this context.');
-        return true;
-      }
-      const next = ctx.toggleFullOutput();
-      agent.addNotice(
-        'info',
-        next
-          ? 'Full tool output enabled (going forward).'
-          : 'Full tool output disabled — back to preview.',
-      );
-      return true;
-    }
-    case '/skills':
-      handleSkillsList(agent);
-      return true;
-    case '/skill':
-      handleSkillShow(agent, arg);
-      return true;
-    // Easter egg — intentionally omitted from /help. `/emoji` toggles emoji
-    // mode; `/emoji <glyph>` overrides the user prompt icon. Do not document.
-    case '/emoji': {
-      const trimmed = arg.trim();
-      if (trimmed) agent.setUserEmoji(trimmed);
-      else agent.toggleEmojiMode();
-      return true;
-    }
+  const handler = HANDLERS[cmd];
+  if (handler) {
+    await handler(arg, ctx);
+    return true;
   }
 
-  agent.addNotice('info', `Unknown command: ${cmd}. Type /help for available commands.`);
+  ctx.agent.addNotice('info', `Unknown command: ${cmd}. Type /help for available commands.`);
   return true;
 }
 

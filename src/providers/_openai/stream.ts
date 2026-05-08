@@ -4,9 +4,10 @@ import {
   finalizeToolCalls,
   mergeStreamedToolCalls,
   parseToolArgs,
+  type StreamedToolCallDelta,
   type StreamingToolCallAcc,
 } from './tool-calls.js';
-import { extractUsage } from './usage.js';
+import { extractUsage, type OpenAiCompatUsageEnvelope } from './usage.js';
 
 interface OpenAiChatRequest {
   url: string;
@@ -14,6 +15,36 @@ interface OpenAiChatRequest {
   body: Record<string, unknown>;
   signal?: AbortSignal;
   providerName: string;
+}
+
+/** OpenAI-compatible streaming chunk shape used by every provider that
+ *  speaks the /chat/completions SSE protocol. */
+interface OpenAiStreamChunk {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+      tool_calls?: StreamedToolCallDelta[];
+    };
+    finish_reason?: string;
+  }>;
+}
+
+interface OpenAiNonStreamMessage {
+  content?: string | null;
+  tool_calls?: Array<{
+    id?: string;
+    function?: {
+      name?: string;
+      arguments?: string | Record<string, unknown>;
+    };
+  }>;
+}
+
+interface OpenAiNonStreamResponse extends OpenAiCompatUsageEnvelope {
+  choices?: Array<{
+    message?: OpenAiNonStreamMessage;
+    finish_reason?: string;
+  }>;
 }
 
 /**
@@ -52,7 +83,7 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
   // abandoned stream holds the underlying connection open until GC.
   try {
     for await (const parsed of parseSseStream(reader)) {
-      const p = parsed as any;
+      const p = parsed as OpenAiStreamChunk & OpenAiCompatUsageEnvelope;
       const delta = p.choices?.[0]?.delta;
 
       if (delta?.content) {
@@ -102,7 +133,7 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
     throw new Error(`${req.providerName} API error ${res.status}: ${await res.text()}`);
   }
 
-  const data = (await res.json()) as any;
+  const data = (await res.json()) as OpenAiNonStreamResponse;
   const choice = data.choices?.[0];
   const result: ChatChunk = {
     content: choice?.message?.content ?? undefined,
@@ -111,19 +142,20 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
   };
 
   if (choice?.message?.tool_calls) {
-    const tcs: ToolCallMessage[] = choice.message.tool_calls.flatMap((tc: any) => {
+    const tcs: ToolCallMessage[] = choice.message.tool_calls.flatMap(tc => {
       if (!tc?.function || typeof tc.function.name !== 'string' || !tc.function.name) {
         return [];
       }
+      const args =
+        typeof tc.function.arguments === 'string'
+          ? parseToolArgs(tc.function.arguments)
+          : (tc.function.arguments ?? {});
       return [
         {
           id: tc.id,
           function: {
             name: tc.function.name,
-            arguments:
-              typeof tc.function.arguments === 'string'
-                ? parseToolArgs(tc.function.arguments)
-                : tc.function.arguments,
+            arguments: args,
           },
         },
       ];

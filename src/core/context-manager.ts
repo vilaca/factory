@@ -175,7 +175,7 @@ export class ContextManager {
     let count = 0;
     for (let i = messages.length - 1; i >= 1; i--) {
       // skip system at [0]
-      const tokens = estimateMessagesTokens([messages[i]]);
+      const tokens = estimateMessagesTokens([messages[i]!]);
       acc += tokens;
       count++;
       if (acc >= budget) break;
@@ -217,9 +217,7 @@ export class ContextManager {
     }
   }
 
-  private buildMechanicalSummary(
-    messages: Array<{ role: string; content: string; tool_calls?: any[] }>,
-  ): string {
+  private buildMechanicalSummary(messages: SummaryMessage[]): string {
     const toolsUsed = new Set<string>();
     const filesAccessed = new Set<string>();
     // Carry forward any prior summary text so cascaded compactions don't drop it.
@@ -268,11 +266,17 @@ export class ContextManager {
   }
 }
 
-type SummaryMessage = { role: string; content: string; tool_calls?: any[] };
+interface SummaryToolCall {
+  function: {
+    name: string;
+    arguments?: Record<string, unknown>;
+  };
+}
+type SummaryMessage = { role: string; content: string; tool_calls?: SummaryToolCall[] };
 
 function findLatestUserRequest(messages: SummaryMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
+    const msg = messages[i]!;
     if (msg.role !== 'user' || typeof msg.content !== 'string') continue;
     const content = msg.content.trim();
     if (!content) continue;
@@ -285,7 +289,7 @@ function findLatestUserRequest(messages: SummaryMessage[]): string | null {
 
 function findLatestAssistantContent(messages: SummaryMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
+    const msg = messages[i]!;
     if (msg.role !== 'assistant' || typeof msg.content !== 'string') continue;
     const content = msg.content.trim();
     if (!content) continue;
