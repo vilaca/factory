@@ -1,0 +1,81 @@
+name: Bug report
+description: Something is wrong with factory.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please fill in the fields below — they help us reproduce the issue quickly.
+  - type: input
+    id: version
+    attributes:
+      label: factory version
+      description: Output of `factory --version`.
+      placeholder: "factory 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: Output of `node --version`.
+      placeholder: "v22.11.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows (WSL)
+        - Other (please specify in the description)
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      description: Which provider and model triggered the bug?
+      placeholder: "anthropic / claude-sonnet-4-6"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal reproduction. Include the exact `factory ...` invocation and the prompt or input that triggered the issue.
+      placeholder: |
+        1. Run `factory --provider anthropic --model claude-sonnet-4-6`
+        2. Type "...".
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened? Include any error message verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: session-log
+    attributes:
+      label: Session log excerpt (optional)
+      description: |
+        From `~/.factory/sessions/`. Redact any tokens before pasting.
+      render: text
+  - type: checkboxes
+    id: security
+    attributes:
+      label: This is not a security issue
+      options:
+        - label: I confirm this is not a security vulnerability. Security issues should follow [SECURITY.md](../../SECURITY.md) instead.
+          required: true
