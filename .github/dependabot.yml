@@ -48,9 +48,7 @@ updates:
         update-types:
           - version-update:semver-major
 
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+  # github-actions ecosystem intentionally omitted — there are no workflows
+  # under .github/workflows yet, and Dependabot errors out ("couldn't find
+  # a <anything>.yml") when configured to scan an empty directory. Re-add
+  # the block once the first workflow lands.
