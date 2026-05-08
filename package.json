@@ -24,10 +24,11 @@
     "format:check": "prettier --check .",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "tsx --test test/unit/*.test.ts",
-    "test:unit:coverage": "c8 --reporter=text --reporter=html --reporter=lcov tsx --test test/unit/*.test.ts",
-    "test:e2e": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/e2e.test.js",
-    "test:only": "node --test dist-test/test/e2e.test.js",
-    "coverage": "npm run test:unit:coverage"
+    "test:e2e": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/e2e-mocks.test.js dist-test/test/e2e-no-mocks.test.js",
+    "test:e2e:mocks": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/e2e-mocks.test.js",
+    "test:e2e:no-mocks": "tsc && tsc -p tsconfig.test.json && node --test dist-test/test/e2e-no-mocks.test.js",
+    "test:only": "node --test dist-test/test/e2e-mocks.test.js dist-test/test/e2e-no-mocks.test.js",
+    "coverage": "c8 --reporter=text --reporter=html --reporter=lcov tsx --test test/unit/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
