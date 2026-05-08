@@ -295,16 +295,46 @@ async function main(): Promise<void> {
     };
   }
 
-  const cleanup = async () => {
-    if (mcpManager) await mcpManager.disconnect().catch(() => {});
-    const { flushKeyStats } = await import('./core/key-stats.js');
-    await flushKeyStats().catch(() => {});
+  // Cleanup must complete inside a hard wall-clock budget. Without it, an
+  // MCP server that hangs on `close()` (or a flushKeyStats() that races
+  // with a fs lock) holds the agent loop indefinitely after Ctrl-C —
+  // observed in practice when servers fall over before their close handler
+  // runs. The race below caps total cleanup time and surfaces what was
+  // still in flight when the deadline hit.
+  const SHUTDOWN_BUDGET_MS = 5000;
+  const cleanup = async (): Promise<void> => {
+    const pending: string[] = [];
+    if (mcpManager) {
+      const { pending: stuck } = await mcpManager.disconnect().catch(() => ({ pending: [] }));
+      for (const name of stuck) pending.push(`mcp:${name}`);
+    }
+    const flushDone = (async () => {
+      const { flushKeyStats } = await import('./core/key-stats.js');
+      await flushKeyStats();
+    })().catch(() => {
+      pending.push('key-stats');
+    });
+    await flushDone;
+    if (pending.length > 0) {
+      process.stderr.write(`shutdown: ${pending.join(', ')} did not finish in time\n`);
+    }
   };
+  const boundedCleanup = (): Promise<void> =>
+    Promise.race([
+      cleanup(),
+      new Promise<void>(resolve => {
+        const t = setTimeout(() => {
+          process.stderr.write(`shutdown: cleanup exceeded ${SHUTDOWN_BUDGET_MS}ms, forcing exit\n`);
+          resolve();
+        }, SHUTDOWN_BUDGET_MS);
+        t.unref();
+      }),
+    ]);
   process.on('SIGINT', () => {
-    void cleanup().finally(() => process.exit(130));
+    void boundedCleanup().finally(() => process.exit(130));
   });
   process.on('SIGTERM', () => {
-    void cleanup().finally(() => process.exit(0));
+    void boundedCleanup().finally(() => process.exit(0));
   });
 
   let gitBranch: string | undefined;

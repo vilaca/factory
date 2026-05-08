@@ -10,6 +10,7 @@ import type { AgentEvent, RotationOptions } from '../agent-types.js';
 import type { ProviderKey } from '../config-types.js';
 import { keyFingerprint, selectNextKey } from '../credentials.js';
 import { classifyForRotation } from '../provider-errors.js';
+import { classifyForRetry, nextDelayMs, resolveRetryPolicy } from '../provider-retry.js';
 import { RepeatDetector } from './repeat-detector.js';
 import { applyCacheBoundaries } from './cache-boundaries.js';
 import { errorMessage, isError } from '../../utils/errors.js';
@@ -198,6 +199,111 @@ async function advanceTuple(
     return { entry, provider: nextProvider, keys, firstKey };
   }
   return null;
+}
+
+function isAbortError(
+  err: unknown,
+  callerSignal: AbortSignal | undefined,
+  internalSignal: AbortSignal,
+): boolean {
+  return (
+    Boolean(callerSignal?.aborted) ||
+    internalSignal.aborted ||
+    (isError(err) && err.name === 'AbortError')
+  );
+}
+
+// Errors that signal a streaming-channel hiccup rather than a model
+// failure: we recover by replaying the call non-streamed once. Distinct
+// from classifyForRetry's network bucket — those are connection-establish
+// errors that warrant backoff+retry. These are mid-stream drops where
+// chatNoStream usually delivers what the SSE channel couldn't.
+function isStreamish(err: unknown): boolean {
+  const msg = errorMessage(err);
+  return (
+    msg.includes('stream') ||
+    msg.includes('connection dropped') ||
+    msg.includes('socket hang up') ||
+    msg.includes('fetch failed')
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    const t = setTimeout(resolve, ms);
+    // Don't keep the event loop alive just for the backoff — if the host
+    // is shutting down, the timer should not block exit.
+    t.unref?.();
+  });
+}
+
+interface RetryOutcome {
+  /** True when a retry was attempted; the caller should `continue` the loop. */
+  retried: boolean;
+  /** Updated attempt counter to write back into the caller. */
+  nextAttempt: number;
+}
+
+type RotationDecision =
+  | { kind: 'rotated' }
+  | { kind: 'rethrow'; err: unknown }
+  | { kind: 'noop' };
+
+/**
+ * Drive the rotation tiers and translate the result into a flat
+ * RotationDecision. Extracted from the main loop's catch block so
+ * cognitive-complexity stays under the cap. The caller decides what to
+ * do with the decision (continue / throw / fall through).
+ */
+async function* tryRotation(
+  state: RotationState,
+  rotation: RotationOptions | undefined,
+  err: unknown,
+): AsyncGenerator<AgentEvent, RotationDecision> {
+  if (!rotation || state.streamedAnything) return { kind: 'noop' };
+  const outcome = yield* handleRotationFailure(state, rotation, err);
+  if (outcome.rotated) return { kind: 'rotated' };
+  if (outcome.rethrow !== undefined) return { kind: 'rethrow', err: outcome.rethrow };
+  return { kind: 'noop' };
+}
+
+/**
+ * Decide whether to attempt a same-key retry for `err`, yield the
+ * `provider-retry` event if so, and sleep the backoff. Extracted to keep
+ * the main `callModel` body under the cognitive-complexity cap.
+ *
+ * Rate-limits (429) defer to rotation when rotation is configured because
+ * a different saved key on the same provider almost always has its own
+ * quota window — that gets through faster than waiting out backoff. With
+ * no rotation configured, we retry 429 too because retry is the only
+ * option left.
+ */
+async function* tryRetry(
+  err: unknown,
+  attempt: number,
+  policy: ReturnType<typeof resolveRetryPolicy>,
+  hasRotation: boolean,
+  alreadyStreamed: boolean,
+): AsyncGenerator<AgentEvent, RetryOutcome> {
+  if (alreadyStreamed || attempt + 1 >= policy.maxAttempts) {
+    return { retried: false, nextAttempt: attempt };
+  }
+  const decision = classifyForRetry(err);
+  const deferToRotation = decision.reason === 'rate-limit' && hasRotation;
+  if (!decision.retry || deferToRotation) {
+    return { retried: false, nextAttempt: attempt };
+  }
+  const delayMs = nextDelayMs(attempt, policy);
+  const nextAttempt = attempt + 1;
+  yield {
+    type: 'provider-retry',
+    attempt: nextAttempt,
+    maxAttempts: policy.maxAttempts,
+    delayMs,
+    reason: decision.reason ?? 'server-error',
+  };
+  await sleep(delayMs);
+  return { retried: true, nextAttempt };
 }
 
 function sanitizeToolCalls(
@@ -463,20 +569,15 @@ export async function* callModel(
   const annotated = applyCacheBoundaries(messages);
   const callOpts = { signal: internal.signal, cacheTools: true };
 
-  const isAbortError = (err: unknown): boolean =>
-    Boolean(signal?.aborted) ||
-    internal.signal.aborted ||
-    (isError(err) && err.name === 'AbortError');
-
-  const isStreamish = (err: unknown): boolean => {
-    const msg = errorMessage(err);
-    return (
-      msg.includes('stream') ||
-      msg.includes('connection dropped') ||
-      msg.includes('socket hang up') ||
-      msg.includes('fetch failed')
-    );
-  };
+  // Per-key retry budget. Sits in front of rotation: a transient blip
+  // (5xx, network drop, 408, 429) re-attempts on the same key with full-
+  // jitter exponential backoff before we burn a rotation slot. Counter is
+  // reset each time we successfully start a stream OR rotate — each
+  // (provider, model, key) triple gets its own budget. The retry helper
+  // (tryRetry above) is broken out so this loop stays under the
+  // cognitive-complexity cap.
+  const retryPolicy = resolveRetryPolicy();
+  let retryAttempt = 0;
 
   // Rotation loop: on a rate-limit/auth failure *before* any chunk has
   // streamed, try the next saved key. Streaming losses still surface
@@ -489,7 +590,7 @@ export async function* callModel(
       yield* streamIntoState(state, stream, repeatDetector, internal, signal);
       break;
     } catch (err: unknown) {
-      if (isAbortError(err)) {
+      if (isAbortError(err, signal, internal.signal)) {
         cleanup();
         return {
           fullContent: state.fullContent,
@@ -499,13 +600,25 @@ export async function* callModel(
           doneReason: state.doneReason,
         };
       }
-      if (rotation && !state.streamedAnything) {
-        const outcome = yield* handleRotationFailure(state, rotation, err);
-        if (outcome.rotated) continue;
-        if (outcome.rethrow !== undefined) {
-          cleanup();
-          throw outcome.rethrow;
-        }
+      // Same-key retry on a transient failure, BEFORE rotation. See
+      // tryRetry() for the 429 vs 5xx vs network split.
+      const retryOutcome = yield* tryRetry(
+        err,
+        retryAttempt,
+        retryPolicy,
+        rotation !== undefined,
+        state.streamedAnything,
+      );
+      retryAttempt = retryOutcome.nextAttempt;
+      if (retryOutcome.retried) continue;
+      const rotationDecision = yield* tryRotation(state, rotation, err);
+      if (rotationDecision.kind === 'rotated') {
+        retryAttempt = 0;
+        continue;
+      }
+      if (rotationDecision.kind === 'rethrow') {
+        cleanup();
+        throw rotationDecision.err;
       }
       // Stream-only failures and transient connection drops retry
       // non-streamed once on the same provider — the model usually has the

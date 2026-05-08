@@ -315,6 +315,16 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           process.stderr.write(`  ⟲ rotation chain exhausted (${reasonLabel})\n`);
           break;
         }
+        case 'provider-retry': {
+          // Surface the in-flight retry so CI logs aren't silent during a
+          // multi-second backoff. The TTY path shows this on the StatusBar;
+          // here the equivalent affordance is a single labeled stderr line.
+          const seconds = (event.delayMs / 1000).toFixed(1);
+          process.stderr.write(
+            `  [activity] retrying ${event.attempt}/${event.maxAttempts} (${event.reason}, ${seconds}s)\n`,
+          );
+          break;
+        }
         case 'auto-retry-exhausted':
           // Model bailed after a tool failure and couldn't recover. Piped
           // output may be truncated mid-task — surface so CI doesn't treat

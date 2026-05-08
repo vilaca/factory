@@ -78,14 +78,30 @@ export class McpManager {
     return this.connections.flatMap(c => c.tools);
   }
 
-  async disconnect(): Promise<void> {
+  /**
+   * Disconnect all connected servers. Each `close()` is bounded by `perServerTimeoutMs`
+   * (default 2000) so a single hung server can't hold the whole shutdown
+   * hostage. Returns the names of servers that didn't acknowledge close in
+   * time so the caller can surface them.
+   */
+  async disconnect(perServerTimeoutMs = 2000): Promise<{ pending: string[] }> {
+    const pending: string[] = [];
     for (const conn of this.connections) {
       try {
-        await conn.client.close();
+        await Promise.race([
+          conn.client.close(),
+          new Promise<void>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`disconnect timed out after ${perServerTimeoutMs}ms`)),
+              perServerTimeoutMs,
+            ).unref(),
+          ),
+        ]);
       } catch {
-        // Ignore cleanup errors
+        pending.push(conn.serverName);
       }
     }
     this.connections = [];
+    return { pending };
   }
 }

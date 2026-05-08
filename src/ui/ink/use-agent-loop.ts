@@ -66,6 +66,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [thinking, setThinking] = useState(false);
   const [compacting, setCompacting] = useState<{ aggressive: boolean } | null>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
+  const [activity, setActivity] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState('');
   const [gitBranch, setGitBranch] = useState<string | undefined>(opts.gitBranch);
   const [gitDirty, setGitDirtyState] = useState<boolean | null>(opts.gitDirty ?? null);
@@ -268,6 +269,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       setState,
       setThinking,
       setRunningTool,
+      setActivity,
       setStreamingText,
       setCompacting,
       setSessionTurns,
@@ -635,6 +637,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     thinking,
     compacting,
     runningTool,
+    activity,
     streamingText,
     permissionRequest,
     pendingToolCall,

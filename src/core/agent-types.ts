@@ -73,6 +73,17 @@ export type AgentEvent =
       reason: 'rate-limit' | 'auth';
     }
   | { type: 'tuple-rotation-exhausted'; reason: 'rate-limit' | 'auth' }
+  | {
+      /** Emitted before a same-key retry sleep. Used by the status bar to
+       *  show what the agent is waiting on, and by the session log for
+       *  flake postmortems. The retry hasn't happened yet — `delayMs` is
+       *  what's about to be slept before the next attempt fires. */
+      type: 'provider-retry';
+      attempt: number;
+      maxAttempts: number;
+      delayMs: number;
+      reason: 'network' | 'server-error' | 'rate-limit' | 'timeout';
+    }
   | { type: 'turn-complete'; stopReason: StopReason; turnsUsed: number; usage?: TokenUsage }
   | { type: 'error'; error: Error };
 

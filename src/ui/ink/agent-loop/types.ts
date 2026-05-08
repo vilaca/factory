@@ -147,6 +147,11 @@ export interface AgentLoopApi {
   thinking: boolean;
   compacting: { aggressive: boolean } | null;
   runningTool: string | null;
+  /** Transient label shown in place of "running" when the agent is doing
+   *  something visible to the user — retry/backoff sleep, rotation hand-
+   *  off, shutdown wait. Null while idle or while a turn is making
+   *  forward progress. */
+  activity: string | null;
   /** In-flight assistant text that hasn't reached text-done yet. Held outside
    * `items[]` so the static history can be rendered via Ink's <Static> for
    * proper terminal scrollback. */
@@ -231,6 +236,12 @@ export interface AgentLoopDeps {
   setState(s: RunState): void;
   setThinking(b: boolean): void;
   setRunningTool(s: string | null): void;
+  /** Set the transient activity label shown in the StatusBar in place of
+   *  the literal "running" while the agent is doing something specific
+   *  (retry/backoff sleep, rotation hand-off, shutdown). Null clears it
+   *  back to plain "running". Set/cleared at event boundaries — the
+   *  spinner cadence is independent. */
+  setActivity(label: string | null): void;
   setStreamingText(s: string): void;
   setCompacting(c: { aggressive: boolean } | null): void;
   setSessionTurns(updater: (n: number) => number): void;

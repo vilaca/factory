@@ -43,6 +43,10 @@ function fingerprintLabel(entry: { label?: string; fingerprint: string }): strin
 const HANDLERS: EventHandlers = {
   'text-chunk': (event, deps, ss) => {
     deps.setThinking(false);
+    // First chunk after a retry/rotation activity proves the call is
+    // making forward progress — clear the activity label so the status
+    // bar returns to plain "running".
+    deps.setActivity(null);
     const next = ss.getStreamingBuffer() + event.content;
     ss.setStreamingBuffer(next);
     deps.setStreamingText(next);
@@ -240,9 +244,21 @@ const HANDLERS: EventHandlers = {
     const toLabel = fingerprintLabel(event.to);
     const reasonLabel = describeRotationReason(event.reason);
     deps.addNotice('warn', `⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}`);
+    deps.setActivity(`rotating key (${event.reason})`);
     if (event.from?.keyId) {
       void recordKeyFailure(event.provider, event.from.keyId, event.reason);
     }
+  },
+
+  'provider-retry': (event, deps) => {
+    // Show the in-flight retry on the status bar in place of "running" so
+    // the user sees why the agent is paused. Reason+attempt+delay together
+    // give them enough info to decide whether to abort. Cleared by
+    // text-chunk (success) or by the next rotation/retry event.
+    const seconds = (event.delayMs / 1000).toFixed(1);
+    deps.setActivity(
+      `retrying ${event.attempt}/${event.maxAttempts} (${event.reason}, ${seconds}s)`,
+    );
   },
 
   'key-rotation-exhausted': (event, deps) => {
@@ -262,6 +278,7 @@ const HANDLERS: EventHandlers = {
       'warn',
       `⟲ ${event.from.provider}/${event.from.model} ${reasonLabel}, falling back to ${event.to.provider}/${event.to.model}`,
     );
+    deps.setActivity(`rotating: ${event.from.provider} → ${event.to.provider} (${event.reason})`);
   },
 
   'tuple-rotation-exhausted': (event, deps) =>
@@ -320,6 +337,9 @@ const HANDLERS: EventHandlers = {
   'turn-complete': (event, deps, ss) => {
     deps.setSessionTurns(n => n + event.turnsUsed);
     if (event.usage) deps.setLastUsage(event.usage);
+    // Always clear any leftover activity at turn boundary — even a turn
+    // that ended in error shouldn't leave a stale "retrying…" label up.
+    deps.setActivity(null);
     if (event.stopReason === 'token-limit') ss.markTokenLimitHalt();
     // Record success for whichever (provider, key) the turn ended on.
     // refs.activeKeyId reflects post-rotation state by this point.
