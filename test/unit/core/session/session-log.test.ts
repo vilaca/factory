@@ -185,6 +185,15 @@ describe('createSessionLogger', () => {
     assert.strictEqual(event.to, 'b');
     assert.ok(!('keyId' in event));
   });
+
+  it('writes providerAfter when switching backends mid-session', async () => {
+    const logger = createSessionLogger();
+    logger.logModelChange('claude-sonnet-4-6', 'gpt-4.1', 'k1', 'openai');
+    logger.close();
+    const raw = fs.readFileSync(logger.filePath, 'utf-8');
+    const event = JSON.parse(raw.trim());
+    assert.strictEqual(event.providerAfter, 'openai');
+  });
 });
 
 describe('appendProviderLog', () => {
@@ -250,6 +259,35 @@ describe('getLastSessionSelection', () => {
     );
     const result = await getLastSessionSelection();
     assert.deepStrictEqual(result, { provider: 'ollama', model: 'llama3:latest' });
+  });
+
+  it('uses providerAfter from model-change as the final provider', async () => {
+    writeSessionLog(
+      '2026-05-08T14-00-00-000Z-ddd',
+      [
+        {
+          type: 'session-start',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          cwd: '/x',
+          keyId: 'k1',
+        },
+        {
+          type: 'model-change',
+          from: 'claude-sonnet-4-6',
+          to: 'gpt-4.1',
+          keyId: 'k2',
+          providerAfter: 'openai',
+        },
+      ],
+      new Date('2026-05-08T14:00:00Z'),
+    );
+    const result = await getLastSessionSelection();
+    assert.deepStrictEqual(result, {
+      provider: 'openai',
+      model: 'gpt-4.1',
+      keyId: 'k2',
+    });
   });
 
   it('returns the latest model-change as the final model + keyId', async () => {
@@ -452,6 +490,32 @@ describe('getRecentSessions', () => {
     const [session] = await getRecentSessions();
     assert.strictEqual(session.model, 'claude-opus-4-7');
     assert.strictEqual(session.keyId, 'k2');
+  });
+
+  it('updates provider from providerAfter when switching with /provider', async () => {
+    writeSessionLog(
+      'provider-switch',
+      [
+        {
+          type: 'session-start',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          cwd: '/x',
+          ts: '2026-05-08T11:00:00Z',
+        },
+        { type: 'user-input', content: 'hi' },
+        {
+          type: 'model-change',
+          from: 'claude-sonnet-4-6',
+          to: 'gpt-4.1',
+          providerAfter: 'openai',
+        },
+      ],
+      new Date('2026-05-08T11:00:00Z'),
+    );
+    const [session] = await getRecentSessions();
+    assert.strictEqual(session.provider, 'openai');
+    assert.strictEqual(session.model, 'gpt-4.1');
   });
 });
 

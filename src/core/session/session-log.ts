@@ -26,7 +26,10 @@ export interface SessionLogger {
   logUserInput(content: string): void;
   logAgentEvent(event: AgentEvent): void;
   logCommand(command: string, arg: string): void;
-  logModelChange(from: string, to: string, keyId?: string): void;
+  /** When the active backend provider changes (e.g. `/provider openai`), pass
+   *  `providerAfter` so recent-session rollup matches the UI — otherwise only
+   *  `session-start.provider` is kept and recents mis-label the session. */
+  logModelChange(from: string, to: string, keyId?: string, providerAfter?: string): void;
   logSystemPrompt(prompt: string): void;
   logSystemPromptChange(reason: string): void;
   logPermissionChange(action: string, toolName?: string): void;
@@ -138,8 +141,14 @@ export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
     logCommand(command, arg) {
       write({ type: 'command', command, arg });
     },
-    logModelChange(from, to, keyId) {
-      write({ type: 'model-change', from, to, ...(keyId ? { keyId } : {}) });
+    logModelChange(from, to, keyId, providerAfter) {
+      write({
+        type: 'model-change',
+        from,
+        to,
+        ...(keyId ? { keyId } : {}),
+        ...(providerAfter ? { providerAfter } : {}),
+      });
     },
     logSystemPrompt(prompt) {
       write({ type: 'system-prompt', content: prompt });
@@ -270,7 +279,7 @@ async function extractUserInputs(filePath: string): Promise<string[]> {
 
 /**
  * Returns the provider + model used in the most recent session log, or null if none.
- * Reads only the first line of the newest log (the session-start event).
+ * Walks `model-change` rows (including `providerAfter`) like {@link getRecentSessions}.
  */
 export async function getLastSessionSelection(): Promise<LastSessionSelection | null> {
   const sessions = await listSessionLogs();
@@ -279,40 +288,17 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
     const raw = await fs.promises.readFile(sessions[0]!.path, 'utf-8');
     const lines = raw.split('\n').filter(Boolean);
     if (lines.length === 0) return null;
-    const entry = JSON.parse(lines[0]!);
-    if (
-      entry.type === 'session-start' &&
-      typeof entry.provider === 'string' &&
-      typeof entry.model === 'string'
-    ) {
-      const startKeyId = typeof entry.keyId === 'string' && entry.keyId ? entry.keyId : undefined;
-      // Find the latest model-change to capture both the final model and
-      // the final keyId (a mid-session /pick switch updates both).
-      let latestModel: string | undefined;
-      let latestKeyId: string | undefined = startKeyId;
-      for (let i = lines.length - 1; i >= 1; i--) {
-        try {
-          const candidate = JSON.parse(lines[i]!);
-          if (candidate.type !== 'model-change') continue;
-          if (typeof candidate.to !== 'string' || candidate.to === STARTUP_MODEL_PLACEHOLDER)
-            continue;
-          latestModel = candidate.to;
-          if (typeof candidate.keyId === 'string' && candidate.keyId) latestKeyId = candidate.keyId;
-          break;
-        } catch {
-          // skip malformed
-        }
-      }
-      const finalModel =
-        latestModel ?? (entry.model !== STARTUP_MODEL_PLACEHOLDER ? entry.model : undefined);
-      if (finalModel) {
-        return {
-          provider: entry.provider,
-          model: finalModel,
-          ...(latestKeyId ? { keyId: latestKeyId } : {}),
-        };
-      }
-    }
+    const header = parseSessionStart(lines[0]!);
+    if (!header) return null;
+    const rollup = rollupSessionLines(lines.slice(1), header);
+    const finalModel =
+      rollup.model !== STARTUP_MODEL_PLACEHOLDER ? rollup.model : undefined;
+    if (!finalModel) return null;
+    return {
+      provider: rollup.provider,
+      model: finalModel,
+      ...(rollup.keyId ? { keyId: rollup.keyId } : {}),
+    };
   } catch {
     // ignore
   }
@@ -357,6 +343,7 @@ function parseSessionStart(line: string): SessionStartHeader | null {
 
 interface SessionRollup {
   model: string;
+  provider: string;
   keyId: string | undefined;
   userInputCount: number;
   lastErrorMessage: string | null;
@@ -370,6 +357,7 @@ interface SessionRollup {
  */
 function rollupSessionLines(lines: string[], header: SessionStartHeader): SessionRollup {
   let model = header.model;
+  let provider = header.provider;
   let keyId = header.keyId;
   let userInputCount = 0;
   let lastErrorMessage: string | null = null;
@@ -391,6 +379,9 @@ function rollupSessionLines(lines: string[], header: SessionStartHeader): Sessio
       entry.to !== STARTUP_MODEL_PLACEHOLDER
     ) {
       model = entry.to;
+      if (typeof entry.providerAfter === 'string' && entry.providerAfter) {
+        provider = entry.providerAfter;
+      }
       if (typeof entry.keyId === 'string' && entry.keyId) keyId = entry.keyId;
       continue;
     }
@@ -402,7 +393,7 @@ function rollupSessionLines(lines: string[], header: SessionStartHeader): Sessio
     }
   }
 
-  return { model, keyId, userInputCount, lastErrorMessage };
+  return { model, provider, keyId, userInputCount, lastErrorMessage };
 }
 
 /** Read one session log into a RecentSession entry, or null if it should be skipped. */
@@ -426,7 +417,7 @@ async function readRecentSession(filePath: string): Promise<RecentSession | null
     ? classifyErrorMessage(rollup.lastErrorMessage)
     : undefined;
   return {
-    provider: header.provider,
+    provider: rollup.provider,
     model: rollup.model,
     startedAt: header.startedAt,
     ...(status ? { status } : {}),

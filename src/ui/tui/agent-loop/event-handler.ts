@@ -273,6 +273,13 @@ const HANDLERS: EventHandlers = {
   },
 
   'tuple-rotation': (event, deps) => {
+    const refs = deps.refs.current;
+    refs?.sessionLogger?.logModelChange(
+      event.from.model,
+      event.to.model,
+      refs.activeKeyId,
+      event.to.provider,
+    );
     const reasonLabel = describeRotationReason(event.reason);
     deps.addNotice(
       'warn',
