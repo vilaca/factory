@@ -90,7 +90,10 @@ function renderModelList(
         const display = info?.label ?? item;
         const labelText = `${sc ? `${sc}. ` : ''}${display}`;
         const warning = info?.warning ? ` ${chalk.yellow(`(${info.warning})`)}` : '';
-        const text = isSel ? chalk.inverse(` ${labelText} `) + warning : `  ${labelText}` + warning;
+        const detail = info?.detail ? ` ${chalk.dim(`[${info.detail}]`)}` : '';
+        const text = isSel
+          ? chalk.inverse(` ${labelText} `) + warning + detail
+          : `  ${labelText}` + warning + detail;
         return <Text key={idx}>{text}</Text>;
       })}
       {end < items.length && <Text dimColor> ↓ {items.length - end} more</Text>}

@@ -29,6 +29,7 @@ export interface ProviderEntry {
  */
 export interface ModelDisplayInfo {
   label?: string;
+  detail?: string;
   warning?: string;
 }
 
