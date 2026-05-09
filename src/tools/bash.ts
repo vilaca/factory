@@ -59,7 +59,7 @@ const definition: ToolDefinition = {
 };
 
 async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
-  const command = args.command as string;
+  const command = typeof args.command === 'string' ? args.command : '';
   const timeout = clampTimeout(args.timeout);
   const cwd = ctx?.cwd ?? process.cwd();
 
