@@ -21,13 +21,13 @@ import {
 // of the picker tidy.
 export const indexForShortcut = _indexForShortcut;
 
-export function describeKeyRow(k: KeySummary): string {
+function describeKeyRow(k: KeySummary): string {
   const base = k.label ? `${k.label} · …${k.fingerprint}` : `…${k.fingerprint}`;
   if (!k.stats || (k.stats.ok === 0 && k.stats.warn === 0)) return base;
   return `${base}  · ${k.stats.ok} ok / ${k.stats.warn} ⚠`;
 }
 
-export function renderProviderList(
+function renderProviderList(
   items: ProviderEntry[],
   selected: number,
 ): React.ReactElement {
@@ -67,7 +67,7 @@ export function renderProviderList(
   );
 }
 
-export function renderModelList(
+function renderModelList(
   provider: string,
   items: string[],
   selected: number,

@@ -143,11 +143,11 @@ export function supportsToolsByName(_model: string): boolean {
   return true;
 }
 
-export function supportsVisionByName(model: string): boolean {
+function supportsVisionByName(model: string): boolean {
   return model.includes('hy3') || model.includes('gemini-');
 }
 
-export function supportsReasoningByName(model: string): boolean {
+function supportsReasoningByName(model: string): boolean {
   return (
     model.includes('qwen') ||
     model.includes('kimi') ||
@@ -159,11 +159,11 @@ export function supportsReasoningByName(model: string): boolean {
   );
 }
 
-export function isFreeModel(model: string): boolean {
+function isFreeModel(model: string): boolean {
   return model.includes('free') || model === 'big-pickle';
 }
 
-export function formatTokenCount(value: number): string {
+function formatTokenCount(value: number): string {
   if (value >= 1_000_000) {
     const millions = value / 1_000_000;
     return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;

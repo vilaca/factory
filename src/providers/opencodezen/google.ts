@@ -29,12 +29,12 @@ interface GoogleStreamPayload {
   };
 }
 
-export function googleEndpoint(baseUrl: string, model: string, stream: boolean): string {
+function googleEndpoint(baseUrl: string, model: string, stream: boolean): string {
   const suffix = stream ? ':streamGenerateContent?alt=sse' : ':generateContent';
   return `${baseUrl}/models/${model}${suffix}`;
 }
 
-export function googleHeaders(apiKey: string): Record<string, string> {
+function googleHeaders(apiKey: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'x-goog-api-key': apiKey,
@@ -43,7 +43,7 @@ export function googleHeaders(apiKey: string): Record<string, string> {
 }
 
 /** Convert ChatMessages into Google's `contents` + `systemInstruction` shape. */
-export function formatGoogleMessages(messages: ChatMessage[]): {
+function formatGoogleMessages(messages: ChatMessage[]): {
   systemInstruction?: { parts: Array<{ text: string }> };
   contents: Array<{ role: 'user' | 'model'; parts: Array<Record<string, unknown>> }>;
 } {
@@ -109,7 +109,7 @@ export function formatGoogleMessages(messages: ChatMessage[]): {
   };
 }
 
-export function buildGoogleBody(
+function buildGoogleBody(
   messages: ChatMessage[],
   tools: ToolDefinition[] | undefined,
   options: ChatOptions | undefined,
@@ -146,7 +146,7 @@ export function buildGoogleBody(
   return body;
 }
 
-export function extractGoogleUsage(data: GoogleStreamPayload | undefined): ChatChunk['usage'] {
+function extractGoogleUsage(data: GoogleStreamPayload | undefined): ChatChunk['usage'] {
   if (!data?.usageMetadata) return undefined;
   const promptTokens = data.usageMetadata.promptTokenCount ?? 0;
   const completionTokens = data.usageMetadata.candidatesTokenCount ?? 0;
@@ -157,7 +157,7 @@ export function extractGoogleUsage(data: GoogleStreamPayload | undefined): ChatC
   };
 }
 
-export function extractGoogleResponseParts(
+function extractGoogleResponseParts(
   data: GoogleStreamPayload,
   seenToolCalls: Set<string>,
   startIndex: number,
