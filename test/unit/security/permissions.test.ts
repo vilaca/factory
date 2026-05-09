@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { PermissionManager } from '../../src/permissions.js';
+import { PermissionManager } from '../../../src/security/permissions.js';
 
 describe('PermissionManager', () => {
   let pm: PermissionManager;

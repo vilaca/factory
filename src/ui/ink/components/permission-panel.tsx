@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { PermissionDecision } from '../../../permissions.js';
+import type { PermissionDecision } from '../../../security/permissions.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
 
 interface PermissionPanelProps {

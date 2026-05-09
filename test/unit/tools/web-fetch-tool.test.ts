@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { webFetchTool } from '../../../src/tools/web-fetch.js';
-import { PermissionManager } from '../../../src/permissions.js';
+import { PermissionManager } from '../../../src/security/permissions.js';
 import { parsePermissionInput } from '../../../src/ui/ink/components/permission-panel.js';
 
 describe('WebFetch tool', () => {

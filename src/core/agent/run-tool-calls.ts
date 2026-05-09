@@ -6,7 +6,7 @@ import { TOOL_NAMES } from '../../tools/types.js';
 import type { PathPolicy } from '../../security/paths.js';
 import type { EnvPolicy } from '../../security/env.js';
 import type { Conversation } from '../conversation.js';
-import type { PermissionManager } from '../../permissions.js';
+import type { PermissionManager } from '../../security/permissions.js';
 import { formatToolResultMessage } from '../tool-result-format.js';
 import { correctToolCall } from '../tool-call-corrector.js';
 import { selectWeakTier } from './weak-tier.js';

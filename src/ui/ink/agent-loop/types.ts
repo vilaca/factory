@@ -8,7 +8,7 @@ import type {
 import type { Conversation } from '../../../core/conversation.js';
 import type { ContextManager } from '../../../core/context-manager.js';
 import type { FileCache } from '../../../core/agent/file-cache.js';
-import type { PermissionManager } from '../../../permissions.js';
+import type { PermissionManager } from '../../../security/permissions.js';
 import type { Provider } from '../../../providers/types.js';
 import type { SessionLogger } from '../../../core/session-log.js';
 import type { SkillsRegistry } from '../../../core/skills/index.js';
@@ -18,8 +18,8 @@ import type { DisplayItem, ToolCallSummary } from '../types.js';
 
 export type RunState = 'idle' | 'running' | 'awaiting-permission';
 export type NoticeLevel = 'info' | 'warn' | 'danger' | 'cyan';
-export type { PermissionDecision } from '../../../permissions.js';
-import type { PermissionDecision } from '../../../permissions.js';
+export type { PermissionDecision } from '../../../security/permissions.js';
+import type { PermissionDecision } from '../../../security/permissions.js';
 
 export interface PermissionRequestState {
   toolName: string;

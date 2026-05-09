@@ -11,7 +11,7 @@ import type {
 } from '../../../../src/providers/types.js';
 import type { AgentEvent } from '../../../../src/core/agent-types.js';
 import { Conversation } from '../../../../src/core/conversation.js';
-import { PermissionManager } from '../../../../src/permissions.js';
+import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
 import { runAgent } from '../../../../src/core/agent/run-agent.js';
 import { createMockProvider, collectEvents, findEvents } from './agent-helpers.js';
