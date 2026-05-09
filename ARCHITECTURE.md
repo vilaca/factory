@@ -58,7 +58,7 @@ The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse
     - `run-tool-calls.ts` — top-level dispatcher; permission/security gate + correction loop.
     - `run-tool-calls-execute.ts` — executes one approved call and records the result.
     - `run-tool-calls-cache.ts` — cache-hit short-circuit for repeat Read calls.
-    - `bash-dedup.ts` — suppresses identical Bash calls within a turn.
+    - `bash-dedup.ts` — fires a one-shot nudge when the model spins on near-duplicate Bash calls.
     - `text-tool-parser.ts` — fallback parser for prose-embedded tool calls.
     - `tool-call-corrector.ts` — LLM-driven correction of malformed calls.
     - `tool-result-format.ts` — sentinel framing + imitation strip.
