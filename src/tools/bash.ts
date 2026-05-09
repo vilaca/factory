@@ -30,10 +30,20 @@ function clampTimeout(raw: unknown): number {
   return Math.max(MIN_TIMEOUT_MS, Math.min(n, MAX_TIMEOUT_MS));
 }
 
-// Cap on combined stdout+stderr we ship back as the tool result. Past this
-// point the model can't usefully consume more, and bigger buffers grow the
-// per-turn conversation cost linearly.
-const OUTPUT_CAP_BYTES = 50_000;
+// Per-stream caps when both streams produced output. A single huge stdout
+// (verbose build log) used to swallow the whole budget and truncate the
+// fenced stderr away — which is exactly the case where stderr matters
+// most (compile error buried after megabytes of progress). Each stream
+// gets its own cap and footer so the smaller one always survives.
+const STDOUT_CAP_BYTES = 40_000;
+const STDERR_CAP_BYTES = 10_000;
+// When only one stream produced output, the unused budget folds into it
+// so single-stream behaviour matches the previous 50KB cap exactly.
+const SOLO_CAP_BYTES = STDOUT_CAP_BYTES + STDERR_CAP_BYTES;
+
+function truncateStream(s: string, cap: number): string {
+  return s.length > cap ? s.slice(0, cap) + '\n...(output truncated)' : s;
+}
 
 // Combined view: stdout as-is, with any non-empty stderr fenced under a
 // `--- stderr ---` separator. Empty-stderr (the common case) stays a flat
@@ -41,10 +51,12 @@ const OUTPUT_CAP_BYTES = 50_000;
 // confuse warnings/progress on stderr (npm, cargo, pytest) with real
 // errors, and useful failure messages on stderr get buried mid-stdout.
 function formatBody(stdout: string, stderr: string): string {
-  if (!stderr) return stdout;
-  if (!stdout) return `--- stderr ---\n${stderr}`;
-  const sep = stdout.endsWith('\n') ? '--- stderr ---\n' : '\n--- stderr ---\n';
-  return `${stdout}${sep}${stderr}`;
+  if (!stderr) return truncateStream(stdout, SOLO_CAP_BYTES);
+  if (!stdout) return `--- stderr ---\n${truncateStream(stderr, SOLO_CAP_BYTES)}`;
+  const out = truncateStream(stdout, STDOUT_CAP_BYTES);
+  const err = truncateStream(stderr, STDERR_CAP_BYTES);
+  const sep = out.endsWith('\n') ? '--- stderr ---\n' : '\n--- stderr ---\n';
+  return `${out}${sep}${err}`;
 }
 
 const definition: ToolDefinition = {
@@ -52,7 +64,7 @@ const definition: ToolDefinition = {
   function: {
     name: TOOL_NAMES.Bash,
     description:
-      'Execute a shell command and return its output (stdout + stderr). Use for system commands, git, builds, tests, and other terminal operations.',
+      'Execute a shell command and return its output. Stdout is returned as-is; any non-empty stderr is appended below a "--- stderr ---" separator. Non-zero exit codes are reported but not treated as tool failures (the model is expected to read the exit code and output and decide what to do). Use for system commands, git, builds, tests, and other terminal operations.',
     parameters: {
       type: 'object',
       required: ['command'],
@@ -154,16 +166,12 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       }
 
       const body = formatBody(stdout, stderr);
-      const truncated =
-        body.length > OUTPUT_CAP_BYTES
-          ? body.slice(0, OUTPUT_CAP_BYTES) + '\n...(output truncated)'
-          : body;
 
       let output: string;
       if (code === 0) {
-        output = truncated || '(no output)';
+        output = body || '(no output)';
       } else {
-        output = truncated ? `(exit code ${code})\n${truncated}` : `(exit code ${code})`;
+        output = body ? `(exit code ${code})\n${body}` : `(exit code ${code})`;
       }
 
       // The command ran — even a non-zero exit is informational (lint errors,

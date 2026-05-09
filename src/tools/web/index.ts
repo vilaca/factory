@@ -13,7 +13,7 @@ const definition: ToolDefinition = {
   function: {
     name: TOOL_NAMES.WebFetch,
     description:
-      'Fetch a URL and return its content as text. HTML is stripped of boilerplate (nav, scripts, styles, footers) and converted to markdown for clean reading; plain text and markdown are returned as-is. Bounded: 1 MiB body cap, 15s timeout, 5 redirects max, 16 KiB cap on the returned text. The user is prompted before any fetch to a non-whitelisted domain.',
+      'Fetch a URL and return its content as text. HTML is stripped of boilerplate (nav, scripts, styles, footers) and converted to markdown for clean reading; plain text and markdown are returned as-is. Bounded: 1 MiB body cap, 15s timeout, 5 redirects max, 16 KiB cap on the returned text. The user is prompted before any fetch to a non-whitelisted domain. Redirects are re-validated against the same allowlist on every hop — a redirect to a host that is neither the originally-approved host nor explicitly whitelisted is refused.',
     parameters: {
       type: 'object',
       required: ['url'],
