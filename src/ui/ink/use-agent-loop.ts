@@ -1,31 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ContextManager } from '../../core/context-manager.js';
-import { validateModelToolSupport } from '../../core/model-validation.js';
-import { createProvider } from '../../providers/registry.js';
-import { descriptorByAlias } from '../../providers/descriptors.js';
-import { loadGlobalConfig } from '../../core/config.js';
-import { getKey } from '../../core/credentials.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { ExperimentalFlags } from '../../core/config-types.js';
-import type { Provider } from '../../providers/types.js';
 import type { DisplayItem, ToolCallSummary } from './types.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './agent-loop/system-prompt.js';
-import {
-  startSessionLogger,
-  createInitialRefs,
-  initSkillsRegistry,
-  loadInitialHistory,
-} from './agent-loop/init.js';
 import { runAgentLoopInternal, processInput } from './agent-loop/run-loop.js';
-import { runHook } from '../../core/hooks/index.js';
 import { refreshGitState } from './agent-loop/git-state.js';
 import {
   recordHistory as recordHistoryPure,
   historyUp as historyUpPure,
   historyDown as historyDownPure,
 } from './agent-loop/history.js';
+import { mountSession } from './agent-loop/setup.js';
+import { swapModel, swapProvider } from './agent-loop/swap.js';
 import type {
   AgentLoopApi,
   AgentLoopDeps,
@@ -106,155 +94,19 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     });
   }
 
-  // One-shot initialization
+  // One-shot session mount. mountSession owns the imperative wiring of
+  // session logger, refs, skills, hook fires, and the matching SessionEnd
+  // teardown — all of which used to live inline here. Empty deps array
+  // pins it to a single fire on mount; the returned cleanup runs on
+  // unmount.
   useEffect(() => {
-    const sessionLogger = startSessionLogger(opts, addNotice);
-
-    const baseSystemPrompt = opts.systemPrompt;
-    const useTextToolFallback = opts.useTextToolFallback ?? false;
-    const initialPlanMode = opts.planMode ?? false;
-    const initialExperimental: ExperimentalFlags = { ...(opts.agentConfig?.experimental ?? {}) };
-    const initialGitDirty = opts.gitDirty ?? null;
-
-    const initialSystemPrompt = composeSystemPromptPure({
-      baseSystemPrompt,
-      useTextToolFallback,
-      planMode: initialPlanMode,
-      lineCountHint: initialExperimental.lineCountHint ?? false,
-      subagents: initialExperimental.subagents ?? false,
-      gitDirty: initialGitDirty,
-    });
-
-    refs.current = createInitialRefs({
-      opts,
-      sessionLogger,
-      initialSystemPrompt,
-      baseSystemPrompt,
-      useTextToolFallback,
-      initialPlanMode,
-      initialExperimental,
-      initialGitDirty,
-    });
-
-    // Skills load asynchronously; once loaded, attach the registry and rebuild
-    // the system prompt so any alwaysOn skills are picked up before the first
-    // turn. Conditional skills don't need a prompt rebuild — they're injected
-    // per-turn from processInput.
-    void initSkillsRegistry(
-      process.cwd(),
-      initialExperimental.skills ?? false,
-      sessionLogger,
+    return mountSession(opts, {
+      refs,
       addNotice,
-    ).then(reg => {
-      if (!refs.current || !reg) return;
-      refs.current.skills = reg;
-      if (reg.alwaysOnSection().length > 0) {
-        const sp = composeSystemPrompt();
-        refs.current.conversation.updateSystemPrompt(sp);
-        sessionLogger?.logSystemPromptChange('skills-loaded');
-        sessionLogger?.logSystemPrompt(sp);
-      }
+      setEstimatedTokens,
+      setCwdState,
+      composeSystemPrompt,
     });
-
-    // Seed the token estimate so the status bar shows the system prompt's
-    // baseline before the first model response.
-    refs.current.contextManager.updateUsage(undefined);
-    setEstimatedTokens(refs.current.contextManager.getTokenEstimate());
-
-    // Sync cwd state with the freshly-seeded refs.cwd (createInitialRefs uses
-    // process.cwd() at creation time; useState's lazy init may have captured a
-    // different value if process.cwd() shifted in between).
-    setCwdState(refs.current.cwd);
-
-    if (sessionLogger) {
-      sessionLogger.logSystemPrompt(initialSystemPrompt);
-      addNotice('info', `Session log: ${sessionLogger.filePath}`);
-    }
-
-    if (opts.validationWarning) {
-      addNotice('warn', `⚠ ${opts.validationWarning}`);
-    }
-
-    void loadInitialHistory(refs, addNotice);
-
-    if (initialExperimental.hooks) {
-      const cwd = process.cwd();
-      void runHook(
-        'SessionStart',
-        { provider: opts.provider.name, model: opts.model, cwd },
-        {
-          cwd,
-          config: opts.agentConfig?.hooks,
-          envPolicy: opts.envPolicy,
-          onStderr: (command, chunk) =>
-            sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
-        },
-      )
-        .then(r => {
-          for (const e of r.errors) {
-            addNotice('warn', `⚠ SessionStart hook: ${e}`);
-            sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
-          }
-          for (const hookCommand of r.firedCommands) {
-            const exe = hookCommand.split(/\s+/)[0] ?? hookCommand;
-            const name = exe.split('/').pop() ?? exe;
-            const suffix = r.notice ? ` — ${r.notice}` : '';
-            addNotice('info', `↪ SessionStart hook ran (${name})${suffix}`);
-            sessionLogger?.logWarning(
-              'hook-fired',
-              `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
-            );
-          }
-          // Inject SessionStart additionalContext as a user message so the
-          // model picks it up on the next turn. Hook fire is async; if the
-          // user types fast the first turn won't include it (acceptable).
-          if (r.additionalContext) {
-            refs.current?.conversation.addUser(r.additionalContext);
-          }
-        })
-        .catch(err => {
-          const msg = err?.message ?? String(err);
-          addNotice('warn', `⚠ SessionStart hook: ${msg}`);
-          sessionLogger?.logWarning('hook-error', `SessionStart: ${msg}`);
-        });
-    }
-
-    return () => {
-      // Closing a tab while its agent is still running: signal abort so the
-      // run-loop unwinds promptly instead of writing to React state on the
-      // unmounted Session and continuing to spawn tools.
-      refs.current?.abort?.abort();
-      if (refs.current?.experimental.hooks) {
-        const cwd = process.cwd();
-        void runHook(
-          'SessionEnd',
-          { provider: opts.provider.name, model: opts.model, cwd },
-          {
-            cwd,
-            config: opts.agentConfig?.hooks,
-            envPolicy: opts.envPolicy,
-            onStderr: (command, chunk) =>
-              sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
-          },
-        )
-          .then(r => {
-            for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
-            // SessionEnd fires during tab teardown — UI is going away, so
-            // skip addNotice and just log. The session-log entry survives.
-            for (const hookCommand of r.firedCommands) {
-              sessionLogger?.logWarning(
-                'hook-fired',
-                `SessionEnd: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
-              );
-            }
-          })
-          .catch(() => {
-            /* never block teardown */
-          });
-      }
-      sessionLogger?.logSessionEnd();
-      sessionLogger?.close();
-    };
   }, []);
 
   function buildDeps(): AgentLoopDeps {
@@ -343,156 +195,28 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     addNotice('info', 'Conversation cleared.');
   }
 
-  async function setModelByName(name: string): Promise<void> {
-    if (!refs.current) return;
-    // Support `provider:model` so the user can switch both in one shot —
-    // useful so they don't end up on a provider whose default model isn't
-    // valid for it.
-    if (name.includes(':')) {
-      const [providerPart, ...rest] = name.split(':');
-      const modelPart = rest.join(':');
-      if (!providerPart || !modelPart) {
-        addNotice('warn', 'Usage: /model <name> or /model <provider>:<model>');
-        return;
-      }
-      await setProviderByName(providerPart, modelPart);
-      return;
-    }
-    const provider = refs.current.provider;
-    const validation = await validateModelToolSupport(provider, name);
-    if (validation.mode === 'unreachable') {
-      addNotice('danger', validation.reason);
-      return;
-    }
-    const prevFallback = refs.current.useTextToolFallback;
-    refs.current.useTextToolFallback = validation.mode === 'fallback';
-    refs.current.nativeToolSupport = validation.mode === 'native';
-    if (validation.mode === 'fallback') {
-      addNotice('warn', `⚠ ${validation.warning}`);
-    }
-    if (prevFallback !== refs.current.useTextToolFallback) {
-      const sp = composeSystemPrompt();
-      refs.current.conversation.updateSystemPrompt(sp);
-      refs.current.sessionLogger?.logSystemPromptChange(
-        `text-tool-fallback=${refs.current.useTextToolFallback}`,
-      );
-      refs.current.sessionLogger?.logSystemPrompt(sp);
-    }
-    refs.current.sessionLogger?.logModelChange(refs.current.model, name);
-    refs.current.model = name;
-    refs.current.primary = { provider: refs.current.provider.name, model: name };
-    setModel(name);
-    const caps = provider.getCapabilities(name);
-    refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
-      compactionThreshold: opts.agentConfig?.compactionThreshold,
-      recencyWindow: opts.agentConfig?.recencyWindow,
-      recencyTokens: opts.agentConfig?.recencyTokens,
-      toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
-    });
-    addNotice('info', `Model switched to ${name}`);
+  function buildSwapCtx(): Parameters<typeof swapModel>[1] {
+    return {
+      refs,
+      opts,
+      addNotice,
+      setModel,
+      setProviderName,
+      refreshTokenEstimate,
+      composeSystemPrompt,
+    };
   }
 
-  // Swap to another provider. We don't drive auth flows from inside the
-  // running CLI — providers fall back to env-var/config-file credentials. If
-  // the user hasn't authed yet, `createProvider` throws and we surface the
-  // hint. If a model is supplied (via `/provider <name> <model>` or as
-  // `provider:model` from /model), validate and apply it; otherwise fall
-  // back to a sensible default by listing the new provider's models.
+  async function setModelByName(name: string): Promise<void> {
+    await swapModel(name, buildSwapCtx());
+  }
+
   async function setProviderByName(
     name: string,
     requestedModel?: string,
     keyId?: string,
   ): Promise<void> {
-    if (!refs.current) return;
-    const trimmed = name.trim();
-    if (!trimmed) {
-      addNotice('info', `Current provider: ${refs.current.provider.name}`);
-      return;
-    }
-    if (trimmed === refs.current.provider.name && !keyId) {
-      if (requestedModel) await setModelByName(requestedModel);
-      else addNotice('info', `Already on ${trimmed}.`);
-      return;
-    }
-    // Resolve credentials from the multi-key store. Without this the
-    // mid-session switch would call createProvider({}) and the provider
-    // would have to fall back to env vars, which most users don't have set
-    // (their token lives only in factory's config). With keyId, target
-    // that specific saved key; without, take the first key (matches the
-    // post-migration "default" entry).
-    const descriptor = descriptorByAlias(trimmed);
-    const createOpts: Parameters<typeof createProvider>[1] = {};
-    // Resolve the key id we actually built the provider with — even when
-    // the caller passed no explicit keyId, getKey returns the first stored
-    // entry. Tracking that id is what lets per-key stats land correctly
-    // after a /provider swap; otherwise refs.activeKeyId stays undefined
-    // and the success/failure recorders skip silently.
-    let resolvedKeyId: string | undefined = keyId;
-    if (descriptor) {
-      try {
-        const cfg = await loadGlobalConfig();
-        const key = getKey(cfg, descriptor.name, keyId);
-        if (key) {
-          createOpts.token = key.token;
-          if (descriptor.needsAccountId && key.extras?.accountId) {
-            createOpts.accountId = key.extras.accountId;
-          }
-          resolvedKeyId = key.id;
-        }
-      } catch {
-        // Fall through with empty opts; provider may still pick up env vars.
-      }
-    }
-    let nextProvider: Provider;
-    try {
-      nextProvider = createProvider(trimmed, createOpts);
-    } catch (err) {
-      addNotice('danger', `Cannot switch to ${trimmed}: ${(err as Error).message}`);
-      return;
-    }
-    let nextModel: string | undefined = requestedModel;
-    if (!nextModel) {
-      try {
-        const list = await nextProvider.listModels();
-        nextModel = list[0];
-      } catch (err) {
-        addNotice('danger', `Cannot list models for ${trimmed}: ${(err as Error).message}`);
-        return;
-      }
-      if (!nextModel) {
-        addNotice(
-          'warn',
-          `${trimmed} returned no models. Pass one explicitly: /provider ${trimmed} <model>`,
-        );
-        return;
-      }
-    }
-    const validation = await validateModelToolSupport(nextProvider, nextModel);
-    if (validation.mode === 'unreachable') {
-      addNotice('danger', validation.reason);
-      return;
-    }
-    refs.current.sessionLogger?.logModelChange(refs.current.model, nextModel, resolvedKeyId);
-    refs.current.provider = nextProvider;
-    refs.current.model = nextModel;
-    refs.current.primary = { provider: nextProvider.name, model: nextModel };
-    refs.current.activeKeyId = resolvedKeyId;
-    refs.current.useTextToolFallback = validation.mode === 'fallback';
-    refs.current.nativeToolSupport = validation.mode === 'native';
-    setProviderName(nextProvider.name);
-    setModel(nextModel);
-    if (validation.mode === 'fallback') {
-      addNotice('warn', `⚠ ${validation.warning}`);
-    }
-    const caps = nextProvider.getCapabilities(nextModel);
-    refs.current.contextManager = new ContextManager(refs.current.conversation, caps, {
-      compactionThreshold: opts.agentConfig?.compactionThreshold,
-      recencyWindow: opts.agentConfig?.recencyWindow,
-      recencyTokens: opts.agentConfig?.recencyTokens,
-      toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
-    });
-    refreshTokenEstimate();
-    addNotice('info', `Provider → ${nextProvider.name}, model → ${nextModel}`);
+    await swapProvider(name, requestedModel, keyId, buildSwapCtx());
   }
 
   function togglePlanMode(): void {
