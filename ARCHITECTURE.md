@@ -185,7 +185,8 @@ Small helpers.
 - `package.json:bin.factory` makes `factory` available globally after `npm install -g` or `npm link`.
 - `package.json:files` allowlists `dist`, `README.md`, `LICENSE` for the npm tarball; `.npmignore` is defense-in-depth.
 - Ambient declarations live in `src/globals.d.ts` (e.g. `marked-terminal` typings).
-- Unit tests run directly against TS source via `tsx --test 'test/unit/**/*.test.ts'` (no compile step). End-to-end tests compile both `src/` and `test/` into `dist-test/` via `tsconfig.test.json` and run with `node --test`. Unit tests mirror `src/` under `test/unit/`.
+- Unit tests run directly against TS source via `tsx --test 'test/unit/**/*.test.ts'` (no compile step). Unit tests mirror `src/` under `test/unit/`.
+- End-to-end tests compile both `src/` and `test/` into `dist-test/` via `tsconfig.test.json` and run with `node --test`. The harness lives at the top of `test/`: `e2e-mocks.test.ts` and `e2e-no-mocks.test.ts` are the suites, `cli-harness.ts` spawns the built binary, and `mock-copilot-server.ts` / `mock-ollama-server.ts` stub provider endpoints.
 
 ## Data flow: one user prompt → one response
 
@@ -220,7 +221,7 @@ Built-in security rules cannot be overridden by user config — only extended.
 | Change | Touch |
 |--------|-------|
 | New CLI flag | `src/cli/args.ts` (parser + usage) → `src/index.ts` (apply) |
-| New provider | `src/providers/<name>.ts` (or folder) + `descriptors.ts` + `registry.ts` (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
+| New provider | `src/providers/<name>.ts` (or folder) + `descriptors.ts` + `registry.ts`. For OpenAI-compatible APIs, delegate transport to `./openai/index.js` (`buildChatBody`, `sendOpenAiChat`, `streamOpenAiChat`) — see `vercel.ts` or `groq.ts` as a template. (See [CONTRIBUTING.md](CONTRIBUTING.md).) |
 | New tool | `src/tools/<name>.ts` + `src/tools/registry.ts` (register in `ToolRegistry`) |
 | New slash command | `src/ui/tui/slash/<name>.ts` + `src/ui/tui/slash/dispatch.ts` (dispatcher) |
 | New session-log event | add a method on the `SessionLogger` interface in `src/core/session/session-log.ts` (alongside `logModelChange`, `logToolCall`, etc.) + call it from where the event fires |
