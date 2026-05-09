@@ -143,8 +143,8 @@ function ModelMenuApp(props: ModelMenuAppProps): React.ReactElement {
       getModelInfo={(_, m) => {
         const info = provider?.getModelPickerInfo?.(m);
         const label = info?.label ?? provider?.getDisplayModelName?.(m);
-        if (!label && !info?.warning) return undefined;
-        return { label, warning: info?.warning };
+        if (!label && !info?.warning && !info?.detail) return undefined;
+        return { label, warning: info?.warning, detail: info?.detail };
       }}
       onCommit={(_, model) => finish(model)}
       onCancel={() => finish(null)}
