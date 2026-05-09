@@ -14,7 +14,7 @@ import {
   fetchOpenAiCatalog,
   sendOpenAiChat,
   streamOpenAiChat,
-} from './_openai/index.js';
+} from './openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://api.mistral.ai/v1';
 const CODESTRAL_BASE_URL = 'https://codestral.mistral.ai/v1';

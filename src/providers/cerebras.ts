@@ -14,7 +14,7 @@ import {
   fetchOpenAiCatalog,
   sendOpenAiChat,
   streamOpenAiChat,
-} from './_openai/index.js';
+} from './openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://api.cerebras.ai/v1';
 const MISSING_TOKEN_ERROR =

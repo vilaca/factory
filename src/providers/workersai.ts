@@ -9,7 +9,7 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from './types.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './openai/index.js';
 
 const DEFAULT_API_ROOT = 'https://api.cloudflare.com/client/v4';
 const PROVIDER_NAME = 'Cloudflare Workers AI';

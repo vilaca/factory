@@ -12,7 +12,7 @@ import type {
 import type { GoogleAiStudioAuthMode } from '../../core/config/types.js';
 import { appendProviderLog } from '../../core/session-log.js';
 import { GoogleAiStudioAuthManager } from './auth.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../_openai/index.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 
 const DEFAULT_OPENAI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const PROVIDER_NAME = 'Google AI Studio';

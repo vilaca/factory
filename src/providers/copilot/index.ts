@@ -9,7 +9,7 @@ import type {
   ModelTier,
 } from '../types.js';
 import { CopilotAuthManager, inferCopilotCredentialKind } from './auth.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../_openai/index.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 
 const PROVIDER_NAME = 'GitHub Copilot';
 const FALLBACK_MODELS = ['gpt-4.1', 'gpt-4o', 'claude-sonnet-4', 'gemini-2.5-pro', 'o4-mini'];

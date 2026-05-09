@@ -53,7 +53,7 @@ The agent core. **`agent.ts`** is the loop: stream model output, parse tool call
 ### `src/providers/`
 One module per provider. All implement the `Provider` interface from `types.ts`. The factory in `registry.ts` maps a provider name to a constructor; `descriptors.ts` carries the metadata (display label, aliases, env vars, default host).
 
-The `_openai/` subdir is the shared adapter for the ten-or-so OpenAI-compatible providers — it owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction. Native-protocol providers (Anthropic, Ollama, HuggingFace, Cohere, Google AI Studio) parse their own response shapes.
+The `openai/` subdir is the shared adapter for the ten-or-so OpenAI-compatible providers — it owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction. Native-protocol providers (Anthropic, Ollama, HuggingFace, Cohere, Google AI Studio) parse their own response shapes.
 
 ### `src/tools/`
 Six built-in tools (`read`, `write`, `edit`, `bash`, `glob`, `grep`) plus the registry that exposes them. Each tool implements `ToolHandler` with a `definition` (LLM-facing JSON schema) and an `execute` that returns a `ToolResult`. The `Delegate` tool delegates to a sub-agent when the experimental `subagents` flag is on.

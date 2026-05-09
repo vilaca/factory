@@ -13,7 +13,7 @@ import {
   mergeStreamedToolCalls,
   finalizeToolCalls,
   type StreamingToolCallAcc,
-} from './_openai/tool-calls.js';
+} from './openai/tool-calls.js';
 
 /** Local mirror of the OpenAI-style tool shape HF accepts. The HF SDK's
  *  `ChatCompletionInputTool` interface isn't re-exported from the package
