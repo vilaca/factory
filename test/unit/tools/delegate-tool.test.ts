@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import type { Provider, ProviderCapabilities, ChatChunk } from '../../../src/providers/types.js';
-import type { AgentEvent } from '../../../src/core/agent-types.js';
+import type { AgentEvent } from '../../../src/core/agent/types.js';
 import { createDelegateTool } from '../../../src/tools/delegate.js';
 import type { runAgent } from '../../../src/core/agent/run-agent.js';
 import {

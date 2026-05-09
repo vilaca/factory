@@ -1,8 +1,8 @@
 import type { Provider, TokenUsage, ToolCallMessage } from '../../providers/types.js';
-import type { AgentEvent, RotationOptions } from '../agent-types.js';
+import type { AgentEvent, RotationOptions } from './types.js';
 import type { ProviderKey } from '../config/types.js';
 import { keyFingerprint, selectNextKey } from '../credentials.js';
-import { classifyForRotation } from '../provider-errors.js';
+import { classifyForRotation } from './provider-errors.js';
 
 type RotationReason = 'rate-limit' | 'auth';
 

@@ -1,11 +1,11 @@
-import { formatArgValue } from './format.js';
-import type { AgentLoopApi } from './agent-loop/use-agent-loop.js';
-import type { TabsContextValue } from './tabs/TabsContext.js';
-import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../core/config/types.js';
-import { dispatchRotate } from './slash/rotate.js';
-import { dispatchKeys } from './slash/keys.js';
-import { dispatchStats } from './slash/stats.js';
-import { dispatchHooks } from './slash/hooks.js';
+import { formatArgValue } from '../format.js';
+import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
+import type { TabsContextValue } from '../tabs/TabsContext.js';
+import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../../core/config/types.js';
+import { dispatchRotate } from './rotate.js';
+import { dispatchKeys } from './keys.js';
+import { dispatchStats } from './stats.js';
+import { dispatchHooks } from './hooks.js';
 
 interface SlashCommandContext {
   agent: AgentLoopApi;

@@ -5,7 +5,7 @@ import type {
   ChatChunk,
   ProviderCapabilities,
 } from '../../../../src/providers/types.js';
-import type { AgentEvent } from '../../../../src/core/agent-types.js';
+import type { AgentEvent } from '../../../../src/core/agent/types.js';
 import type { ContextManager } from '../../../../src/core/context-manager.js';
 import { Conversation } from '../../../../src/core/conversation.js';
 import { PermissionManager } from '../../../../src/security/permissions.js';

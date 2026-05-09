@@ -1,5 +1,5 @@
 import type { Provider } from '../../providers/types.js';
-import type { AgentEvent } from '../agent-types.js';
+import type { AgentEvent } from './types.js';
 import type { ContextManager } from '../context-manager.js';
 import type { HooksConfig } from '../config/types.js';
 import type { EnvPolicy } from '../../security/env.js';

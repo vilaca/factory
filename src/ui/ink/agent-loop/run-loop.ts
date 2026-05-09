@@ -1,5 +1,5 @@
 import { runAgent } from '../../../core/agent/run-agent.js';
-import type { RotationOptions } from '../../../core/agent-types.js';
+import type { RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';

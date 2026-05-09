@@ -6,9 +6,9 @@ import {
   canResumeLastSession,
   decideStartupSource,
   persistRotationConfig,
-} from '../../../src/cli/startup-config.js';
-import type { StartupProviderName } from '../../../src/providers/descriptors.js';
-import type { Config, RotationEntry } from '../../../src/core/config/types.js';
+} from '../../../../src/cli/startup/config.js';
+import type { StartupProviderName } from '../../../../src/providers/descriptors.js';
+import type { Config, RotationEntry } from '../../../../src/core/config/types.js';
 
 describe('canResumeLastSession', () => {
   it('returns true when the descriptor resolves and the model is in the probe', () => {

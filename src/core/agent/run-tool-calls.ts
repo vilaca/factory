@@ -1,5 +1,5 @@
 import type { Provider, ToolCallMessage } from '../../providers/types.js';
-import type { AgentEvent } from '../agent-types.js';
+import type { AgentEvent } from './types.js';
 import type { HooksConfig } from '../config/types.js';
 import type { ToolRegistry } from '../../tools/registry.js';
 import { TOOL_NAMES } from '../../tools/types.js';
@@ -7,8 +7,8 @@ import type { PathPolicy } from '../../security/paths.js';
 import type { EnvPolicy } from '../../security/env.js';
 import type { Conversation } from '../conversation.js';
 import type { PermissionManager } from '../../security/permissions.js';
-import { formatToolResultMessage } from '../tool-result-format.js';
-import { correctToolCall } from '../tool-call-corrector.js';
+import { formatToolResultMessage } from '../tool-call/tool-result-format.js';
+import { correctToolCall } from '../tool-call/tool-call-corrector.js';
 import { selectWeakTier } from './weak-tier.js';
 import type { RecoveryState } from './recovery-state.js';
 import type { BashDedupTracker } from './bash-dedup.js';

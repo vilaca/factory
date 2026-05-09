@@ -1,29 +1,29 @@
 import chalk from 'chalk';
-import type { Provider } from '../providers/types.js';
-import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
-import { DESCRIPTORS, descriptorByAlias } from '../providers/descriptors.js';
-import { createProvider } from '../providers/registry.js';
-import type { Config, HookEntry } from '../core/config/types.js';
-import type { McpManager } from '../mcp/client.js';
-import type { ToolRegistry } from '../tools/registry.js';
-import { validateModelToolSupport } from '../core/model-validation.js';
-import { appendProviderLog, getRecentSessions } from '../core/session-log.js';
-import { renderError } from '../ui/renderer.js';
-import { getGitBranch, isGitDirty } from '../utils/git.js';
-import { errorMessage } from '../utils/errors.js';
-import { dbg } from '../utils/debug.js';
-import { withBoundedTimeout } from '../utils/timeout.js';
-import type { CliArgs } from './args.js';
+import type { Provider } from '../../providers/types.js';
+import type { ProviderDescriptor, StartupProviderName } from '../../providers/descriptors.js';
+import { DESCRIPTORS, descriptorByAlias } from '../../providers/descriptors.js';
+import { createProvider } from '../../providers/registry.js';
+import type { Config, HookEntry } from '../../core/config/types.js';
+import type { McpManager } from '../../mcp/client.js';
+import type { ToolRegistry } from '../../tools/registry.js';
+import { validateModelToolSupport } from '../../core/model-validation.js';
+import { appendProviderLog, getRecentSessions } from '../../core/session-log.js';
+import { renderError } from '../../ui/renderer.js';
+import { getGitBranch, isGitDirty } from '../../utils/git.js';
+import { errorMessage } from '../../utils/errors.js';
+import { dbg } from '../../utils/debug.js';
+import { withBoundedTimeout } from '../../utils/timeout.js';
+import type { CliArgs } from '../args.js';
 import {
   ensureAuth,
   saveCredentialsAfterModelDiscovery,
   type AuthResult,
   type StartupCredentials,
-} from './auth.js';
-import { buildPickerOptions, findDefaultSelection } from './picker.js';
-import { selectModelInk, selectStartupSession } from './startup-menu.js';
-import { parseRotationChain } from './parse-rotation.js';
-import { applyCliRotationOverrides, decideStartupSource, persistRotationConfig } from './startup-config.js';
+} from '../auth.js';
+import { buildPickerOptions, findDefaultSelection } from '../picker.js';
+import { selectModelInk, selectStartupSession } from './menu.js';
+import { parseRotationChain } from '../parse-rotation.js';
+import { applyCliRotationOverrides, decideStartupSource, persistRotationConfig } from './config.js';
 
 /**
  * Apply CLI rotation overrides to `config.agent.rotation` and (when
@@ -51,7 +51,7 @@ export async function applyRotationPhase(config: Config, cliArgs: CliArgs): Prom
   config.agent = { ...config.agent, rotation: next };
   if (cliArgs.saveRotate) {
     try {
-      const { loadGlobalConfig, saveGlobalConfig } = await import('../core/config/index.js');
+      const { loadGlobalConfig, saveGlobalConfig } = await import('../../core/config/index.js');
       await persistRotationConfig(next, loadGlobalConfig, saveGlobalConfig);
     } catch (err: unknown) {
       console.log(renderError(`Failed to save rotation config: ${errorMessage(err)}`));
@@ -279,7 +279,7 @@ export function installShutdownHandlers(opts: ShutdownHandlerOptions): void {
       for (const name of stuck) pending.push(`mcp:${name}`);
     }
     const flushDone = (async () => {
-      const { flushKeyStats } = await import('../core/key-stats.js');
+      const { flushKeyStats } = await import('../../core/key-stats.js');
       await flushKeyStats();
     })().catch(() => {
       pending.push('key-stats');
@@ -343,15 +343,15 @@ export async function gatherGitState(cwd: string): Promise<GitState> {
  * the merged config so they don't fire for this session.
  */
 export async function handleProjectHookTrust(config: Config, cwd: string): Promise<void> {
-  const { loadProjectConfig } = await import('../core/config/index.js');
+  const { loadProjectConfig } = await import('../../core/config/index.js');
   const projectOnly = await loadProjectConfig(cwd);
   const projectHooks = projectOnly.agent?.hooks;
   if (!projectHooks || Object.keys(projectHooks).length === 0) return;
 
-  const { isProjectTrusted, recordTrust } = await import('../core/hooks/trust.js');
+  const { isProjectTrusted, recordTrust } = await import('../../core/hooks/trust.js');
   if (await isProjectTrusted(cwd, projectHooks)) return;
 
-  const { promptText } = await import('./prompts.js');
+  const { promptText } = await import('../prompts.js');
   console.log('');
   console.log(chalk.yellow(' ⚠ This project declares hooks in .factory/config.json:'));
   for (const [event, entries] of Object.entries(projectHooks)) {
@@ -402,8 +402,8 @@ export async function registerSubagentTool(
   registry: ToolRegistry,
 ): Promise<void> {
   const [{ createDelegateTool }, { selectWeakTier }] = await Promise.all([
-    import('../tools/delegate.js'),
-    import('../core/agent/weak-tier.js'),
+    import('../../tools/delegate.js'),
+    import('../../core/agent/weak-tier.js'),
   ]);
   const weakModel = selectWeakTier(provider, parentModel);
   registry.register(

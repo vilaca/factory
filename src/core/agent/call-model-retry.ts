@@ -1,6 +1,6 @@
-import type { AgentEvent } from '../agent-types.js';
-import { classifyForRetry, nextDelayMs } from '../provider-retry.js';
-import type { resolveRetryPolicy } from '../provider-retry.js';
+import type { AgentEvent } from './types.js';
+import { classifyForRetry, nextDelayMs } from './provider-retry.js';
+import type { resolveRetryPolicy } from './provider-retry.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => {

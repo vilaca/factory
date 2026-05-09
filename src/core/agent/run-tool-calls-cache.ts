@@ -1,9 +1,9 @@
 import type { ToolCallMessage } from '../../providers/types.js';
-import type { AgentEvent } from '../agent-types.js';
+import type { AgentEvent } from './types.js';
 import type { ToolResult } from '../../tools/types.js';
 import { TOOL_NAMES } from '../../tools/types.js';
 import { FileCache } from './file-cache.js';
-import { formatToolResultMessage } from '../tool-result-format.js';
+import { formatToolResultMessage } from '../tool-call/tool-result-format.js';
 import type { ToolLoopContext } from './run-tool-calls.js';
 
 export async function* tryReadCacheHit(
