@@ -1,16 +1,9 @@
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 import type { RotationEntry } from '../../../core/config/types.js';
+import { tupleKey } from '../../../core/config/types.js';
 import { parseRotationEntry } from '../../../cli/parse-rotation.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { loadGlobalConfig, saveGlobalConfig } from '../../../core/config/index.js';
-
-/**
- * Format `<provider>:<model>` exactly. Used as the override key in the
- * rotation config and as a render token in /rotate output.
- */
-export function tupleKey(entry: RotationEntry): string {
-  return `${entry.provider}:${entry.model}`;
-}
 
 export function activeScope(
   agent: AgentLoopApi,
@@ -20,7 +13,7 @@ export function activeScope(
   return {
     provider: refs.provider.name,
     model: refs.model,
-    key: `${refs.provider.name}:${refs.model}`,
+    key: tupleKey({ provider: refs.provider.name, model: refs.model }),
   };
 }
 

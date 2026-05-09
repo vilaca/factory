@@ -3,6 +3,7 @@ import type { RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
+import { tupleKey } from '../../../core/config/types.js';
 import { listKeys } from '../../../core/auth/credentials.js';
 import { getWarmthLog } from '../../../core/session/key-stats.js';
 import { defaultRegistry } from '../../../tools/index.js';
@@ -67,8 +68,8 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
 
   // Resolve the chain for the active tuple: per-(provider, model) override
   // beats the default. Empty when neither is set.
-  const tupleKey = `${refs.provider.name}:${refs.model}`;
-  const chain = refs.rotation.overrides[tupleKey] ?? refs.rotation.default;
+  const key = tupleKey({ provider: refs.provider.name, model: refs.model });
+  const chain = refs.rotation.overrides[key] ?? refs.rotation.default;
 
   // Skip context build entirely when neither tier has any work to do AND
   // there's no requestFallback bridge to ask the user. With the bridge,
