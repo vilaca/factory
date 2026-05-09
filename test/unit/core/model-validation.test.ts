@@ -7,7 +7,7 @@ import type {
   ProviderCapabilities,
   ModelInfo,
 } from '../../../src/providers/types.js';
-import { validateModelToolSupport } from '../../../src/core/model-validation.js';
+import { validateModelToolSupport } from '../../../src/core/auth/model-validation.js';
 
 function baseProvider(): Provider {
   return {

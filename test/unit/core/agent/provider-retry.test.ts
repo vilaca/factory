@@ -4,7 +4,7 @@ import {
   classifyForRetry,
   nextDelayMs,
   resolveRetryPolicy,
-} from '../../../../src/core/agent/provider-retry.js';
+} from '../../../../src/core/agent/call-model/provider-retry.js';
 
 describe('classifyForRetry', () => {
   it('classifies 408 / 429 / 5xx as transient', () => {

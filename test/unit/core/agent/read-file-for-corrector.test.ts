@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { readFileForCorrector } from '../../../../src/core/agent/run-tool-calls.js';
+import { readFileForCorrector } from '../../../../src/core/agent/tool-calls/run-tool-calls.js';
 
 const READ_CAP = 32 * 1024;
 

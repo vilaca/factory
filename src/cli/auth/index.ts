@@ -9,8 +9,8 @@ import {
 } from '../../providers/descriptors.js';
 import { createProvider, type CreateProviderOptions } from '../../providers/registry.js';
 import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
-import { addKey, getKey } from '../../core/credentials.js';
-import { appendProviderLog } from '../../core/session-log.js';
+import { addKey, getKey } from '../../core/auth/credentials.js';
+import { appendProviderLog } from '../../core/session/session-log.js';
 import { promptText } from '../prompts.js';
 import {
   ensureCopilotAuth,

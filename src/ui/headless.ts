@@ -12,16 +12,16 @@ import type { Provider } from '../providers/types.js';
 import type { AgentConfig, BashRuleConfig } from '../core/config/types.js';
 import type { PathPolicy } from '../security/paths.js';
 import type { EnvPolicy } from '../security/env.js';
-import { Conversation } from '../core/conversation.js';
-import { ContextManager } from '../core/context-manager.js';
+import { Conversation } from '../core/context/conversation.js';
+import { ContextManager } from '../core/context/context-manager.js';
 import { PermissionManager } from '../security/permissions.js';
 import { runAgent } from '../core/agent/run-agent.js';
 import { errorMessage } from '../utils/errors.js';
-import { FileCache } from '../core/agent/file-cache.js';
+import { FileCache } from '../core/agent/cache/file-cache.js';
 import { defaultRegistry } from '../tools/index.js';
-import { createSessionLogger, type SessionLogger } from '../core/session-log.js';
+import { createSessionLogger, type SessionLogger } from '../core/session/session-log.js';
 import { getBuildInfo } from '../utils/build-info.js';
-import { buildEnvironmentMessage } from '../core/system-prompt.js';
+import { buildEnvironmentMessage } from '../core/context/system-prompt.js';
 import { runHook } from '../core/hooks/index.js';
 
 interface HeadlessOptions {

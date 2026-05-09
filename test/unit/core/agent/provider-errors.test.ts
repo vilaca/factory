@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { classifyForRotation } from '../../../../src/core/agent/provider-errors.js';
+import { classifyForRotation } from '../../../../src/core/agent/call-model/provider-errors.js';
 
 describe('classifyForRotation', () => {
   describe('via .status / .statusCode field', () => {

@@ -2,7 +2,7 @@ import type { Provider } from '../providers/types.js';
 import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { runSubagent } from '../core/subagent/runner.js';
-import type { SessionLogger } from '../core/session-log.js';
+import type { SessionLogger } from '../core/session/session-log.js';
 
 /*
  * Future improvements (not blocking this branch's merge):

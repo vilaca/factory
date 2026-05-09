@@ -7,7 +7,7 @@ import { readTool } from '../../tools/read.js';
 import { globTool } from '../../tools/glob.js';
 import { grepTool } from '../../tools/grep.js';
 import { bashTool } from '../../tools/bash.js';
-import { Conversation } from '../conversation.js';
+import { Conversation } from '../context/conversation.js';
 import { PermissionManager } from '../../security/permissions.js';
 import { runAgent } from '../agent/run-agent.js';
 import { isCommandAllowed } from './bash-allowlist.js';

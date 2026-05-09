@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { RepeatDetector } from '../../../../src/core/agent/repeat-detector.js';
+import { RepeatDetector } from '../../../../src/core/agent/call-model/repeat-detector.js';
 
 describe('RepeatDetector', () => {
   it('returns null for non-repeating output', () => {

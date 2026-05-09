@@ -5,7 +5,7 @@ import { editTool } from './edit.js';
 import { bashTool } from './bash.js';
 import { globTool } from './glob.js';
 import { grepTool } from './grep.js';
-import { webFetchTool } from './web-fetch.js';
+import { webFetchTool } from './web/index.js';
 
 export class ToolRegistry {
   // Canonical store keyed by the handler's exact name. `getAll()` iterates
