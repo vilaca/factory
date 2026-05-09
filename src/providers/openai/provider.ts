@@ -9,7 +9,15 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from '../types.js';
-import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './index.js';
+import {
+  buildChatBody,
+  buildResponsesBody,
+  fetchOpenAiCatalog,
+  sendOpenAiChat,
+  sendOpenAiResponses,
+  streamOpenAiChat,
+  streamOpenAiResponses,
+} from './index.js';
 import { filterChatModels, matchedPattern } from '../list-models-filter.js';
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
@@ -77,6 +85,17 @@ export class OpenAIProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
+    const lower = model.toLowerCase();
+    if (isResponsesApiOnly(lower)) {
+      yield* streamOpenAiResponses({
+        url: `${this.baseUrl}/responses`,
+        headers: this.authHeaders(),
+        body: this.responsesBody(model, messages, tools, true, options),
+        signal: options?.signal,
+        providerName: PROVIDER_NAME,
+      });
+      return;
+    }
     yield* streamOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.authHeaders(),
@@ -92,6 +111,16 @@ export class OpenAIProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
+    const lower = model.toLowerCase();
+    if (isResponsesApiOnly(lower)) {
+      return sendOpenAiResponses({
+        url: `${this.baseUrl}/responses`,
+        headers: this.authHeaders(),
+        body: this.responsesBody(model, messages, tools, false, options),
+        signal: options?.signal,
+        providerName: PROVIDER_NAME,
+      });
+    }
     return sendOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.authHeaders(),
@@ -117,6 +146,27 @@ export class OpenAIProvider implements Provider {
         : undefined
       : options;
     return buildChatBody({
+      model,
+      messages,
+      tools: supportsToolsByName(lower) ? tools : undefined,
+      stream,
+      options: adjusted,
+      parallelToolCalls: supportsParallelToolCalls(lower),
+    });
+  }
+
+  private responsesBody(
+    model: string,
+    messages: ChatMessage[],
+    tools: ToolDefinition[] | undefined,
+    stream: boolean,
+    options?: ChatOptions,
+  ): Record<string, unknown> {
+    const lower = model.toLowerCase();
+    // Codex rejects `temperature` outright on the Responses path; strip it
+    // unconditionally for responsesApiOnly models regardless of caller default.
+    const adjusted = options ? { ...options, temperature: undefined } : undefined;
+    return buildResponsesBody({
       model,
       messages,
       tools: supportsToolsByName(lower) ? tools : undefined,
@@ -318,6 +368,16 @@ function estimateMaxOutput(model: string): number {
 
 function isReasoningModel(model: string): boolean {
   return lookupFamily(model)?.reasoning ?? false;
+}
+
+function isResponsesApiOnly(model: string): boolean {
+  // Substring rather than the family table so dotted minor versions —
+  // gpt-5.1-codex, gpt-5.3-codex, gpt-5.1-codex-mini — all route to
+  // /v1/responses without one row per variant. Family-prefix matching
+  // is hyphen-anchored ('gpt-5-codex' doesn't startsWith 'gpt-5.3-codex').
+  // 'codex' is OpenAI-specific terminology; safe to match generically inside
+  // the OpenAI provider.
+  return /codex/i.test(model);
 }
 
 function supportsToolsByName(model: string): boolean {

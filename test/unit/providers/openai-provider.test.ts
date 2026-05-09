@@ -158,6 +158,170 @@ describe('OpenAIProvider', () => {
     );
   });
 
+  it('routes gpt-5-codex through /v1/responses with the new body shape', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+
+        // Codex must hit the Responses endpoint, not chat/completions —
+        // the latter returns 404 "not a chat model" upstream.
+        assert.strictEqual(req.url, '/v1/responses');
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          assert.strictEqual(parsed.model, 'gpt-5-codex');
+          // Responses-API shape: input/instructions, not messages.
+          assert.ok(Array.isArray(parsed.input));
+          assert.strictEqual('messages' in parsed, false);
+          // Tools flatten to `{type, name, description, parameters, strict}`.
+          assert.strictEqual(parsed.tools[0].type, 'function');
+          assert.strictEqual(parsed.tools[0].name, 'Read');
+          assert.strictEqual('function' in parsed.tools[0], false);
+          // Codex rejects temperature even via the Responses path.
+          assert.strictEqual('temperature' in parsed, false);
+          // max_output_tokens, not max_completion_tokens.
+          assert.strictEqual(parsed.max_output_tokens, 1024);
+          assert.strictEqual(parsed.store, false);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id: 'resp_test',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'codex thought it through.' }],
+                },
+              ],
+              usage: {
+                input_tokens: 4,
+                output_tokens: 7,
+                total_tokens: 11,
+                output_tokens_details: { reasoning_tokens: 5 },
+              },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream(
+          'gpt-5-codex',
+          [
+            { role: 'system', content: 'be helpful' },
+            { role: 'user', content: 'think' },
+          ],
+          [
+            {
+              type: 'function',
+              function: { name: 'Read', description: 'read', parameters: {} },
+            },
+          ],
+          { maxTokens: 1024, temperature: 0 },
+        );
+        assert.strictEqual(result.content, 'codex thought it through.');
+        assert.deepStrictEqual(result.usage, {
+          promptTokens: 4,
+          completionTokens: 7,
+          totalTokens: 11,
+          reasoningTokens: 5,
+        });
+      },
+    );
+  });
+
+  it('routes dotted-minor codex variants (gpt-5.3-codex, gpt-5.1-codex-mini) through /v1/responses', async () => {
+    const seen: string[] = [];
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        seen.push(req.url ?? '');
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'ok' }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        await provider.chatNoStream('gpt-5.3-codex', [{ role: 'user', content: 'hi' }]);
+        await provider.chatNoStream('gpt-5.1-codex-mini', [{ role: 'user', content: 'hi' }]);
+        assert.deepStrictEqual(seen, ['/v1/responses', '/v1/responses']);
+      },
+    );
+  });
+
+  it('still routes gpt-5 (non-codex) through /v1/chat/completions', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+
+        assert.strictEqual(req.url, '/v1/chat/completions');
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          assert.strictEqual(parsed.model, 'gpt-5');
+          // Chat-completions shape: messages, not input.
+          assert.ok(Array.isArray(parsed.messages));
+          assert.strictEqual('input' in parsed, false);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' } }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream(
+          'gpt-5',
+          [{ role: 'user', content: 'hi' }],
+          undefined,
+          { maxTokens: 16 },
+        );
+        assert.strictEqual(result.content, 'ok');
+      },
+    );
+  });
+
   it('keeps temperature on non-reasoning chat models', async () => {
     await withServer(
       (req, res) => {
