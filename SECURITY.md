@@ -25,4 +25,4 @@ Out of scope:
 
 - Vulnerabilities in upstream provider APIs, model weights, or third-party services
 - Issues that require an attacker to already have local code execution as the user
-- Risks already documented in the README's [Security](README.md#security) section (e.g. the Bash tool executes shell commands by design)
+- Risks already documented in [docs/security.md](docs/security.md) (e.g. the Bash tool executes shell commands by design)
