@@ -297,11 +297,15 @@ function lookupFamily(model: string): OpenAIFamily | undefined {
 function estimateModelTier(model: string): ModelTier {
   const family = lookupFamily(model);
   if (family?.deprecated) return 'weak';
-  if (family?.tier) return family.tier;
-  // Generic fallback: mini/nano variants demote one step. Everything else
-  // is assumed strong so unknown future flagships float above unknown minis.
-  if (/(?:^|[-/])(?:mini|nano)\b/.test(model)) return 'medium';
-  return 'strong';
+  const baseTier: ModelTier = family?.tier ?? 'strong';
+  // A family row encodes the *default* tier for that family; mini/nano
+  // variants of a strong family are still smaller models. Apply the
+  // generic demotion on top of `strong` rows so e.g. `gpt-5.1-codex-mini`
+  // (which matches the `gpt-5` row) lands in `medium`. Explicit `medium`
+  // or `weak` rows already account for being a mini and aren't demoted
+  // again.
+  if (baseTier === 'strong' && /(?:^|[-/])(?:mini|nano)\b/.test(model)) return 'medium';
+  return baseTier;
 }
 
 function estimateContextWindow(model: string): number {
