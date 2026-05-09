@@ -85,9 +85,7 @@ export async function handleAdd(agent: AgentLoopApi, rest: string[]): Promise<vo
     return;
   }
   const current = readChain(agent, target);
-  const dupIndex = current.findIndex(
-    e => e.provider === entry.provider && e.model === entry.model,
-  );
+  const dupIndex = current.findIndex(e => e.provider === entry.provider && e.model === entry.model);
   if (dupIndex >= 0) {
     agent.addNotice('warn', `Already in chain at position ${dupIndex + 1}.`);
     return;
@@ -115,10 +113,7 @@ export async function handleAdd(agent: AgentLoopApi, rest: string[]): Promise<vo
 export async function handleInsert(agent: AgentLoopApi, rest: string[]): Promise<void> {
   const flags = parseFlags(rest);
   if (flags.rest.length !== 2) {
-    agent.addNotice(
-      'warn',
-      'Usage: /rotate insert [--default | --for <p:m>] <n> <provider:model>',
-    );
+    agent.addNotice('warn', 'Usage: /rotate insert [--default | --for <p:m>] <n> <provider:model>');
     return;
   }
   const n = parseIndex(flags.rest[0]!);

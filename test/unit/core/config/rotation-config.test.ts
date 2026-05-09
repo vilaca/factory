@@ -3,7 +3,11 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { loadProjectConfig, loadGlobalConfig, saveGlobalConfig } from '../../../../src/core/config/index.js';
+import {
+  loadProjectConfig,
+  loadGlobalConfig,
+  saveGlobalConfig,
+} from '../../../../src/core/config/index.js';
 
 async function withProjectFile(content: string, fn: (cwd: string) => Promise<void>): Promise<void> {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-rotcfg-'));

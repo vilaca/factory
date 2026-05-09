@@ -186,9 +186,7 @@ const HANDLERS: EventHandlers = {
 
   'tool-call-planned': (event, deps) => {
     const sig = `${event.toolName}:${JSON.stringify(event.args)}`;
-    const dup = deps
-      .getPlannedCalls()
-      .some(p => `${p.toolName}:${JSON.stringify(p.args)}` === sig);
+    const dup = deps.getPlannedCalls().some(p => `${p.toolName}:${JSON.stringify(p.args)}` === sig);
     if (dup) {
       deps.addNotice('info', `[planned] (skipped duplicate ${event.toolName} call)`);
       return;
@@ -305,8 +303,7 @@ const HANDLERS: EventHandlers = {
     deps.addNotice('warn', `⛔ ${event.event} hook vetoed ${event.toolName}${reason}`);
   },
 
-  'hook-error': (event, deps) =>
-    deps.addNotice('warn', `⚠ Hook ${event.event}: ${event.error}`),
+  'hook-error': (event, deps) => deps.addNotice('warn', `⚠ Hook ${event.event}: ${event.error}`),
 
   'hook-fired': (event, deps) => {
     const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;

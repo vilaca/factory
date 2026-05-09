@@ -254,13 +254,13 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   function renderBody(): React.ReactElement {
     switch (stage.kind) {
       case 'recent':
-        return <RecentStage recents={recents} recentsLoading={recentsLoading} recentIdx={recentIdx} />;
+        return (
+          <RecentStage recents={recents} recentsLoading={recentsLoading} recentIdx={recentIdx} />
+        );
       case 'provider':
         return <ProviderStage providers={providers} providerIndex={providerIndex} />;
       case 'key':
-        return (
-          <KeyStage stage={stage} hasDelete={stage.keys.length >= 1 && Boolean(deleteKey)} />
-        );
+        return <KeyStage stage={stage} hasDelete={stage.keys.length >= 1 && Boolean(deleteKey)} />;
       case 'key-delete':
         return <KeyDeleteStage stage={stage} />;
       case 'key-confirm-delete':

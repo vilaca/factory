@@ -24,15 +24,15 @@ Be deliberate about which tools you allow — `Bash`, `Edit`, and `Write` execut
 
 ## Exit codes
 
-| Code | Meaning |
-| ---- | ------- |
-| `0`  | Success |
-| `1`  | Agent error (provider failure, unhandled rejection, etc.) |
-| `2`  | Empty stdin (nothing for the agent to act on) |
-| `3`  | Permission denied (no TTY to prompt) |
-| `4`  | Turn limit hit (`--turn-timeout`) |
-| `5`  | Token limit / context-window exhausted |
-| `130` | SIGINT |
+| Code  | Meaning                                                   |
+| ----- | --------------------------------------------------------- |
+| `0`   | Success                                                   |
+| `1`   | Agent error (provider failure, unhandled rejection, etc.) |
+| `2`   | Empty stdin (nothing for the agent to act on)             |
+| `3`   | Permission denied (no TTY to prompt)                      |
+| `4`   | Turn limit hit (`--turn-timeout`)                         |
+| `5`   | Token limit / context-window exhausted                    |
+| `130` | SIGINT                                                    |
 
 ## Session logs
 

@@ -233,10 +233,14 @@ export async function selectAndValidateModel(
     model = resumeModel;
     dbg(`resuming model from picker: ${model}`);
   } else {
-    const lastModelForProvider =
-      lastSession?.provider === providerName ? lastSession.model : null;
+    const lastModelForProvider = lastSession?.provider === providerName ? lastSession.model : null;
     dbg(`opening selectModel (default=${lastModelForProvider ?? '<none>'})`);
-    model = await selectModelInk(availableModels ?? [], lastModelForProvider, provider, providerName);
+    model = await selectModelInk(
+      availableModels ?? [],
+      lastModelForProvider,
+      provider,
+      providerName,
+    );
     dbg(`selectModel returned: ${model}`);
   }
 

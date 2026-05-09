@@ -205,9 +205,10 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  private splitMessages(
-    messages: ChatMessage[],
-  ): { system: StreamingParams['system'] | null; msgs: MessageParam[] } {
+  private splitMessages(messages: ChatMessage[]): {
+    system: StreamingParams['system'] | null;
+    msgs: MessageParam[];
+  } {
     return splitMessagesForAnthropic(messages);
   }
 }

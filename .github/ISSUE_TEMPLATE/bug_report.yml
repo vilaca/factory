@@ -1,6 +1,6 @@
 name: Bug report
 description: Something is wrong with factory.
-labels: ["bug"]
+labels: ['bug']
 body:
   - type: markdown
     attributes:
@@ -11,7 +11,7 @@ body:
     attributes:
       label: factory version
       description: Output of `factory --version`.
-      placeholder: "factory 0.1.0"
+      placeholder: 'factory 0.1.0'
     validations:
       required: true
   - type: input
@@ -19,7 +19,7 @@ body:
     attributes:
       label: Node version
       description: Output of `node --version`.
-      placeholder: "v22.11.0"
+      placeholder: 'v22.11.0'
     validations:
       required: true
   - type: dropdown
@@ -38,7 +38,7 @@ body:
     attributes:
       label: Provider and model
       description: Which provider and model triggered the bug?
-      placeholder: "anthropic / claude-sonnet-4-6"
+      placeholder: 'anthropic / claude-sonnet-4-6'
     validations:
       required: true
   - type: textarea

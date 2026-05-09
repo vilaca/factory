@@ -291,8 +291,7 @@ export async function getLastSessionSelection(): Promise<LastSessionSelection | 
     const header = parseSessionStart(lines[0]!);
     if (!header) return null;
     const rollup = rollupSessionLines(lines.slice(1), header);
-    const finalModel =
-      rollup.model !== STARTUP_MODEL_PLACEHOLDER ? rollup.model : undefined;
+    const finalModel = rollup.model !== STARTUP_MODEL_PLACEHOLDER ? rollup.model : undefined;
     if (!finalModel) return null;
     return {
       provider: rollup.provider,

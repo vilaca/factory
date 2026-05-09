@@ -70,7 +70,11 @@ describe('Read — path-jail enforcement', () => {
       assert.strictEqual(result.success, false);
       assert.match(result.output, /denied/);
     } finally {
-      try { fs.unlinkSync(link); } catch { /* ignore */ }
+      try {
+        fs.unlinkSync(link);
+      } catch {
+        /* ignore */
+      }
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });

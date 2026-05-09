@@ -115,10 +115,9 @@ describe('runToolCalls — recovery state', () => {
   it('counts denials in the returned deniedCount', async () => {
     const tool = fakeTool({ name: 'Read' });
     const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
-    const { result } = await collect(
-      runToolCalls([callOf('Read')], ctx, 'sig', makeRecovery()),
-      { onPermission: () => 'deny' },
-    );
+    const { result } = await collect(runToolCalls([callOf('Read')], ctx, 'sig', makeRecovery()), {
+      onPermission: () => 'deny',
+    });
     assert.strictEqual(result.deniedCount, 1);
   });
 });
@@ -226,9 +225,7 @@ describe('runToolCalls — corrector', () => {
       enableCorrector: true,
       model: 'claude-opus-4',
     });
-    await collect(
-      runToolCalls([callOf('Read', { file_path: '/x' })], ctx, 'sig', makeRecovery()),
-    );
+    await collect(runToolCalls([callOf('Read', { file_path: '/x' })], ctx, 'sig', makeRecovery()));
     assert.deepStrictEqual(modelLog, ['claude-haiku-4-5-20251001']);
   });
 
@@ -333,9 +330,7 @@ describe('runToolCalls — corrector', () => {
       provider,
       enableCorrector: true,
     });
-    await collect(
-      runToolCalls([callOf('Read', { file_path: '/x' })], ctx, 'sig', recovery),
-    );
+    await collect(runToolCalls([callOf('Read', { file_path: '/x' })], ctx, 'sig', recovery));
     assert.strictEqual(chatCalls, 0, 'corrector skipped when budget is zero');
   });
 
@@ -356,9 +351,7 @@ describe('runToolCalls — corrector', () => {
       permissions.allowAll('Read');
       const provider = makeProvider({
         modelTier: 'strong',
-        noStreamResponses: [
-          JSON.stringify({ name: 'Read', arguments: { file_path: right } }),
-        ],
+        noStreamResponses: [JSON.stringify({ name: 'Read', arguments: { file_path: right } })],
       });
       const ctx = makeCtx({
         permissions,
@@ -404,9 +397,7 @@ describe('runToolCalls — corrector', () => {
       enableCorrector: true,
       planMode: true,
     });
-    await collect(
-      runToolCalls([callOf('Read', { file_path: '/x' })], ctx, 'sig', makeRecovery()),
-    );
+    await collect(runToolCalls([callOf('Read', { file_path: '/x' })], ctx, 'sig', makeRecovery()));
     assert.strictEqual(chatCalls, 0);
   });
 });
@@ -452,8 +443,7 @@ describe('runToolCalls — hooks', () => {
       hooksConfig: {
         PreToolUse: [
           {
-            command:
-              `cat >/dev/null && echo '{"cancel":true,"errorMessage":"blocked by test hook"}'`,
+            command: `cat >/dev/null && echo '{"cancel":true,"errorMessage":"blocked by test hook"}'`,
           },
         ],
       },
@@ -484,9 +474,7 @@ describe('runToolCalls — hooks', () => {
     const { events: okEvents } = await collect(
       runToolCalls([callOf('Read')], ctx, 'sig', makeRecovery()),
     );
-    const okHookFired = okEvents.find(
-      e => e.type === 'hook-fired' && e.event === 'PostToolUse',
-    );
+    const okHookFired = okEvents.find(e => e.type === 'hook-fired' && e.event === 'PostToolUse');
     assert.ok(okHookFired, 'PostToolUse fires on success');
     assert.ok(
       !okEvents.some(e => e.type === 'hook-fired' && e.event === 'PostToolUseFailure'),

@@ -4,11 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
-import type {
-  Provider,
-  ChatChunk,
-  ProviderCapabilities,
-} from '../../../../src/providers/types.js';
+import type { Provider, ChatChunk, ProviderCapabilities } from '../../../../src/providers/types.js';
 import type { AgentEvent } from '../../../../src/core/agent/types.js';
 import { Conversation } from '../../../../src/core/context/conversation.js';
 import { PermissionManager } from '../../../../src/security/permissions.js';

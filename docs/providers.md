@@ -4,24 +4,24 @@ factory supports 16 providers. Each one ships with default model discovery, capa
 
 ## Provider matrix
 
-| Provider | CLI alias | Auth | Notes |
-| -------- | --------- | ---- | ----- |
-| Anthropic Claude | `anthropic`, `claude` | `ANTHROPIC_API_KEY` | Native protocol; explicit prompt caching supported. |
-| Cerebras | `cerebras` | `CEREBRAS_API_KEY` | OpenAI-compatible; very fast inference. |
-| Codestral | `codestral` | `CODESTRAL_API_KEY` | Mistral's code-focused endpoint. Same SDK as Mistral. |
-| Cohere | `cohere` | `COHERE_API_KEY` | Native protocol. Streaming not yet implemented (uses non-streaming chat). |
-| GitHub Copilot | `copilot` | `GITHUB_COPILOT_API_KEY` or `COPILOT_API_KEY`, or interactive OAuth | Catalog reflects Copilot's own picker/policy flags. |
-| Google AI Studio | `googleaistudio`, `gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY`, or `GOOGLE_APPLICATION_CREDENTIALS` (ADC), or `gcloud auth application-default login` | Filters out non-chat models (embeddings, image/video, TTS). |
-| Groq | `groq` | `GROQ_API_KEY` | OpenAI-compatible. Excludes audio/guardrail models. |
-| HuggingFace | `huggingface`, `hf` | `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN` | Curated starter list of chat models; HF doesn't expose a single "chat models I can use" catalog. |
-| llama.cpp | `llamacpp` | none (local) | Lists the currently loaded model set from the llama.cpp server. |
-| Mistral | `mistral` | `MISTRAL_API_KEY` | OpenAI-compatible. |
-| Ollama | `ollama` | none (local) or token via `--token` | Default; assumes `http://localhost:11434`. |
-| OpenAI | `openai`, `oai` | `OPENAI_API_KEY` | OpenAI-compatible (its native shape). Filters non-chat endpoints (embeddings, audio, image, moderation, realtime). Drops `temperature` and `parallel_tool_calls` for the o-series and gpt-5 reasoning models. |
-| OpenCode Zen | `opencodezen` | `OPENCODE_ZEN_API_KEY` or `OPENCODE_API_KEY` | Routes to Anthropic-, Google-, or OpenAI-shaped backends per model. GPT models routed via the legacy chat-completions path; native `/responses` is on the roadmap. |
-| OpenRouter | `openrouter`, `or` | `OPENROUTER_API_KEY` | OpenAI-compatible; preserves Anthropic `cache_control` blocks for `anthropic/...` model ids. |
-| Vercel AI Gateway | `vercel` | `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | OpenAI-compatible. Filters to language models only. |
-| Workers AI | `workersai` | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) | OpenAI-compatible. Cloudflare account ID can also be inferred from the host URL. |
+| Provider          | CLI alias                  | Auth                                                                                                                        | Notes                                                                                                                                                                                                         |
+| ----------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anthropic Claude  | `anthropic`, `claude`      | `ANTHROPIC_API_KEY`                                                                                                         | Native protocol; explicit prompt caching supported.                                                                                                                                                           |
+| Cerebras          | `cerebras`                 | `CEREBRAS_API_KEY`                                                                                                          | OpenAI-compatible; very fast inference.                                                                                                                                                                       |
+| Codestral         | `codestral`                | `CODESTRAL_API_KEY`                                                                                                         | Mistral's code-focused endpoint. Same SDK as Mistral.                                                                                                                                                         |
+| Cohere            | `cohere`                   | `COHERE_API_KEY`                                                                                                            | Native protocol. Streaming not yet implemented (uses non-streaming chat).                                                                                                                                     |
+| GitHub Copilot    | `copilot`                  | `GITHUB_COPILOT_API_KEY` or `COPILOT_API_KEY`, or interactive OAuth                                                         | Catalog reflects Copilot's own picker/policy flags.                                                                                                                                                           |
+| Google AI Studio  | `googleaistudio`, `gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY`, or `GOOGLE_APPLICATION_CREDENTIALS` (ADC), or `gcloud auth application-default login` | Filters out non-chat models (embeddings, image/video, TTS).                                                                                                                                                   |
+| Groq              | `groq`                     | `GROQ_API_KEY`                                                                                                              | OpenAI-compatible. Excludes audio/guardrail models.                                                                                                                                                           |
+| HuggingFace       | `huggingface`, `hf`        | `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN`                                                                                      | Curated starter list of chat models; HF doesn't expose a single "chat models I can use" catalog.                                                                                                              |
+| llama.cpp         | `llamacpp`                 | none (local)                                                                                                                | Lists the currently loaded model set from the llama.cpp server.                                                                                                                                               |
+| Mistral           | `mistral`                  | `MISTRAL_API_KEY`                                                                                                           | OpenAI-compatible.                                                                                                                                                                                            |
+| Ollama            | `ollama`                   | none (local) or token via `--token`                                                                                         | Default; assumes `http://localhost:11434`.                                                                                                                                                                    |
+| OpenAI            | `openai`, `oai`            | `OPENAI_API_KEY`                                                                                                            | OpenAI-compatible (its native shape). Filters non-chat endpoints (embeddings, audio, image, moderation, realtime). Drops `temperature` and `parallel_tool_calls` for the o-series and gpt-5 reasoning models. |
+| OpenCode Zen      | `opencodezen`              | `OPENCODE_ZEN_API_KEY` or `OPENCODE_API_KEY`                                                                                | Routes to Anthropic-, Google-, or OpenAI-shaped backends per model. GPT models routed via the legacy chat-completions path; native `/responses` is on the roadmap.                                            |
+| OpenRouter        | `openrouter`, `or`         | `OPENROUTER_API_KEY`                                                                                                        | OpenAI-compatible; preserves Anthropic `cache_control` blocks for `anthropic/...` model ids.                                                                                                                  |
+| Vercel AI Gateway | `vercel`                   | `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN`                                                                                 | OpenAI-compatible. Filters to language models only.                                                                                                                                                           |
+| Workers AI        | `workersai`                | `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`)                                                                          | OpenAI-compatible. Cloudflare account ID can also be inferred from the host URL.                                                                                                                              |
 
 ## Auth precedence
 
@@ -43,11 +43,11 @@ Most providers expose `/v1/models` and factory paginates through it. Some quirks
 
 ## Tool support
 
-| Level | Description |
-| ----- | ----------- |
-| `native` | Provider exposes a tool-call API; tool calls round-trip through structured fields. |
-| `basic` | Tool calls are supported but with limitations (no parallel calls, no reasoning preservation). |
-| `none` | No structured tool support; the agent falls back to text-based tool calls (recovered by `src/core/agent/tool-calls/text-tool-parser.ts`). |
+| Level    | Description                                                                                                                               |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `native` | Provider exposes a tool-call API; tool calls round-trip through structured fields.                                                        |
+| `basic`  | Tool calls are supported but with limitations (no parallel calls, no reasoning preservation).                                             |
+| `none`   | No structured tool support; the agent falls back to text-based tool calls (recovered by `src/core/agent/tool-calls/text-tool-parser.ts`). |
 
 Per-model capability is reported by `getCapabilities(model)` on each provider — see `src/providers/<provider>.ts` (or `src/providers/<provider>/index.ts` for folder-based providers like `copilot/`, `googleaistudio/`, `opencodezen/`).
 
