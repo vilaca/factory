@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { webFetchTool } from '../../../src/tools/web/index.js';
 import { fetchUrl } from '../../../src/tools/web/fetch.js';
@@ -180,6 +180,146 @@ describe('WebFetch tool', () => {
     });
     assert.strictEqual(result.url, 'https://www.example.com/y');
     assert.strictEqual(result.body, 'hello');
+  });
+});
+
+describe('WebFetch tool — execute() success paths', () => {
+  // The early-return error branches above run without I/O. The interesting
+  // post-fetch branches (HTML→md vs plain vs raw, output truncation tail,
+  // redirect-URL prefix, validateHop protocol block) need a real call into
+  // fetchUrl, which uses globalThis.fetch. Stub it for this block only.
+  let originalFetch: typeof globalThis.fetch;
+  before(() => {
+    originalFetch = globalThis.fetch;
+  });
+  after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const stubFetch = (impl: (url: string) => Response): void => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      impl(typeof input === 'string' ? input : input.toString())) as typeof fetch;
+  };
+
+  it('converts HTML responses to markdown and labels the mode', async () => {
+    stubFetch(
+      () =>
+        new Response('<p>hello <strong>world</strong></p>', {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        }),
+    );
+    const r = await webFetchTool.execute({ url: 'https://example.com/x' });
+    assert.strictEqual(r.success, true);
+    assert.match(r.output, /html→markdown/);
+    assert.match(r.output, /hello \*\*world\*\*/);
+  });
+
+  it('returns plain text bodies as-is and labels the mode', async () => {
+    stubFetch(
+      () =>
+        new Response('first line\nsecond line', {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    );
+    const r = await webFetchTool.execute({ url: 'https://example.com/x' });
+    assert.strictEqual(r.success, true);
+    assert.match(r.output, /plain text/);
+    assert.match(r.output, /first line\nsecond line/);
+  });
+
+  it('falls back to a raw view for unsupported content-types and includes the type in the preamble', async () => {
+    stubFetch(
+      () =>
+        new Response('{"k":1}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    const r = await webFetchTool.execute({ url: 'https://example.com/x' });
+    assert.strictEqual(r.success, true);
+    assert.match(r.output, /— raw\n/);
+    assert.match(r.output, /\[unsupported content-type: application\/json/);
+    assert.match(r.output, /\{"k":1\}/);
+  });
+
+  it('truncates output past the model cap with a footer reporting how much was dropped', async () => {
+    // 20 KiB plain text exceeds the 16 KiB MODEL_OUTPUT_CAP — the trailing
+    // `... [truncated N chars to fit the WebFetch output cap]` line should
+    // appear and the visible output should not contain the trailing marker
+    // we appended past the cap.
+    const big = 'x'.repeat(20 * 1024) + 'TAIL_MARKER';
+    stubFetch(
+      () =>
+        new Response(big, {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    );
+    const r = await webFetchTool.execute({ url: 'https://example.com/x' });
+    assert.strictEqual(r.success, true);
+    assert.match(r.output, /\[truncated \d+ chars to fit the WebFetch output cap\]/);
+    assert.ok(!r.output.includes('TAIL_MARKER'));
+  });
+
+  it('annotates the output with the post-redirect URL when the chain rewrote it', async () => {
+    let calls = 0;
+    stubFetch(url => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://example.com/new' },
+        });
+      }
+      assert.strictEqual(url, 'https://example.com/new');
+      return new Response('arrived', {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      });
+    });
+    const r = await webFetchTool.execute({ url: 'https://example.com/old' });
+    assert.strictEqual(r.success, true);
+    assert.match(r.output, /\(final URL after redirects: https:\/\/example\.com\/new\)/);
+  });
+
+  it('refuses a redirect to a non-http(s) protocol via the validateHop protocol gate', async () => {
+    // Same host, but the redirect target's scheme is ftp — the protocol
+    // check fires before the hostname allowlist branch. Without the gate,
+    // node-fetch would happily fetch ftp:// or worse, javascript:.
+    stubFetch(
+      () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'ftp://example.com/data' },
+        }),
+    );
+    const r = await webFetchTool.execute({ url: 'https://example.com/x' });
+    assert.strictEqual(r.success, false);
+    assert.match(r.output, /redirect to unsupported protocol "ftp:"/);
+  });
+
+  it('threads ToolContext.isHostnameAllowed through to validateHop so allowlisted hosts pass', async () => {
+    // Cross-host redirect that would normally be refused; ctx pre-allows it.
+    stubFetch(url => {
+      if (url === 'https://docs.example.com/x') {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://www.example.com/y' },
+        });
+      }
+      return new Response('ok', {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      });
+    });
+    const r = await webFetchTool.execute(
+      { url: 'https://docs.example.com/x' },
+      { cwd: '/', isHostnameAllowed: (h: string) => h === 'www.example.com' },
+    );
+    assert.strictEqual(r.success, true);
+    assert.match(r.output, /\(final URL after redirects: https:\/\/www\.example\.com\/y\)/);
   });
 });
 
