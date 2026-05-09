@@ -1,6 +1,7 @@
 import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
 import { descriptorByAlias, DESCRIPTORS } from '../providers/descriptors.js';
 import type {
+  Config,
   ExperimentalFlags,
   RotationConfig,
   RotationEntry,
@@ -104,4 +105,60 @@ export function buildExperimentalConfig(
     ...(cliArgs.hooks ? { hooks: true } : {}),
     ...(cliArgs.noHooks ? { hooks: false } : {}),
   };
+}
+
+/**
+ * Three-way decision for which provider/model the session should start on:
+ *  - `config`: an explicit `--provider <name>` (or `provider:` field) overrides
+ *    everything else; model is decided downstream.
+ *  - `last-session`: fast-path resuming the prior (provider, model, key) when
+ *    `--pick` wasn't requested AND the prior selection still probes ok.
+ *  - `picker`: open the interactive startup menu.
+ *
+ * Pure — no I/O. The picker invocation itself stays in the caller.
+ */
+export type StartupSource =
+  | { kind: 'config'; provider: string }
+  | { kind: 'last-session'; provider: string; model: string; keyId?: string }
+  | { kind: 'picker' };
+
+export function decideStartupSource(
+  config: { provider?: string },
+  cliArgs: Pick<CliArgs, 'pick'>,
+  lastSession: { provider: string; model: string; keyId?: string } | null,
+  probedModels: Map<StartupProviderName, string[] | null>,
+): StartupSource {
+  if (config.provider) {
+    return { kind: 'config', provider: config.provider };
+  }
+  if (!cliArgs.pick && lastSession && canResumeLastSession(lastSession, probedModels)) {
+    return {
+      kind: 'last-session',
+      provider: lastSession.provider,
+      model: lastSession.model,
+      ...(lastSession.keyId ? { keyId: lastSession.keyId } : {}),
+    };
+  }
+  return { kind: 'picker' };
+}
+
+/**
+ * Persist the merged rotation config to the global config file. Performs
+ * a top-level shallow merge by reading `loadGlobal`, mutating only the
+ * `agent.rotation` block, and writing back via `saveGlobal`. Both I/O
+ * functions are injected so tests can stub them; production callers pass
+ * `loadGlobalConfig` / `saveGlobalConfig` from `core/config/`.
+ *
+ * Throws if either I/O step throws — caller decides how to surface the
+ * failure (main() prints to stderr and exits non-zero).
+ */
+export async function persistRotationConfig(
+  rotation: RotationConfig,
+  loadGlobal: () => Promise<Config>,
+  saveGlobal: (patch: Partial<Config>) => Promise<unknown>,
+): Promise<void> {
+  const global = await loadGlobal();
+  await saveGlobal({
+    agent: { ...global.agent, rotation },
+  });
 }
