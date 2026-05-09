@@ -83,9 +83,9 @@ describe('splitMessagesForAnthropic', () => {
     const { msgs } = splitMessagesForAnthropic(messages);
     // assistant, user(tool_result a), user(follow-up), assistant, user(tool_result b)
     assert.strictEqual(msgs.length, 5);
-    assert.strictEqual(msgs[1].content[0].tool_use_id, 'toolu_a');
+    assert.strictEqual((msgs[1].content as any)[0].tool_use_id, 'toolu_a');
     assert.strictEqual(msgs[2].content, 'follow-up');
-    assert.strictEqual(msgs[4].content[0].tool_use_id, 'toolu_b');
+    assert.strictEqual((msgs[4].content as any)[0].tool_use_id, 'toolu_b');
   });
 
   it('throws when a tool message is missing tool_call_id', () => {
@@ -137,8 +137,9 @@ describe('splitMessagesForAnthropic — cache markers', () => {
     ]);
     const asst = msgs[1];
     assert.strictEqual(asst.role, 'assistant');
-    assert.strictEqual(asst.content[asst.content.length - 1].cache_control.type, 'ephemeral');
-    assert.strictEqual(asst.content[0].cache_control, undefined);
+    const blocks = asst.content as any[];
+    assert.strictEqual(blocks[blocks.length - 1].cache_control.type, 'ephemeral');
+    assert.strictEqual(blocks[0].cache_control, undefined);
   });
 
   it('converts plain text assistant content to a block array when cacheBoundary is set', () => {
