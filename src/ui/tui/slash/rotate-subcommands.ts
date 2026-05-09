@@ -1,5 +1,5 @@
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
-import { descriptorByAlias } from '../../../providers/descriptors.js';
+import { descriptorByAlias } from '../../../providers/registry.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { listKeys } from '../../../core/auth/credentials.js';
 import {

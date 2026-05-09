@@ -8,7 +8,7 @@ import { ContextManager } from '../../../core/context/context-manager.js';
 import { validateModelToolSupport } from '../../../core/auth/model-validation.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { getKey } from '../../../core/auth/credentials.js';
-import { descriptorByAlias } from '../../../providers/descriptors.js';
+import { descriptorByAlias } from '../../../providers/registry.js';
 import { createProvider } from '../../../providers/registry.js';
 import type { Provider } from '../../../providers/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';

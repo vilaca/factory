@@ -1,5 +1,5 @@
-import type { ProviderDescriptor, StartupProviderName } from '../../providers/descriptors.js';
-import { descriptorByAlias, DESCRIPTORS } from '../../providers/descriptors.js';
+import type { ProviderDescriptor, StartupProviderName } from '../../providers/registry.js';
+import { descriptorByAlias, DESCRIPTORS } from '../../providers/registry.js';
 import type {
   Config,
   ExperimentalFlags,

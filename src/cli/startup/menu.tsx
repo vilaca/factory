@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApp, render } from 'ink';
 import type { RecentSession } from '../../core/session/session-log.js';
-import type { StartupProviderName } from '../../providers/descriptors.js';
+import type { StartupProviderName } from '../../providers/registry.js';
 import type { Provider } from '../../providers/types.js';
 import type { PickerOption } from '../picker.js';
 import { exitStartupSelection } from '../prompts.js';

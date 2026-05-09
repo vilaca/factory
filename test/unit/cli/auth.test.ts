@@ -12,7 +12,7 @@ import {
   saveCredentialsAfterModelDiscovery,
   type AuthResult,
 } from '../../../src/cli/auth/index.js';
-import { DESCRIPTORS } from '../../../src/providers/descriptors.js';
+import { DESCRIPTORS } from '../../../src/providers/registry.js';
 import type { Config } from '../../../src/core/config/types.js';
 
 let originalHome: string | undefined;

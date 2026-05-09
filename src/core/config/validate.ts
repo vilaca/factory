@@ -35,6 +35,7 @@ const STRING_TOP_LEVEL_KEYS = [
   'cerebrasToken',
   'groqToken',
   'cohereToken',
+  'openaiToken',
   'workersAiToken',
   'workersAiAccountId',
 ] as const;

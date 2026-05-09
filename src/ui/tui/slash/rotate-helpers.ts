@@ -2,7 +2,7 @@ import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 import type { RotationEntry } from '../../../core/config/types.js';
 import { tupleKey } from '../../../core/config/types.js';
 import { parseRotationEntry } from '../../../cli/startup/parse-rotation.js';
-import { descriptorByAlias } from '../../../providers/descriptors.js';
+import { descriptorByAlias } from '../../../providers/registry.js';
 import { loadGlobalConfig, saveGlobalConfig } from '../../../core/config/index.js';
 
 export function activeScope(

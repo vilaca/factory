@@ -1,6 +1,6 @@
 # Providers
 
-factory supports 15 providers. Each one ships with default model discovery, capability inference, and (where the SDK supports it) tool-call streaming.
+factory supports 16 providers. Each one ships with default model discovery, capability inference, and (where the SDK supports it) tool-call streaming.
 
 ## Provider matrix
 
@@ -17,6 +17,7 @@ factory supports 15 providers. Each one ships with default model discovery, capa
 | llama.cpp | `llamacpp` | none (local) | Lists the currently loaded model set from the llama.cpp server. |
 | Mistral | `mistral` | `MISTRAL_API_KEY` | OpenAI-compatible. |
 | Ollama | `ollama` | none (local) or token via `--token` | Default; assumes `http://localhost:11434`. |
+| OpenAI | `openai`, `oai` | `OPENAI_API_KEY` | OpenAI-compatible (its native shape). Filters non-chat endpoints (embeddings, audio, image, moderation, realtime). Drops `temperature` and `parallel_tool_calls` for the o-series and gpt-5 reasoning models. |
 | OpenCode Zen | `opencodezen` | `OPENCODE_ZEN_API_KEY` or `OPENCODE_API_KEY` | Routes to Anthropic-, Google-, or OpenAI-shaped backends per model. GPT models routed via the legacy chat-completions path; native `/responses` is on the roadmap. |
 | OpenRouter | `openrouter`, `or` | `OPENROUTER_API_KEY` | OpenAI-compatible; preserves Anthropic `cache_control` blocks for `anthropic/...` model ids. |
 | Vercel AI Gateway | `vercel` | `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | OpenAI-compatible. Filters to language models only. |

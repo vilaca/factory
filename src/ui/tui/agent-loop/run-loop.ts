@@ -1,7 +1,7 @@
 import { runAgent } from '../../../core/agent/run-agent.js';
 import type { RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
-import { descriptorByAlias } from '../../../providers/descriptors.js';
+import { descriptorByAlias } from '../../../providers/registry.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { tupleKey } from '../../../core/config/types.js';
 import { listKeys } from '../../../core/auth/credentials.js';

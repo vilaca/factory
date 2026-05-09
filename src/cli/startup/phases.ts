@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Provider } from '../../providers/types.js';
-import type { ProviderDescriptor, StartupProviderName } from '../../providers/descriptors.js';
-import { DESCRIPTORS, descriptorByAlias } from '../../providers/descriptors.js';
+import type { ProviderDescriptor, StartupProviderName } from '../../providers/registry.js';
+import { DESCRIPTORS, descriptorByAlias } from '../../providers/registry.js';
 import { createProvider } from '../../providers/registry.js';
 import type { Config, HookEntry } from '../../core/config/types.js';
 import type { McpManager } from '../../mcp/client.js';

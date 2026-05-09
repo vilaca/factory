@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import chalk from 'chalk';
-import type { StartupProviderName } from './providers/descriptors.js';
-import { DESCRIPTOR_LIST } from './providers/descriptors.js';
+import type { StartupProviderName } from './providers/registry.js';
+import { DESCRIPTOR_LIST } from './providers/registry.js';
 import { loadConfig } from './core/config/index.js';
 import { McpManager } from './mcp/client.js';
 import { defaultRegistry } from './tools/index.js';
