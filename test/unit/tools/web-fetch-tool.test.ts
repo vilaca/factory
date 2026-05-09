@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { webFetchTool } from '../../../src/tools/web-fetch.js';
+import { webFetchTool } from '../../../src/tools/web/index.js';
 import { PermissionManager } from '../../../src/security/permissions.js';
-import { parsePermissionInput } from '../../../src/ui/ink/components/permission-panel.js';
+import { parsePermissionInput } from '../../../src/ui/tui/components/permission-panel.js';
 
 describe('WebFetch tool', () => {
   it('rejects missing url', async () => {

@@ -10,7 +10,7 @@ import type {
   ModelTier,
 } from '../types.js';
 import type { GoogleAiStudioAuthMode } from '../../core/config/types.js';
-import { appendProviderLog } from '../../core/session-log.js';
+import { appendProviderLog } from '../../core/session/session-log.js';
 import { GoogleAiStudioAuthManager } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 

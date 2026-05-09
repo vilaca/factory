@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import type { Provider, ProviderCapabilities, ChatChunk } from '../../../src/providers/types.js';
-import { Conversation } from '../../../src/core/conversation.js';
-import { ContextManager } from '../../../src/core/context-manager.js';
+import { Conversation } from '../../../src/core/context/conversation.js';
+import { ContextManager } from '../../../src/core/context/context-manager.js';
 
 const capabilities: ProviderCapabilities = {
   contextWindow: 8192,

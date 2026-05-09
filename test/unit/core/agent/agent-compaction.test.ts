@@ -6,8 +6,8 @@ import type {
   ProviderCapabilities,
 } from '../../../../src/providers/types.js';
 import type { AgentEvent } from '../../../../src/core/agent/types.js';
-import type { ContextManager } from '../../../../src/core/context-manager.js';
-import { Conversation } from '../../../../src/core/conversation.js';
+import type { ContextManager } from '../../../../src/core/context/context-manager.js';
+import { Conversation } from '../../../../src/core/context/conversation.js';
 import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
 import { runAgent } from '../../../../src/core/agent/run-agent.js';
@@ -193,7 +193,7 @@ describe('Agent loop — compaction', () => {
     conversation.addAssistant('eight');
     conversation.addUser('nine');
     conversation.addAssistant('ten');
-    const { ContextManager } = await import('../../../../src/core/context-manager.js');
+    const { ContextManager } = await import('../../../../src/core/context/context-manager.js');
     const cm = new ContextManager(conversation, provider.getCapabilities('mock-model'), {
       compactionThreshold: 0.0001, // force shouldCompact=true
       recencyWindow: 2,

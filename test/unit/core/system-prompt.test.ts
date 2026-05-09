@@ -12,7 +12,7 @@ import {
   getPlanModePrompt,
   getSubagentsPrompt,
   getTextToolFallbackPrompt,
-} from '../../../src/core/system-prompt.js';
+} from '../../../src/core/context/system-prompt.js';
 
 function tmpDir(): string {
   const dir = path.join(os.tmpdir(), `oc-sysprompt-${crypto.randomUUID()}`);

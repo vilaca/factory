@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { BashDedupTracker } from '../../../../src/core/agent/bash-dedup.js';
+import { BashDedupTracker } from '../../../../src/core/agent/tool-calls/bash-dedup.js';
 
 describe('BashDedupTracker', () => {
   it('does not nudge on the first or second similar command', () => {

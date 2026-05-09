@@ -1,11 +1,11 @@
 import type { ToolCallMessage, TokenUsage } from '../../providers/types.js';
 import type { AgentEvent, AgentOptions } from './types.js';
 import { RecoveryState } from './recovery-state.js';
-import { callModel } from './call-model.js';
+import { callModel } from './call-model/call-model.js';
 import { parseModelResponse } from './parse-response.js';
-import { runToolCalls } from './run-tool-calls.js';
+import { runToolCalls } from './tool-calls/run-tool-calls.js';
 import { maybeCompact } from './compaction.js';
-import { BashDedupTracker } from './bash-dedup.js';
+import { BashDedupTracker } from './tool-calls/bash-dedup.js';
 import { runHook } from '../hooks/index.js';
 import { errorMessage, isError } from '../../utils/errors.js';
 

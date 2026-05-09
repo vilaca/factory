@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import {
   applyCacheBoundaries,
   countCacheBoundaries,
-} from '../../../../src/core/agent/cache-boundaries.js';
+} from '../../../../src/core/agent/cache/cache-boundaries.js';
 import type { ChatMessage } from '../../../../src/providers/types.js';
 
 describe('applyCacheBoundaries', () => {

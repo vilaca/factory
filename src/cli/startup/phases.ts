@@ -6,8 +6,8 @@ import { createProvider } from '../../providers/registry.js';
 import type { Config, HookEntry } from '../../core/config/types.js';
 import type { McpManager } from '../../mcp/client.js';
 import type { ToolRegistry } from '../../tools/registry.js';
-import { validateModelToolSupport } from '../../core/model-validation.js';
-import { appendProviderLog, getRecentSessions } from '../../core/session-log.js';
+import { validateModelToolSupport } from '../../core/auth/model-validation.js';
+import { appendProviderLog, getRecentSessions } from '../../core/session/session-log.js';
 import { renderError } from '../../ui/renderer.js';
 import { getGitBranch, isGitDirty } from '../../utils/git.js';
 import { errorMessage } from '../../utils/errors.js';
@@ -279,7 +279,7 @@ export function installShutdownHandlers(opts: ShutdownHandlerOptions): void {
       for (const name of stuck) pending.push(`mcp:${name}`);
     }
     const flushDone = (async () => {
-      const { flushKeyStats } = await import('../../core/key-stats.js');
+      const { flushKeyStats } = await import('../../core/session/key-stats.js');
       await flushKeyStats();
     })().catch(() => {
       pending.push('key-stats');
@@ -403,7 +403,7 @@ export async function registerSubagentTool(
 ): Promise<void> {
   const [{ createDelegateTool }, { selectWeakTier }] = await Promise.all([
     import('../../tools/delegate.js'),
-    import('../../core/agent/weak-tier.js'),
+    import('../../core/agent/call-model/weak-tier.js'),
   ]);
   const weakModel = selectWeakTier(provider, parentModel);
   registry.register(

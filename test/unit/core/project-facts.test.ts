@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
-import { extractProjectFacts } from '../../../src/core/project-facts.js';
+import { extractProjectFacts } from '../../../src/core/context/project-facts.js';
 
 function tmpDir(): string {
   const dir = path.join(os.tmpdir(), `oc-facts-${crypto.randomUUID()}`);

@@ -11,7 +11,7 @@ import {
   getLastSessionSelection,
   getRecentSessions,
   loadHistoryFromSessions,
-} from '../../../src/core/session-log.js';
+} from '../../../src/core/session/session-log.js';
 
 let originalHome: string | undefined;
 let homeDir: string;

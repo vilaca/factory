@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
-import { FileCache } from '../../../../src/core/agent/file-cache.js';
+import { FileCache } from '../../../../src/core/agent/cache/file-cache.js';
 
 async function tempFile(content: string): Promise<string> {
   const fp = path.join(os.tmpdir(), `oc-fc-${Date.now()}-${Math.random().toString(36).slice(2)}`);

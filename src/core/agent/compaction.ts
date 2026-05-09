@@ -1,9 +1,9 @@
 import type { Provider } from '../../providers/types.js';
 import type { AgentEvent } from './types.js';
-import type { ContextManager } from '../context-manager.js';
+import type { ContextManager } from '../context/context-manager.js';
 import type { HooksConfig } from '../config/types.js';
 import type { EnvPolicy } from '../../security/env.js';
-import type { FileCache } from './file-cache.js';
+import type { FileCache } from './cache/file-cache.js';
 import { errorMessage } from '../../utils/errors.js';
 import { runHook } from '../hooks/index.js';
 

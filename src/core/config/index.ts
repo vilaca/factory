@@ -62,7 +62,7 @@ export async function loadGlobalConfig(): Promise<Config> {
   // first load under the new schema. Legacy fields stay in place so older
   // factory builds keep working if the user downgrades.
   // Lazy import to break the config ↔ credentials ↔ descriptors cycle.
-  const { migrateLegacyKeys } = await import('../credentials.js');
+  const { migrateLegacyKeys } = await import('../auth/credentials.js');
   const { changed, next } = migrateLegacyKeys(validated);
   if (changed) {
     try {

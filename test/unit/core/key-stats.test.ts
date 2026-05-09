@@ -12,7 +12,7 @@ import {
   recordSuccess,
   recordTokenUsage,
   _resetKeyStatsForTests,
-} from '../../../src/core/key-stats.js';
+} from '../../../src/core/session/key-stats.js';
 
 async function withTempHome(fn: (home: string) => Promise<void>): Promise<void> {
   const prev = os.homedir;
