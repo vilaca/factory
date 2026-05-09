@@ -186,7 +186,7 @@ async function main(): Promise<void> {
     enableSessionLog: !cliArgs.noLog,
     strictLogging: cliArgs.strictLog,
     planMode: cliArgs.plan,
-    enableCorrector: !cliArgs.noAutoCorrect,
+    enableCorrector: cliArgs.autoCorrect === true,
     mcpInfo,
     gitBranch,
     gitDirty,

@@ -11,7 +11,7 @@ Three layers, lowest to highest precedence: **config files → environment varia
 | `--host <url>`         |       | Override the provider's default host (e.g. remote Ollama, llama.cpp)                               |
 | `--token <token>`      | `-t`  | API token (overrides env var and saved credential)                                                 |
 | `--plan`               |       | Start in plan mode                                                                                 |
-| `--no-auto-correct`    |       | Disable LLM tool-call corrector                                                                    |
+| `--auto-correct`       |       | Enable LLM tool-call corrector (off by default)                                                    |
 | `--bash-dedup`         |       | Enable Bash near-duplicate detector                                                                |
 | `--no-read-cache`      |       | Disable Read mtime/hash cache                                                                      |
 | `--no-line-count-hint` |       | Drop the cloc/scc system-prompt hint                                                               |
