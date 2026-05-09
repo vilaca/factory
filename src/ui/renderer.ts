@@ -155,10 +155,16 @@ function renderLogoFrame(shift: number): string {
 
 export async function animateLogo(frameMs = 220): Promise<void> {
   const rowCount = LOGO_LETTERS[0]!.rows.length;
-  if (!process.stdout.isTTY) {
+  const logoWidth = LOGO_LETTERS[0]!.rows.reduce((max, _, rowIndex) => {
+    const rowWidth = LOGO_LETTERS.reduce((sum, letter) => sum + letter.rows[rowIndex]!.length, 2);
+    return Math.max(max, rowWidth);
+  }, 0);
+
+  if (!process.stdout.isTTY || (process.stdout.columns ?? 0) < logoWidth) {
     process.stdout.write(renderLogoFrame(LOGO_LETTERS.length) + '\n');
     return;
   }
+
   const totalFrames = LOGO_LETTERS.length + 1;
   for (let frame = 0; frame < totalFrames; frame++) {
     if (frame > 0) process.stdout.write(`\x1B[${rowCount}A`);
