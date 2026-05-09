@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import type { Config, GoogleAiStudioAuthMode } from '../../core/config/types.js';
-import type { ProviderDescriptor } from '../../providers/descriptors.js';
-import { resolveToken } from '../../providers/descriptors.js';
+import type { ProviderDescriptor } from '../../providers/registry.js';
+import { resolveToken } from '../../providers/registry.js';
 import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../../core/config/index.js';
 import { appendProviderLog } from '../../core/session/session-log.js';
 import { getCopilotAuthStorageNote, CopilotAuthManager } from '../../providers/copilot/auth.js';

@@ -107,6 +107,7 @@ const SCALAR_KEYS = [
   'cerebrasToken',
   'groqToken',
   'cohereToken',
+  'openaiToken',
   'workersAiToken',
   'workersAiAccountId',
 ] as const;

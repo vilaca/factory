@@ -1,12 +1,12 @@
 import chalk from 'chalk';
 import type { Config, GoogleAiStudioAuthMode } from '../../core/config/types.js';
-import type { ProviderDescriptor, StartupProviderName } from '../../providers/descriptors.js';
+import type { ProviderDescriptor, StartupProviderName } from '../../providers/registry.js';
 import {
   DESCRIPTOR_LIST,
   noModelsMessageFor,
   resolveToken,
   saveSuccessMessageFor,
-} from '../../providers/descriptors.js';
+} from '../../providers/registry.js';
 import { createProvider, type CreateProviderOptions } from '../../providers/registry.js';
 import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
 import { addKey, getKey } from '../../core/auth/credentials.js';

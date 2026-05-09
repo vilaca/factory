@@ -25,7 +25,7 @@ import {
   keyFingerprint,
   listKeys,
 } from '../../core/auth/credentials.js';
-import { descriptorByAlias, DESCRIPTORS, DESCRIPTOR_LIST } from '../../providers/descriptors.js';
+import { descriptorByAlias, DESCRIPTORS, DESCRIPTOR_LIST } from '../../providers/registry.js';
 import { useRotationFallback } from './hooks/use-rotation-fallback.js';
 import { useSessionInput } from './hooks/use-session-input.js';
 

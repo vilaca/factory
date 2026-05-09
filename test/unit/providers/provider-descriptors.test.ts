@@ -5,7 +5,7 @@ import {
   DESCRIPTOR_LIST,
   descriptorByAlias,
   resolveToken,
-} from '../../../src/providers/descriptors.js';
+} from '../../../src/providers/registry.js';
 import type { Config } from '../../../src/core/config/types.js';
 
 describe('DESCRIPTORS', () => {

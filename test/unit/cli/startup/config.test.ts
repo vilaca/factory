@@ -7,7 +7,7 @@ import {
   decideStartupSource,
   persistRotationConfig,
 } from '../../../../src/cli/startup/config.js';
-import type { StartupProviderName } from '../../../../src/providers/descriptors.js';
+import type { StartupProviderName } from '../../../../src/providers/registry.js';
 import type { Config, RotationEntry } from '../../../../src/core/config/types.js';
 
 describe('canResumeLastSession', () => {

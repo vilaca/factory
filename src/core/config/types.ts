@@ -207,6 +207,7 @@ export interface Config {
   cerebrasToken?: string;
   groqToken?: string;
   cohereToken?: string;
+  openaiToken?: string;
   workersAiToken?: string;
   workersAiAccountId?: string;
   /** Multi-key credential store. Source of truth once migrated; legacy

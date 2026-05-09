@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { Config, ProviderKey } from '../config/types.js';
 import { updateGlobalConfig } from '../config/index.js';
-import { DESCRIPTOR_LIST } from '../../providers/descriptors.js';
+import { DESCRIPTOR_LIST } from '../../providers/registry.js';
 
 /**
  * Helpers over the multi-key credential store. The store lives at
