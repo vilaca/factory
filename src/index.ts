@@ -32,7 +32,7 @@ import {
 
 const SHUTDOWN_BUDGET_MS = 5000;
 
-// eslint-disable-next-line max-lines-per-function, max-statements, complexity -- main() is the orchestrator: each branch is a one-liner phase call. The remaining statements are sequential await calls that don't benefit from further splitting.
+// eslint-disable-next-line max-statements, complexity -- main() is the orchestrator: each branch is a one-liner phase call. The remaining statements are sequential await calls that don't benefit from further splitting.
 async function main(): Promise<void> {
   const cliArgs = parseArgs(process.argv.slice(2));
 

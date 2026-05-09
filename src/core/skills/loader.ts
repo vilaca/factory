@@ -110,12 +110,12 @@ export function parseSkillFile(
     throw new Error('"description" is required and must be a string');
   }
 
-  const alwaysOn = fm.alwaysOn === undefined ? false : fm.alwaysOn;
+  const alwaysOn = fm.alwaysOn ?? false;
   if (typeof alwaysOn !== 'boolean') {
     throw new Error('"alwaysOn" must be a boolean');
   }
 
-  const triggers = fm.triggers === undefined ? [] : fm.triggers;
+  const triggers = fm.triggers ?? [];
   if (!Array.isArray(triggers) || !triggers.every(t => typeof t === 'string')) {
     throw new Error('"triggers" must be an array of strings');
   }
@@ -129,7 +129,7 @@ export function parseSkillFile(
     }
   }
 
-  const tools = fm.tools === undefined ? [] : fm.tools;
+  const tools = fm.tools ?? [];
   if (!Array.isArray(tools) || !tools.every(t => typeof t === 'string')) {
     throw new Error('"tools" must be an array of strings');
   }

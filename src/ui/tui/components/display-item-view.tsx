@@ -166,6 +166,7 @@ export function ToolCallLine({
   continuation?: boolean;
 }): React.ReactElement {
   const summary = summarizeToolArgs(toolName, args);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- both bools; want logical OR, not nullish-fallback
   const isProblem = denied || failed;
   const nameColor = isProblem ? 'red' : 'cyan';
   if (continuation && summary) {

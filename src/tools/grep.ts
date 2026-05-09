@@ -97,6 +97,7 @@ async function tryRipgrep(
     // will usually fail there too, and hiding the real diagnostic makes the
     // model retry blindly.
     const stderr = (err as { stderr?: { toString(): string } }).stderr?.toString().trim();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string stderr should fall through too
     return { success: false, output: `Grep error: ${stderr || errorMessage(err)}` };
   }
 }

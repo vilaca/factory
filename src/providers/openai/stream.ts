@@ -91,7 +91,7 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
       }
 
       if (delta?.tool_calls) {
-        if (!toolCalls) toolCalls = [];
+        toolCalls ??= [];
         mergeStreamedToolCalls(toolCalls, delta.tool_calls);
       }
 
