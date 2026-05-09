@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { TabsRegistry } from '../../../../../src/ui/tui/tabs/tabs-registry.js';
-import type { AgentLoopApi } from '../../../../../src/ui/tui/agent-loop/types.js';
+import type { AgentLoopApi } from '../../../../../src/ui/tui/agent-loop/agent-loop-types.js';
 
 // Build a minimal AgentLoopApi stub. Most tests only care about identity,
 // so we cast through unknown — the tabs registry never invokes most of these

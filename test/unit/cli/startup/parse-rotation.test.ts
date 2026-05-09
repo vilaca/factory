@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseRotationEntry, parseRotationChain } from '../../../src/cli/parse-rotation.js';
+import { parseRotationEntry, parseRotationChain } from '../../../../src/cli/startup/parse-rotation.js';
 
 describe('parseRotationEntry', () => {
   it('parses a simple <provider>:<model>', () => {

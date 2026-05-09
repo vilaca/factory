@@ -1,7 +1,7 @@
 import type { ToolCallMessage } from '../../../providers/types.js';
 import type { AgentEvent, PermissionDecision } from '../types.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
-import { formatToolResultMessage } from '../../tool-call/tool-result-format.js';
+import { formatToolResultMessage } from './tool-result-format.js';
 import { errorMessage } from '../../../utils/errors.js';
 import type { ToolLoopContext } from './run-tool-calls.js';
 

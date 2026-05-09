@@ -11,7 +11,7 @@ import { getKey } from '../../../core/auth/credentials.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { createProvider } from '../../../providers/registry.js';
 import type { Provider } from '../../../providers/types.js';
-import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './types.js';
+import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 
 export interface SwapContext {
   refs: MutableRefObject<RunRefs | null>;

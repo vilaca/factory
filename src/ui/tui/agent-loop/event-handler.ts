@@ -1,5 +1,5 @@
 import type { AgentEvent } from '../../../core/agent/types.js';
-import type { AgentLoopDeps } from './types.js';
+import type { AgentLoopDeps } from './agent-loop-types.js';
 import {
   recordFailure as recordKeyFailure,
   recordSuccess as recordKeySuccess,

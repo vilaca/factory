@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import {
   formatToolResultMessage,
   stripImitatedToolResults,
-} from '../../../../src/core/tool-call/tool-result-format.js';
+} from '../../../../../src/core/agent/tool-calls/tool-result-format.js';
 
 describe('formatToolResultMessage', () => {
   it('wraps output in the tool-result sentinel', () => {

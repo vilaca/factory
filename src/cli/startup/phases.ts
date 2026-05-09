@@ -22,7 +22,7 @@ import {
 } from '../auth/index.js';
 import { buildPickerOptions, findDefaultSelection } from '../picker.js';
 import { selectModelInk, selectStartupSession } from './menu.js';
-import { parseRotationChain } from '../parse-rotation.js';
+import { parseRotationChain } from './parse-rotation.js';
 import { applyCliRotationOverrides, decideStartupSource, persistRotationConfig } from './config.js';
 
 /**

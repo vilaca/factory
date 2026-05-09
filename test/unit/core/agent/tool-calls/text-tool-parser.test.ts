@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { parseTextToolCalls } from '../../../../src/core/tool-call/text-tool-parser.js';
+import { parseTextToolCalls } from '../../../../../src/core/agent/tool-calls/text-tool-parser.js';
 
 describe('parseTextToolCalls', () => {
   it('returns no calls and original content when no tags present', () => {

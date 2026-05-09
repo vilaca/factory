@@ -8,7 +8,7 @@ import { listKeys } from '../../../core/auth/credentials.js';
 import { getWarmthLog } from '../../../core/session/key-stats.js';
 import { defaultRegistry } from '../../../tools/index.js';
 import { handleAgentEvent } from './event-handler.js';
-import type { AgentLoopDeps } from './types.js';
+import type { AgentLoopDeps } from './agent-loop-types.js';
 
 /** Anthropic's default ephemeral cache TTL. The rotation tiebreaker uses
  *  the same window so a key that hit cache "recently" by Anthropic's

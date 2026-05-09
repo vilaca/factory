@@ -1,4 +1,4 @@
-import type { RotationEntry } from '../core/config/types.js';
+import type { RotationEntry } from '../../core/config/types.js';
 
 /**
  * Parses a `<provider>:<model>` string into a RotationEntry. Returns null on
