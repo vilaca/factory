@@ -81,7 +81,7 @@ export async function* maybeCompact(
       ...(precomputedSummary !== undefined ? { precomputedSummary } : {}),
     });
     if (result) {
-      if (cumulativeOld === null) cumulativeOld = result.oldCount;
+      cumulativeOld ??= result.oldCount;
       cumulativeNew = result.newCount;
       lastAggressive = true;
     }

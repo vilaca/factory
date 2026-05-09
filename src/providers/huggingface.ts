@@ -132,7 +132,7 @@ export class HuggingFaceProvider implements Provider {
         }
 
         if (delta.tool_calls) {
-          if (!toolCalls) toolCalls = [];
+          toolCalls ??= [];
           mergeStreamedToolCalls(toolCalls, delta.tool_calls);
         }
 

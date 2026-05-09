@@ -201,12 +201,10 @@ export class OpenCodeZenProvider implements Provider {
 
   private getAnthropicClient(): Anthropic {
     const apiKey = this.requireApiKey();
-    if (!this.anthropicClient) {
-      this.anthropicClient = new Anthropic({
-        apiKey,
-        baseURL: this.baseUrl.replace(/\/v1$/, ''),
-      });
-    }
+    this.anthropicClient ??= new Anthropic({
+      apiKey,
+      baseURL: this.baseUrl.replace(/\/v1$/, ''),
+    });
     return this.anthropicClient;
   }
 

@@ -73,7 +73,7 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  // eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity): split request build / stream parse / usage emit.
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- TODO(complexity): split request build / stream parse / usage emit.
   async *chat(
     model: string,
     messages: ChatMessage[],

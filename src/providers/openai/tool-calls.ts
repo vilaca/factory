@@ -27,12 +27,10 @@ export function mergeStreamedToolCalls(
 ): void {
   for (const tc of incoming) {
     const idx = tc.index ?? 0;
-    if (!target[idx]) {
-      target[idx] = {
-        id: tc.id,
-        function: { name: '', arguments: {} },
-      };
-    }
+    target[idx] ??= {
+      id: tc.id,
+      function: { name: '', arguments: {} },
+    };
     if (tc.function?.name) {
       target[idx]!.function.name += tc.function.name;
     }

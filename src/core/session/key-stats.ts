@@ -94,16 +94,14 @@ function scheduleFlush(): void {
 let pendingRead: Promise<AllKeyStats> | null = null;
 async function ensureCache(): Promise<AllKeyStats> {
   if (cache) return cache;
-  if (!pendingRead) {
-    pendingRead = readFromDisk()
-      .then(c => {
-        cache = c;
-        return c;
-      })
-      .finally(() => {
-        pendingRead = null;
-      });
-  }
+  pendingRead ??= readFromDisk()
+    .then(c => {
+      cache = c;
+      return c;
+    })
+    .finally(() => {
+      pendingRead = null;
+    });
   return pendingRead;
 }
 
