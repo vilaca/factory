@@ -10,7 +10,7 @@ const definition: ToolDefinition = {
   function: {
     name: TOOL_NAMES.Edit,
     description:
-      'Perform exact string replacement in a file. The old_string must appear exactly once in the file. Use this instead of sed/awk.',
+      'Perform exact string replacement in a file. By default the old_string must appear exactly once; set replace_all=true to replace every occurrence in one call. Use this instead of sed/awk.',
     parameters: {
       type: 'object',
       required: ['file_path', 'old_string', 'new_string'],
@@ -21,11 +21,17 @@ const definition: ToolDefinition = {
         },
         old_string: {
           type: 'string',
-          description: 'The exact string to find and replace. Must be unique in the file.',
+          description:
+            'The exact string to find and replace. Must appear exactly once unless replace_all is true.',
         },
         new_string: {
           type: 'string',
           description: 'The replacement string',
+        },
+        replace_all: {
+          type: 'boolean',
+          description:
+            'When true, replace every occurrence of old_string. Defaults to false (single unique match required). Prefer this over multiple Edit calls when the intent is a bulk rename.',
         },
       },
     },
@@ -36,6 +42,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   const filePath = args.file_path as string;
   const oldString = args.old_string as string;
   const newString = args.new_string as string;
+  const replaceAll = args.replace_all === true;
 
   if (!filePath) return { success: false, output: 'file_path is required' };
   if (!oldString) return { success: false, output: 'old_string is required' };
@@ -56,20 +63,25 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     const content = await fs.readFile(resolved, { encoding: 'utf-8', signal: ctx?.signal });
 
     const matchLines = findMatchLines(content, oldString);
-    if (matchLines.length === 1) {
-      // Function replacer takes new_string literally — a string replacement
-      // would interpret `$1`, `$&`, `$'`, `` $` ``, `$$` as patterns and
-      // mangle replacements that contain them (e.g. shell snippets, regex
-      // examples, currency-with-dollar-amount).
-      const newContent = content.replace(oldString, () => newString);
+    if (matchLines.length >= 1 && (replaceAll || matchLines.length === 1)) {
+      // split+join takes new_string literally — String#replace would
+      // interpret `$1`, `$&`, `$'`, `` $` ``, `$$` as patterns and mangle
+      // replacements containing them (e.g. shell snippets, regex examples,
+      // currency-with-dollar-amount). The single-match path used a function
+      // replacer for the same reason; split/join generalizes cleanly to N.
+      const newContent = content.split(oldString).join(newString);
       const validation = validateStructuredFile(resolved, newContent);
       if (!validation.ok) {
         return rejectStructured(resolved, validation.format, validation.error);
       }
       await fs.writeFile(resolved, newContent, { encoding: 'utf-8', signal: ctx?.signal });
+      const count = matchLines.length;
+      const noun = count === 1 ? 'occurrence' : 'occurrences';
       return {
         success: true,
-        output: `Edited ${resolved}: replaced 1 occurrence at line ${matchLines[0]}`,
+        output: `Edited ${resolved}: replaced ${count} ${noun} at line${
+          count === 1 ? '' : 's'
+        } ${matchLines.join(', ')}`,
       };
     }
 
@@ -79,7 +91,9 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
         output:
           `old_string found ${matchLines.length} times in ${resolved} ` +
           `(at lines ${matchLines.join(', ')}) — must be unique. ` +
-          `Include more surrounding context (the line before or after the target) to disambiguate.`,
+          `Either include more surrounding context (the line before or after the target) to disambiguate, ` +
+          `or set replace_all=true to replace every occurrence in one call.`,
+        skipCorrector: true,
       };
     }
 
@@ -106,6 +120,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
           `old_string not found in ${resolved} (exact match). ` +
           `Whitespace-normalized search found ${fuzzy.count} candidates at lines ${fuzzy.lines.join(', ')} — too ambiguous to auto-correct. ` +
           `Re-read the file and provide old_string with exact indentation.`,
+        skipCorrector: true,
       };
     }
 

@@ -50,6 +50,14 @@ export interface ToolResult {
    * loop reads this and updates the session's refs.cwd so the new directory
    * persists across subsequent tool calls. */
   cwdAfter?: string;
+  /** Set on a `success=false` result when the error is a *reasoning hint* for
+   * the model rather than a malformed-call problem the corrector can fix.
+   * Example: Edit's "old_string found N times — must be unique" already tells
+   * the model exactly what to do (add disambiguating context); routing it
+   * through the corrector just produces a fabricated retry against an 8000-
+   * char file slice. The agent loop checks this flag and skips the corrector
+   * when true. */
+  skipCorrector?: boolean;
 }
 
 /** Per-call context that an agent loop passes when executing a tool.
