@@ -31,6 +31,11 @@ export interface TokenUsage {
   /** Input tokens written into the cache on this turn (Anthropic-style
    * explicit caching). Optional. */
   cacheCreationTokens?: number;
+  /** Hidden-reasoning output tokens (OpenAI o-series, codex via the
+   * Responses API). Counted *inside* completionTokens; surfaced separately
+   * so the UI can split "thinking vs answer" cost. Undefined for providers
+   * that don't expose the breakdown. */
+  reasoningTokens?: number;
 }
 
 export interface ChatChunk {
