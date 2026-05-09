@@ -43,6 +43,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 - [docs/web-fetch.md](./docs/web-fetch.md) — WebFetch tool, bounds, per-domain whitelist
 - [docs/troubleshooting.md](./docs/troubleshooting.md) — common issues and fixes
 - [docs/observability.md](./docs/observability.md) — session-log JSONL schema
+- [docs/security.md](./docs/security.md) — built-in path jail, bash deny list, env scrubbing
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — module map, data flow, design overview
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — dev setup, conventions, adding a provider
 
@@ -64,15 +65,7 @@ Once running, type `/help` to see the full slash-command list.
 
 ## Security
 
-Read [SECURITY.md](./SECURITY.md) for the security policy and disclosure process. The short version:
-
-- Built-in **path jail** rejects access to known secret paths (`~/.ssh`, `~/.aws`, `~/.gnupg`, `/etc/shadow`, etc.) before any I/O. Symlinks are resolved before the check. Built-ins can't be overridden, only extended.
-- Built-in **bash deny list** rejects `rm -rf /`, fork bombs, `curl ... | sh`, raw-device writes, force-push to protected branches. Cannot be bypassed by `allow-all`.
-- Built-in **env scrubbing** for spawned bash subprocesses — only a small safe-vars allowlist is forwarded. Provider API keys, GitHub tokens, AWS credentials and similar in your shell are NOT visible to model-driven commands.
-- API keys are stored in plaintext at `~/.config/factory/config.json` with mode `0o600`. **Not encrypted at rest** — anyone with access to your user account can read them.
-- Bash, Edit, and Write run with your user permissions. Use `--plan` for untrusted models.
-
-Configure additional bash patterns, path denies, and env-var allowlists via `permissions.bashRules` and `security.{bashEnv,paths}` in your config file. See [docs/configuration.md](./docs/configuration.md).
+Built-in path jail, bash deny list, env scrubbing for subprocess execution, and plan mode for untrusted models. See [docs/security.md](./docs/security.md) for what's enforced and how to extend it, and [SECURITY.md](./SECURITY.md) for the disclosure process.
 
 ## License
 
