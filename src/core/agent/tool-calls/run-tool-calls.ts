@@ -124,7 +124,7 @@ export async function* runToolCalls(
 
 interface ExecutionTracking {
   deniedCount: number;
-  lastFailedResult: { toolName: string; output: string } | null;
+  lastFailedResult: { toolName: string; output: string; skipCorrector?: boolean } | null;
   lastResultForPostHook: { success: boolean; output: string } | null;
 }
 
@@ -158,7 +158,11 @@ async function* executeAndTrack(
         // Update or invalidate the file cache after successful Read/Edit/Write.
         if (ctx.fileCache) await maintainFileCache(toolCall, ctx.fileCache);
       } else {
-        tracking.lastFailedResult = { toolName: event.toolName, output: event.result.output };
+        tracking.lastFailedResult = {
+          toolName: event.toolName,
+          output: event.result.output,
+          skipCorrector: event.result.skipCorrector,
+        };
       }
     }
     yield event;
@@ -325,7 +329,7 @@ async function* maybeBashDedupNudge(
 
 interface CorrectorParams {
   toolCall: ToolCallMessage;
-  lastFailedResult: { toolName: string; output: string };
+  lastFailedResult: { toolName: string; output: string; skipCorrector?: boolean };
   callSignature: string;
 }
 
@@ -343,6 +347,7 @@ async function* runCorrectorIfNeeded(
   if (
     !ctx.enableCorrector ||
     ctx.planMode ||
+    lastFailedResult.skipCorrector ||
     recovery.correctedSignatures.has(callSig) ||
     recovery.correctionsUsedThisRun >= recovery.maxCorrections
   ) {

@@ -263,6 +263,52 @@ describe('runToolCalls — corrector', () => {
     assert.strictEqual(chatCalls, 1, 'corrector only fired for the first identical call');
   });
 
+  it('skips the corrector when the failed result is flagged skipCorrector', async () => {
+    // Regression: the Edit tool's "found N times — must be unique" failure
+    // is a reasoning hint for the main model (it has the file in context),
+    // not a malformed-call problem the corrector can fix from an 8000-char
+    // truncated slice. The tool sets skipCorrector and the loop must honor
+    // it — otherwise the corrector fabricates context lines and burns the
+    // single corrector slot the agent gets per (name, args) signature.
+    let chatCalls = 0;
+    const tool = fakeTool({
+      name: 'Edit',
+      execute: () => ({
+        success: false,
+        output: 'old_string found 3 times — must be unique',
+        skipCorrector: true,
+      }),
+    });
+    const permissions = new PermissionManager();
+    permissions.allowAll('Edit');
+    const provider = makeProvider({
+      modelTier: 'strong',
+      noStreamResponses: ['{"name":"Edit","arguments":{}}'],
+    });
+    const original = provider.chatNoStream.bind(provider);
+    provider.chatNoStream = async (...args) => {
+      chatCalls++;
+      return original(...args);
+    };
+    const ctx = makeCtx({
+      permissions,
+      toolRegistry: makeRegistry([tool]),
+      provider,
+      enableCorrector: true,
+    });
+    const { events } = await collect(
+      runToolCalls(
+        [callOf('Edit', { file_path: '/x', old_string: 'a', new_string: 'b' })],
+        ctx,
+        'sig',
+        makeRecovery(),
+      ),
+    );
+    assert.strictEqual(chatCalls, 0, 'corrector model not consulted');
+    assert.ok(!events.some(e => e.type === 'tool-call-corrected'));
+    assert.ok(!events.some(e => e.type === 'tool-call-corrector-aborted'));
+  });
+
   it('respects the corrector budget', async () => {
     let chatCalls = 0;
     const tool = fakeTool({

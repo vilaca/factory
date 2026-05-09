@@ -222,6 +222,108 @@ describe('Edit tool', () => {
       assert.ok(result.output.includes('3 times'));
       assert.ok(result.output.includes('lines 1, 3, 5'));
       assert.ok(result.output.toLowerCase().includes('surrounding context'));
+      assert.ok(result.output.includes('replace_all=true'));
+      assert.strictEqual(result.skipCorrector, true);
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('replace_all=true replaces every occurrence and reports the count', async () => {
+    const fp = tmpFile('edit-all', 'aaa\nfoo\naaa\nbar\naaa\n');
+    try {
+      const result = await edit.execute({
+        file_path: fp,
+        old_string: 'aaa',
+        new_string: 'XX',
+        replace_all: true,
+      });
+      assert.strictEqual(result.success, true);
+      assert.match(result.output, /replaced 3 occurrences/);
+      assert.match(result.output, /lines 1, 3, 5/);
+      assert.strictEqual(fs.readFileSync(fp, 'utf-8'), 'XX\nfoo\nXX\nbar\nXX\n');
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('replace_all=true with a single match behaves like the unique path', async () => {
+    const fp = tmpFile('edit-all-one', 'foo bar baz\n');
+    try {
+      const result = await edit.execute({
+        file_path: fp,
+        old_string: 'bar',
+        new_string: 'qux',
+        replace_all: true,
+      });
+      assert.strictEqual(result.success, true);
+      assert.match(result.output, /replaced 1 occurrence at line 1/);
+      assert.strictEqual(fs.readFileSync(fp, 'utf-8'), 'foo qux baz\n');
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('replace_all=true with zero matches still falls through to the not-found path', async () => {
+    const fp = tmpFile('edit-all-zero', 'hello\n');
+    try {
+      const result = await edit.execute({
+        file_path: fp,
+        old_string: 'missing',
+        new_string: 'x',
+        replace_all: true,
+      });
+      assert.strictEqual(result.success, false);
+      assert.match(result.output, /not found/);
+      assert.strictEqual(fs.readFileSync(fp, 'utf-8'), 'hello\n');
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('replace_all=true rejects when the post-replace content breaks JSON', async () => {
+    // Removing every comma in this JSON would yield syntactically invalid JSON.
+    const before = '{\n  "a": 1,\n  "b": 2,\n  "c": 3\n}\n';
+    const fp = tmpFile('edit-all-json', before);
+    fs.renameSync(fp, fp + '.json');
+    const jsonFp = fp + '.json';
+    try {
+      const result = await edit.execute({
+        file_path: jsonFp,
+        old_string: ',',
+        new_string: '',
+        replace_all: true,
+      });
+      assert.strictEqual(result.success, false);
+      assert.match(result.output, /invalid JSON/);
+      assert.match(result.output, /NOT modified/);
+      assert.strictEqual(fs.readFileSync(jsonFp, 'utf-8'), before);
+    } finally {
+      try {
+        fs.unlinkSync(jsonFp);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it('replace_all=true preserves $-pattern literals across every site', async () => {
+    // String#replace + replaceAll interpret $1/$&/$$/etc. The single-match
+    // path uses a function replacer; the all-sites path uses split+join so
+    // it gets the same literal semantics. Guard both.
+    const fp = tmpFile('edit-all-dollar', 'X: PLACEHOLDER\nY: PLACEHOLDER\nZ: PLACEHOLDER\n');
+    try {
+      const result = await edit.execute({
+        file_path: fp,
+        old_string: 'PLACEHOLDER',
+        new_string: 'price=$1.50',
+        replace_all: true,
+      });
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(
+        fs.readFileSync(fp, 'utf-8'),
+        'X: price=$1.50\nY: price=$1.50\nZ: price=$1.50\n',
+      );
     } finally {
       cleanup(fp);
     }
