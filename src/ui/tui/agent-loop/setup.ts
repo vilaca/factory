@@ -6,6 +6,7 @@
 import type { MutableRefObject } from 'react';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
+import { defaultRegistry } from '../../../tools/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
 import {
   createInitialRefs,
@@ -157,8 +158,11 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   });
 
   // Seed the token estimate so the status bar shows the system prompt's
-  // baseline before the first model response.
-  ctx.refs.current.contextManager.updateUsage(undefined);
+  // baseline before the first model response. Pass `[]` when text-tool
+  // fallback is on — refreshEstimate counts tools-schema overhead, and
+  // there's nothing to count in that mode.
+  const defs = ctx.refs.current.useTextToolFallback ? [] : defaultRegistry.getDefinitions();
+  ctx.refs.current.contextManager.refreshEstimate(defs);
   ctx.setEstimatedTokens(ctx.refs.current.contextManager.getTokenEstimate());
 
   // Sync cwd state with the freshly-seeded refs.cwd (createInitialRefs uses

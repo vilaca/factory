@@ -1,4 +1,4 @@
-import type { Provider } from '../../providers/types.js';
+import type { Provider, ToolDefinition } from '../../providers/types.js';
 import type { AgentEvent } from './types.js';
 import type { ContextManager } from '../context/context-manager.js';
 import type { HooksConfig } from '../config/types.js';
@@ -7,7 +7,7 @@ import type { FileCache } from './cache/file-cache.js';
 import { errorMessage } from '../../utils/errors.js';
 import { runHook } from '../hooks/index.js';
 
-interface CompactionHookOptions {
+interface CompactionOptions {
   hooksEnabled?: boolean;
   /** Live cwd holder; we dereference at each hook fire so PreCompact picks
    *  up project-local hooks even after Bash `cd`'d mid-turn. */
@@ -16,6 +16,12 @@ interface CompactionHookOptions {
   envPolicy?: EnvPolicy;
   onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
+  /** Native tool definitions sent alongside the next model call. Threaded
+   *  through to `ContextManager` so the pre-flight estimate accounts for
+   *  the tool-schema overhead and to `compact()` so the post-summary
+   *  refresh stays accurate. Must match what the agent loop will hand to
+   *  `provider.chat`. */
+  toolDefinitions?: ToolDefinition[];
 }
 
 interface CompactionDecision {
@@ -38,20 +44,23 @@ export async function* maybeCompact(
   provider: Provider,
   model: string,
   signal: AbortSignal | undefined,
-  fileCache?: FileCache,
-  hookOpts?: CompactionHookOptions,
+  fileCache: FileCache | undefined,
+  opts: CompactionOptions | undefined,
 ): AsyncGenerator<AgentEvent, CompactionDecision> {
   if (!contextManager) return { halt: false };
+  // Normalize once — `[]` matches "no tools sent" everywhere downstream
+  // (`refreshEstimate`, `ageOldToolResults`, the post-compact refresh).
+  const toolDefinitions = opts?.toolDefinitions ?? [];
 
-  // Re-estimate from current messages — usage from a prior turn doesn't reflect
-  // tool results added since.
-  contextManager.updateUsage(undefined);
+  // Re-estimate from current messages + tool schema — usage from a prior turn
+  // doesn't reflect tool results added since.
+  contextManager.refreshEstimate(toolDefinitions);
 
   // Pre-flight: age old tool results in place. Cheaper than full
   // compaction and cache-friendly (only old messages change, so the
   // recent prefix stays warm). Re-estimates internally; if this pulls us
   // back under the soft threshold the rest of this function no-ops.
-  contextManager.ageOldToolResults();
+  contextManager.ageOldToolResults(toolDefinitions);
 
   let cumulativeOld: number | null = null;
   let cumulativeNew: number | null = null;
@@ -60,9 +69,10 @@ export async function* maybeCompact(
   if (contextManager.shouldCompact()) {
     yield { type: 'compaction-start', aggressive: false };
     const fingerprints = fileCache?.fingerprints();
-    const precomputedSummary = yield* runPreCompactHook(false, hookOpts);
+    const precomputedSummary = yield* runPreCompactHook(false, opts);
     const result = await contextManager.compact(provider, model, signal, {
       fingerprints,
+      toolDefinitions,
       ...(precomputedSummary !== undefined ? { precomputedSummary } : {}),
     });
     if (result) {
@@ -74,10 +84,11 @@ export async function* maybeCompact(
   if (contextManager.getUsagePercent() > HARD_CEILING) {
     yield { type: 'compaction-start', aggressive: true };
     const fingerprints = fileCache?.fingerprints();
-    const precomputedSummary = yield* runPreCompactHook(true, hookOpts);
+    const precomputedSummary = yield* runPreCompactHook(true, opts);
     const result = await contextManager.compact(provider, model, signal, {
       aggressive: true,
       fingerprints,
+      toolDefinitions,
       ...(precomputedSummary !== undefined ? { precomputedSummary } : {}),
     });
     if (result) {
@@ -108,22 +119,22 @@ export async function* maybeCompact(
  */
 async function* runPreCompactHook(
   aggressive: boolean,
-  hookOpts: CompactionHookOptions | undefined,
+  opts: CompactionOptions | undefined,
 ): AsyncGenerator<AgentEvent, string | undefined> {
-  if (!hookOpts?.hooksEnabled || !hookOpts.cwdRef) return undefined;
+  if (!opts?.hooksEnabled || !opts.cwdRef) return undefined;
   try {
     const result = await runHook(
       'PreCompact',
       { aggressive },
       {
-        cwd: hookOpts.cwdRef.current,
-        config: hookOpts.hooksConfig,
-        envPolicy: hookOpts.envPolicy,
-        onStderr: hookOpts.onHookStderr,
+        cwd: opts.cwdRef.current,
+        config: opts.hooksConfig,
+        envPolicy: opts.envPolicy,
+        onStderr: opts.onHookStderr,
       },
     );
     for (const e of result.errors) {
-      hookOpts.onHookError?.('PreCompact', e);
+      opts.onHookError?.('PreCompact', e);
       yield { type: 'hook-error', event: 'PreCompact', error: e };
     }
     for (const hookCommand of result.firedCommands) {
@@ -137,7 +148,7 @@ async function* runPreCompactHook(
     return result.additionalContext;
   } catch (err: unknown) {
     const msg = errorMessage(err);
-    hookOpts.onHookError?.('PreCompact', msg);
+    opts.onHookError?.('PreCompact', msg);
     yield { type: 'hook-error', event: 'PreCompact', error: msg };
     return undefined;
   }

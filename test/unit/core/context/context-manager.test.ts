@@ -334,6 +334,57 @@ describe('ContextManager — summary marks cacheBoundary', () => {
   });
 });
 
+describe('ContextManager — prompt-token floor and tools surcharge', () => {
+  it('refreshEstimate uses max(heuristic, last promptTokens from API)', () => {
+    const conv = new Conversation('SYSTEM');
+    conv.addUser('hi');
+    const cm = new ContextManager(conv, capabilities);
+    cm.refreshEstimate([]);
+    const heuristicOnly = cm.getTokenEstimate();
+    cm.recordPromptUsage({ promptTokens: 50_000, completionTokens: 10, totalTokens: 50_010 });
+    cm.refreshEstimate([]);
+    assert.strictEqual(cm.getTokenEstimate(), Math.max(heuristicOnly, 50_000));
+  });
+
+  it('clears prompt-token floor after successful compaction', async () => {
+    const conv = new Conversation('SYSTEM');
+    for (let i = 0; i < 10; i++) {
+      if (i % 2 === 0) conv.addUser(`q${i}`);
+      else conv.addAssistant(`a${i}`);
+    }
+    const cm = new ContextManager(conv, capabilities, {
+      compactionThreshold: 0.0001,
+      recencyWindow: 4,
+      recencyTokens: 0,
+    });
+    cm.recordPromptUsage({ promptTokens: 99_999, completionTokens: 1, totalTokens: 100_000 });
+    cm.refreshEstimate([]);
+    await cm.compact(noopProvider(), 'm', undefined, { aggressive: true });
+    cm.refreshEstimate([]);
+    assert.ok(cm.getTokenEstimate() < 99_999, 'floor should reset after compact');
+  });
+
+  it('refreshEstimate adds tool-definition surcharge', () => {
+    const conv = new Conversation('SYSTEM');
+    conv.addUser('x');
+    const cm = new ContextManager(conv, capabilities);
+    cm.refreshEstimate([]);
+    const without = cm.getTokenEstimate();
+    const defs = [
+      {
+        type: 'function' as const,
+        function: {
+          name: 'BigTool',
+          description: 'y'.repeat(400),
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ];
+    cm.refreshEstimate(defs);
+    assert.ok(cm.getTokenEstimate() > without);
+  });
+});
+
 describe('ContextManager.ageOldToolResults', () => {
   it('drops the token estimate after aging old tool results', () => {
     const conv = new Conversation('SYSTEM');
@@ -348,7 +399,7 @@ describe('ContextManager.ageOldToolResults', () => {
     const cm = new ContextManager(conv, capabilities, { toolResultAgingTurns: 3 });
     cm.updateUsage(undefined);
     const before = cm.getTokenEstimate();
-    const aged = cm.ageOldToolResults();
+    const aged = cm.ageOldToolResults([]);
     assert.strictEqual(aged, 5);
     const after = cm.getTokenEstimate();
     assert.ok(after < before, `expected token estimate to drop, got ${before} → ${after}`);
@@ -361,7 +412,7 @@ describe('ContextManager.ageOldToolResults', () => {
     const cm = new ContextManager(conv, capabilities, { toolResultAgingTurns: 6 });
     cm.updateUsage(undefined);
     const before = cm.getTokenEstimate();
-    const aged = cm.ageOldToolResults();
+    const aged = cm.ageOldToolResults([]);
     assert.strictEqual(aged, 0);
     assert.strictEqual(cm.getTokenEstimate(), before);
   });

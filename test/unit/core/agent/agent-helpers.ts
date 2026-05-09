@@ -9,6 +9,7 @@ import type {
   ProviderCapabilities,
 } from '../../../../src/providers/types.js';
 import type { AgentEvent, PermissionDecision } from '../../../../src/core/agent/types.js';
+import type { ContextManager } from '../../../../src/core/context/context-manager.js';
 import { Conversation } from '../../../../src/core/context/conversation.js';
 import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
@@ -118,4 +119,22 @@ export async function collectEvents(
 
 export function findEvents(events: AgentEvent[], type: string): AgentEvent[] {
   return events.filter(e => e.type === type);
+}
+
+/** Build a fake `ContextManager` with no-op methods, overridable per test.
+ *  Tests that drive `runAgent` and only care about the compaction surface
+ *  (shouldCompact / compact / getUsagePercent) can pass overrides for
+ *  just those methods. The cast to `ContextManager` is safe as long as
+ *  the test sticks to methods exercised by the agent loop. */
+export function makeFakeCM(overrides: Partial<ContextManager> = {}): ContextManager {
+  const base: Partial<ContextManager> = {
+    refreshEstimate: () => {},
+    recordPromptUsage: () => {},
+    ageOldToolResults: () => 0,
+    shouldCompact: () => false,
+    compact: async () => null,
+    getUsagePercent: () => 0,
+    getTokenEstimate: () => 0,
+  };
+  return { ...base, ...overrides } as unknown as ContextManager;
 }

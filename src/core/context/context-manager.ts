@@ -3,9 +3,14 @@ import type {
   Provider,
   ProviderCapabilities,
   TokenUsage,
+  ToolDefinition,
 } from '../../providers/types.js';
 import type { Conversation } from './conversation.js';
-import { estimateMessagesTokens } from '../../utils/tokens.js';
+import {
+  estimateMessagesTokens,
+  estimateSingleMessageTokens,
+  estimateToolDefinitionsTokens,
+} from '../../utils/tokens.js';
 import { selectWeakTier } from '../agent/call-model/weak-tier.js';
 import { isError } from '../../utils/errors.js';
 
@@ -39,8 +44,24 @@ const LATEST_ASSISTANT_MAX_CHARS = 300;
 const SUMMARY_PREFIX = '[Previous conversation summary]\n';
 const AUTO_RETRY_PREFIX = 'Your last tool call failed with:';
 
+/** Token reservations for the summary call's own framing — see
+ *  `buildModelSummary`: a system instruction (~30 tokens) and a closing
+ *  user prompt (~30 tokens), plus margin. Subtracted from the context
+ *  window when deciding whether `toSummarize` fits. */
+const SUMMARY_FRAMING_TOKENS = 100;
+/** Output tokens reserved for the summary itself — matches `maxTokens`
+ *  passed to `provider.chatNoStream` in `buildModelSummary`. */
+const SUMMARY_OUTPUT_RESERVE = 512;
+/** Safety multiplier applied to the budget after framing/output are
+ *  subtracted. The heuristic estimate can undercount by ~10–15% on
+ *  tokenizer mismatch, so leaving this margin keeps a near-budget slice
+ *  from overflowing the provider limit. */
+const SUMMARY_BUDGET_SAFETY = 0.85;
+
 export class ContextManager {
   private tokenEstimate: number = 0;
+  /** Last provider-reported prompt token count; floors heuristic estimate. */
+  private lastPromptTokensFromApi: number = 0;
   private config: ContextConfig;
   private contextWindow: number;
 
@@ -61,12 +82,42 @@ export class ContextManager {
     };
   }
 
-  updateUsage(usage?: TokenUsage): void {
-    if (usage) {
-      this.tokenEstimate = usage.totalTokens;
-    } else {
-      this.tokenEstimate = estimateMessagesTokens(this.conversation.getMessages());
+  /** Store prompt-token count from the last model response (floors heuristic). */
+  recordPromptUsage(usage: TokenUsage | undefined): void {
+    if (usage && usage.promptTokens > 0) {
+      this.lastPromptTokensFromApi = usage.promptTokens;
     }
+  }
+
+  /** Recompute the token estimate for the *next* model call. Combines
+   *  three sources: a heuristic char-to-token estimate of the conversation
+   *  messages, the JSON-serialized tool definitions sent alongside (when
+   *  applicable), and a floor pulled from the most recent provider
+   *  response's `promptTokens` (whichever is larger). The floor matters
+   *  because the char heuristic systematically undercounts on tool-heavy
+   *  prompts; without it, compaction would defer until the next call
+   *  actually overflows the window.
+   *
+   *  Callers must pass the same definitions the agent loop will hand to
+   *  `provider.chat`, or `[]` when no tools will be sent (text-tool
+   *  fallback mode). Forgetting to thread the list through means the
+   *  estimate undercounts and compaction defers past the safe point. */
+  refreshEstimate(toolDefinitions: ToolDefinition[]): void {
+    const messagesTokens = estimateMessagesTokens(this.conversation.getMessages());
+    const toolsTokens = estimateToolDefinitionsTokens(toolDefinitions);
+    const heuristic = messagesTokens + toolsTokens;
+    this.tokenEstimate = Math.max(heuristic, this.lastPromptTokensFromApi);
+  }
+
+  /** @deprecated Prefer {@link refreshEstimate} with explicit tool
+   *  definitions. Kept as a back-compat shim for callers that haven't
+   *  threaded the tool list through yet — the resulting estimate
+   *  undercounts the per-request tool-schema overhead. */
+  updateUsage(usage?: TokenUsage): void {
+    if (usage?.promptTokens && usage.promptTokens > 0) {
+      this.recordPromptUsage(usage);
+    }
+    this.refreshEstimate([]);
   }
 
   getTokenEstimate(): number {
@@ -87,10 +138,10 @@ export class ContextManager {
    *  compaction and cache-friendly because only old messages mutate, so
    *  the prefix of recent turns stays byte-stable for re-cache. Returns
    *  the number of messages aged. */
-  ageOldToolResults(): number {
+  ageOldToolResults(toolDefinitions: ToolDefinition[]): number {
     const aged = this.conversation.ageOldToolResults(this.config.toolResultAgingTurns);
     if (aged > 0) {
-      this.tokenEstimate = estimateMessagesTokens(this.conversation.getMessages());
+      this.refreshEstimate(toolDefinitions);
     }
     return aged;
   }
@@ -106,6 +157,8 @@ export class ContextManager {
        *  as the summary verbatim. Used by PreCompact hooks to override the
        *  context that survives compaction. */
       precomputedSummary?: string;
+      /** Same definitions passed to the main model call — refreshes estimate post-compaction. */
+      toolDefinitions?: ToolDefinition[];
     },
   ): Promise<{ oldCount: number; newCount: number } | null> {
     const aggressive = opts?.aggressive ?? false;
@@ -140,12 +193,32 @@ export class ContextManager {
       // the model and mechanical fallbacks. This is the only override path.
       summary = opts.precomputedSummary;
     } else {
-      // Both aggressive and normal compaction try the weak-tier model first;
-      // mechanical is the fallback when the model call fails (per the source
-      // plan: "skip-model-entirely path is overcautious").
-      summary =
-        (await this.buildModelSummary(provider, summaryModel, toSummarize, signal)) ??
-        this.buildMechanicalSummary(toSummarize);
+      // The summary call carries its own framing (a system instruction
+      // and a closing user prompt) and reserves output tokens. Subtract
+      // those from the context window before checking whether the slice
+      // still fits, then apply a small safety multiplier to absorb the
+      // ~10–15% undercount the char heuristic exhibits on tool-heavy
+      // conversations. Falls through to the mechanical summary when the
+      // slice is too large to summarize in a single model call.
+      const summarizeTokens = estimateMessagesTokens(toSummarize);
+      const summarizeBudget = Math.max(
+        0,
+        Math.floor(
+          (this.contextWindow - SUMMARY_FRAMING_TOKENS - SUMMARY_OUTPUT_RESERVE) *
+            SUMMARY_BUDGET_SAFETY,
+        ),
+      );
+      const skipLlmCompaction = summarizeBudget > 0 && summarizeTokens > summarizeBudget;
+      if (skipLlmCompaction) {
+        summary = this.buildMechanicalSummary(toSummarize);
+      } else {
+        // Both aggressive and normal compaction try the weak-tier model first;
+        // mechanical is the fallback when the model call fails (per the source
+        // plan: "skip-model-entirely path is overcautious").
+        summary =
+          (await this.buildModelSummary(provider, summaryModel, toSummarize, signal)) ??
+          this.buildMechanicalSummary(toSummarize);
+      }
     }
 
     // Append known file fingerprints so the agent can re-Read post-compaction
@@ -160,7 +233,8 @@ export class ContextManager {
     }
 
     const result = this.conversation.replaceWithSummary(summary, recencyWindow);
-    this.tokenEstimate = estimateMessagesTokens(this.conversation.getMessages());
+    this.lastPromptTokensFromApi = 0;
+    this.refreshEstimate(opts?.toolDefinitions ?? []);
     return result;
   }
 
@@ -175,7 +249,7 @@ export class ContextManager {
     let count = 0;
     for (let i = messages.length - 1; i >= 1; i--) {
       // skip system at [0]
-      const tokens = estimateMessagesTokens([messages[i]!]);
+      const tokens = estimateSingleMessageTokens(messages[i]!);
       acc += tokens;
       count++;
       if (acc >= budget) break;
