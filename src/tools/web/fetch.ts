@@ -26,6 +26,12 @@ interface FetchUrlOptions {
   maxBytes?: number;
   /** Injectable for tests — defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /** Called for the initial URL and every redirect target. Return `null` to
+   *  permit the hop, or a string reason to abort. Lets the caller re-apply
+   *  the same domain gate the permission prompt used, so a redirect chain
+   *  can't smuggle the model onto a host the user never approved (SSRF /
+   *  open-redirect mitigation). */
+  validateHop?: (url: URL) => string | null;
 }
 
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -121,6 +127,10 @@ export async function fetchUrl(url: string, opts: FetchUrlOptions = {}): Promise
     let redirects = 0;
     // Manual redirect loop so we can cap hops and surface the final URL.
     for (;;) {
+      if (opts.validateHop) {
+        const reason = opts.validateHop(new URL(current));
+        if (reason) throw new Error(reason);
+      }
       const res = await fetchFn(current, {
         method: 'GET',
         headers: {

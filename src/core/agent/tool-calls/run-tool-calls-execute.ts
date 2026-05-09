@@ -212,6 +212,7 @@ async function* executeAndEmit(
           pathPolicy: ctx.pathPolicy,
           envPolicy: ctx.envPolicy,
           signal: ctx.signal,
+          isHostnameAllowed: (h: string) => ctx.permissions.isDomainAllowed(h),
         }
       : undefined;
     const result = await tool.execute(args, toolCtx);
