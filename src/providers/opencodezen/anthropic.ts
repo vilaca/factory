@@ -28,7 +28,7 @@ type AnthropicContentBlockParam = Anthropic.Messages.ContentBlockParam;
  * tool use/result is encoded as a typed content block, not a separate
  * role. Pure function — caller-friendly for tests.
  */
-export function splitAnthropicMessages(messages: ChatMessage[]): {
+function splitAnthropicMessages(messages: ChatMessage[]): {
   system: string | null;
   msgs: AnthropicMessageParam[];
 } {
