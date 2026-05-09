@@ -18,7 +18,7 @@ import {
   resolveCredentialsFor,
   type StartupCredentials,
 } from './cli/auth.js';
-import { buildExperimentalConfig } from './cli/startup-config.js';
+import { buildExperimentalConfig } from './cli/startup/config.js';
 import {
   applyRotationPhase,
   authenticateAndConnect,
@@ -28,7 +28,7 @@ import {
   registerSubagentTool,
   resolveProvider,
   selectAndValidateModel,
-} from './cli/startup-phases.js';
+} from './cli/startup/phases.js';
 
 const SHUTDOWN_BUDGET_MS = 5000;
 

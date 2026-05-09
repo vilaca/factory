@@ -8,7 +8,7 @@ import type {
   ProviderCapabilities,
   ToolDefinition,
 } from '../../../../src/providers/types.js';
-import type { AgentEvent } from '../../../../src/core/agent-types.js';
+import type { AgentEvent } from '../../../../src/core/agent/types.js';
 
 /**
  * Build a provider whose chat() consumes a plan entry per call: an Error

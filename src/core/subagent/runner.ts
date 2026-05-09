@@ -1,7 +1,7 @@
 import type { Provider } from '../../providers/types.js';
 import type { ToolContext, ToolHandler, ToolResult } from '../../tools/types.js';
 import { TOOL_NAMES } from '../../tools/types.js';
-import type { AgentEvent } from '../agent-types.js';
+import type { AgentEvent } from '../agent/types.js';
 import { ToolRegistry } from '../../tools/registry.js';
 import { readTool } from '../../tools/read.js';
 import { globTool } from '../../tools/glob.js';

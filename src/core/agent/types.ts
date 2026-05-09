@@ -1,13 +1,13 @@
-import type { Provider, TokenUsage, ToolCallMessage } from '../providers/types.js';
-import type { ToolResult } from '../tools/types.js';
-import type { ToolRegistry } from '../tools/registry.js';
-import type { Conversation } from './conversation.js';
-import type { ContextManager } from './context-manager.js';
-import type { PermissionManager, PermissionDecision } from '../security/permissions.js';
-import type { FileCache } from './agent/file-cache.js';
-import type { HooksConfig, ProviderKey, RotationEntry } from './config/types.js';
-import type { PathPolicy } from '../security/paths.js';
-import type { EnvPolicy } from '../security/env.js';
+import type { Provider, TokenUsage, ToolCallMessage } from '../../providers/types.js';
+import type { ToolResult } from '../../tools/types.js';
+import type { ToolRegistry } from '../../tools/registry.js';
+import type { Conversation } from '../conversation.js';
+import type { ContextManager } from '../context-manager.js';
+import type { PermissionManager, PermissionDecision } from '../../security/permissions.js';
+import type { FileCache } from './file-cache.js';
+import type { HooksConfig, ProviderKey, RotationEntry } from '../config/types.js';
+import type { PathPolicy } from '../../security/paths.js';
+import type { EnvPolicy } from '../../security/env.js';
 
 export type { PermissionDecision };
 

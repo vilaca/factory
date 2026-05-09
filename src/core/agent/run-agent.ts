@@ -1,5 +1,5 @@
 import type { ToolCallMessage, TokenUsage } from '../../providers/types.js';
-import type { AgentEvent, AgentOptions } from '../agent-types.js';
+import type { AgentEvent, AgentOptions } from './types.js';
 import { RecoveryState } from './recovery-state.js';
 import { callModel } from './call-model.js';
 import { parseModelResponse } from './parse-response.js';

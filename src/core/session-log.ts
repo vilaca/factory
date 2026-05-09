@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import type { AgentEvent } from './agent-types.js';
+import type { AgentEvent } from './agent/types.js';
 
 interface SessionStartMeta {
   model: string;

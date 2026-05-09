@@ -1,7 +1,7 @@
-import type { Provider, ToolCallMessage } from '../providers/types.js';
-import type { ToolRegistry } from '../tools/registry.js';
-import { parseFirstJsonObject } from '../utils/json-extract.js';
-import { errorMessage, isError } from '../utils/errors.js';
+import type { Provider, ToolCallMessage } from '../../providers/types.js';
+import type { ToolRegistry } from '../../tools/registry.js';
+import { parseFirstJsonObject } from '../../utils/json-extract.js';
+import { errorMessage, isError } from '../../utils/errors.js';
 
 const SYSTEM_PROMPT = `You are a tool-call corrector. The main coding agent attempted a tool call that failed. Given the original call, the error, and any relevant context, produce a single corrected tool call.
 

@@ -1,12 +1,12 @@
-import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
-import { descriptorByAlias, DESCRIPTORS } from '../providers/descriptors.js';
+import type { ProviderDescriptor, StartupProviderName } from '../../providers/descriptors.js';
+import { descriptorByAlias, DESCRIPTORS } from '../../providers/descriptors.js';
 import type {
   Config,
   ExperimentalFlags,
   RotationConfig,
   RotationEntry,
-} from '../core/config/types.js';
-import type { CliArgs } from './args.js';
+} from '../../core/config/types.js';
+import type { CliArgs } from '../args.js';
 
 /**
  * Decide whether the user can fast-path back into the previous session

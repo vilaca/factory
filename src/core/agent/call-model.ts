@@ -6,8 +6,8 @@ import type {
   ToolCallMessage,
   ToolDefinition,
 } from '../../providers/types.js';
-import type { AgentEvent, RotationOptions } from '../agent-types.js';
-import { resolveRetryPolicy } from '../provider-retry.js';
+import type { AgentEvent, RotationOptions } from './types.js';
+import { resolveRetryPolicy } from './provider-retry.js';
 import { RepeatDetector } from './repeat-detector.js';
 import { applyCacheBoundaries } from './cache-boundaries.js';
 import { errorMessage, isError } from '../../utils/errors.js';

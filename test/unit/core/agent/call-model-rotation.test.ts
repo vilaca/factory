@@ -9,7 +9,7 @@ import type {
   ProviderCapabilities,
   ToolDefinition,
 } from '../../../../src/providers/types.js';
-import type { AgentEvent, RotationOptions } from '../../../../src/core/agent-types.js';
+import type { AgentEvent, RotationOptions } from '../../../../src/core/agent/types.js';
 
 /**
  * Build a Provider whose chat() yields the supplied chunks (or throws when

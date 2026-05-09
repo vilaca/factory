@@ -4,7 +4,7 @@ import { parsePermissionInput } from '../components/permission-panel.js';
 import { parsePlanInput } from '../components/plan-approval-panel.js';
 import { parseRotationPromptInput } from '../components/rotation-prompt-panel.js';
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
-import { dispatchSlashCommand } from '../slash-commands.js';
+import { dispatchSlashCommand } from '../slash/dispatch.js';
 import type { TabsContextValue } from '../tabs/TabsContext.js';
 import type { RotationPromptState } from './use-rotation-fallback.js';
 

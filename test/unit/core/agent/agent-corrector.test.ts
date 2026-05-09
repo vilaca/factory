@@ -9,7 +9,7 @@ import type {
   ChatChunk,
   ProviderCapabilities,
 } from '../../../../src/providers/types.js';
-import type { AgentEvent } from '../../../../src/core/agent-types.js';
+import type { AgentEvent } from '../../../../src/core/agent/types.js';
 import { Conversation } from '../../../../src/core/conversation.js';
 import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
