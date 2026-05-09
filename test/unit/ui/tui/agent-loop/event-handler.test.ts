@@ -19,7 +19,9 @@ interface FakeRefs {
   sessionLogger?: {
     logSystemPromptChange: ReturnType<typeof mock.fn>;
     logPermissionChange: ReturnType<typeof mock.fn>;
+    logModelChange?: ReturnType<typeof mock.fn>;
   };
+  model?: string;
   conversation?: { updateSystemPrompt: ReturnType<typeof mock.fn> };
 }
 
@@ -365,6 +367,83 @@ describe('event-handler — recovery & rotation notices', () => {
     assert.match(text, /<unknown>/);
     assert.match(text, /work · …bbbb/);
     assert.match(text, /auth failed/);
+  });
+
+  it('key-rotation logs a same-model model-change so rollup tracks the new keyId', () => {
+    const logModelChange = mock.fn();
+    const { deps } = fakeDeps({
+      model: 'claude-sonnet-4-6',
+      sessionLogger: {
+        logSystemPromptChange: mock.fn(),
+        logPermissionChange: mock.fn(),
+        logModelChange,
+      },
+    });
+    const { ss } = makeSs();
+    handleAgentEvent(
+      {
+        type: 'key-rotation',
+        provider: 'anthropic',
+        from: { keyId: 'k1', fingerprint: 'aaaa' },
+        to: { keyId: 'k2', fingerprint: 'bbbb' },
+        reason: 'rate-limit',
+      },
+      deps,
+      ss,
+    );
+    assert.strictEqual(logModelChange.mock.callCount(), 1);
+    assert.deepStrictEqual(logModelChange.mock.calls[0]!.arguments, [
+      'claude-sonnet-4-6',
+      'claude-sonnet-4-6',
+      'k2',
+    ]);
+  });
+
+  it('key-rotation skips logging when refs is null (defensive)', () => {
+    const { deps } = fakeDeps(null);
+    const { ss } = makeSs();
+    // Just must not throw.
+    handleAgentEvent(
+      {
+        type: 'key-rotation',
+        provider: 'anthropic',
+        from: null,
+        to: { keyId: 'b', fingerprint: 'bbbb' },
+        reason: 'auth',
+      },
+      deps,
+      ss,
+    );
+  });
+
+  it('tuple-rotation logs a model-change with providerAfter so recents reflect the new tuple', () => {
+    const logModelChange = mock.fn();
+    const { deps } = fakeDeps({
+      activeKeyId: 'openai-key-1',
+      sessionLogger: {
+        logSystemPromptChange: mock.fn(),
+        logPermissionChange: mock.fn(),
+        logModelChange,
+      },
+    });
+    const { ss } = makeSs();
+    handleAgentEvent(
+      {
+        type: 'tuple-rotation',
+        from: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+        to: { provider: 'openai', model: 'gpt-4.1' },
+        reason: 'rate-limit',
+      },
+      deps,
+      ss,
+    );
+    assert.strictEqual(logModelChange.mock.callCount(), 1);
+    assert.deepStrictEqual(logModelChange.mock.calls[0]!.arguments, [
+      'claude-sonnet-4-6',
+      'gpt-4.1',
+      'openai-key-1',
+      'openai',
+    ]);
   });
 
   it('key-rotation-exhausted records a failure for the active key', () => {
