@@ -170,7 +170,7 @@ export async function swapProvider(
     return;
   }
 
-  refs.sessionLogger?.logModelChange(refs.model, nextModel, resolvedKeyId);
+  refs.sessionLogger?.logModelChange(refs.model, nextModel, resolvedKeyId, nextProvider.name);
   refs.provider = nextProvider;
   refs.model = nextModel;
   refs.primary = { provider: nextProvider.name, model: nextModel };
