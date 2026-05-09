@@ -1,6 +1,7 @@
 import type {
   ChatChunk,
   ChatMessage,
+  ChatOptions,
   Provider,
   TokenUsage,
   ToolCallMessage,
@@ -53,6 +54,9 @@ async function* streamIntoState(
     if (chunk.doneReason) {
       state.doneReason = chunk.doneReason;
     }
+    if (chunk.responseId) {
+      state.responseId = chunk.responseId;
+    }
   }
 }
 
@@ -67,15 +71,20 @@ async function* recoverViaNonStream(
   messages: ChatMessage[],
   tools: ToolDefinition[] | undefined,
   signal: AbortSignal | undefined,
+  chatOptions: Partial<ChatOptions> | undefined,
 ): AsyncGenerator<AgentEvent, void> {
   const response = await state.provider.chatNoStream(state.model, messages, tools, {
     signal,
     cacheTools: true,
+    ...chatOptions,
   });
   state.fullContent = response.content ?? '';
   state.toolCalls = sanitizeToolCalls(response.tool_calls ?? []);
   if (response.usage) {
     state.lastUsage = response.usage;
+  }
+  if (response.responseId) {
+    state.responseId = response.responseId;
   }
   if (state.fullContent) {
     yield { type: 'text-chunk', content: state.fullContent };
@@ -152,6 +161,11 @@ interface ModelCallResult {
   /** When tier-2 rotation swapped to a different (provider, model)
    *  tuple, this is the model the call ended on. */
   finalModel?: string;
+  /** Stored-response id from a successful /v1/responses turn, captured on
+   *  the terminal chunk. Never set on aborted turns — the chain pointer
+   *  must reference a fully-stored response or the next call will 4xx.
+   *  Callers who don't track responses chains can ignore it. */
+  responseId?: string;
 }
 
 /**
@@ -164,14 +178,24 @@ interface ModelCallResult {
  * Abort and non-stream errors propagate to the orchestrator, which decides
  * how to surface them.
  */
+interface CallModelExtras {
+  signal?: AbortSignal;
+  rotation?: RotationOptions;
+  /** Per-call ChatOptions overrides forwarded to provider.chat. The
+   *  orchestrator uses this to inject `responsesChain` for OpenAI's
+   *  /v1/responses path; other fields layer on top of the runtime's own
+   *  defaults (signal, cacheTools). */
+  chatOptions?: Partial<ChatOptions>;
+}
+
 export async function* callModel(
   initialProvider: Provider,
   initialModel: string,
   messages: ChatMessage[],
   tools: ToolDefinition[] | undefined,
-  signal: AbortSignal | undefined,
-  rotation?: RotationOptions,
+  extras: CallModelExtras = {},
 ): AsyncGenerator<AgentEvent, ModelCallResult> {
+  const { signal, rotation, chatOptions } = extras;
   const state: RotationState = {
     provider: initialProvider,
     model: initialModel,
@@ -188,6 +212,7 @@ export async function* callModel(
     toolCalls: [],
     lastUsage: undefined,
     doneReason: undefined,
+    responseId: undefined,
     streamedAnything: false,
   };
 
@@ -210,7 +235,11 @@ export async function* callModel(
   // cacheBoundary hint and Anthropic's splitMessagesForAnthropic
   // translates it into cache_control blocks.
   const annotated = applyCacheBoundaries(messages);
-  const callOpts = { signal: internal.signal, cacheTools: true };
+  const callOpts: ChatOptions = {
+    signal: internal.signal,
+    cacheTools: true,
+    ...chatOptions,
+  };
 
   // Per-key retry budget. Sits in front of rotation: a transient blip
   // (5xx, network drop, 408, 429) re-attempts on the same key with full-
@@ -267,7 +296,7 @@ export async function* callModel(
       // non-streamed once on the same provider — the model usually has the
       // answer in non-streaming mode even when the SSE channel hiccups.
       if (isStreamish(err)) {
-        yield* recoverViaNonStream(state, annotated, tools, signal);
+        yield* recoverViaNonStream(state, annotated, tools, signal, chatOptions);
         break;
       }
       cleanup();
@@ -282,5 +311,6 @@ export async function* callModel(
     doneReason: state.doneReason,
     ...(state.provider !== initialProvider ? { finalProvider: state.provider } : {}),
     ...(state.tupleRotated ? { finalModel: state.model } : {}),
+    ...(state.responseId ? { responseId: state.responseId } : {}),
   };
 }

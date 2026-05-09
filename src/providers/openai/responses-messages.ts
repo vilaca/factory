@@ -17,16 +17,29 @@ interface BuildResponsesBodyOptions {
  *  uses `input` (not `messages`), flat tool definitions, `max_output_tokens`
  *  instead of `max_completion_tokens`, and accepts a `reasoning` block. The
  *  first system message is hoisted to `instructions` per the API's preferred
- *  shape; subsequent system turns stay inline. */
+ *  shape; subsequent system turns stay inline.
+ *
+ *  When `options.responsesChain` is set the input is sliced to messages
+ *  produced after the captured count, and `previous_response_id` continues
+ *  the server-side chain — codex reuses prior reasoning tokens instead of
+ *  re-deriving them, which is the whole point of this transport.
+ *
+ *  `store: true` is always sent on this path: even when no chain pointer is
+ *  active on this call, the response must be retained server-side so the
+ *  *next* call has something to chain off. OpenAI retains stored responses
+ *  for ~30 days; users who need to opt out should pick a non-codex model. */
 export function buildResponsesBody(opts: BuildResponsesBodyOptions): Record<string, unknown> {
-  const { instructions, input } = toResponsesInput(opts.messages);
+  const chain = opts.options?.responsesChain;
+  const messages = chain ? opts.messages.slice(chain.messageCount) : opts.messages;
+  const { instructions, input } = toResponsesInput(messages);
 
   const body: Record<string, unknown> = {
     model: opts.model,
     input,
     stream: opts.stream,
-    store: false,
+    store: true,
   };
+  if (chain) body.previous_response_id = chain.lastResponseId;
   if (instructions) body.instructions = instructions;
 
   if (opts.tools && opts.tools.length > 0) {

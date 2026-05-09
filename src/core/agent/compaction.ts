@@ -27,6 +27,12 @@ interface CompactionOptions {
 interface CompactionDecision {
   /** True when usage stays above the hard ceiling and the agent should halt. */
   halt: boolean;
+  /** True when this call actually rewrote conversation messages (soft or
+   *  aggressive pass produced a result). Callers use this to invalidate
+   *  cached pointers that reference message indices — e.g. the OpenAI
+   *  Responses-API chain, whose `messageCount` slice would alias into
+   *  rewritten history after compaction. */
+  compacted: boolean;
 }
 
 const HARD_CEILING = 0.9;
@@ -47,7 +53,7 @@ export async function* maybeCompact(
   fileCache: FileCache | undefined,
   opts: CompactionOptions | undefined,
 ): AsyncGenerator<AgentEvent, CompactionDecision> {
-  if (!contextManager) return { halt: false };
+  if (!contextManager) return { halt: false, compacted: false };
   // Normalize once — `[]` matches "no tools sent" everywhere downstream
   // (`refreshEstimate`, `ageOldToolResults`, the post-compact refresh).
   const toolDefinitions = opts?.toolDefinitions ?? [];
@@ -108,7 +114,8 @@ export async function* maybeCompact(
     };
   }
 
-  return { halt: contextManager.getUsagePercent() > HARD_CEILING };
+  const compacted = cumulativeOld !== null && cumulativeNew !== null;
+  return { halt: contextManager.getUsagePercent() > HARD_CEILING, compacted };
 }
 
 /**

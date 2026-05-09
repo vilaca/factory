@@ -167,6 +167,12 @@ export async function* runAgent(
       yield { type: 'turn-complete', stopReason: 'token-limit', turnsUsed, usage: lastUsage };
       return;
     }
+    // Compaction rewrites prior messages in place — any cached pointer
+    // into the conversation index (e.g. ResponsesChain.messageCount)
+    // would slice into mismatched history server-side. Drop it.
+    if (compaction.compacted) {
+      options.responsesChainRef?.set(undefined);
+    }
 
     // Snapshot of what's about to be sent — recorded so session logs can be
     // graphed for context growth, not surfaced in the UI.
@@ -187,22 +193,44 @@ export async function* runAgent(
     let fullContent = '';
     let toolCalls: ToolCallMessage[] = [];
 
+    // Validate the chain pointer against the live (provider, model, keyId)
+    // tuple. A stale pointer left over from an unhandled state change is
+    // silently dropped — we fall back to a fresh request, which costs
+    // input tokens but stays correct.
+    const chainRef = options.responsesChainRef;
+    const candidate = chainRef?.get();
+    const activeKeyId = options.rotation?.activeKeyId;
+    const chainForCall =
+      candidate &&
+      candidate.provider === provider.name &&
+      candidate.model === model &&
+      candidate.keyId === activeKeyId &&
+      candidate.messageCount <= messages.length
+        ? {
+            lastResponseId: candidate.lastResponseId,
+            messageCount: candidate.messageCount,
+          }
+        : undefined;
+
     try {
-      const modelResult = yield* callModel(
-        provider,
-        model,
-        messages,
-        tools,
+      const modelResult = yield* callModel(provider, model, messages, tools, {
         signal,
-        options.rotation,
-      );
+        ...(options.rotation ? { rotation: options.rotation } : {}),
+        ...(chainForCall ? { chatOptions: { responsesChain: chainForCall } } : {}),
+      });
       if (modelResult.finalProvider) {
         provider = modelResult.finalProvider;
         options.rotation?.onProviderChange?.(provider);
+        // Tier-2 rotation: the chain belongs to the previous (provider,
+        // model) tuple. The validity check above would also drop it on the
+        // next iteration; clearing here keeps state consistent for any
+        // downstream introspection.
+        chainRef?.set(undefined);
       }
       if (modelResult.finalModel) {
         model = modelResult.finalModel;
         options.rotation?.onModelChange?.(model);
+        chainRef?.set(undefined);
       }
       fullContent = modelResult.fullContent;
       toolCalls = modelResult.toolCalls;
@@ -218,6 +246,10 @@ export async function* runAgent(
       // partial content stays visible in scrollback and in conversation
       // history.
       if (modelResult.aborted) {
+        // Partial assistant content lands in conversation history below;
+        // a chain pointer would then slice into a half-recorded turn on
+        // the next call. Drop it BEFORE the addAssistant.
+        chainRef?.set(undefined);
         if (fullContent) {
           yield { type: 'text-done', fullContent };
           conversation.addAssistant(fullContent);
@@ -255,6 +287,19 @@ export async function* runAgent(
         storedContent,
         !useUserResultFraming && toolCalls.length > 0 ? toolCalls : undefined,
       );
+
+      // Capture the chain pointer for the next turn. `messageCount` is
+      // taken AFTER the assistant append so the next call slices off
+      // exactly what the server has already stored.
+      if (modelResult.responseId && chainRef) {
+        chainRef.set({
+          lastResponseId: modelResult.responseId,
+          messageCount: conversation.getMessages().length,
+          provider: provider.name,
+          model,
+          ...(options.rotation?.activeKeyId ? { keyId: options.rotation.activeKeyId } : {}),
+        });
+      }
 
       if (toolCalls.length === 0) {
         // Detect "silent" turns where the model burned a meaningful number

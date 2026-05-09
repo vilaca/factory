@@ -64,7 +64,7 @@ describe('callModel — retry policy', () => {
       [{ content: 'finally', usage: undefined }],
     ]);
     const t0 = Date.now();
-    const { events, result } = await collect(callModel(provider, 'm', messages, tools, undefined));
+    const { events, result } = await collect(callModel(provider, 'm', messages, tools, {}));
     const elapsed = Date.now() - t0;
 
     const retries = events.filter(e => e.type === 'provider-retry');
@@ -94,7 +94,7 @@ describe('callModel — retry policy', () => {
       Object.assign(new Error('Too many requests'), { status: 429 }),
       [{ content: 'after-throttle', usage: undefined }],
     ]);
-    const { events, result } = await collect(callModel(provider, 'm', messages, tools, undefined));
+    const { events, result } = await collect(callModel(provider, 'm', messages, tools, {}));
     const retries = events.filter(e => e.type === 'provider-retry');
     assert.strictEqual(retries.length, 1);
     assert.strictEqual((retries[0] as { reason: string }).reason, 'rate-limit');
@@ -109,7 +109,7 @@ describe('callModel — retry policy', () => {
       Object.assign(new Error('Unauthorized'), { status: 401 }),
     ]);
     await assert.rejects(async () => {
-      await collect(callModel(provider, 'm', messages, tools, undefined));
+      await collect(callModel(provider, 'm', messages, tools, {}));
     });
   });
 
@@ -121,7 +121,7 @@ describe('callModel — retry policy', () => {
       Object.assign(new Error('503'), { status: 503 }),
     ]);
     await assert.rejects(async () => {
-      await collect(callModel(provider, 'm', messages, tools, undefined));
+      await collect(callModel(provider, 'm', messages, tools, {}));
     }, /503/);
   });
 
@@ -150,7 +150,7 @@ describe('callModel — retry policy', () => {
     // call-model has its OWN streamish-recovery path that retries non-stream
     // once. That's fine — the contract under test is "no provider-retry
     // events fire after a stream chunk has landed".
-    const { events } = await collect(callModel(provider, 'm', messages, tools, undefined));
+    const { events } = await collect(callModel(provider, 'm', messages, tools, {}));
     assert.strictEqual(events.filter(e => e.type === 'provider-retry').length, 0);
   });
 });

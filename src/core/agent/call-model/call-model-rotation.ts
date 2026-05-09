@@ -25,6 +25,11 @@ export interface RotationState {
   toolCalls: ToolCallMessage[];
   lastUsage: TokenUsage | undefined;
   doneReason: string | undefined;
+  /** Captured from the terminal /v1/responses chunk so the agent loop can
+   *  pin the next call to this stored response via `previous_response_id`.
+   *  Cleared on rotation so a stale id from a different (provider, model,
+   *  key) tuple can't leak into the next call. */
+  responseId: string | undefined;
   /** Set true on the first chunk that lands. Read by the catch handler to
    *  decide whether rotation is meaningful (rotating mid-stream would
    *  duplicate tokens already committed to the caller's scrollback). */
@@ -58,6 +63,7 @@ function resetAccumulators(state: RotationState): void {
   state.toolCalls = [];
   state.lastUsage = undefined;
   state.doneReason = undefined;
+  state.responseId = undefined;
 }
 
 /**

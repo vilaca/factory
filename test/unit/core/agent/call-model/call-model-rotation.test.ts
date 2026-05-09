@@ -83,7 +83,7 @@ describe('callModel rotation (tier 1)', () => {
     };
 
     const { events, result } = await collect(
-      callModel(initial, 'm', messages, tools, undefined, rotation),
+      callModel(initial, 'm', messages, tools, { rotation }),
     );
 
     // Saw a key-rotation event, then text from the new provider.
@@ -113,7 +113,7 @@ describe('callModel rotation (tier 1)', () => {
     let caught: unknown;
     const events: AgentEvent[] = [];
     try {
-      const gen = callModel(initial, 'm', messages, tools, undefined, rotation);
+      const gen = callModel(initial, 'm', messages, tools, { rotation });
       while (true) {
         const next = await gen.next();
         if (next.done) break;
@@ -145,7 +145,7 @@ describe('callModel rotation (tier 1)', () => {
     // 'socket hang up' is matched as "isStreamish" and falls back to
     // chatNoStream on the *initial* provider (not a key rotation).
     const { events, result } = await collect(
-      callModel(initial, 'm', messages, tools, undefined, rotation),
+      callModel(initial, 'm', messages, tools, { rotation }),
     );
     assert.strictEqual(
       events.find(e => e.type === 'key-rotation'),
@@ -165,7 +165,7 @@ describe('callModel rotation (tier 1)', () => {
     };
     let caught: unknown;
     try {
-      const gen = callModel(initial, 'm', messages, tools, undefined, rotation);
+      const gen = callModel(initial, 'm', messages, tools, { rotation });
       while (true) {
         const next = await gen.next();
         if (next.done) break;
@@ -205,7 +205,7 @@ describe('callModel rotation (tier 1)', () => {
     };
 
     const { events, result } = await collect(
-      callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
+      callModel(initial, 'claude-sonnet', messages, tools, { rotation }),
     );
 
     // Should see key-rotation-exhausted (tier 1 had nothing), then
@@ -252,7 +252,7 @@ describe('callModel rotation (tier 1)', () => {
     let caught: unknown;
     const events: AgentEvent[] = [];
     try {
-      const gen = callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation);
+      const gen = callModel(initial, 'claude-sonnet', messages, tools, { rotation });
       while (true) {
         const next = await gen.next();
         if (next.done) break;
@@ -287,7 +287,7 @@ describe('callModel rotation (tier 1)', () => {
     };
 
     const { events, result } = await collect(
-      callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
+      callModel(initial, 'claude-sonnet', messages, tools, { rotation }),
     );
     const tupEvent = events.find(e => e.type === 'tuple-rotation');
     assert.ok(tupEvent);
@@ -309,7 +309,7 @@ describe('callModel rotation (tier 1)', () => {
     };
     let caught: unknown;
     try {
-      const gen = callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation);
+      const gen = callModel(initial, 'claude-sonnet', messages, tools, { rotation });
       while (true) {
         const n = await gen.next();
         if (n.done) break;
@@ -348,7 +348,7 @@ describe('callModel rotation (tier 1)', () => {
     };
 
     const { events, result } = await collect(
-      callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation),
+      callModel(initial, 'claude-sonnet', messages, tools, { rotation }),
     );
 
     assert.ok(captured.value);
@@ -376,7 +376,7 @@ describe('callModel rotation (tier 1)', () => {
     };
     let caught: unknown;
     try {
-      const gen = callModel(initial, 'claude-sonnet', messages, tools, undefined, rotation);
+      const gen = callModel(initial, 'claude-sonnet', messages, tools, { rotation });
       while (true) {
         const n = await gen.next();
         if (n.done) break;
@@ -402,7 +402,7 @@ describe('callModel rotation (tier 1)', () => {
       withKey: () => replacement,
       failureLog,
     };
-    await collect(callModel(initial, 'm', messages, tools, undefined, rotation));
+    await collect(callModel(initial, 'm', messages, tools, { rotation }));
     assert.ok(failureLog.has('a'));
   });
 });

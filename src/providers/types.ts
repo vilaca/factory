@@ -46,6 +46,13 @@ export interface ChatChunk {
   /** Provider-supplied stop reason on the final chunk. Ollama uses values like
    * "stop" (natural), "length" (hit num_predict), "load" (model still loading). */
   doneReason?: string;
+  /** Stored-response id from OpenAI's /v1/responses, set on the terminal
+   *  chunk. The agent loop captures it into a per-session ResponsesChain so
+   *  the next call can pass `previous_response_id` and reuse server-side
+   *  reasoning tokens — codex generates 5–15k of these per turn at output
+   *  rates, so reuse is a real cost reduction. Other providers leave it
+   *  undefined. */
+  responseId?: string;
 }
 
 type ToolSupportLevel = 'native' | 'basic' | 'none';
@@ -87,6 +94,12 @@ export interface ChatOptions {
    * other providers ignore. Pairs with `cacheBoundary` on ChatMessage so
    * the agent layer has a single decision point for cache placement. */
   cacheTools?: boolean;
+  /** Active OpenAI Responses-API chain pointer. When set on a /v1/responses
+   *  call, the body is built with `previous_response_id` and the input is
+   *  trimmed to messages.slice(messageCount). Providers that don't speak
+   *  the Responses API ignore this. Pairs with ChatChunk.responseId for
+   *  capture on the way out. */
+  responsesChain?: { lastResponseId: string; messageCount: number };
 }
 
 export interface Provider {

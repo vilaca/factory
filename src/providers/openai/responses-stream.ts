@@ -52,6 +52,7 @@ interface ResponsesStreamEvent {
 interface DispatchState {
   toolCalls: ResponsesToolCallAcc;
   usage: ChatChunk['usage'];
+  responseId: string | undefined;
   providerName: string;
 }
 
@@ -90,6 +91,7 @@ function dispatchResponsesEvent(
       return undefined;
     case 'response.completed':
       state.usage = extractResponsesUsage(ev.response);
+      if (ev.response?.id) state.responseId = ev.response.id;
       return undefined;
     case 'response.failed':
     case 'response.incomplete':
@@ -131,6 +133,7 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
   const state: DispatchState = {
     toolCalls: new Map(),
     usage: undefined,
+    responseId: undefined,
     providerName: req.providerName,
   };
 
@@ -141,11 +144,11 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
     }
 
     const finalized = finalizeResponsesToolCalls(state.toolCalls);
-    if (finalized.length > 0) {
-      yield { tool_calls: finalized, done: true, ...(state.usage ? { usage: state.usage } : {}) };
-    } else {
-      yield { done: true, ...(state.usage ? { usage: state.usage } : {}) };
-    }
+    const terminal: ChatChunk = { done: true };
+    if (state.usage) terminal.usage = state.usage;
+    if (state.responseId) terminal.responseId = state.responseId;
+    if (finalized.length > 0) terminal.tool_calls = finalized;
+    yield terminal;
   } finally {
     try {
       await reader.cancel();
@@ -210,6 +213,7 @@ export async function sendOpenAiResponses(req: OpenAiChatRequest): Promise<ChatC
     done: true,
     usage: extractResponsesUsage(data),
   };
+  if (data.id) result.responseId = data.id;
   if (content) result.content = content;
   if (tcs.length > 0) result.tool_calls = tcs;
   return result;
