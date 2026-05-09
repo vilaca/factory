@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { globToRegex } from '../utils/glob.js';
+import { globToRegex } from '../utils/glob-match.js';
 
 export async function extractProjectFacts(cwd: string): Promise<string | null> {
   const sections: string[] = [];

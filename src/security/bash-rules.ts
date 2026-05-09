@@ -26,7 +26,7 @@
 // can over-grant). If a user truly needs regex they can compose multiple
 // glob rules.
 
-import { globToRegex } from '../utils/glob.js';
+import { globToRegex } from '../utils/glob-match.js';
 
 type BashDecision = 'allow' | 'deny' | 'prompt';
 

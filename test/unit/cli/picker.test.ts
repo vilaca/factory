@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { buildPickerOptions, findDefaultSelection } from '../../../src/cli/picker.js';
 import type { StartupProviderName } from '../../../src/providers/descriptors.js';
-import type { StartupCredentials } from '../../../src/cli/auth.js';
+import type { StartupCredentials } from '../../../src/cli/auth/index.js';
 
 describe('buildPickerOptions', () => {
   it('returns one entry per descriptor, sorted alphabetically by label', () => {

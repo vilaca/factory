@@ -2,7 +2,7 @@
 // component file so the per-stage render helpers can be extracted without
 // importing the orchestrator (which would create a cycle).
 
-import type { SessionErrorStatus } from '../../../core/session-log.js';
+import type { SessionErrorStatus } from '../../../../core/session-log.js';
 
 export interface RecentPair {
   provider: string;

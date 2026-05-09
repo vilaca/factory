@@ -7,7 +7,7 @@ import {
   type Stage,
   type ValidateResult,
   type KeySummary,
-} from './provider-picker-types.js';
+} from './types.js';
 import {
   ConfirmDeleteStage,
   ErrorStage,
@@ -20,12 +20,12 @@ import {
   RecentStage,
   ValidatingStage,
   ValidateFailedStage,
-} from './provider-picker-stages.js';
-import { useProviderPickerKeys } from './provider-picker-keys.js';
+} from './stages.js';
+import { useProviderPickerKeys } from './keys.js';
 
 // Re-export types so existing call sites that import from this module
 // (e.g. Session.tsx, headless callers) keep working without churn.
-export type { RecentPair, ProviderEntry } from './provider-picker-types.js';
+export type { RecentPair, ProviderEntry } from './types.js';
 
 interface ProviderPickerProps {
   /** Provider list. Use `name` only when no metadata is available. */

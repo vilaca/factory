@@ -1,5 +1,5 @@
 import type { HookEntry, HooksConfig } from '../config/types.js';
-import { globMatch } from '../../utils/glob.js';
+import { globMatch } from '../../utils/glob-match.js';
 
 export const HOOK_EVENTS = [
   'SessionStart',

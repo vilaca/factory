@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { htmlToMarkdown, decodeEntities } from '../../../../src/core/web/html-to-markdown.js';
+import { htmlToMarkdown, decodeEntities } from '../../../../src/tools/web/html-to-markdown.js';
 
 describe('decodeEntities', () => {
   it('decodes named entities', () => {

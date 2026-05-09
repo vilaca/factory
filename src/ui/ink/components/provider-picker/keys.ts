@@ -4,8 +4,8 @@ import {
   type ProviderEntry,
   type RecentPair,
   type Stage,
-} from './provider-picker-types.js';
-import { indexForShortcut } from './provider-picker-stages.js';
+} from './types.js';
+import { indexForShortcut } from './stages.js';
 
 interface UseProviderPickerKeysArgs {
   stage: Stage;

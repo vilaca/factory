@@ -17,7 +17,7 @@ import {
   probeAllProviders,
   resolveCredentialsFor,
   type StartupCredentials,
-} from './cli/auth.js';
+} from './cli/auth/index.js';
 import { buildExperimentalConfig } from './cli/startup/config.js';
 import {
   applyRotationPhase,

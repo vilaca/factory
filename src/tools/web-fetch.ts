@@ -1,7 +1,7 @@
 import type { ToolDefinition, ToolHandler, ToolResult, ToolContext } from './types.js';
 import { TOOL_NAMES } from './types.js';
-import { fetchUrl, isHtmlType, isPlainTextType } from '../core/web/fetch.js';
-import { htmlToMarkdown } from '../core/web/html-to-markdown.js';
+import { fetchUrl, isHtmlType, isPlainTextType } from './web/fetch.js';
+import { htmlToMarkdown } from './web/html-to-markdown.js';
 
 /** Hard cap on the post-conversion text the model receives. The fetcher
  *  itself caps the raw body at 1 MiB; this cap protects the model's context
