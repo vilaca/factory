@@ -2,6 +2,7 @@ import type { Provider, ToolCallMessage } from '../../../providers/types.js';
 import type { ToolRegistry } from '../../../tools/registry.js';
 import { parseFirstJsonObject } from '../../../utils/json-extract.js';
 import { errorMessage, isError } from '../../../utils/errors.js';
+import * as fs from 'fs/promises';
 
 const SYSTEM_PROMPT = `You are a tool-call corrector. The main coding agent attempted a tool call that failed. Given the original call, the error, and any relevant context, produce a single corrected tool call.
 
@@ -145,4 +146,30 @@ function extractFirstJsonObject(text: string): Record<string, unknown> | null {
     .replace(/\n```\s*$/, '')
     .trim();
   return parseFirstJsonObject(stripped);
+}
+
+/** Read up to 32KB of the file the failed call targeted (when the call has
+ *  a `file_path` arg) so the corrector model can ground its fix on real
+ *  content. The corrector slices to 8000 chars before sending anyway —
+ *  reading more is just memory waste on large files. */
+export async function readFileForCorrector(
+  call: ToolCallMessage,
+): Promise<{ path: string; content: string } | undefined> {
+  const args = call.function?.arguments as Record<string, unknown> | undefined;
+  const path = typeof args?.file_path === 'string' ? args.file_path : null;
+  if (!path) return undefined;
+  const READ_CAP_BYTES = 32 * 1024;
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(path, 'r');
+    const buf = Buffer.alloc(READ_CAP_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, READ_CAP_BYTES, 0);
+    return { path, content: buf.toString('utf-8', 0, bytesRead) };
+  } catch {
+    return undefined;
+  } finally {
+    await handle?.close().catch(() => {
+      /* ignore */
+    });
+  }
 }
