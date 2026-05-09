@@ -83,6 +83,29 @@ describe('Bash — AbortSignal', () => {
   });
 });
 
+describe('Bash — stdout/stderr split', () => {
+  it('returns stdout flat when stderr is empty', async () => {
+    const result = await bash.execute({ command: 'echo hello' });
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.output.trimEnd(), 'hello');
+    assert.ok(!result.output.includes('--- stderr ---'));
+  });
+
+  it('fences stderr under a --- stderr --- separator when both streams produce output', async () => {
+    const result = await bash.execute({
+      command: 'echo on-stdout && echo on-stderr 1>&2',
+    });
+    assert.strictEqual(result.success, true);
+    assert.match(result.output, /on-stdout\n+--- stderr ---\non-stderr/);
+  });
+
+  it('emits the stderr fence even when stdout is empty', async () => {
+    const result = await bash.execute({ command: 'echo only-on-stderr 1>&2' });
+    assert.strictEqual(result.success, true);
+    assert.match(result.output, /^--- stderr ---\nonly-on-stderr/);
+  });
+});
+
 describe('Bash — output cap', () => {
   it('truncates combined stdout/stderr past 50KB and emits a truncation footer', async () => {
     // Use yes(1)-style repetition to exceed the 50,000-byte cap quickly.

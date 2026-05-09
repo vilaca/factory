@@ -35,6 +35,18 @@ function clampTimeout(raw: unknown): number {
 // per-turn conversation cost linearly.
 const OUTPUT_CAP_BYTES = 50_000;
 
+// Combined view: stdout as-is, with any non-empty stderr fenced under a
+// `--- stderr ---` separator. Empty-stderr (the common case) stays a flat
+// stdout string so we don't pay token overhead for noise. Models otherwise
+// confuse warnings/progress on stderr (npm, cargo, pytest) with real
+// errors, and useful failure messages on stderr get buried mid-stdout.
+function formatBody(stdout: string, stderr: string): string {
+  if (!stderr) return stdout;
+  if (!stdout) return `--- stderr ---\n${stderr}`;
+  const sep = stdout.endsWith('\n') ? '--- stderr ---\n' : '\n--- stderr ---\n';
+  return `${stdout}${sep}${stderr}`;
+}
+
 const definition: ToolDefinition = {
   type: 'function',
   function: {
@@ -120,7 +132,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     // a 1s timeout would block the agent loop for 30s.
     proc.on('exit', (_code, signal) => {
       if (!signal) return;
-      const tail = [stdout, stderr].filter(Boolean).join('\n');
+      const tail = formatBody(stdout, stderr);
       settle({
         success: false,
         output: tail
@@ -129,18 +141,6 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       });
     });
 
-    // TODO: split stdout and stderr in the output instead of concatenating.
-    // Motivation:
-    //   - Models confuse warnings/progress on stderr (npm, cargo, pytest)
-    //     with real errors and chase phantom failures.
-    //   - Conversely, when a command fails with a useful message on stderr,
-    //     it gets mixed into stdout noise and buried.
-    //   - Tools that write structured data to stdout (jq, git diff) become
-    //     unparseable when stderr lines are interleaved.
-    // Shape: keep the combined view for short outputs; for non-empty stderr,
-    // emit a fenced "--- stderr ---" section after stdout so the model can
-    // see them separately without doubling the token cost on the common
-    // case where stderr is empty.
     proc.on('close', code => {
       // Strip the sentinel from stdout before showing the user/model. Look at
       // the very tail (\\n SENTINEL : path \\n?) to avoid eating earlier text
@@ -153,11 +153,11 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
         stdout = stdout.replace(sentinelRe, '');
       }
 
-      const combined = [stdout, stderr].filter(Boolean).join('\n');
+      const body = formatBody(stdout, stderr);
       const truncated =
-        combined.length > OUTPUT_CAP_BYTES
-          ? combined.slice(0, OUTPUT_CAP_BYTES) + '\n...(output truncated)'
-          : combined;
+        body.length > OUTPUT_CAP_BYTES
+          ? body.slice(0, OUTPUT_CAP_BYTES) + '\n...(output truncated)'
+          : body;
 
       let output: string;
       if (code === 0) {
