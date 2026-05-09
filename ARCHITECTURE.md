@@ -4,36 +4,28 @@ This document maps factory's internals so a new contributor can locate the right
 
 ## High level
 
-```
-┌──────────┐   ┌────────────┐   ┌──────┐   ┌──────────┐   ┌───────────┐
-│ CLI args │ → │ loadConfig │ → │ auth │ → │ provider │ → │ tools/MCP │
-└──────────┘   └────────────┘   └──────┘   └──────────┘   └─────┬─────┘
-                                                                │
-                                                                ▼
-                                                ┌──────────────────────────────┐
-                                                │  TUI: renderApp → Session    │
-                                                │  no TTY: runHeadless         │
-                                                └───────────────┬──────────────┘
-                                                                │
-                                                                ▼
-                                                      ┌──────────────────┐
-                                                      │    agent loop    │
-                                                      │   (core/agent)   │
-                                                      └──────────────────┘
+```mermaid
+flowchart LR
+  A[CLI args] --> B[loadConfig] --> C[auth] --> D[provider] --> E[tools / MCP]
+  E --> F{isInteractiveTty}
+  F -- yes --> G[renderApp — TUI]
+  F -- no  --> H[runHeadless]
+  G --> I[agent loop<br/>core/agent]
+  H --> I
 ```
 
-The entry in `src/index.ts` parses CLI flags, loads config, runs auth, picks a provider, registers tools, attaches MCP servers, then dispatches to either `renderApp` (TUI) or `runHeadless` (scripted/non-TTY) — both eventually call into the same agent loop.
+The entry in `src/index.ts` parses CLI flags, loads config, runs auth, picks a provider, registers tools, attaches MCP servers, then checks `isInteractiveTty` and dispatches to either `renderApp` (TUI) or `runHeadless` (scripted/non-TTY) — both eventually call into the same agent loop.
 
 ## Module map
 
 ### `src/index.ts`
-Top-level `main()`. Parses argv, applies `--debug`, branches on `--version` / `--help`, loads config, applies rotation overrides, runs auth, wires hooks, registers tools, instantiates the MCP manager, prints the welcome banner, and dispatches to TUI or headless mode. Also installs `SIGINT` / `SIGTERM` / `unhandledRejection` / `uncaughtException` handlers.
+Top-level `main()`. Parses argv, applies `--debug`, branches on `--version` / `--help`, loads config, applies rotation overrides, runs auth, wires hooks, registers tools, instantiates the `McpManager` (`src/mcp/client.ts`), prints the welcome banner, and dispatches to TUI or headless mode based on `isInteractiveTty`. Also installs `unhandledRejection` / `uncaughtException` handlers.
 
 ### `src/cli/`
 - `args.ts` — argv parser (manual, no commander), `printUsage()`, `printVersion()`.
 - `picker.ts` — line-based interactive provider/model selection.
 - `prompts.ts` — Ink-based variant of the picker prompts.
-- `auth/` — credential resolution and interactive auth flows:
+- `auth/` — credential resolution and interactive auth flows (storage and model validation live in `src/core/auth/`):
   - `index.ts` — credential resolution: CLI → env var → config file → interactive prompt. Probes providers in parallel during startup. Returns `StartupCredentials` keyed by provider.
   - `flows.ts` — interactive auth flow helpers used during startup.
 - `startup/` — startup orchestration:
@@ -75,9 +67,9 @@ The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse
   - `context-manager.ts` — recency window + summary compaction.
   - `system-prompt.ts` — dynamic system prompt generation (project facts, capabilities, tool list).
   - `project-facts.ts` — best-effort metadata extraction (cloc counts, README excerpt).
-- `auth/` — credential storage:
+- `auth/` — credential storage (interactive resolution lives in `src/cli/auth/`):
   - `credentials.ts` — multi-key store and migration from older single-key formats.
-  - `model-validation.ts` — model-id sanity checks at startup.
+  - `model-validation.ts` — model-id sanity checks at startup. Lives under `auth/` for historical reasons but is about provider model IDs, not credentials.
 - `config/` — config file load/merge/save with zod-validated schema (`index.ts`, `merge.ts`, `types.ts`, `validate.ts`).
 - `session/` — per-session telemetry:
   - `session-log.ts` — JSONL per-session logging in `~/.factory/sessions/`. Tracks provider auth, tool calls, model changes, errors.
@@ -95,16 +87,16 @@ The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse
   - `bash-allowlist.ts` — restricted Bash policy for sub-agents.
 
 ### `src/providers/`
-One module per provider. All implement the `Provider` interface.
+All providers implement the `Provider` interface. They come in three flavors:
 
+1. **Shared OpenAI-compatible adapter** — `openai/` is one folder serving the ten-or-so OpenAI-compatible providers; owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction.
+2. **Folder-with-own-auth** — `copilot/`, `googleaistudio/` use the OpenAI adapter shape but have their own auth flow alongside; `opencodezen/` is a proxy that re-exposes Anthropic/Google through a single endpoint.
+3. **Flat-file native** — Anthropic, Ollama, HuggingFace, Cohere, Cerebras, Groq, Mistral, OpenRouter, Vercel, llama.cpp, workersai each live as a single file and parse their own response shapes.
+
+Cross-cutting files:
 - `types.ts` — the `Provider` interface every adapter implements.
 - `registry.ts` — maps a provider name to a constructor.
 - `descriptors.ts` — per-provider metadata (display label, aliases, env vars, default host).
-- `openai/` — shared adapter for the ten-or-so OpenAI-compatible providers; owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction.
-- `copilot/`, `googleaistudio/` — providers with their own auth flow alongside the adapter.
-- `opencodezen/` — proxy that re-exposes Anthropic/Google through a single endpoint.
-
-Native-protocol providers (Anthropic, Ollama, HuggingFace, Cohere, Cerebras, Groq, Mistral, OpenRouter, Vercel, llama.cpp, workersai) live as flat files and parse their own response shapes.
 
 ### `src/tools/`
 Built-in tools plus the registry that exposes them. Each tool implements `ToolHandler` with a `definition` (LLM-facing JSON schema) and an `execute` that returns a `ToolResult`.
@@ -119,12 +111,15 @@ Built-in tools plus the registry that exposes them. Each tool implements `ToolHa
 - `registry.ts` — maps tool name to handler; `ToolRegistry` registers each built-in.
 - `index.ts` — exports the shared `defaultRegistry` instance.
 - `types.ts` — `ToolHandler`, `ToolDefinition`, `ToolResult` shapes.
-- `web/` — HTTP fetch + HTML rendering pipeline backing the WebFetch tool:
+- `web/` — HTTP fetch + HTML rendering pipeline backing the WebFetch tool. The pipeline is:
+  ```
+  fetch.ts → html-tokenize.ts → html-render.ts → html-to-markdown.ts
+  ```
   - `index.ts` — the `WebFetch` tool handler.
   - `fetch.ts` — HTTP client with content-type sniffing.
+  - `html-tokenize.ts` — lightweight HTML tokenizer.
   - `html-render.ts` — top-level renderer entry.
   - `html-to-markdown.ts` — DOM walker that emits Markdown.
-  - `html-tokenize.ts` — lightweight HTML tokenizer.
 
 Tool execution is gated by `src/security/permissions.ts` (allow-once / allow-always / deny / domain whitelist) and the security policies in `src/security/` (path jail, env scrubbing, bash rule matching).
 
@@ -181,10 +176,19 @@ Small helpers.
 - `debug.ts` — debug logging gate.
 - `timeout.ts` — promise timeout helper.
 
+## Build & distribution
+
+- Source: `src/` → `dist/` via `tsc` (Node16 module, ES2022 target, declaration maps).
+- Entry: `dist/index.js` ships with a `#!/usr/bin/env node` shebang.
+- `package.json:bin.factory` makes `factory` available globally after `npm install -g` or `npm link`.
+- `package.json:files` allowlists `dist`, `README.md`, `LICENSE` for the npm tarball; `.npmignore` is defense-in-depth.
+- Ambient declarations live in `src/globals.d.ts` (e.g. `marked-terminal` typings).
+- Unit tests run directly against TS source via `tsx --test 'test/unit/**/*.test.ts'` (no compile step). End-to-end tests compile both `src/` and `test/` into `dist-test/` via `tsconfig.test.json` and run with `node --test`. Unit tests mirror `src/` under `test/unit/`.
+
 ## Data flow: one user prompt → one response
 
 1. User types into the input bar in `Session.tsx`.
-2. `Session.tsx:handleSubmit` dispatches: slash commands go to `dispatchSlashCommand`; plain text becomes `agent.queueInput(text)` on the `useAgentLoop` API.
+2. `Session.tsx` wires the input bar to `useSessionInput` (`src/ui/tui/hooks/use-session-input.ts`); its `handleSubmit` dispatches: slash commands go to `dispatchSlashCommand`; plain text becomes `agent.queueInput(text)` on the `useAgentLoop` API.
 3. `use-agent-loop.ts` queues the message into a `Conversation` (from `core/context/conversation.ts`), then calls into `core/agent/run-agent.ts:runAgent`.
 4. `runAgent` builds the system prompt via `core/context/system-prompt.ts`, applies cache boundaries via `agent/cache/cache-boundaries.ts`, then calls `agent/call-model/call-model.ts:callModel` which streams from the provider.
 5. The provider's `chat()` method yields `ChatChunk`s — content deltas, tool calls, and a final `done: true` with usage. `runAgent` consumes these and emits `AgentEvent`s.
@@ -195,28 +199,19 @@ Small helpers.
 
 ## Permission and security layering
 
-```
-user input → slash dispatcher ─┐
-                               ├─→ tool execute()
-agent tool_call → permissions ─┘       │
-                                       ▼
-                       security/{paths, bash-rules, env}
-                                       │
-                                       ▼
-                                   actual I/O
+```mermaid
+flowchart TB
+  A[user input] --> B[slash dispatcher]
+  C[agent tool_call] --> D[permissions]
+  B --> E["tool execute()"]
+  D --> E
+  E --> F["security/{paths, bash-rules, env}"]
+  F --> G[actual I/O]
 ```
 
 `src/security/permissions.ts` decides per-tool / per-domain whether a call needs interactive approval. `src/security/` checks the *content* of the call: paths must pass the jail, bash commands must not match a forbidden pattern, env vars passed to spawned shells are scrubbed against the deny list. Both layers must approve before execution.
 
 Built-in security rules cannot be overridden by user config — only extended.
-
-## Build & distribution
-
-- Source: `src/` → `dist/` via `tsc` (Node16 module, ES2022 target, declaration maps).
-- Entry: `dist/index.js` ships with a `#!/usr/bin/env node` shebang.
-- `package.json:bin.factory` makes `factory` available globally after `npm install -g` or `npm link`.
-- `package.json:files` allowlists `dist`, `README.md`, `LICENSE` for the npm tarball; `.npmignore` is defense-in-depth.
-- Tests compile separately to `dist-test/` via `tsconfig.test.json`. Unit tests mirror `src/` under `test/unit/`.
 
 ## Where to start when adding...
 
@@ -226,7 +221,7 @@ Built-in security rules cannot be overridden by user config — only extended.
 | New provider | `src/providers/<name>.ts` (or folder) + `descriptors.ts` + `registry.ts` (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
 | New tool | `src/tools/<name>.ts` + `src/tools/registry.ts` (register in `ToolRegistry`) |
 | New slash command | `src/ui/tui/slash/<name>.ts` + `src/ui/tui/slash/dispatch.ts` (dispatcher) |
-| New session-log event | `src/core/session/session-log.ts:logXxx` + corresponding caller |
+| New session-log event | add a method on the `SessionLogger` interface in `src/core/session/session-log.ts` (alongside `logModelChange`, `logToolCall`, etc.) + call it from where the event fires |
 | New security rule | `src/security/<area>.ts` — built-in rules are an export list |
 | New hook event | `src/core/hooks/discovery.ts` (event enum) + caller (where the hook fires) |
 | New skill matcher | `src/core/skills/matcher.ts` |
