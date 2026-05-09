@@ -93,6 +93,38 @@ describe('Grep tool', () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it('handles match volumes that would have blown a 10 MiB buffer', async () => {
+    // Regression: previous impl used execFile with maxBuffer=10MiB, so a
+    // search at the repo root hitting compiled output / coverage HTML
+    // produced enough stdout to exit with "stdout maxBuffer length
+    // exceeded" before our line cap could fire. The streaming impl kills
+    // rg/grep at MAX_RESULT_LINES + slack, so even ~50 MiB of latent
+    // matches return cleanly truncated.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-grep-flood-'));
+    try {
+      // Each line ~5 KiB. 12_000 lines ≈ 60 MiB if buffered whole — well
+      // beyond the old 10 MiB cap. Streaming should kill at ~1050 lines.
+      const padding = 'x'.repeat(5000);
+      const fp = path.join(tmp, 'huge.txt');
+      const lines = Array.from(
+        { length: 12_000 },
+        (_, i) => `match-${i}: hit-marker-flood-${padding}`,
+      );
+      fs.writeFileSync(fp, lines.join('\n') + '\n');
+      const result = await grep.execute({
+        pattern: 'hit-marker-flood',
+        path: tmp,
+        include_content: true,
+      });
+      assert.strictEqual(result.success, true, `expected success, got: ${result.output.slice(0, 200)}`);
+      const outLines = result.output.split('\n');
+      assert.strictEqual(outLines.length, 1001, `expected 1001 lines, got ${outLines.length}`);
+      assert.ok(result.output.includes('truncated'));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });
 
 // ─── Search tools deny-list ─────────────────────────────────────────────
