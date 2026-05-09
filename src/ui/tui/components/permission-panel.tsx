@@ -25,7 +25,7 @@ export function PermissionPanel({ toolName, args }: PermissionPanelProps): React
   if (toolName === TOOL_NAMES.WebFetch) {
     const host = webFetchHostname(args);
     return (
-      <Box paddingX={1}>
+      <Box marginTop={1} paddingLeft={4}>
         <Text color="yellow">Allow WebFetch{host ? ` to ${host}` : ''}? </Text>
         <Text dimColor>
           [y]es / [n]o / [w]hitelist {host ?? 'this domain'} / [a]llow all WebFetch
@@ -34,7 +34,7 @@ export function PermissionPanel({ toolName, args }: PermissionPanelProps): React
     );
   }
   return (
-    <Box paddingX={1}>
+    <Box marginTop={1} paddingLeft={4}>
       <Text color="yellow">Allow {toolName}? </Text>
       <Text dimColor>[y]es / [n]o / [a]llow all</Text>
     </Box>

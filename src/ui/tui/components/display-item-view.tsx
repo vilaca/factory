@@ -64,7 +64,7 @@ export function DisplayItemView({
       // Failures don't render a standalone ✗ line either — the call panel
       // header now shows ✗ in place of 🔧 (computed in ConversationDisplay
       // via lookahead), so the body alone is enough.
-      // Empty-success (○) keeps the icon-only line because nothing else
+      // Empty-success (◌) keeps the icon-only line because nothing else
       // distinguishes "succeeded but found nothing" from a regular run.
       if (item.success && !item.empty) {
         const isEdit = item.toolName === TOOL_NAMES.Edit || item.toolName === TOOL_NAMES.Write;
@@ -90,18 +90,11 @@ export function DisplayItemView({
           </Box>
         );
       }
-      // TODO: collapse the empty-success case to a single line — `❌ No
-      // matches found.` (or similar) instead of the current two-line
-      // "  ○\n     No matches found." render. Requires checking item.empty
-      // and either inlining the body alongside the icon or replacing the
-      // generic ○ with a body-aware glyph (❌ for grep/glob misses, etc.).
       return (
         <Box flexDirection="column">
-          <Text color="yellow"> ○</Text>
           {lines.map((line, i) => (
-            <Text dimColor key={i}>
-              {' '}
-              {line}
+            <Text color="green" key={i}>
+              {i === 0 ? `    ◌ ${line}` : `      ${line}`}
             </Text>
           ))}
         </Box>
