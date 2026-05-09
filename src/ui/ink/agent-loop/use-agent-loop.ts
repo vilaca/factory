@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import type { DisplayItem, ToolCallSummary } from '../types.js';
-import { composeSystemPrompt as composeSystemPromptPure } from './system-prompt.js';
+import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
 import { runAgentLoopInternal, processInput } from './run-loop.js';
 import { refreshGitState } from './git-state.js';
 import {
