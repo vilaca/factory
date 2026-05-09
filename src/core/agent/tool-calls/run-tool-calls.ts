@@ -8,13 +8,12 @@ import type { EnvPolicy } from '../../../security/env.js';
 import type { Conversation } from '../../context/conversation.js';
 import type { PermissionManager } from '../../../security/permissions.js';
 import { formatToolResultMessage } from './tool-result-format.js';
-import { correctToolCall } from './tool-call-corrector.js';
+import { correctToolCall, readFileForCorrector } from './tool-call-corrector.js';
 import { selectWeakTier } from '../call-model/weak-tier.js';
 import type { RecoveryState } from '../recovery-state.js';
 import type { BashDedupTracker } from './bash-dedup.js';
 import type { FileCache } from '../cache/file-cache.js';
 import { runHook } from '../../hooks/index.js';
-import * as fs from 'fs/promises';
 import { errorMessage } from '../../../utils/errors.js';
 import { tryReadCacheHit, maintainFileCache } from './run-tool-calls-cache.js';
 import { executeToolCall } from './run-tool-calls-execute.js';
@@ -418,26 +417,3 @@ async function* runCorrectorIfNeeded(
   return { deniedDelta };
 }
 
-export async function readFileForCorrector(
-  call: ToolCallMessage,
-): Promise<{ path: string; content: string } | undefined> {
-  const args = call.function?.arguments as Record<string, unknown> | undefined;
-  const path = typeof args?.file_path === 'string' ? args.file_path : null;
-  if (!path) return undefined;
-  // Cap the read at 32KB. The corrector slices to 8000 chars before sending
-  // to the model anyway; reading more is just memory waste on large files.
-  const READ_CAP_BYTES = 32 * 1024;
-  let handle: fs.FileHandle | undefined;
-  try {
-    handle = await fs.open(path, 'r');
-    const buf = Buffer.alloc(READ_CAP_BYTES);
-    const { bytesRead } = await handle.read(buf, 0, READ_CAP_BYTES, 0);
-    return { path, content: buf.toString('utf-8', 0, bytesRead) };
-  } catch {
-    return undefined;
-  } finally {
-    await handle?.close().catch(() => {
-      /* ignore */
-    });
-  }
-}
