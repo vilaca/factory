@@ -16,7 +16,7 @@ Three layers, lowest to highest precedence: **config files → environment varia
 | `--no-read-cache`      |       | Disable Read mtime/hash cache |
 | `--no-line-count-hint` |       | Drop the cloc/scc system-prompt hint |
 | `--no-subagents`       |       | Disable the `Delegate` tool |
-| `--no-hooks`           |       | Disable user-supplied lifecycle shell hooks |
+| `--no-hooks`           |       | Disable user-supplied lifecycle hook commands |
 | `--turn-timeout <sec>` |       | Auto-abort agent after N seconds |
 | `--no-log`             |       | Disable session JSONL logging |
 | `--strict-log`         |       | Exit non-zero if session logging fails (init or first write) |
@@ -69,7 +69,27 @@ Example `config.json`:
       "readCache": true,
       "lineCountHint": true,
       "subagents": true,
+      "skills": true,
       "hooks": true
+    },
+    "web": {
+      "allowlist": ["docs.anthropic.com"]
+    }
+  },
+  "permissions": {
+    "allowAll": ["Read", "Glob", "Grep"],
+    "bashRules": [
+      { "pattern": "git status*", "decision": "allow" },
+      { "pattern": "git push *", "decision": "deny", "note": "Push from a real terminal" }
+    ]
+  },
+  "security": {
+    "bashEnv": {
+      "allow": ["MY_BUILD_FLAG"],
+      "denyPrefixes": ["INTERNAL_"]
+    },
+    "paths": {
+      "deny": ["~/work/private-repo/secrets"]
     }
   },
   "keys": {
@@ -80,7 +100,61 @@ Example `config.json`:
 }
 ```
 
-The `agent.experimental` block toggles the experimental flags described in [the README](../README.md#experimental-flags). Toggle at runtime with `/exp <name> on|off`.
+The `agent.experimental` block toggles the [experimental flags](#experimental-flags) below. Toggle at runtime with `/exp <name> on|off`.
+
+## Permissions (`permissions`)
+
+Tool-level permissions. The user is prompted before any tool call that isn't pre-allowed; this section pre-allows tools and lays down Bash rules so the prompts don't show up.
+
+| Field | Type | Purpose |
+| ----- | ---- | ------- |
+| `allowAll` | `string[]` | Tool names that bypass the per-call prompt. Names match the registered tool ids (`Read`, `Glob`, `Grep`, `Bash`, `Edit`, `Write`, `WebFetch`, plus any MCP tool names). Granting `Bash` here does **not** bypass the built-in forbidden patterns or your own `bashRules` — those still apply. |
+| `bashRules` | `BashRuleConfig[]` | Ordered list of glob patterns scoped to Bash. First match wins. Each rule has `pattern` (shell glob), `decision` (`allow` \| `deny` \| `prompt`), and an optional `note` shown in `/permissions`. |
+
+Bash rule evaluation:
+
+1. **Built-in forbidden patterns** (e.g. `rm -rf /`, fork bombs, `curl ... | sh`, force-push to protected branches) — hard deny, no prompt, **cannot be overridden** by `allowAll` or your own rules. The safety net stays on.
+2. **Your `bashRules`** — first matching rule wins.
+3. `Bash` in `allowAll` — runs without prompt.
+4. Otherwise — prompt.
+
+```json
+"permissions": {
+  "allowAll": ["Read", "Glob", "Grep"],
+  "bashRules": [
+    { "pattern": "git status*", "decision": "allow" },
+    { "pattern": "npm test*",   "decision": "allow" },
+    { "pattern": "git push *",  "decision": "deny", "note": "Push from a terminal, not the agent" }
+  ]
+}
+```
+
+For headless mode, see [headless.md](./headless.md) — anything not on `allowAll` is denied (no TTY to prompt) and the run exits with code 3. WebFetch has its own per-domain whitelist on top of this — see [web-fetch.md](./web-fetch.md).
+
+## Security (`security`)
+
+Hardening for the Bash subprocess and the file-access tools (`Read`, `Write`, `Edit`). User entries **extend** the built-in policy — they cannot remove built-in denials.
+
+### `security.bashEnv`
+
+Env-var allowlist for Bash subprocesses. Deny-by-default: only vars whose name is on the allowlist (or matches an allowed prefix) reach the spawned shell, so provider API keys, GitHub tokens, AWS credentials, etc., in your interactive shell don't leak into model-driven commands.
+
+| Field | Purpose |
+| ----- | ------- |
+| `allow` | Exact var names to forward in addition to the built-in safe set (`PATH`, `HOME`, `LANG`, `SSH_AUTH_SOCK`, …). |
+| `allowPrefixes` | Prefix patterns; e.g. `"MY_"` forwards every `MY_*` var. Built-ins include `LC_`, `GIT_`, `XDG_`. |
+| `deny` | Exact names to scrub even if otherwise allowed. Wins over allow. |
+| `denyPrefixes` | Prefix variant of `deny`. Wins over allow. |
+
+Built-in deny entries (e.g. `GIT_ASKPASS`, `GIT_SSH_COMMAND`) cannot be removed.
+
+### `security.paths`
+
+Path policy for `Read`/`Write`/`Edit`. The built-in deny list covers `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.factory`, `/etc/shadow`, `/etc/sudoers`, etc. Symlinks are resolved with `realpath()` before the check, so a symlink pointing at `~/.ssh/id_rsa` is denied even if its name looks innocuous.
+
+| Field | Purpose |
+| ----- | ------- |
+| `deny` | Additional paths to deny. Tilde is expanded. Directory entries cover the directory and everything under it. |
 
 ## Project instructions
 
@@ -101,7 +175,7 @@ Total size is capped at ~16 KB; sources past the cap are dropped with a truncati
 | `readCache`     | on      | Stamps Read operations with mtime + sha256. Repeat reads short-circuit with a reference to prior result, saving tokens. |
 | `lineCountHint` | on      | Adds system-prompt hint: prefer `cloc`/`scc` when available; avoid running multiple line-counting variants. |
 | `subagents`     | on      | Registers the `Delegate` tool for spawning a read-only research subagent. |
-| `skills`        | off     | Loads markdown skill files from `.factory/skills/` and conditionally injects them based on triggers. |
-| `hooks`         | on      | Run user-supplied shell scripts at lifecycle events. No-op when no hook scripts exist. |
+| `skills`        | on      | Loads markdown skill files from `.factory/skills/` and conditionally injects them based on triggers. |
+| `hooks`         | on      | Run user-supplied shell commands at lifecycle events. No-op when no hook commands are configured. |
 
-Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--no-subagents`, `--skills`, `--no-hooks`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
+Toggle via CLI (`--bash-dedup`, `--no-read-cache`, `--no-line-count-hint`, `--no-subagents`, `--no-skills`, `--no-hooks`), via the config file under `agent.experimental`, or at runtime with `/exp <name> on|off`.
