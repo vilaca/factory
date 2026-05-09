@@ -69,7 +69,7 @@ export async function* runAgent(
   const useTextToolFallback = options.useTextToolFallback ?? false;
   const nativeToolSupport = options.nativeToolSupport ?? true;
   const planMode = options.planMode ?? false;
-  const enableCorrector = options.enableCorrector ?? true;
+  const enableCorrector = options.enableCorrector ?? false;
 
   if (signal?.aborted) {
     yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed: 0 };

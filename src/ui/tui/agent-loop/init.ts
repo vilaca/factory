@@ -115,7 +115,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     useTextToolFallback: input.useTextToolFallback,
     nativeToolSupport: opts.nativeToolSupport ?? true,
     planMode: input.initialPlanMode,
-    enableCorrector: opts.enableCorrector ?? true,
+    enableCorrector: opts.enableCorrector ?? false,
     experimental: input.initialExperimental,
     ...(opts.agentConfig?.hooks ? { hooksConfig: opts.agentConfig.hooks } : {}),
     rotation: {

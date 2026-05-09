@@ -15,7 +15,7 @@ export interface CliArgs {
    *  (CI, scripted runs) and silent loss is unacceptable. */
   strictLog?: boolean;
   plan?: boolean;
-  noAutoCorrect?: boolean;
+  autoCorrect?: boolean;
   bashDedup?: boolean;
   readCache?: boolean;
   lineCountHint?: boolean;
@@ -50,7 +50,7 @@ const BOOLEAN_FLAGS: Record<string, keyof CliArgs> = {
   '--no-log': 'noLog',
   '--strict-log': 'strictLog',
   '--plan': 'plan',
-  '--no-auto-correct': 'noAutoCorrect',
+  '--auto-correct': 'autoCorrect',
   '--bash-dedup': 'bashDedup',
   '--no-bash-dedup': 'noBashDedup',
   '--read-cache': 'readCache',
@@ -158,7 +158,7 @@ export function printUsage(): void {
     '    --no-log                 Disable session logging to ~/.factory/sessions/',
     '    --strict-log             Exit non-zero if session logging fails (init or first write)',
     '    --plan                   Start in plan mode (writes are queued for approval)',
-    '    --no-auto-correct        Disable LLM tool-call corrector (on by default)',
+    '    --auto-correct           Enable LLM tool-call corrector (off by default)',
     '    --bash-dedup             Enable Bash near-duplicate detector (off by default)',
     '    --no-hooks               Disable user-supplied lifecycle shell hooks (on by default)',
     '    --no-read-cache          Disable Read mtime/hash cache (on by default)',
