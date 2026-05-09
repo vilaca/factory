@@ -21,7 +21,7 @@ CHANGELOG.md
 .gitattributes
 .gitignore
 .c8rc.json
-eslint.config.js
+eslint.config.ts
 tsconfig.json
 tsconfig.test.json
 tsconfig.tsbuildinfo
