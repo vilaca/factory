@@ -1,14 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { callModel } from '../../../../src/core/agent/call-model/call-model.js';
+import { callModel } from '../../../../../src/core/agent/call-model/call-model.js';
 import type {
   ChatChunk,
   ChatMessage,
   Provider,
   ProviderCapabilities,
   ToolDefinition,
-} from '../../../../src/providers/types.js';
-import type { AgentEvent } from '../../../../src/core/agent/types.js';
+} from '../../../../../src/providers/types.js';
+import type { AgentEvent } from '../../../../../src/core/agent/types.js';
 
 /**
  * Build a provider whose chat() consumes a plan entry per call: an Error

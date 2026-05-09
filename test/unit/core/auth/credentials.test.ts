@@ -12,9 +12,9 @@ import {
   listKeys,
   migrateLegacyKeys,
   selectNextKey,
-} from '../../../src/core/auth/credentials.js';
-import type { ProviderKey } from '../../../src/core/config/types.js';
-import { loadGlobalConfig, saveGlobalConfig } from '../../../src/core/config/index.js';
+} from '../../../../src/core/auth/credentials.js';
+import type { ProviderKey } from '../../../../src/core/config/types.js';
+import { loadGlobalConfig, saveGlobalConfig } from '../../../../src/core/config/index.js';
 
 async function withGlobalHome(fn: (home: string) => Promise<void>): Promise<void> {
   const prev = process.env.XDG_CONFIG_HOME;

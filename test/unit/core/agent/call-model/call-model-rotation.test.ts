@@ -1,15 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { callModel } from '../../../../src/core/agent/call-model/call-model.js';
-import type { ProviderKey } from '../../../../src/core/config/types.js';
+import { callModel } from '../../../../../src/core/agent/call-model/call-model.js';
+import type { ProviderKey } from '../../../../../src/core/config/types.js';
 import type {
   ChatChunk,
   ChatMessage,
   Provider,
   ProviderCapabilities,
   ToolDefinition,
-} from '../../../../src/providers/types.js';
-import type { AgentEvent, RotationOptions } from '../../../../src/core/agent/types.js';
+} from '../../../../../src/providers/types.js';
+import type { AgentEvent, RotationOptions } from '../../../../../src/core/agent/types.js';
 
 /**
  * Build a Provider whose chat() yields the supplied chunks (or throws when
