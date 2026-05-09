@@ -51,6 +51,8 @@ Most providers expose `/v1/models` and factory paginates through it. Some quirks
 
 Per-model capability is reported by `getCapabilities(model)` on each provider — see `src/providers/<provider>.ts` (or `src/providers/<provider>/index.ts` for folder-based providers like `copilot/`, `googleaistudio/`, `opencodezen/`).
 
+For maintainer notes on how the picker filters, sorts, and infers capabilities (and what to update when OpenAI ships a new flagship), see [picker-internals.md](./picker-internals.md).
+
 ## Examples
 
 ```bash
