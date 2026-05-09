@@ -187,6 +187,7 @@ function supportsChatCompletions(modelId: string): boolean {
 
 function buildModelDetail(modelId: string): string {
   const details: string[] = [];
+  details.push('paid');
   details.push(supportsVisionByName(modelId) ? 'vision' : 'text-only');
   details.push(supportsToolsByName(modelId) ? 'tools' : 'no tools');
   if (isReasoningModel(modelId)) details.push('reasoning');
