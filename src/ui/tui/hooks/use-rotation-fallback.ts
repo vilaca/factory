@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { RotationEntry } from '../../../core/config/types.js';
+import { tupleKey } from '../../../core/config/types.js';
 import { updateGlobalConfig } from '../../../core/config/index.js';
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 
@@ -65,15 +66,15 @@ export function useRotationFallback(
       // the other.
       let added = false;
       try {
-        const tupleKey = `${context.provider}:${context.model}`;
+        const key = tupleKey({ provider: context.provider, model: context.model });
         await updateGlobalConfig(cfg => {
-          const existing = cfg.agent?.rotation?.overrides?.[tupleKey] ?? [];
+          const existing = cfg.agent?.rotation?.overrides?.[key] ?? [];
           const dup = existing.some(e => e.provider === entry.provider && e.model === entry.model);
           if (dup) return {};
           added = true;
           const nextOverrides = {
             ...(cfg.agent?.rotation?.overrides ?? {}),
-            [tupleKey]: [...existing, entry],
+            [key]: [...existing, entry],
           };
           return {
             agent: {
@@ -83,8 +84,8 @@ export function useRotationFallback(
           };
         });
         if (added && agent.refs.current) {
-          const existingRefs = agent.refs.current.rotation.overrides[tupleKey] ?? [];
-          agent.refs.current.rotation.overrides[tupleKey] = [...existingRefs, entry];
+          const existingRefs = agent.refs.current.rotation.overrides[key] ?? [];
+          agent.refs.current.rotation.overrides[key] = [...existingRefs, entry];
         }
       } catch (err) {
         agent.addNotice('warn', `⚠ couldn't persist fallback: ${(err as Error).message}`);

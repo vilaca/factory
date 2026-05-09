@@ -1,6 +1,7 @@
 import type { Provider, TokenUsage, ToolCallMessage } from '../../../providers/types.js';
 import type { AgentEvent, RotationOptions } from '../types.js';
 import type { ProviderKey } from '../../config/types.js';
+import { tupleKey } from '../../config/types.js';
 import { keyFingerprint, selectNextKey } from '../../auth/credentials.js';
 import { classifyForRotation } from './provider-errors.js';
 
@@ -52,7 +53,7 @@ export type RotationDecision =
   | { kind: 'rethrow'; err: unknown }
   | { kind: 'noop' };
 
-export function resetAccumulators(state: RotationState): void {
+function resetAccumulators(state: RotationState): void {
   state.fullContent = '';
   state.toolCalls = [];
   state.lastUsage = undefined;
@@ -76,8 +77,8 @@ async function advanceTuple(
 } | null> {
   if (!rotation.chain || !rotation.loadKeysForProvider || !rotation.withTuple) return null;
   for (const entry of rotation.chain) {
-    const tupleKey = `${entry.provider}:${entry.model}`;
-    if (tried.has(tupleKey)) continue;
+    const key = tupleKey(entry);
+    if (tried.has(key)) continue;
     let keys: ProviderKey[];
     try {
       keys = await rotation.loadKeysForProvider(entry.provider);

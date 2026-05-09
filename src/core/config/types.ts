@@ -74,6 +74,12 @@ export interface RotationEntry {
   model: string;
 }
 
+/** Build the canonical `<provider>:<model>` key used for rotation overrides
+ *  and tried-tuple tracking. Accepts anything with provider+model fields. */
+export function tupleKey(entry: { provider: string; model: string }): string {
+  return `${entry.provider}:${entry.model}`;
+}
+
 export interface RotationConfig {
   /** Tier 1: rotate among saved keys for the active (provider, model)
    *  before advancing to the chain. Default: true. */
