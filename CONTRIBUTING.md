@@ -51,17 +51,17 @@ Before opening a PR, run `npm run lint && npx tsc --noEmit && npm test`.
 
 The codebase lives in `src/providers/`. There are two cases.
 
-**OpenAI-compatible** (most providers — Cerebras, Groq, Mistral, Vercel, OpenRouter, Workers AI, etc.):
+**OpenAI-compatible** (most providers — Cerebras, Groq, Mistral, Vercel, OpenRouter, Workers AI, llama.cpp, Google AI Studio, etc.):
 
-1. Implement the `Provider` interface from `src/providers/types.ts` using the shared helpers in `src/providers/_openai/`. Look at `src/providers/cerebras.ts` for a minimal example.
+1. Implement the `Provider` interface from `src/providers/types.ts` using the shared helpers in `src/providers/openai/` (`buildChatBody`, `sendOpenAiChat`, `streamOpenAiChat`). Look at `src/providers/cerebras.ts` for a minimal example.
 2. Add an entry to `src/providers/descriptors.ts` with label, aliases, env-var names, and default host.
 3. Wire up the factory in `src/providers/registry.ts`.
-4. Add unit tests in `test/unit/<provider>-provider.test.ts`. Follow the patterns in the existing provider tests.
+4. Add unit tests in `test/unit/providers/<provider>-provider.test.ts`. Follow the patterns in the existing provider tests.
 5. Document the provider's env vars in `docs/providers.md` and add an example to `--help` in `src/cli/args.ts:printUsage`.
 
-**Native protocol** (Anthropic, Ollama, HuggingFace, Cohere, Google AI Studio):
+**Native protocol** (Anthropic, Ollama, Cohere):
 
-These don't share the OpenAI surface and have their own request/response shapes. Look at `src/providers/anthropic.ts` for the cleanest example. Define narrow types for the SDK responses; do not use `any` (the lint rule rejects it).
+These don't share the OpenAI surface and have their own request/response shapes. Look at `src/providers/anthropic.ts` for the cleanest example. HuggingFace is a hybrid — its transport is the `@huggingface/inference` SDK but it reuses `openai/tool-calls.ts` for tool-call parsing. Define narrow types for the SDK responses; do not use `any` (the lint rule rejects it).
 
 ## Filing issues
 
