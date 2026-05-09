@@ -107,16 +107,30 @@ describe('Bash — stdout/stderr split', () => {
 });
 
 describe('Bash — output cap', () => {
-  it('truncates combined stdout/stderr past 50KB and emits a truncation footer', async () => {
-    // Use yes(1)-style repetition to exceed the 50,000-byte cap quickly.
+  it('truncates a solo stream past the 50KB combined cap and emits a footer', async () => {
+    // Use yes(1)-style repetition to exceed the 50,000-byte solo cap quickly.
     // `head -c 100000` produces 100KB, well over the cap.
     const result = await bash.execute({
       command: 'yes "x" | head -c 100000',
     });
     assert.strictEqual(result.success, true);
     assert.ok(result.output.includes('...(output truncated)'));
-    // The truncated body itself is the cap (50,000) plus the footer.
     assert.ok(result.output.length < 51_000);
+  });
+
+  it('preserves stderr even when stdout would otherwise consume the whole cap', async () => {
+    // Previously: 100KB of stdout filled the 50KB cap and the fenced stderr
+    // was sliced off entirely — the failing-build case where stderr was the
+    // *only* useful part. Now stdout is capped at 40KB and stderr at 10KB
+    // independently, so the stderr message survives.
+    const result = await bash.execute({
+      command: 'yes "x" | head -c 100000 && echo COMPILE_ERROR_MARKER 1>&2',
+    });
+    assert.strictEqual(result.success, true);
+    assert.ok(result.output.includes('--- stderr ---'));
+    assert.ok(result.output.includes('COMPILE_ERROR_MARKER'));
+    // stdout half truncated; stderr half intact.
+    assert.ok(result.output.includes('...(output truncated)'));
   });
 });
 
