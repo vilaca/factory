@@ -8,7 +8,7 @@ import {
   extractUsage,
   formatMessage,
   buildChatBody,
-} from '../../../src/providers/_openai/index.js';
+} from '../../../src/providers/openai/index.js';
 
 function makeReader(chunks: string[]): ReadableStreamDefaultReader<Uint8Array> {
   const encoder = new TextEncoder();

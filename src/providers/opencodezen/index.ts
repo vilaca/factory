@@ -9,7 +9,7 @@ import type {
   ModelInfo,
   ModelPickerInfo,
 } from '../types.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../_openai/index.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 import {
   type OpenCodeZenModel,
   buildCapabilities,

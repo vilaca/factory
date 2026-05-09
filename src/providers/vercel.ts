@@ -14,7 +14,7 @@ import {
   fetchOpenAiCatalog,
   sendOpenAiChat,
   streamOpenAiChat,
-} from './_openai/index.js';
+} from './openai/index.js';
 
 const DEFAULT_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
 const PROVIDER_NAME = 'Vercel AI Gateway';

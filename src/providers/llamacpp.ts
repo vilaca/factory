@@ -6,7 +6,7 @@ import type {
   ProviderCapabilities,
   ChatOptions,
 } from './types.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './_openai/index.js';
+import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './openai/index.js';
 
 const PROVIDER_NAME = 'llama.cpp';
 
