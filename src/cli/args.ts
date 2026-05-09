@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import chalk from 'chalk';
 
-interface CliArgs {
+export interface CliArgs {
   model?: string;
   host?: string;
   provider?: string;

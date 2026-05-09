@@ -74,7 +74,7 @@ export interface RotationEntry {
   model: string;
 }
 
-interface RotationConfig {
+export interface RotationConfig {
   /** Tier 1: rotate among saved keys for the active (provider, model)
    *  before advancing to the chain. Default: true. */
   keys?: boolean;
