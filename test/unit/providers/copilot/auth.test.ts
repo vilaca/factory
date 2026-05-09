@@ -7,8 +7,8 @@ import path from 'path';
 import {
   CopilotAuthManager,
   inferCopilotCredentialKind,
-} from '../../../src/providers/copilot/auth.js';
-import { loadGlobalConfig } from '../../../src/core/config/index.js';
+} from '../../../../src/providers/copilot/auth.js';
+import { loadGlobalConfig } from '../../../../src/core/config/index.js';
 
 function withServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,

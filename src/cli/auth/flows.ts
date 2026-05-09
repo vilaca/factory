@@ -1,18 +1,18 @@
 import chalk from 'chalk';
-import type { Config, GoogleAiStudioAuthMode } from '../core/config/types.js';
-import type { ProviderDescriptor } from '../providers/descriptors.js';
-import { resolveToken } from '../providers/descriptors.js';
-import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../core/config/index.js';
-import { appendProviderLog } from '../core/session-log.js';
-import { getCopilotAuthStorageNote, CopilotAuthManager } from '../providers/copilot/auth.js';
+import type { Config, GoogleAiStudioAuthMode } from '../../core/config/types.js';
+import type { ProviderDescriptor } from '../../providers/descriptors.js';
+import { resolveToken } from '../../providers/descriptors.js';
+import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../../core/config/index.js';
+import { appendProviderLog } from '../../core/session-log.js';
+import { getCopilotAuthStorageNote, CopilotAuthManager } from '../../providers/copilot/auth.js';
 import {
   GoogleAiStudioAuthManager,
   getGoogleAiStudioOAuthErrorMessage,
   getGoogleAiStudioOAuthStorageNote,
-} from '../providers/googleaistudio/auth.js';
-import { exitStartupSelection, isExitSelection, promptText } from './prompts.js';
-import { errorMessage } from '../utils/errors.js';
-import type { AuthResult } from './auth.js';
+} from '../../providers/googleaistudio/auth.js';
+import { exitStartupSelection, isExitSelection, promptText } from '../prompts.js';
+import { errorMessage } from '../../utils/errors.js';
+import type { AuthResult } from './index.js';
 
 export function resolveGoogleAiStudioAuthMode(
   config: Config,

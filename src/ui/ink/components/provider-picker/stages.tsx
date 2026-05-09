@@ -5,8 +5,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import chalk from 'chalk';
-import { indexForShortcut as _indexForShortcut, renderStatusBadge, shortcutFor } from './picker-shortcuts.js';
-import { TextInput } from './text-input.js';
+import { indexForShortcut as _indexForShortcut, renderStatusBadge, shortcutFor } from './shortcuts.js';
+import { TextInput } from '../text-input.js';
 import {
   type KeySummary,
   type ModelDisplayInfo,
@@ -14,7 +14,7 @@ import {
   type RecentPair,
   type Stage,
   VISIBLE_ROWS,
-} from './provider-picker-types.js';
+} from './types.js';
 
 // Re-export so callers that only need keypress shortcut indexing don't
 // have to import from picker-shortcuts directly. Keeps the import surface

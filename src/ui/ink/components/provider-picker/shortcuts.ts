@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { SessionErrorStatus } from '../../../core/session-log.js';
+import type { SessionErrorStatus } from '../../../../core/session-log.js';
 
 /**
  * 0–9, A–Z jump shortcuts for picker rows. Indices beyond 35 silently

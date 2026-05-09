@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { GoogleAiStudioAuthManager } from '../../../src/providers/googleaistudio/auth.js';
+import { GoogleAiStudioAuthManager } from '../../../../src/providers/googleaistudio/auth.js';
 
 describe('GoogleAiStudioAuthManager', () => {
   it('returns API-key headers when configured for API key auth', async () => {

@@ -9,7 +9,7 @@ import {
   ProviderPicker,
   type ProviderEntry,
   type RecentPair,
-} from '../../ui/ink/components/provider-picker.js';
+} from '../../ui/ink/components/provider-picker/index.js';
 
 interface StartupSelection {
   provider: StartupProviderName;

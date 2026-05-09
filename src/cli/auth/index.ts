@@ -1,22 +1,22 @@
 import chalk from 'chalk';
-import type { Config, GoogleAiStudioAuthMode } from '../core/config/types.js';
-import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
+import type { Config, GoogleAiStudioAuthMode } from '../../core/config/types.js';
+import type { ProviderDescriptor, StartupProviderName } from '../../providers/descriptors.js';
 import {
   DESCRIPTOR_LIST,
   noModelsMessageFor,
   resolveToken,
   saveSuccessMessageFor,
-} from '../providers/descriptors.js';
-import { createProvider, type CreateProviderOptions } from '../providers/registry.js';
-import { getGlobalConfigDir, saveGlobalConfig } from '../core/config/index.js';
-import { addKey, getKey } from '../core/credentials.js';
-import { appendProviderLog } from '../core/session-log.js';
-import { promptText } from './prompts.js';
+} from '../../providers/descriptors.js';
+import { createProvider, type CreateProviderOptions } from '../../providers/registry.js';
+import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
+import { addKey, getKey } from '../../core/credentials.js';
+import { appendProviderLog } from '../../core/session-log.js';
+import { promptText } from '../prompts.js';
 import {
   ensureCopilotAuth,
   ensureGoogleAiStudioAuth,
   resolveGoogleAiStudioAuthMode,
-} from './auth-flows.js';
+} from './flows.js';
 
 export interface StartupCredentials {
   token?: string;

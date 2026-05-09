@@ -12,7 +12,7 @@ import {
   ProviderPicker,
   type ProviderEntry,
   type RecentPair,
-} from './components/provider-picker.js';
+} from './components/provider-picker/index.js';
 import { RotationPromptPanel } from './components/rotation-prompt-panel.js';
 import { useAgentLoop, type AgentLoopApi } from './agent-loop/use-agent-loop.js';
 import { TabsContext } from './tabs/TabsContext.js';

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
-import { CopilotProvider } from '../../../src/providers/copilot/index.js';
+import { CopilotProvider } from '../../../../src/providers/copilot/index.js';
 
 function withServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
