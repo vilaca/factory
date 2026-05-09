@@ -6,7 +6,7 @@
 import type { MutableRefObject } from 'react';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
-import { composeSystemPrompt as composeSystemPromptPure } from './system-prompt.js';
+import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
 import {
   createInitialRefs,
   initSkillsRegistry,
