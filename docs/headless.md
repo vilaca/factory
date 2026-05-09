@@ -43,7 +43,7 @@ Session logs are written exactly as in interactive mode, so headless runs are st
 **One-shot question against the codebase:**
 
 ```bash
-echo "summarize what /src/core/agent.ts does" | factory \
+echo "summarize what src/core/agent/run-agent.ts does" | factory \
   -p anthropic -m claude-sonnet-4-6 --no-clear
 ```
 

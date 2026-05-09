@@ -46,9 +46,9 @@ Most providers expose `/v1/models` and factory paginates through it. Some quirks
 | ----- | ----------- |
 | `native` | Provider exposes a tool-call API; tool calls round-trip through structured fields. |
 | `basic` | Tool calls are supported but with limitations (no parallel calls, no reasoning preservation). |
-| `none` | No structured tool support; the agent falls back to text-based tool calls (recovered by `core/text-tool-parser.ts`). |
+| `none` | No structured tool support; the agent falls back to text-based tool calls (recovered by `src/core/agent/tool-calls/text-tool-parser.ts`). |
 
-Per-model capability is reported by `getCapabilities(model)` on each provider — see `src/providers/<provider>.ts`.
+Per-model capability is reported by `getCapabilities(model)` on each provider — see `src/providers/<provider>.ts` (or `src/providers/<provider>/index.ts` for folder-based providers like `copilot/`, `googleaistudio/`, `opencodezen/`).
 
 ## Examples
 
