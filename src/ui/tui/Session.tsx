@@ -382,6 +382,7 @@ export function Session(props: SessionProps): React.ReactElement {
                     void handleSubmit(value);
                   }}
                   focus={!pickerOpen}
+                  multiline
                 />
               </Box>
               <Separator />
