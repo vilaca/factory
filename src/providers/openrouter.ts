@@ -15,6 +15,7 @@ import {
   sendOpenAiChat,
   streamOpenAiChat,
 } from './openai/index.js';
+import { filterChatModels } from './list-models-filter.js';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 const PROVIDER_NAME = 'OpenRouter';
@@ -180,10 +181,8 @@ export class OpenRouterProvider implements Provider {
       providerName: PROVIDER_NAME,
     });
 
-    const models = items
-      // Note: keep only models whose declared modalities include text I/O,
-      // since this CLI currently talks in chat-completions-style text turns.
-      .filter(isChatCapableModel)
+    const valid = items.filter(hasStringId);
+    const models = filterChatModels('openrouter', valid, chatCapabilityReason)
       .map(item => ({
         id: item.id,
         context_length: typeof item.context_length === 'number' ? item.context_length : undefined,
@@ -254,29 +253,33 @@ export function routesToAnthropic(model: string): boolean {
   return /^anthropic\//i.test(model);
 }
 
-function isChatCapableModel(item: unknown): item is OpenRouterModel & { id: string } {
+function hasStringId(item: unknown): item is OpenRouterModel & { id: string } {
   if (!item || typeof item !== 'object') return false;
   const i = item as OpenRouterModel;
-  if (typeof i.id !== 'string' || !i.id) return false;
+  return typeof i.id === 'string' && !!i.id;
+}
 
+function chatCapabilityReason(item: OpenRouterModel & { id: string }): true | string {
   const modality =
-    typeof i.architecture?.modality === 'string' ? i.architecture.modality.toLowerCase() : '';
+    typeof item.architecture?.modality === 'string'
+      ? item.architecture.modality.toLowerCase()
+      : '';
   if (modality && !modality.includes('text')) {
-    return false;
+    return `non-chat: modality '${item.architecture?.modality}' lacks text`;
   }
 
-  const inputModalities = Array.isArray(i.architecture?.input_modalities)
-    ? i.architecture.input_modalities.map((value: unknown) => String(value).toLowerCase())
+  const inputModalities = Array.isArray(item.architecture?.input_modalities)
+    ? item.architecture.input_modalities.map((value: unknown) => String(value).toLowerCase())
     : [];
-  const outputModalities = Array.isArray(i.architecture?.output_modalities)
-    ? i.architecture.output_modalities.map((value: unknown) => String(value).toLowerCase())
+  const outputModalities = Array.isArray(item.architecture?.output_modalities)
+    ? item.architecture.output_modalities.map((value: unknown) => String(value).toLowerCase())
     : [];
 
   if (inputModalities.length > 0 && !inputModalities.includes('text')) {
-    return false;
+    return `non-chat: input modalities [${inputModalities.join(', ')}] lack text`;
   }
   if (outputModalities.length > 0 && !outputModalities.includes('text')) {
-    return false;
+    return `non-chat: output modalities [${outputModalities.join(', ')}] lack text`;
   }
 
   return true;

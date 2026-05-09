@@ -62,6 +62,17 @@ interface SessionProps {
   tabLabel?: string;
 }
 
+function findCachedProvider(
+  cache: Map<string, Provider>,
+  name: string,
+): Provider | undefined {
+  const prefix = `${name}\0`;
+  for (const [key, value] of cache) {
+    if (key.startsWith(prefix)) return value;
+  }
+  return undefined;
+}
+
 // eslint-disable-next-line complexity -- TODO(complexity): extract subviews (input bar, transcript, modals) into child components.
 export function Session(props: SessionProps): React.ReactElement {
   const isActive = props.isActive ?? true;
@@ -78,6 +89,13 @@ export function Session(props: SessionProps): React.ReactElement {
   showFullOutputRef.current = showFullOutput;
   const agent = useAgentLoop(props);
   const { rotationPrompt, fallbackPickerResolver } = useRotationFallback(agent, setPickerOpen);
+  // Cache picker-created Provider instances so getModelInfo can call their
+  // pure picker-info methods (getModelPickerInfo, getDisplayModelName,
+  // getCapabilities) without re-instantiating per render. Keyed by
+  // `${name}\0${keyId ?? ''}` so simultaneous keys for one provider don't
+  // overwrite each other; getModelInfo doesn't know the keyId so it scans
+  // for any entry whose key starts with the provider name.
+  const pickerProviderCache = useRef(new Map<string, Provider>());
 
   // Reload recents each time the picker opens so the freshest pairs are
   // offered. Cheap (~16 jsonl head reads) and avoids stale entries when the
@@ -98,6 +116,7 @@ export function Session(props: SessionProps): React.ReactElement {
           provider: s.provider,
           model: s.model,
           ...(s.status ? { status: s.status } : {}),
+          ...(s.keyId ? { keyId: s.keyId } : {}),
         });
       }
       setPickerRecents(pairs);
@@ -232,6 +251,23 @@ export function Session(props: SessionProps): React.ReactElement {
           recentsLoading={pickerRecentsLoading}
           initialProvider={providerName}
           initialModel={model}
+          getModelInfo={(prov, m) => {
+            const cached = findCachedProvider(pickerProviderCache.current, prov);
+            const source =
+              cached ??
+              (prov === providerName ? refs.current?.provider ?? props.provider : undefined);
+            if (!source) return undefined;
+            const info = source.getModelPickerInfo?.(m);
+            const label = info?.label ?? source.getDisplayModelName?.(m);
+            let tier;
+            try {
+              tier = source.getCapabilities(m).modelTier;
+            } catch {
+              // Unknown model — capabilities estimator may throw; sort puts it last.
+            }
+            if (!label && !info?.warning && !info?.detail && !tier) return undefined;
+            return { label, warning: info?.warning, detail: info?.detail, tier };
+          }}
           multiKeyProviders={SIMPLE_PROMPT_PROVIDERS}
           loadModels={async (name, keyId) => {
             const cfg = keyId ? await loadGlobalConfig() : null;
@@ -248,6 +284,7 @@ export function Session(props: SessionProps): React.ReactElement {
               }
             }
             const p = createProvider(name, opts);
+            pickerProviderCache.current.set(`${name}\0${keyId ?? ''}`, p);
             return p.listModels();
           }}
           loadKeysForProvider={async name => {

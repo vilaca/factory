@@ -10,6 +10,7 @@ import type {
   ModelTier,
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './openai/index.js';
+import { filterChatModels } from './list-models-filter.js';
 
 const DEFAULT_API_ROOT = 'https://api.cloudflare.com/client/v4';
 const PROVIDER_NAME = 'Cloudflare Workers AI';
@@ -165,16 +166,14 @@ export class WorkersAiProvider implements Provider {
 
       const data = (await res.json()) as { result?: unknown[] };
       const pageItems = Array.isArray(data?.result) ? data.result : [];
-      const normalized = pageItems
-        .flatMap((item: unknown) => normalizeModel(item))
-        // Note: keep only text-generation entries for now; if Cloudflare starts
-        // labeling useful chat models differently, this filter may need to widen.
-        .filter(
-          (model: WorkersAiModel) =>
-            model.taskName === undefined || model.taskName === 'text generation',
-        );
+      const normalized = pageItems.flatMap((item: unknown) => normalizeModel(item));
+      const kept = filterChatModels('workersai', normalized, model =>
+        model.taskName === undefined || model.taskName === 'text generation'
+          ? true
+          : `non-chat: task='${model.taskName}'`,
+      );
 
-      models.push(...normalized);
+      models.push(...kept);
 
       if (pageItems.length < perPage) break;
       page++;

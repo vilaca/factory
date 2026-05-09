@@ -15,6 +15,7 @@ import {
   sendOpenAiChat,
   streamOpenAiChat,
 } from './openai/index.js';
+import { filterChatModels } from './list-models-filter.js';
 
 const DEFAULT_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
 const PROVIDER_NAME = 'Vercel AI Gateway';
@@ -164,16 +165,19 @@ export class VercelProvider implements Provider {
       type?: string;
       tags?: unknown[];
     }
-    const byId = new Map<string, VercelModel>();
+    const idable: (VercelCatalogItem & { id: string })[] = [];
     for (const raw of items) {
-      // Vercel's catalog includes multiple resource types; keep only language
-      // models because this provider only targets chat text models.
       if (!raw || typeof raw !== 'object') continue;
       const item = raw as VercelCatalogItem;
       if (typeof item.id !== 'string' || !item.id) continue;
-      if (item.type !== 'language') continue;
+      idable.push({ ...item, id: item.id });
+    }
+    const kept = filterChatModels('vercel', idable, item =>
+      item.type === 'language' ? true : `non-chat: type='${item.type ?? 'unknown'}'`,
+    );
+    const byId = new Map<string, VercelModel>();
+    for (const item of kept) {
       if (byId.has(item.id)) continue;
-
       byId.set(item.id, {
         id: item.id,
         name: typeof item.name === 'string' ? item.name : undefined,

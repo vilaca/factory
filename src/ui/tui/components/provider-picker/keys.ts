@@ -1,6 +1,13 @@
 import { useInput } from 'ink';
-import { type KeySummary, type ProviderEntry, type RecentPair, type Stage } from './types.js';
+import {
+  type KeySummary,
+  type ModelDisplayInfo,
+  type ProviderEntry,
+  type RecentPair,
+  type Stage,
+} from './types.js';
 import { indexForShortcut } from './stages.js';
+import { prepareModels } from './prepare.js';
 
 interface UseProviderPickerKeysArgs {
   stage: Stage;
@@ -14,6 +21,7 @@ interface UseProviderPickerKeysArgs {
   recents: RecentPair[];
   providers: ProviderEntry[];
   loadModels: (provider: string, keyId?: string) => Promise<string[]>;
+  getModelInfo?: (provider: string, model: string) => ModelDisplayInfo | undefined;
   loadKeysForProvider?: (provider: string) => Promise<KeySummary[]>;
   saveKey?: (provider: string, token: string) => Promise<string>;
   deleteKey?: (provider: string, keyId: string) => Promise<void>;
@@ -50,6 +58,7 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
     recents,
     providers,
     loadModels,
+    getModelInfo,
     loadKeysForProvider,
     saveKey,
     deleteKey,
@@ -77,7 +86,8 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
   ): Promise<void> {
     setStage({ kind: 'loading', provider: name, ...(keyId ? { keyId } : {}) });
     try {
-      const models = await loadModels(name, keyId);
+      const raw = await loadModels(name, keyId);
+      const models = prepareModels(raw, getModelInfo ? m => getModelInfo(name, m) : undefined);
       if (models.length === 0) {
         setStage({ kind: 'error', provider: name, message: 'no models returned' });
         return;

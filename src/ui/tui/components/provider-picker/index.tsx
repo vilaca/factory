@@ -22,6 +22,7 @@ import {
   ValidateFailedStage,
 } from './stages.js';
 import { useProviderPickerKeys } from './keys.js';
+import { prepareModels } from './prepare.js';
 
 // Re-export types so existing call sites that import from this module
 // (e.g. Session.tsx, headless callers) keep working without churn.
@@ -109,7 +110,10 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     ? {
         kind: 'model',
         provider: initialProvider ?? '',
-        models: preloadedModels ?? [],
+        models: prepareModels(
+          preloadedModels ?? [],
+          getModelInfo ? m => getModelInfo(initialProvider ?? '', m) : undefined,
+        ),
         ...(initialKeyId ? { keyId: initialKeyId } : {}),
       }
     : { kind: 'recent' };
@@ -156,7 +160,10 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
         if (result.ok) {
           try {
             const newKeyId = await saveKey(validatingProvider, validatingToken);
-            const models = result.models ?? [];
+            const models = prepareModels(
+              result.models ?? [],
+              getModelInfo ? m => getModelInfo(validatingProvider, m) : undefined,
+            );
             if (models.length === 0) {
               setStage({
                 kind: 'error',
@@ -190,7 +197,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [validatingToken, validatingProvider, validateKey, saveKey]);
+  }, [validatingToken, validatingProvider, validateKey, saveKey, getModelInfo]);
 
   useProviderPickerKeys({
     stage,
@@ -204,6 +211,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     recents,
     providers,
     loadModels,
+    ...(getModelInfo ? { getModelInfo } : {}),
     ...(loadKeysForProvider ? { loadKeysForProvider } : {}),
     ...(saveKey ? { saveKey } : {}),
     ...(deleteKey ? { deleteKey } : {}),

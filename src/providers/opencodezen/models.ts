@@ -20,15 +20,6 @@ export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '');
 }
 
-export function isSupportedOpenCodeZenModel(
-  item: unknown,
-): item is { id: string; owned_by?: string } {
-  if (!item || typeof item !== 'object') return false;
-  const i = item as { id?: unknown };
-  if (typeof i.id !== 'string' || !i.id) return false;
-  return detectOpenCodeZenRoute(i.id) !== 'openai-responses';
-}
-
 export function detectOpenCodeZenRoute(model: string): OpenCodeZenRoute {
   const id = model.toLowerCase();
   if (id.startsWith('claude-')) {

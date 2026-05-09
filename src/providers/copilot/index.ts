@@ -10,6 +10,7 @@ import type {
 } from '../types.js';
 import { CopilotAuthManager, inferCopilotCredentialKind } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
+import { filterChatModels } from '../list-models-filter.js';
 
 const PROVIDER_NAME = 'GitHub Copilot';
 const FALLBACK_MODELS = ['gpt-4.1', 'gpt-4o', 'claude-sonnet-4', 'gemini-2.5-pro', 'o4-mini'];
@@ -144,29 +145,31 @@ function extractModelEntries(data: unknown): CopilotModelEntry[] {
       ? (data as { data: unknown[] }).data
       : [];
 
-  const models: string[] = rawItems
-    .filter((item: unknown) => {
-      if (!item || typeof item !== 'object') return true;
+  const idable: { id: string; raw: unknown }[] = [];
+  for (const item of rawItems) {
+    if (typeof item === 'string') {
+      idable.push({ id: item, raw: item });
+      continue;
+    }
+    if (item && typeof item === 'object') {
       const i = item as CopilotModelItem;
-      // Note: respect Copilot's own picker and policy flags so we do not offer
-      // models the upstream service marks as hidden, non-chat, or disabled.
-      if (i.model_picker_enabled === false) return false;
-      if (i.capabilities?.type && i.capabilities.type !== 'chat') return false;
-      if (i.policy?.state && i.policy.state !== 'enabled') return false;
-      return true;
-    })
-    .map((item: unknown) => {
-      if (typeof item === 'string') return item;
-      if (item && typeof item === 'object') {
-        const i = item as CopilotModelItem;
-        if (typeof i.id === 'string') return i.id;
-        if (typeof i.name === 'string') return i.name;
-      }
-      return null;
-    })
-    .filter((value: string | null): value is string => value !== null);
+      const id = typeof i.id === 'string' ? i.id : typeof i.name === 'string' ? i.name : null;
+      if (id) idable.push({ id, raw: item });
+    }
+  }
 
-  return [...new Set(models)].map(id => ({ id }));
+  const kept = filterChatModels('copilot', idable, ({ raw }) => {
+    if (typeof raw !== 'object' || raw === null) return true;
+    const i = raw as CopilotModelItem;
+    if (i.model_picker_enabled === false) return 'non-chat: model_picker_enabled=false';
+    if (i.capabilities?.type && i.capabilities.type !== 'chat')
+      return `non-chat: capabilities.type='${i.capabilities.type}'`;
+    if (i.policy?.state && i.policy.state !== 'enabled')
+      return `non-chat: policy.state='${i.policy.state}'`;
+    return true;
+  });
+
+  return [...new Set(kept.map(k => k.id))].map(id => ({ id }));
 }
 
 function estimateCopilotModelTier(model: string): ModelTier {

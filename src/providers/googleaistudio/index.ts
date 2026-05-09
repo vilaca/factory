@@ -13,6 +13,7 @@ import type { GoogleAiStudioAuthMode } from '../../core/config/types.js';
 import { appendProviderLog } from '../../core/session/session-log.js';
 import { GoogleAiStudioAuthManager } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
+import { filterChatModels } from '../list-models-filter.js';
 
 const DEFAULT_OPENAI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const PROVIDER_NAME = 'Google AI Studio';
@@ -200,10 +201,18 @@ export class GoogleAiStudioProvider implements Provider {
 
       const data = (await res.json()) as { models?: unknown[]; nextPageToken?: string };
       const pageModels: unknown[] = Array.isArray(data?.models) ? data.models : [];
-      // Note: we intentionally keep only generateContent-capable text/chat
-      // models and drop embeddings, image/video, speech/music, and live APIs.
-      const supportedModels = pageModels.filter((item): item is GoogleAiStudioModelItem =>
-        isSupportedGoogleAiStudioModel(item),
+      const idable: (GoogleAiStudioModelItem & { id: string })[] = [];
+      for (const item of pageModels) {
+        if (!item || typeof item !== 'object') continue;
+        const i = item as GoogleAiStudioModelItem;
+        const modelId = getGoogleAiStudioModelId(i);
+        if (typeof i.name !== 'string' || !modelId) continue;
+        idable.push({ ...i, id: modelId });
+      }
+      const supportedModels = filterChatModels(
+        'googleaistudio',
+        idable,
+        chatCapabilityReason,
       );
       appendProviderLog({
         provider: 'googleaistudio',
@@ -266,26 +275,21 @@ interface GoogleAiStudioModelItem {
   thinking?: boolean;
 }
 
-function isSupportedGoogleAiStudioModel(item: unknown): item is GoogleAiStudioModelItem {
-  if (!item || typeof item !== 'object') return false;
-  const i = item as GoogleAiStudioModelItem;
-  const modelId = getGoogleAiStudioModelId(i);
-  if (typeof i.name !== 'string' || !modelId) return false;
-
-  const methods = Array.isArray(i.supportedGenerationMethods)
-    ? i.supportedGenerationMethods.filter(
+function chatCapabilityReason(item: GoogleAiStudioModelItem & { id: string }): true | string {
+  const methods = Array.isArray(item.supportedGenerationMethods)
+    ? item.supportedGenerationMethods.filter(
         (value: unknown): value is string => typeof value === 'string',
       )
     : [];
-  if (!methods.includes('generateContent')) return false;
+  if (!methods.includes('generateContent')) return 'non-chat: lacks generateContent';
 
-  const searchableId = `${i.name} ${modelId} ${i.displayName ?? ''}`.toLowerCase();
-  if (/(embedding|imagen|veo|lyria|robotics)/i.test(searchableId)) {
-    return false;
-  }
-  if (/(?:^|[\s/_:-])(tts|speech|music|image|video|live)(?:$|[\s/_:-])/i.test(searchableId)) {
-    return false;
-  }
+  const searchableId = `${item.name ?? ''} ${item.id} ${item.displayName ?? ''}`.toLowerCase();
+  const familyMatch = /(embedding|imagen|veo|lyria|robotics)/i.exec(searchableId);
+  if (familyMatch) return `non-chat: family '${familyMatch[1]}'`;
+  const taskMatch = /(?:^|[\s/_:-])(tts|speech|music|image|video|live)(?:$|[\s/_:-])/i.exec(
+    searchableId,
+  );
+  if (taskMatch) return `non-chat: task '${taskMatch[1]}'`;
 
   return true;
 }
