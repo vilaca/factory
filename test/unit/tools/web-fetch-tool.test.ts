@@ -46,6 +46,116 @@ describe('WebFetch tool', () => {
     );
   });
 
+  it('rejects the initial URL when validateHop refuses it (no fetch happens)', async () => {
+    // The redirect cases prove validateHop runs on hop targets; this proves
+    // the initial URL goes through the same gate, so no request fires.
+    let fetchCalls = 0;
+    const fetchImpl = (async () => {
+      fetchCalls += 1;
+      return new Response('should not happen');
+    }) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://blocked.example.com/x', {
+        fetchImpl,
+        validateHop: () => 'host blocked',
+      }),
+      /host blocked/,
+    );
+    assert.strictEqual(fetchCalls, 0);
+  });
+
+  it('rejects the response when Content-Length advertises more than the cap allows', async () => {
+    // The pre-flight bails before any body bytes are read so a server that
+    // honestly reports a huge response can't force us to allocate.
+    const fetchImpl = (async () =>
+      new Response('x', {
+        status: 200,
+        headers: { 'content-type': 'text/plain', 'content-length': '999999999' },
+      })) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://example.com/big', { fetchImpl, maxBytes: 1024 }),
+      /response advertises 999999999 bytes/,
+    );
+  });
+
+  it('refuses a Response that exposes no streaming body', async () => {
+    // `new Response(null)` is the closest spec-compliant way to produce a
+    // body=null Response. We refuse rather than fall back to res.text(),
+    // which would buffer uncapped.
+    const fetchImpl = (async () =>
+      new Response(null, { status: 200, headers: { 'content-type': 'text/plain' } })) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://example.com/empty', { fetchImpl }),
+      /no streaming body/,
+    );
+  });
+
+  it('truncates the body at maxBytes and reports truncated=true', async () => {
+    const big = 'x'.repeat(500);
+    const fetchImpl = (async () =>
+      new Response(big, {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      })) as typeof fetch;
+    const res = await fetchUrl('https://example.com/big', { fetchImpl, maxBytes: 100 });
+    assert.strictEqual(res.truncated, true);
+    assert.strictEqual(res.body.length, 100);
+  });
+
+  it('honours an explicit charset directive in Content-Type', async () => {
+    // Latin-1 0xE9 is "é" — UTF-8 would mojibake it. Proves we honour the
+    // server's declared encoding rather than always assuming UTF-8.
+    const fetchImpl = (async () =>
+      new Response(new Uint8Array([0x63, 0x61, 0x66, 0xe9]), {
+        status: 200,
+        headers: { 'content-type': 'text/plain; charset=iso-8859-1' },
+      })) as typeof fetch;
+    const res = await fetchUrl('https://example.com/x', { fetchImpl });
+    assert.strictEqual(res.body, 'café');
+  });
+
+  it('falls back to UTF-8 when the declared charset is unknown', async () => {
+    // TextDecoder throws on construction with an unknown label; the catch
+    // route must still produce a usable string rather than propagate.
+    const fetchImpl = (async () =>
+      new Response('hello', {
+        status: 200,
+        headers: { 'content-type': 'text/plain; charset=not-a-real-encoding' },
+      })) as typeof fetch;
+    const res = await fetchUrl('https://example.com/x', { fetchImpl });
+    assert.strictEqual(res.body, 'hello');
+  });
+
+  it('throws on a redirect response with no Location header', async () => {
+    const fetchImpl = (async () => new Response(null, { status: 302 })) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://example.com/x', { fetchImpl }),
+      /redirect 302 without Location header/,
+    );
+  });
+
+  it('throws when the redirect chain exceeds maxRedirects', async () => {
+    // Each hop redirects to itself — the cap must fire instead of looping.
+    const fetchImpl = (async () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: 'https://example.com/loop' },
+      })) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://example.com/loop', { fetchImpl, maxRedirects: 2 }),
+      /too many redirects \(>2\)/,
+    );
+  });
+
+  it('throws on a non-OK terminal response', async () => {
+    const fetchImpl = (async () =>
+      new Response('boom', { status: 503, statusText: 'Service Unavailable' })) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://example.com/down', { fetchImpl }),
+      /HTTP 503 Service Unavailable/,
+    );
+  });
+
   it('permits redirects to a host explicitly in the allowlist', async () => {
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
