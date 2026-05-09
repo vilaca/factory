@@ -7,7 +7,7 @@ import type {
   ToolDefinition,
 } from '../../providers/types.js';
 import type { AgentEvent, RotationOptions } from '../agent-types.js';
-import type { ProviderKey } from '../config-types.js';
+import type { ProviderKey } from '../config/types.js';
 import { keyFingerprint, selectNextKey } from '../credentials.js';
 import { classifyForRotation } from '../provider-errors.js';
 import { classifyForRetry, nextDelayMs, resolveRetryPolicy } from '../provider-retry.js';

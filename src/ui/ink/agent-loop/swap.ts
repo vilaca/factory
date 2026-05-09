@@ -6,7 +6,7 @@
 import type { MutableRefObject } from 'react';
 import { ContextManager } from '../../../core/context-manager.js';
 import { validateModelToolSupport } from '../../../core/model-validation.js';
-import { loadGlobalConfig } from '../../../core/config.js';
+import { loadGlobalConfig } from '../../../core/config/index.js';
 import { getKey } from '../../../core/credentials.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
 import { createProvider } from '../../../providers/registry.js';

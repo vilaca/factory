@@ -1,8 +1,8 @@
-import type { AgentLoopApi } from '../use-agent-loop.js';
+import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 import { listStatsForProvider } from '../../../core/key-stats.js';
 import { keyFingerprint, listKeys } from '../../../core/credentials.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
-import { loadGlobalConfig } from '../../../core/config.js';
+import { loadGlobalConfig } from '../../../core/config/index.js';
 
 function relativeAge(ts: string | undefined): string {
   if (!ts) return 'never';

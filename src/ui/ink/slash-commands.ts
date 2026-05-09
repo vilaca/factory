@@ -1,7 +1,7 @@
 import { formatArgValue } from './format.js';
-import type { AgentLoopApi } from './use-agent-loop.js';
+import type { AgentLoopApi } from './agent-loop/use-agent-loop.js';
 import type { TabsContextValue } from './tabs/TabsContext.js';
-import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../core/config-types.js';
+import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../core/config/types.js';
 import { dispatchRotate } from './slash/rotate.js';
 import { dispatchKeys } from './slash/keys.js';
 import { dispatchStats } from './slash/stats.js';

@@ -9,7 +9,7 @@ import { grepTool } from '../../tools/grep.js';
 import { bashTool } from '../../tools/bash.js';
 import { Conversation } from '../conversation.js';
 import { PermissionManager } from '../../permissions.js';
-import { runAgent } from '../agent.js';
+import { runAgent } from '../agent/run-agent.js';
 import { isCommandAllowed } from './bash-allowlist.js';
 
 /**

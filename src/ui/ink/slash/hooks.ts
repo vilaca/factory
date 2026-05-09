@@ -1,5 +1,5 @@
-import type { AgentLoopApi } from '../use-agent-loop.js';
-import type { HooksConfig } from '../../../core/config-types.js';
+import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
+import type { HooksConfig } from '../../../core/config/types.js';
 import { listAllHooks } from '../../../core/hooks/discovery.js';
 
 export async function dispatchHooks(

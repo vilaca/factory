@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import type { HookEntry, HooksConfig } from '../config-types.js';
+import type { HookEntry, HooksConfig } from '../config/types.js';
 import { resolveHooks, type HookEvent } from './discovery.js';
 import { sanitizeEnv } from '../../security/env.js';
 import type { EnvPolicy } from '../../security/env.js';

@@ -5,8 +5,8 @@ import type { Provider } from './providers/types.js';
 import type { ProviderDescriptor, StartupProviderName } from './providers/descriptors.js';
 import { DESCRIPTORS, DESCRIPTOR_LIST, descriptorByAlias } from './providers/descriptors.js';
 import { createProvider } from './providers/registry.js';
-import { loadConfig } from './core/config.js';
-import type { HookEntry } from './core/config-types.js';
+import { loadConfig } from './core/config/index.js';
+import type { HookEntry } from './core/config/types.js';
 import { McpManager } from './mcp/client.js';
 import { defaultRegistry } from './tools/index.js';
 import { runHeadless } from './ui/headless.js';
@@ -113,7 +113,7 @@ async function main(): Promise<void> {
         // saveGlobalConfig does top-level shallow merge — preserve the rest
         // of `agent` by reading the existing global agent block and only
         // overriding the rotation field.
-        const { loadGlobalConfig, saveGlobalConfig } = await import('./core/config.js');
+        const { loadGlobalConfig, saveGlobalConfig } = await import('./core/config/index.js');
         const global = await loadGlobalConfig();
         await saveGlobalConfig({
           agent: { ...global.agent, rotation: next },
@@ -360,7 +360,7 @@ async function main(): Promise<void> {
   // project-only slice (without user-level entries) to fingerprint and
   // prompt against — user hooks are implicitly trusted (the user wrote
   // them in their own home dir).
-  const { loadProjectConfig } = await import('./core/config.js');
+  const { loadProjectConfig } = await import('./core/config/index.js');
   const projectOnly = await loadProjectConfig(cwd);
   const projectHooks = projectOnly.agent?.hooks;
   if (projectHooks && Object.keys(projectHooks).length > 0) {

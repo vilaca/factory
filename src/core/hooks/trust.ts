@@ -18,7 +18,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import type { HooksConfig } from '../config-types.js';
+import type { HooksConfig } from '../config/types.js';
 import { writeFileAtomic } from '../../utils/atomic-write.js';
 
 interface TrustEntry {
