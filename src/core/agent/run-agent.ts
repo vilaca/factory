@@ -207,7 +207,11 @@ export async function* runAgent(
       fullContent = modelResult.fullContent;
       toolCalls = modelResult.toolCalls;
       if (modelResult.lastUsage) lastUsage = modelResult.lastUsage;
-      contextManager?.recordPromptUsage(modelResult.lastUsage);
+      // Optional `?.` even though the method is declared — `runAgent` is
+      // hosted by external callers (TUI tabs, headless mode, future SDK
+      // consumers) that may pass partial ContextManager stubs. Don't strip
+      // it as "dead code"; the type system can't see those callers.
+      contextManager?.recordPromptUsage?.(modelResult.lastUsage);
 
       // User aborted mid-stream: preserve whatever was already produced as
       // both a committed text-done event and a real assistant message so the
