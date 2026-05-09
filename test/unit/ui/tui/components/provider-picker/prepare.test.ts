@@ -21,13 +21,53 @@ describe('prepareModels', () => {
     assert.deepStrictEqual(sorted, ['strong-1', 'medium-1', 'weak-1', 'unknown-1']);
   });
 
-  it('within a tier, newer numeric versions come first', () => {
+  it('within a tier, codingSpecialist floats above non-specialists', () => {
+    const sorted = prepareModels(
+      ['gpt-5.5-pro', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.4-pro'],
+      infoFor({
+        'gpt-5.5-pro': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 128_000 },
+        'gpt-5.4-pro': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 128_000 },
+        'gpt-5.3-codex': {
+          tier: 'strong',
+          contextWindow: 1_000_000,
+          maxOutputTokens: 128_000,
+          codingSpecialist: true,
+        },
+        'gpt-5.2-codex': {
+          tier: 'strong',
+          contextWindow: 1_000_000,
+          maxOutputTokens: 128_000,
+          codingSpecialist: true,
+        },
+      }),
+    );
+    assert.deepStrictEqual(sorted, ['gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.5-pro', 'gpt-5.4-pro']);
+  });
+
+  it('within a tier, larger context window comes first', () => {
+    const sorted = prepareModels(['gpt-4o', 'gpt-5', 'gpt-3.5-turbo'], infoFor({
+      'gpt-5': { tier: 'strong', contextWindow: 1_000_000 },
+      'gpt-4o': { tier: 'strong', contextWindow: 128_000 },
+      'gpt-3.5-turbo': { tier: 'strong', contextWindow: 16_000 },
+    }));
+    assert.deepStrictEqual(sorted, ['gpt-5', 'gpt-4o', 'gpt-3.5-turbo']);
+  });
+
+  it('falls back to maxOutputTokens when contextWindow ties', () => {
+    const sorted = prepareModels(['gpt-4.1', 'gpt-5'], infoFor({
+      'gpt-5': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 128_000 },
+      'gpt-4.1': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 32_000 },
+    }));
+    assert.deepStrictEqual(sorted, ['gpt-5', 'gpt-4.1']);
+  });
+
+  it('falls back to numeric name compare when capabilities tie', () => {
     const sorted = prepareModels(
       ['claude-sonnet-3-5', 'claude-sonnet-4-5', 'claude-sonnet-4-1'],
       infoFor({
-        'claude-sonnet-3-5': { tier: 'strong' },
-        'claude-sonnet-4-5': { tier: 'strong' },
-        'claude-sonnet-4-1': { tier: 'strong' },
+        'claude-sonnet-3-5': { tier: 'strong', contextWindow: 200_000, maxOutputTokens: 16_000 },
+        'claude-sonnet-4-5': { tier: 'strong', contextWindow: 200_000, maxOutputTokens: 16_000 },
+        'claude-sonnet-4-1': { tier: 'strong', contextWindow: 200_000, maxOutputTokens: 16_000 },
       }),
     );
     assert.deepStrictEqual(sorted, ['claude-sonnet-4-5', 'claude-sonnet-4-1', 'claude-sonnet-3-5']);

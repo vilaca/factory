@@ -41,10 +41,11 @@ export class OpenAIProvider implements Provider {
   }
 
   getModelPickerInfo(model: string): ModelPickerInfo {
+    const lower = model.toLowerCase();
     return {
       label: model,
-      detail: buildModelDetail(model.toLowerCase()),
-      warning: buildModelWarning(model.toLowerCase()),
+      detail: buildModelDetail(lower),
+      warning: buildModelWarning(lower),
     };
   }
 
@@ -149,9 +150,13 @@ export class OpenAIProvider implements Provider {
         typeof (item as CatalogItem).id === 'string' &&
         !!(item as CatalogItem).id,
     );
+    const allIds = new Set(valid.map(item => item.id));
     this.modelsCache = filterChatModels('openai', valid, item => {
       const matched = matchedPattern(item.id, NON_CHAT_PATTERNS);
-      return matched ? `non-chat: matches '${matched}'` : true;
+      if (matched) return `non-chat: matches '${matched}'`;
+      const aliasBase = stripDateSuffix(item.id);
+      if (aliasBase && allIds.has(aliasBase)) return `alias of '${aliasBase}'`;
+      return true;
     }).map(item => ({
       id: item.id,
       owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
@@ -159,6 +164,17 @@ export class OpenAIProvider implements Provider {
 
     return this.modelsCache;
   }
+}
+
+/** Returns the alias base when `id` looks like a dated pin
+ * (`o3-mini-2025-01-31` → `o3-mini`, `gpt-4-0613` → `gpt-4`). Caller decides
+ * whether the base actually exists in the catalog before treating it as a dup. */
+function stripDateSuffix(id: string): string | null {
+  const ymd = /^(.+)-\d{4}-\d{2}-\d{2}$/.exec(id);
+  if (ymd?.[1]) return ymd[1];
+  const mmdd = /^(.+)-\d{4}$/.exec(id);
+  if (mmdd?.[1]) return mmdd[1];
+  return null;
 }
 
 // ─── Catalog filter ────────────────────────────────────────────────────
@@ -194,7 +210,7 @@ function buildModelDetail(modelId: string): string {
 
 function buildModelWarning(modelId: string): string | undefined {
   if (modelId.includes('preview')) return 'preview';
-  if (modelId.startsWith('gpt-3.5') || modelId.startsWith('gpt-4-')) return 'deprecated';
+  if (lookupFamily(modelId)?.deprecated) return 'deprecated';
   return undefined;
 }
 
@@ -207,61 +223,101 @@ function buildCapabilities(model: string): string[] {
   return capabilities;
 }
 
+/**
+ * Single source of truth for OpenAI per-family capability metadata.
+ *
+ * `/v1/models` ships only `{id, created, object, owned_by}` — no context
+ * size, max output, modality, reasoning flag, or deprecation status. Every
+ * one of those has to be inferred from the model id, so we keep them all
+ * in one table instead of scattering startsWith chains across six functions.
+ *
+ * Lookup uses longest-matching prefix (so `gpt-4o-mini` beats `gpt-4o`),
+ * which makes array order irrelevant — keep the rows grouped by family for
+ * readability. Add a row when a new family ships; tweak existing rows when
+ * a family is retired (set `deprecated: true`) or extended.
+ *
+ * Defaults when no row matches: ctx 128k, maxOut 16k, no reasoning, no
+ * vision, supportsTools true, tier from generic mini/nano heuristic. New
+ * unknown ids therefore land in the middle of `strong` tier — visible but
+ * not at the top — until someone adds a row.
+ */
+interface OpenAIFamily {
+  prefix: string;
+  contextWindow: number;
+  maxOutputTokens: number;
+  /** Override for the generic tier heuristic. */
+  tier?: ModelTier;
+  reasoning?: boolean;
+  vision?: boolean;
+  /** Defaults to true. Set false for models that are tool-disabled. */
+  supportsTools?: boolean;
+  /** Drives both the picker 'deprecated' warning and tier='weak'. */
+  deprecated?: boolean;
+}
+
+const OPENAI_FAMILIES: ReadonlyArray<OpenAIFamily> = [
+  // Current flagships
+  { prefix: 'gpt-5-codex', contextWindow: 1_047_576, maxOutputTokens: 128_000, tier: 'strong', reasoning: true,  vision: true },
+  { prefix: 'gpt-5',       contextWindow: 1_047_576, maxOutputTokens: 128_000, tier: 'strong', reasoning: true,  vision: true },
+  { prefix: 'gpt-4.1',     contextWindow: 1_047_576, maxOutputTokens:  32_768, tier: 'strong', vision: true },
+
+  // Reasoning series
+  { prefix: 'o4-mini',     contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'medium', reasoning: true, vision: true },
+  { prefix: 'o4',          contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
+  { prefix: 'o3-mini',     contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'medium', reasoning: true, vision: true },
+  { prefix: 'o3',          contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
+  { prefix: 'o1-pro',      contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
+  { prefix: 'o1-preview',  contextWindow: 128_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true, supportsTools: false },
+  { prefix: 'o1-mini',     contextWindow: 128_000, maxOutputTokens: 100_000, tier: 'medium', reasoning: true, vision: true, supportsTools: false },
+  { prefix: 'o1',          contextWindow: 128_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
+
+  // Multimodal flagship line
+  { prefix: 'gpt-4o-mini', contextWindow: 128_000, maxOutputTokens: 16_384, tier: 'medium', vision: true },
+  { prefix: 'gpt-4o',      contextWindow: 128_000, maxOutputTokens: 16_384, tier: 'strong', vision: true },
+
+  // Deprecated families — surface a warning and pin to weak tier
+  { prefix: 'gpt-4-turbo',           contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
+  { prefix: 'gpt-4-1106',            contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
+  { prefix: 'gpt-4-',                contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
+  { prefix: 'gpt-3.5-turbo-instruct', contextWindow: 16_385, maxOutputTokens: 4_096, deprecated: true, supportsTools: false },
+  { prefix: 'gpt-3.5-turbo',         contextWindow:  16_385, maxOutputTokens: 4_096, deprecated: true },
+];
+
+function lookupFamily(model: string): OpenAIFamily | undefined {
+  const lower = model.toLowerCase();
+  let best: OpenAIFamily | undefined;
+  for (const family of OPENAI_FAMILIES) {
+    if (lower.startsWith(family.prefix) && (!best || family.prefix.length > best.prefix.length)) {
+      best = family;
+    }
+  }
+  return best;
+}
+
 function estimateModelTier(model: string): ModelTier {
-  if (
-    model.startsWith('gpt-5') ||
-    model.startsWith('gpt-4.1') ||
-    model.startsWith('o3') ||
-    model.startsWith('o1')
-  )
-    return 'strong';
-  if (
-    model.startsWith('gpt-4o') ||
-    model.startsWith('o4-mini') ||
-    model.startsWith('o3-mini') ||
-    model.startsWith('o1-mini')
-  )
-    return 'medium';
-  return 'weak';
+  const family = lookupFamily(model);
+  if (family?.deprecated) return 'weak';
+  if (family?.tier) return family.tier;
+  // Generic fallback: mini/nano variants demote one step. Everything else
+  // is assumed strong so unknown future flagships float above unknown minis.
+  if (/(?:^|[-/])(?:mini|nano)\b/.test(model)) return 'medium';
+  return 'strong';
 }
 
 function estimateContextWindow(model: string): number {
-  if (model.startsWith('gpt-5') || model.startsWith('gpt-4.1')) return 1_047_576;
-  if (model.startsWith('o4') || model.startsWith('o3') || model.startsWith('o1-pro'))
-    return 200_000;
-  if (model.startsWith('o1')) return 128_000;
-  if (model.startsWith('gpt-4o')) return 128_000;
-  if (model.startsWith('gpt-4-turbo') || model.startsWith('gpt-4-1106')) return 128_000;
-  if (model.startsWith('gpt-3.5-turbo')) return 16_385;
-  return 128_000;
+  return lookupFamily(model)?.contextWindow ?? 128_000;
 }
 
 function estimateMaxOutput(model: string): number {
-  if (model.startsWith('gpt-5')) return 128_000;
-  if (model.startsWith('gpt-4.1')) return 32_768;
-  if (model.startsWith('o4') || model.startsWith('o3') || model.startsWith('o1')) return 100_000;
-  if (model.startsWith('gpt-4o')) return 16_384;
-  if (model.startsWith('gpt-4-turbo')) return 4_096;
-  if (model.startsWith('gpt-3.5-turbo')) return 4_096;
-  return 16_384;
+  return lookupFamily(model)?.maxOutputTokens ?? 16_384;
 }
 
 function isReasoningModel(model: string): boolean {
-  return (
-    model.startsWith('o1') ||
-    model.startsWith('o3') ||
-    model.startsWith('o4') ||
-    model.startsWith('gpt-5')
-  );
+  return lookupFamily(model)?.reasoning ?? false;
 }
 
 function supportsToolsByName(model: string): boolean {
-  // The chat endpoints we surface all support tools today. The catalog filter
-  // already drops embeddings/whisper/etc, so anything reaching this check is
-  // a chat model.
-  if (model.startsWith('o1-mini') || model.startsWith('o1-preview')) return false;
-  if (model === 'gpt-3.5-turbo-instruct') return false;
-  return true;
+  return lookupFamily(model)?.supportsTools ?? true;
 }
 
 function supportsParallelToolCalls(model: string): boolean {
@@ -272,14 +328,7 @@ function supportsParallelToolCalls(model: string): boolean {
 }
 
 function supportsVisionByName(model: string): boolean {
-  return (
-    model.startsWith('gpt-5') ||
-    model.startsWith('gpt-4.1') ||
-    model.startsWith('gpt-4o') ||
-    model.startsWith('o4') ||
-    model.startsWith('o3') ||
-    model.startsWith('o1')
-  );
+  return lookupFamily(model)?.vision ?? false;
 }
 
 function formatTokenCount(value: number): string {

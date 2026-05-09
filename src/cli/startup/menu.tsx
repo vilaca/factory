@@ -10,6 +10,7 @@ import {
   type ProviderEntry,
   type RecentPair,
 } from '../../ui/tui/components/provider-picker/index.js';
+import { buildPickerInfo } from '../../ui/tui/components/provider-picker/build-info.js';
 
 interface StartupSelection {
   provider: StartupProviderName;
@@ -140,18 +141,7 @@ function ModelMenuApp(props: ModelMenuAppProps): React.ReactElement {
       initialModel={defaultModel ?? undefined}
       startStage="model"
       loadModels={async () => models}
-      getModelInfo={(_, m) => {
-        const info = provider?.getModelPickerInfo?.(m);
-        const label = info?.label ?? provider?.getDisplayModelName?.(m);
-        let tier;
-        try {
-          tier = provider?.getCapabilities(m).modelTier;
-        } catch {
-          // Unknown model — capabilities estimator may throw; sort puts it last.
-        }
-        if (!label && !info?.warning && !info?.detail && !tier) return undefined;
-        return { label, warning: info?.warning, detail: info?.detail, tier };
-      }}
+      getModelInfo={(_, m) => (provider ? buildPickerInfo(provider, m) : undefined)}
       onCommit={(_, model) => finish(model)}
       onCancel={() => finish(null)}
       bordered={false}

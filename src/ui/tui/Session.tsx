@@ -13,6 +13,7 @@ import {
   type ProviderEntry,
   type RecentPair,
 } from './components/provider-picker/index.js';
+import { buildPickerInfo } from './components/provider-picker/build-info.js';
 import { RotationPromptPanel } from './components/rotation-prompt-panel.js';
 import { useAgentLoop, type AgentLoopApi } from './agent-loop/use-agent-loop.js';
 import { TabsContext } from './tabs/TabsContext.js';
@@ -256,17 +257,7 @@ export function Session(props: SessionProps): React.ReactElement {
             const source =
               cached ??
               (prov === providerName ? refs.current?.provider ?? props.provider : undefined);
-            if (!source) return undefined;
-            const info = source.getModelPickerInfo?.(m);
-            const label = info?.label ?? source.getDisplayModelName?.(m);
-            let tier;
-            try {
-              tier = source.getCapabilities(m).modelTier;
-            } catch {
-              // Unknown model — capabilities estimator may throw; sort puts it last.
-            }
-            if (!label && !info?.warning && !info?.detail && !tier) return undefined;
-            return { label, warning: info?.warning, detail: info?.detail, tier };
+            return source ? buildPickerInfo(source, m) : undefined;
           }}
           multiKeyProviders={SIMPLE_PROMPT_PROVIDERS}
           loadModels={async (name, keyId) => {

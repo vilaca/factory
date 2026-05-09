@@ -12,9 +12,16 @@ export function prepareModels(
   getModelInfo?: (model: string) => ModelDisplayInfo | undefined,
 ): string[] {
   return [...models].sort((a, b) => {
-    const tierA = rankFor(getModelInfo?.(a)?.tier);
-    const tierB = rankFor(getModelInfo?.(b)?.tier);
-    if (tierA !== tierB) return tierB - tierA;
+    const infoA = getModelInfo?.(a);
+    const infoB = getModelInfo?.(b);
+    const tierDiff = rankFor(infoB?.tier) - rankFor(infoA?.tier);
+    if (tierDiff !== 0) return tierDiff;
+    const codingDiff = Number(infoB?.codingSpecialist ?? false) - Number(infoA?.codingSpecialist ?? false);
+    if (codingDiff !== 0) return codingDiff;
+    const ctxDiff = (infoB?.contextWindow ?? 0) - (infoA?.contextWindow ?? 0);
+    if (ctxDiff !== 0) return ctxDiff;
+    const outDiff = (infoB?.maxOutputTokens ?? 0) - (infoA?.maxOutputTokens ?? 0);
+    if (outDiff !== 0) return outDiff;
     return b.localeCompare(a, undefined, { numeric: true });
   });
 }

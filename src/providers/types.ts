@@ -55,6 +55,11 @@ export interface ProviderCapabilities {
   streaming: boolean;
   tokenCounting: TokenCountingMethod;
   modelTier: ModelTier;
+  /** True for coding-specialist fine-tunes (codex, coder). Used by the
+   *  picker to float them above generic flagships within the same tier
+   *  since this CLI is a coding agent. Inferred via generic substring
+   *  match — no per-family table needed. */
+  codingSpecialist?: boolean;
 }
 
 export interface ModelInfo {
