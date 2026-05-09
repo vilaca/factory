@@ -3,7 +3,11 @@ import assert from 'node:assert';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseSkillFile, parseFrontmatter, loadSkills } from '../../../../src/core/skills/loader.js';
+import {
+  parseSkillFile,
+  parseFrontmatter,
+  loadSkills,
+} from '../../../../src/core/skills/loader.js';
 import { shouldInjectSkill } from '../../../../src/core/skills/matcher.js';
 import { SkillsRegistry } from '../../../../src/core/skills/index.js';
 

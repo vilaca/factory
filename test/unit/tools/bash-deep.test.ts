@@ -144,10 +144,7 @@ describe('Bash — cwdAfter sentinel', () => {
   it('reports the new cwd when the command cd-s into a different directory', async () => {
     // sh -c interprets `cd /tmp && pwd` in the same shell as the wrapper's
     // post-command `printf "$PWD"`, so the wrapper sees the post-cd value.
-    const result = await bash.execute(
-      { command: 'cd /tmp' },
-      { cwd: process.cwd() },
-    );
+    const result = await bash.execute({ command: 'cd /tmp' }, { cwd: process.cwd() });
     assert.strictEqual(result.success, true);
     // On macOS /tmp is a symlink into /private/tmp; accept either form.
     assert.ok(

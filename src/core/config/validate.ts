@@ -117,19 +117,12 @@ function validateAgentRotation(rot: unknown, filePath: string): void {
   }
 }
 
-function validateHookEntry(
-  entry: unknown,
-  event: string,
-  i: number,
-  filePath: string,
-): void {
+function validateHookEntry(entry: unknown, event: string, i: number, filePath: string): void {
   if (!isPlainObject(entry)) {
     throw new Error(`${filePath}: "agent.hooks.${event}[${i}]" must be an object`);
   }
   if (typeof entry.command !== 'string' || !entry.command) {
-    throw new Error(
-      `${filePath}: "agent.hooks.${event}[${i}].command" must be a non-empty string`,
-    );
+    throw new Error(`${filePath}: "agent.hooks.${event}[${i}].command" must be a non-empty string`);
   }
   if (entry.matcher !== undefined && typeof entry.matcher !== 'string') {
     throw new Error(`${filePath}: "agent.hooks.${event}[${i}].matcher" must be a string`);
@@ -302,12 +295,7 @@ function validateMcpSection(mcp: unknown, filePath: string): void {
   }
 }
 
-function validateProviderKey(
-  entry: unknown,
-  provider: string,
-  i: number,
-  filePath: string,
-): void {
+function validateProviderKey(entry: unknown, provider: string, i: number, filePath: string): void {
   if (!isPlainObject(entry)) {
     throw new Error(`${filePath}: "keys.${provider}[${i}]" must be an object`);
   }

@@ -188,7 +188,7 @@ function getBasePrompt(modelTier: ModelTier): string {
     return buildTerminalMediumStrongPrompt({
       toolsSectionHeader: '## Tools',
       deniedToolRecoveryLine:
-        'If a tool call is denied, ask what to do differently — don\'t fall back to prose.',
+        "If a tool call is denied, ask what to do differently — don't fall back to prose.",
       scopeLine:
         'Look for the relevant file inside the current project before assuming it\'s elsewhere. Do not modify shell config (~/.zshrc, ~/.bashrc), system files, or other repos unless the user explicitly asks. "Add a /q command to the REPL" means edit this project\'s REPL source, not create a shell alias.',
       guidelinesSection: `## Guidelines

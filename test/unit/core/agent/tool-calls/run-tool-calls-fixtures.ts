@@ -7,11 +7,7 @@ import type {
   ProviderCapabilities,
   ToolCallMessage,
 } from '../../../../../src/providers/types.js';
-import type {
-  ToolHandler,
-  ToolResult,
-  ToolCategory,
-} from '../../../../../src/tools/types.js';
+import type { ToolHandler, ToolResult, ToolCategory } from '../../../../../src/tools/types.js';
 import type { AgentEvent, PermissionDecision } from '../../../../../src/core/agent/types.js';
 import { ToolRegistry } from '../../../../../src/tools/registry.js';
 import { Conversation } from '../../../../../src/core/context/conversation.js';
@@ -25,7 +21,9 @@ export interface FakeToolOptions {
   execute?: (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult;
 }
 
-export function fakeTool(opts: FakeToolOptions): ToolHandler & { calls: Record<string, unknown>[] } {
+export function fakeTool(
+  opts: FakeToolOptions,
+): ToolHandler & { calls: Record<string, unknown>[] } {
   const calls: Record<string, unknown>[] = [];
   const handler: ToolHandler = {
     name: opts.name,
@@ -162,6 +160,10 @@ export function makeRecovery(maxCorrections = 3): RecoveryState {
   return new RecoveryState(2, maxCorrections);
 }
 
-export function callOf(name: string, args: Record<string, unknown> = {}, id = 'tc-1'): ToolCallMessage {
+export function callOf(
+  name: string,
+  args: Record<string, unknown> = {},
+  id = 'tc-1',
+): ToolCallMessage {
   return { id, function: { name, arguments: args } };
 }

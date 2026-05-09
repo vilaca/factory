@@ -5,7 +5,11 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import chalk from 'chalk';
-import { indexForShortcut as _indexForShortcut, renderStatusBadge, shortcutFor } from './shortcuts.js';
+import {
+  indexForShortcut as _indexForShortcut,
+  renderStatusBadge,
+  shortcutFor,
+} from './shortcuts.js';
 import { TextInput } from '../text-input.js';
 import {
   type KeySummary,
@@ -27,10 +31,7 @@ function describeKeyRow(k: KeySummary): string {
   return `${base}  · ${k.stats.ok} ok / ${k.stats.warn} ⚠`;
 }
 
-function renderProviderList(
-  items: ProviderEntry[],
-  selected: number,
-): React.ReactElement {
+function renderProviderList(items: ProviderEntry[], selected: number): React.ReactElement {
   const half = Math.floor(VISIBLE_ROWS / 2);
   let start = Math.max(0, selected - half);
   const end = Math.min(items.length, start + VISIBLE_ROWS);
@@ -89,9 +90,7 @@ function renderModelList(
         const display = info?.label ?? item;
         const labelText = `${sc ? `${sc}. ` : ''}${display}`;
         const warning = info?.warning ? ` ${chalk.yellow(`(${info.warning})`)}` : '';
-        const text = isSel
-          ? chalk.inverse(` ${labelText} `) + warning
-          : `  ${labelText}` + warning;
+        const text = isSel ? chalk.inverse(` ${labelText} `) + warning : `  ${labelText}` + warning;
         return <Text key={idx}>{text}</Text>;
       })}
       {end < items.length && <Text dimColor> ↓ {items.length - end} more</Text>}
@@ -105,7 +104,11 @@ interface RecentStageProps {
   recentIdx: number;
 }
 
-export function RecentStage({ recents, recentsLoading, recentIdx }: RecentStageProps): React.ReactElement {
+export function RecentStage({
+  recents,
+  recentsLoading,
+  recentIdx,
+}: RecentStageProps): React.ReactElement {
   const lastIdx = recents.length;
   const placeholder = recentsLoading
     ? 'Loading recent sessions…'
@@ -143,7 +146,10 @@ interface ProviderStageProps {
   providerIndex: number;
 }
 
-export function ProviderStage({ providers, providerIndex }: ProviderStageProps): React.ReactElement {
+export function ProviderStage({
+  providers,
+  providerIndex,
+}: ProviderStageProps): React.ReactElement {
   return (
     <>
       <Text color="cyan" bold>
@@ -179,9 +185,7 @@ export function KeyStage({ stage, hasDelete }: KeyStageProps): React.ReactElemen
           const i = n;
           const sel = i === stage.selectedIdx;
           const labelText = ' Add new key… ';
-          return (
-            <Text key="add">{sel ? chalk.inverse(labelText) : `  ${labelText.trim()}`}</Text>
-          );
+          return <Text key="add">{sel ? chalk.inverse(labelText) : `  ${labelText.trim()}`}</Text>;
         })()}
         {hasDelete &&
           (() => {
@@ -333,7 +337,11 @@ interface ModelStageProps {
   getModelInfo?: (provider: string, model: string) => ModelDisplayInfo | undefined;
 }
 
-export function ModelStage({ stage, modelIndex, getModelInfo }: ModelStageProps): React.ReactElement {
+export function ModelStage({
+  stage,
+  modelIndex,
+  getModelInfo,
+}: ModelStageProps): React.ReactElement {
   return (
     <>
       <Text color="cyan" bold>

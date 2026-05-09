@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import type { Provider, ChatChunk, ProviderCapabilities } from '../../../../../src/providers/types.js';
+import type {
+  Provider,
+  ChatChunk,
+  ProviderCapabilities,
+} from '../../../../../src/providers/types.js';
 import { defaultRegistry } from '../../../../../src/tools/index.js';
 import { correctToolCall } from '../../../../../src/core/agent/tool-calls/tool-call-corrector.js';
 

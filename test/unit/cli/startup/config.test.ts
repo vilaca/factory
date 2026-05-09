@@ -112,7 +112,11 @@ describe('applyCliRotationOverrides', () => {
   });
 
   it('preserves existing fields not touched by flags', () => {
-    const existing = { keys: true, models: true, overrides: { 'a:b': [{ provider: 'g', model: 'm' }] } };
+    const existing = {
+      keys: true,
+      models: true,
+      overrides: { 'a:b': [{ provider: 'g', model: 'm' }] },
+    };
     const got = applyCliRotationOverrides(existing, { noRotateKeys: true }, stubParse);
     assert.deepStrictEqual(got.overrides, existing.overrides);
     assert.strictEqual(got.models, true); // preserved
@@ -316,10 +320,9 @@ describe('persistRotationConfig', () => {
     // The rotation block was overwritten...
     assert.deepStrictEqual(patch.agent?.rotation, newRotation);
     // ...but the unrelated agent.hooks block was preserved.
-    assert.deepStrictEqual(
-      (patch.agent as Record<string, unknown> | undefined)?.hooks,
-      { PreToolUse: [{ command: 'echo' }] },
-    );
+    assert.deepStrictEqual((patch.agent as Record<string, unknown> | undefined)?.hooks, {
+      PreToolUse: [{ command: 'echo' }],
+    });
   });
 
   it('handles undefined existing agent block (no other agent fields to preserve)', async () => {

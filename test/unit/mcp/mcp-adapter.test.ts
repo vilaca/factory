@@ -7,7 +7,9 @@ import { adaptMcpTool } from '../../../src/mcp/adapter.js';
 // adapter only calls callTool(); typing as Client lets us exercise the real
 // signature without spawning a subprocess.
 function fakeClient(callTool: (req: { name: string; arguments: unknown }) => unknown): Client {
-  return { callTool: async (req: { name: string; arguments: unknown }) => callTool(req) } as unknown as Client;
+  return {
+    callTool: async (req: { name: string; arguments: unknown }) => callTool(req),
+  } as unknown as Client;
 }
 
 describe('MCP adapter — adaptMcpTool', () => {
@@ -15,7 +17,11 @@ describe('MCP adapter — adaptMcpTool', () => {
     const handler = adaptMcpTool(
       fakeClient(() => ({ content: [], isError: false })),
       'srv',
-      { name: 'do_thing', description: 'd', inputSchema: { type: 'object', properties: { x: { type: 'string' } } } },
+      {
+        name: 'do_thing',
+        description: 'd',
+        inputSchema: { type: 'object', properties: { x: { type: 'string' } } },
+      },
     );
     assert.strictEqual(handler.name, 'do_thing');
     assert.strictEqual(handler.description, 'd');
@@ -29,12 +35,20 @@ describe('MCP adapter — adaptMcpTool', () => {
   });
 
   it('synthesizes a description when the descriptor omits one', () => {
-    const handler = adaptMcpTool(fakeClient(() => ({ content: [] })), 'github', { name: 'list_repos' });
+    const handler = adaptMcpTool(
+      fakeClient(() => ({ content: [] })),
+      'github',
+      { name: 'list_repos' },
+    );
     assert.match(handler.definition.function.description, /github/);
   });
 
   it('defaults parameters to an empty object schema when the descriptor omits inputSchema', () => {
-    const handler = adaptMcpTool(fakeClient(() => ({ content: [] })), 'srv', { name: 'noargs' });
+    const handler = adaptMcpTool(
+      fakeClient(() => ({ content: [] })),
+      'srv',
+      { name: 'noargs' },
+    );
     assert.deepStrictEqual(handler.definition.function.parameters, {
       type: 'object',
       properties: {},
@@ -46,10 +60,12 @@ describe('MCP adapter — adaptMcpTool', () => {
     const handler = adaptMcpTool(
       fakeClient(req => {
         captured = req;
-        return { content: [
-          { type: 'text', text: 'line1' },
-          { type: 'text', text: 'line2' },
-        ] };
+        return {
+          content: [
+            { type: 'text', text: 'line1' },
+            { type: 'text', text: 'line2' },
+          ],
+        };
       }),
       'srv',
       { name: 'echo' },

@@ -158,11 +158,7 @@ describe('event-handler — tool lifecycle', () => {
   it('tool-call-start parks the call as pending', () => {
     const { deps, calls } = fakeDeps();
     const { ss } = makeSs();
-    handleAgentEvent(
-      { type: 'tool-call-start', toolName: 'Bash', args: baseArgs },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'tool-call-start', toolName: 'Bash', args: baseArgs }, deps, ss);
     assert.strictEqual(calls.setRunningTool.mock.calls[0]!.arguments[0], 'Bash');
     assert.deepStrictEqual(calls.setPendingToolCall.mock.calls[0]!.arguments[0], {
       toolName: 'Bash',
@@ -186,9 +182,7 @@ describe('event-handler — tool lifecycle', () => {
     );
     // Pending cleared + tool-call entry committed, but no tool-result entry.
     assert.strictEqual(calls.setPendingToolCall.mock.calls[0]!.arguments[0], null);
-    const kinds = calls.addItem.mock.calls.map(
-      c => (c.arguments[0] as { kind: string }).kind,
-    );
+    const kinds = calls.addItem.mock.calls.map(c => (c.arguments[0] as { kind: string }).kind);
     assert.deepStrictEqual(kinds, ['tool-call']);
     assert.strictEqual(successes.length, 1);
     assert.strictEqual(skills.recordToolUsed.mock.calls[0]!.arguments[0], 'Read');
@@ -287,11 +281,7 @@ describe('event-handler — tool lifecycle', () => {
   it('tool-call-denied commits a denied tool-call entry without a result entry', () => {
     const { deps, calls } = fakeDeps();
     const { ss } = makeSs();
-    handleAgentEvent(
-      { type: 'tool-call-denied', toolName: 'Bash', args: baseArgs },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'tool-call-denied', toolName: 'Bash', args: baseArgs }, deps, ss);
     const kinds = calls.addItem.mock.calls.map(c => (c.arguments[0] as { kind: string }).kind);
     assert.deepStrictEqual(kinds, ['tool-call']);
     const item = calls.addItem.mock.calls[0]!.arguments[0] as { status: string };
@@ -517,10 +507,7 @@ describe('event-handler — planned tool calls', () => {
     assert.strictEqual(calls.setPlannedCalls.mock.callCount(), 0);
     assert.strictEqual(calls.addItem.mock.callCount(), 0);
     assert.strictEqual(calls.addNotice.mock.callCount(), 1);
-    assert.match(
-      calls.addNotice.mock.calls[0]!.arguments[1] as string,
-      /skipped duplicate Bash/,
-    );
+    assert.match(calls.addNotice.mock.calls[0]!.arguments[1] as string, /skipped duplicate Bash/);
   });
 });
 
@@ -567,21 +554,13 @@ describe('event-handler — misc notice handlers', () => {
     const { ss } = makeSs();
     handleAgentEvent({ type: 'output-cap-reached', completionTokens: 4096 }, deps, ss);
     handleAgentEvent({ type: 'empty-turn-warning', completionTokens: 200 }, deps, ss);
-    handleAgentEvent(
-      { type: 'repetition-detected', line: 'looped line', streak: 12 },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'repetition-detected', line: 'looped line', streak: 12 }, deps, ss);
     handleAgentEvent(
       { type: 'read-cache-hit', path: '/tmp/foo.txt', afterCompaction: false },
       deps,
       ss,
     );
-    handleAgentEvent(
-      { type: 'bash-dedup-nudge', recentCommands: ['ls', 'ls -la'] },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'bash-dedup-nudge', recentCommands: ['ls', 'ls -la'] }, deps, ss);
     const texts = calls.addNotice.mock.calls.map(c => c.arguments[1] as string);
     assert.match(texts[0]!, /Output cap reached \(4096/);
     assert.match(texts[1]!, /200 tokens of internal reasoning/);
@@ -621,11 +600,7 @@ describe('event-handler — misc notice handlers', () => {
       deps,
       ss,
     );
-    handleAgentEvent(
-      { type: 'hook-fired', event: 'Stop', hookCommand: 'inline-cmd' },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'hook-fired', event: 'Stop', hookCommand: 'inline-cmd' }, deps, ss);
     const m1 = calls.addNotice.mock.calls[0]!.arguments[1] as string;
     const m2 = calls.addNotice.mock.calls[1]!.arguments[1] as string;
     assert.match(m1, /\(notify\.sh\) — sent/);
@@ -643,10 +618,7 @@ describe('event-handler — misc notice handlers', () => {
     );
     assert.deepStrictEqual(calls.setCompacting.mock.calls[0]!.arguments[0], { aggressive: true });
     assert.strictEqual(calls.setCompacting.mock.calls[1]!.arguments[0], null);
-    assert.match(
-      calls.addNotice.mock.calls[0]!.arguments[1] as string,
-      /aggressively compacting/,
-    );
+    assert.match(calls.addNotice.mock.calls[0]!.arguments[1] as string, /aggressively compacting/);
     assert.match(
       calls.addNotice.mock.calls[1]!.arguments[1] as string,
       /Compacted 50 messages → 12.*aggressive pass/,
@@ -714,11 +686,7 @@ describe('event-handler — turn-complete', () => {
       provider: { name: 'anthropic' },
     });
     const { ss, flags } = makeSs();
-    handleAgentEvent(
-      { type: 'turn-complete', stopReason: 'token-limit', turnsUsed: 1 },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'turn-complete', stopReason: 'token-limit', turnsUsed: 1 }, deps, ss);
     assert.strictEqual(flags.tokenLimit, 1);
     assert.strictEqual(calls.setLastUsage.mock.callCount(), 0);
   });
@@ -726,11 +694,7 @@ describe('event-handler — turn-complete', () => {
   it('skips key recording when there is no active key, even on completed', () => {
     const { deps, calls } = fakeDeps({ provider: { name: 'anthropic' } });
     const { ss } = makeSs();
-    handleAgentEvent(
-      { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 }, deps, ss);
     // Activity always cleared at turn boundary.
     assert.strictEqual(calls.setActivity.mock.calls[0]!.arguments[0], null);
   });

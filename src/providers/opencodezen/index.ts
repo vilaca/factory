@@ -24,10 +24,7 @@ import {
   supportsToolsByName,
   unsupportedOpenCodeZenRouteError,
 } from './models.js';
-import {
-  chatAnthropicNoStream,
-  chatAnthropicStream,
-} from './anthropic.js';
+import { chatAnthropicNoStream, chatAnthropicStream } from './anthropic.js';
 import { chatGoogleNoStream, chatGoogleStream } from './google.js';
 
 const DEFAULT_BASE_URL = 'https://opencode.ai/zen/v1';
@@ -107,7 +104,14 @@ export class OpenCodeZenProvider implements Provider {
         yield* chatAnthropicStream(this.getAnthropicClient(), model, messages, tools, options);
         return;
       case 'google-native':
-        yield* chatGoogleStream(this.baseUrl, this.requireApiKey(), model, messages, tools, options);
+        yield* chatGoogleStream(
+          this.baseUrl,
+          this.requireApiKey(),
+          model,
+          messages,
+          tools,
+          options,
+        );
         return;
       case 'openai-responses':
         throw unsupportedOpenCodeZenRouteError(model);

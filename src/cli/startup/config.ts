@@ -26,10 +26,7 @@ export function canResumeLastSession(
   return models.includes(last.model);
 }
 
-type RotationCliFlags = Pick<
-  CliArgs,
-  'rotate' | 'noRotate' | 'noRotateKeys' | 'noRotateModels'
->;
+type RotationCliFlags = Pick<CliArgs, 'rotate' | 'noRotate' | 'noRotateKeys' | 'noRotateModels'>;
 
 /**
  * Apply CLI rotation overrides to the existing rotation config and return

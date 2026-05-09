@@ -116,9 +116,7 @@ describe('executeToolCall — Bash policy', () => {
   it('hard-denies a forbidden command without prompting', async () => {
     const tool = fakeTool({ name: 'Bash' });
     const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
-    const { events } = await collect(
-      executeToolCall(tc('Bash', { command: 'rm -rf /' }), ctx),
-    );
+    const { events } = await collect(executeToolCall(tc('Bash', { command: 'rm -rf /' }), ctx));
     assert.strictEqual(tool.calls.length, 0);
     assert.ok(!events.some(e => e.type === 'permission-request'));
     assert.ok(events.some(e => e.type === 'tool-call-denied'));
@@ -177,7 +175,9 @@ describe('executeToolCall — WebFetch domain', () => {
       execute: () => ({ success: false, output: 'tool ran (should not happen)' }),
     });
     const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
-    const { events } = await collect(executeToolCall(tc('WebFetch', { url: '::not-a-url::' }), ctx));
+    const { events } = await collect(
+      executeToolCall(tc('WebFetch', { url: '::not-a-url::' }), ctx),
+    );
     assert.ok(!events.some(e => e.type === 'permission-request'));
     assert.ok(events.some(e => e.type === 'tool-call-denied'));
     assert.strictEqual(tool.calls.length, 0);

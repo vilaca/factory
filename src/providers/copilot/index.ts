@@ -141,7 +141,7 @@ function extractModelEntries(data: unknown): CopilotModelEntry[] {
   const rawItems: unknown[] = Array.isArray(data)
     ? data
     : data && typeof data === 'object' && Array.isArray((data as { data?: unknown[] }).data)
-      ? ((data as { data: unknown[] }).data)
+      ? (data as { data: unknown[] }).data
       : [];
 
   const models: string[] = rawItems

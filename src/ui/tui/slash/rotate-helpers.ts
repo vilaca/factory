@@ -86,11 +86,7 @@ export function readChain(agent: AgentLoopApi, target: ChainTarget): RotationEnt
   return refs.rotation.overrides[target.key] ?? [];
 }
 
-export function writeChain(
-  agent: AgentLoopApi,
-  target: ChainTarget,
-  next: RotationEntry[],
-): void {
+export function writeChain(agent: AgentLoopApi, target: ChainTarget, next: RotationEntry[]): void {
   const refs = agent.refs.current!;
   if (target.kind === 'default') {
     refs.rotation.default = next;

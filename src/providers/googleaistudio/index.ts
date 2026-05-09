@@ -202,8 +202,8 @@ export class GoogleAiStudioProvider implements Provider {
       const pageModels: unknown[] = Array.isArray(data?.models) ? data.models : [];
       // Note: we intentionally keep only generateContent-capable text/chat
       // models and drop embeddings, image/video, speech/music, and live APIs.
-      const supportedModels = pageModels.filter(
-        (item): item is GoogleAiStudioModelItem => isSupportedGoogleAiStudioModel(item),
+      const supportedModels = pageModels.filter((item): item is GoogleAiStudioModelItem =>
+        isSupportedGoogleAiStudioModel(item),
       );
       appendProviderLog({
         provider: 'googleaistudio',

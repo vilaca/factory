@@ -10,7 +10,10 @@ import { getBuildInfo } from '../utils/build-info.js';
  *  a narrow surface covering exactly what we touch. */
 interface MarkedTerminalExt {
   renderer: {
-    text: (this: { parser: { parseInline: (tokens: unknown[]) => string } }, token: unknown) => string;
+    text: (
+      this: { parser: { parseInline: (tokens: unknown[]) => string } },
+      token: unknown,
+    ) => string;
     code: (token: unknown) => string;
   };
 }

@@ -179,14 +179,13 @@ describe('Delegate tool — execute() post-processing', () => {
     parentModel?: string;
     runner: RunAgentFn;
     sessionLogger?: { logWarning: (k: string, v: string) => void };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }): ReturnType<typeof createDelegateTool> {
     return createDelegateTool({
       provider: stubProvider(),
       parentModel: opts.parentModel ?? 'parent-model',
       weakModel: opts.weakModel,
       runner: opts.runner,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       sessionLogger: opts.sessionLogger as any,
     });
   }
@@ -227,7 +226,6 @@ describe('Delegate tool — execute() post-processing', () => {
   it('catches runner errors and returns them as a Delegate failure', async () => {
     const runner: RunAgentFn = async function* () {
       throw new Error('provider exploded');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const tool = makeTool({ runner });
     const r = await tool.execute({ task: 'go investigate' });
@@ -239,13 +237,12 @@ describe('Delegate tool — execute() post-processing', () => {
     let observedModel = '';
     const runner: RunAgentFn = async function* (
       _input: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       opts: any,
     ): AsyncGenerator<AgentEvent> {
       observedModel = opts.model;
       yield { type: 'text-done', fullContent: 'ok' };
       yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const tool = makeTool({ runner, weakModel: 'weak-1', parentModel: 'parent-1' });
     await tool.execute({ task: 't' });
@@ -256,13 +253,12 @@ describe('Delegate tool — execute() post-processing', () => {
     let observedModel = '';
     const runner: RunAgentFn = async function* (
       _input: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       opts: any,
     ): AsyncGenerator<AgentEvent> {
       observedModel = opts.model;
       yield { type: 'text-done', fullContent: 'ok' };
       yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const tool = makeTool({ runner, parentModel: 'parent-only' });
     await tool.execute({ task: 't' });
@@ -273,13 +269,12 @@ describe('Delegate tool — execute() post-processing', () => {
     let observedModel = '';
     const runner: RunAgentFn = async function* (
       _input: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       opts: any,
     ): AsyncGenerator<AgentEvent> {
       observedModel = opts.model;
       yield { type: 'text-done', fullContent: 'ok' };
       yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const tool = makeTool({ runner, weakModel: 'weak-1', parentModel: 'parent-1' });
     await tool.execute({ task: 't', model: 'explicit-2' });
@@ -290,13 +285,12 @@ describe('Delegate tool — execute() post-processing', () => {
     let observedModel = '';
     const runner: RunAgentFn = async function* (
       _input: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       opts: any,
     ): AsyncGenerator<AgentEvent> {
       observedModel = opts.model;
       yield { type: 'text-done', fullContent: 'ok' };
       yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const tool = makeTool({ runner, weakModel: 'weak-1' });
     await tool.execute({ task: 't', model: '   ' });

@@ -16,7 +16,11 @@ describe('tokens', () => {
     const defs: ToolDefinition[] = [
       {
         type: 'function',
-        function: { name: 'Foo', description: 'x'.repeat(100), parameters: { type: 'object', properties: {} } },
+        function: {
+          name: 'Foo',
+          description: 'x'.repeat(100),
+          parameters: { type: 'object', properties: {} },
+        },
       },
     ];
     const t = estimateToolDefinitionsTokens(defs);

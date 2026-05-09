@@ -82,10 +82,14 @@ function splitAnthropicMessages(messages: ChatMessage[]): {
   return { system, msgs };
 }
 
-function buildToolsParam(
-  tools: ToolDefinition[] | undefined,
-):
-  | { tools: Array<{ name: string; description: string; input_schema: Anthropic.Messages.Tool.InputSchema }> }
+function buildToolsParam(tools: ToolDefinition[] | undefined):
+  | {
+      tools: Array<{
+        name: string;
+        description: string;
+        input_schema: Anthropic.Messages.Tool.InputSchema;
+      }>;
+    }
   | Record<string, never> {
   if (!tools || tools.length === 0) return {};
   return {

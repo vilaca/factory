@@ -1,10 +1,5 @@
 import { useInput } from 'ink';
-import {
-  type KeySummary,
-  type ProviderEntry,
-  type RecentPair,
-  type Stage,
-} from './types.js';
+import { type KeySummary, type ProviderEntry, type RecentPair, type Stage } from './types.js';
 import { indexForShortcut } from './stages.js';
 
 interface UseProviderPickerKeysArgs {

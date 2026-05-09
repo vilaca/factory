@@ -92,10 +92,7 @@ describe('OpenAIProvider', () => {
     // the picker. Preview-tagged ids surface the "preview" warning instead.
     assert.strictEqual(provider.getModelPickerInfo('gpt-3.5-turbo').warning, 'deprecated');
     assert.strictEqual(provider.getModelPickerInfo('gpt-4-turbo').warning, 'deprecated');
-    assert.strictEqual(
-      provider.getModelPickerInfo('o1-preview').warning,
-      'preview',
-    );
+    assert.strictEqual(provider.getModelPickerInfo('o1-preview').warning, 'preview');
   });
 
   it('reports modelTier and capability flags from getCapabilities', () => {

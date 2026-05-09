@@ -230,7 +230,8 @@ function estimateModelTier(model: string): ModelTier {
 
 function estimateContextWindow(model: string): number {
   if (model.startsWith('gpt-5') || model.startsWith('gpt-4.1')) return 1_047_576;
-  if (model.startsWith('o4') || model.startsWith('o3') || model.startsWith('o1-pro')) return 200_000;
+  if (model.startsWith('o4') || model.startsWith('o3') || model.startsWith('o1-pro'))
+    return 200_000;
   if (model.startsWith('o1')) return 128_000;
   if (model.startsWith('gpt-4o')) return 128_000;
   if (model.startsWith('gpt-4-turbo') || model.startsWith('gpt-4-1106')) return 128_000;

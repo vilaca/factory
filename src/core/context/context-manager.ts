@@ -211,8 +211,7 @@ export class ContextManager {
       // No headroom (tiny contextWindow or pathological caps): skip LLM — same
       // as an oversized slice would, instead of stuffing the transcript into a
       // request that cannot reserve framing + output tokens.
-      const skipLlmCompaction =
-        summarizeBudget <= 0 || summarizeTokens > summarizeBudget;
+      const skipLlmCompaction = summarizeBudget <= 0 || summarizeTokens > summarizeBudget;
       if (skipLlmCompaction) {
         summary = this.buildMechanicalSummary(toSummarize);
       } else {

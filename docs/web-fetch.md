@@ -6,13 +6,13 @@
 
 Every fetch is capped — there is no flag to lift these limits.
 
-| Limit | Value |
-| ----- | ----- |
+| Limit           | Value                                                                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Body size (raw) | 1 MiB. The fetcher streams chunks and aborts when the cap is exceeded; if the server advertises a `Content-Length` more than 8× the cap, the request is refused before any body is read. |
-| Output to model | 16 KiB. Truncation note appended when hit. |
-| Total timeout | 15 s (connect + body). Enforced via `AbortSignal`. |
-| Redirects | 5 hops max, manual follow. The final URL is surfaced in the tool output. |
-| Protocols | `http:` and `https:` only. |
+| Output to model | 16 KiB. Truncation note appended when hit.                                                                                                                                               |
+| Total timeout   | 15 s (connect + body). Enforced via `AbortSignal`.                                                                                                                                       |
+| Redirects       | 5 hops max, manual follow. The final URL is surfaced in the tool output.                                                                                                                 |
+| Protocols       | `http:` and `https:` only.                                                                                                                                                               |
 
 The User-Agent is `factory/<version> (+https://github.com/vilaca/factory)`.
 
@@ -46,7 +46,7 @@ Hostname matching is case-insensitive and **exact** — no wildcard support yet,
 In headless / non-TTY runs there's no UI to answer the per-domain prompt, so an unwhitelisted hostname falls through to the standard permission flow and the run exits with code 3 (permission denied) unless one of the following is true:
 
 - The hostname is in `agent.web.allowlist`, **or**
-- `WebFetch` is in `permissions.allowAll` (allows *every* hostname — use carefully).
+- `WebFetch` is in `permissions.allowAll` (allows _every_ hostname — use carefully).
 
 For a CI job that needs WebFetch against a known set of hosts, prefer `agent.web.allowlist` over `permissions.allowAll`: the allowlist keeps the cap tight, where `allowAll` lets the model fetch anything.
 

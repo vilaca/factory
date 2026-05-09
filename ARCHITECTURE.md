@@ -19,9 +19,11 @@ The entry in `src/index.ts` parses CLI flags, loads config, runs auth, picks a p
 ## Module map
 
 ### `src/index.ts`
+
 Top-level `main()`. Parses argv, applies `--debug`, branches on `--version` / `--help`, loads config, applies rotation overrides, runs auth, wires hooks, registers tools, instantiates the `McpManager` (`src/mcp/client.ts`), prints the welcome banner, and dispatches to TUI or headless mode based on `isInteractiveTty`. Also installs `unhandledRejection` / `uncaughtException` handlers.
 
 ### `src/cli/`
+
 - `args.ts` — argv parser (manual, no commander), `printUsage()`, `printVersion()`.
 - `picker.ts` — line-based interactive provider/model selection.
 - `prompts.ts` — Ink-based variant of the picker prompts.
@@ -35,6 +37,7 @@ Top-level `main()`. Parses argv, applies `--debug`, branches on `--version` / `-
   - `parse-rotation.ts` — parses the `--rotate <p:m,p:m>` chain syntax.
 
 ### `src/core/`
+
 The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse tool calls, dispatch, append results, loop until `done`. Sibling files under `agent/` split the loop into call/parse/run/compact/recover phases.
 
 - `agent/` — the loop and its phases:
@@ -87,6 +90,7 @@ The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse
   - `bash-allowlist.ts` — restricted Bash policy for sub-agents.
 
 ### `src/providers/`
+
 All providers implement the `Provider` interface. The shared `openai/` folder is an internal adapter (no registry entry of its own) that owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction; most providers delegate to it via `buildChatBody` / `sendOpenAiChat` / `streamOpenAiChat`.
 
 Three flavors:
@@ -96,11 +100,13 @@ Three flavors:
 3. **Truly native** — `anthropic.ts` (uses `@anthropic-ai/sdk`), `ollama.ts` (uses the `ollama` package), and `cohere.ts` (hand-rolled) parse their own response shapes and don't touch `openai/`.
 
 Cross-cutting files:
+
 - `types.ts` — the `Provider` interface every adapter implements.
 - `registry.ts` — maps a provider name to a constructor (no `openai` entry — the adapter is internal).
 - `descriptors.ts` — per-provider metadata (display label, aliases, env vars, default host).
 
 ### `src/tools/`
+
 Built-in tools plus the registry that exposes them. Each tool implements `ToolHandler` with a `definition` (LLM-facing JSON schema) and an `execute` that returns a `ToolResult`.
 
 - `read.ts` — file read with byte-range and line-range support.
@@ -114,9 +120,11 @@ Built-in tools plus the registry that exposes them. Each tool implements `ToolHa
 - `index.ts` — exports the shared `defaultRegistry` instance.
 - `types.ts` — `ToolHandler`, `ToolDefinition`, `ToolResult` shapes.
 - `web/` — HTTP fetch + HTML rendering pipeline backing the WebFetch tool. The pipeline is:
+
   ```
   fetch.ts → html-tokenize.ts → html-render.ts → html-to-markdown.ts
   ```
+
   - `index.ts` — the `WebFetch` tool handler.
   - `fetch.ts` — HTTP client with content-type sniffing.
   - `html-tokenize.ts` — lightweight HTML tokenizer.
@@ -126,15 +134,18 @@ Built-in tools plus the registry that exposes them. Each tool implements `ToolHa
 Tool execution is gated by `src/security/permissions.ts` (allow-once / allow-always / deny / domain whitelist) and the security policies in `src/security/` (path jail, env scrubbing, bash rule matching).
 
 ### `src/security/`
+
 - `permissions.ts` — per-tool / per-domain interactive approval state machine.
 - `paths.ts` — symlink-aware path jail with built-in deny list (`.ssh`, `.aws`, `.gnupg`, `/etc/shadow`, etc.) and user-configurable rules.
 - `bash-rules.ts` — built-in forbidden patterns (`rm -rf /`, fork bomb, `curl|sh`, `dd to /dev/*`) plus user globs. Built-ins cannot be overridden.
 - `env.ts` — deny-by-default env scrubbing with a small safe-vars whitelist.
 
 ### `src/ui/`
+
 Two render targets: the React + Ink TUI under `tui/`, and the non-TTY `headless.ts`. Both paths call into the same `core/agent/run-agent.ts` loop.
 
 `tui/`:
+
 - `index.tsx` — `renderApp()` entry.
 - `App.tsx` — tab host.
 - `Session.tsx` — one tab's REPL.
@@ -155,10 +166,12 @@ Two render targets: the React + Ink TUI under `tui/`, and the non-TTY `headless.
 - `tabs/` — tab registry/context (`tabs-registry.ts`, `TabsContext.tsx`, `use-tabs.ts`).
 
 Top-level files:
+
 - `headless.ts` — non-TTY entry point used for scripted runs and CI. Reads from stdin, writes to stdout, no Ink.
 - `renderer.ts` — markdown-to-terminal pipeline (marked + marked-terminal, with a patch for inline-token rendering and a guard against unsupported highlight.js languages).
 
 ### `src/mcp/`
+
 Model Context Protocol integration.
 
 - `client.ts` — connects to external MCP servers as child processes.
@@ -166,6 +179,7 @@ Model Context Protocol integration.
 - `types.ts` — shared MCP types.
 
 ### `src/utils/`
+
 Small helpers.
 
 - `errors.ts` — extract `error.message`.
@@ -212,19 +226,19 @@ flowchart TB
   F --> G[actual I/O]
 ```
 
-`src/security/permissions.ts` decides per-tool / per-domain whether a call needs interactive approval. `src/security/` checks the *content* of the call: paths must pass the jail, bash commands must not match a forbidden pattern, env vars passed to spawned shells are scrubbed against the deny list. Both layers must approve before execution.
+`src/security/permissions.ts` decides per-tool / per-domain whether a call needs interactive approval. `src/security/` checks the _content_ of the call: paths must pass the jail, bash commands must not match a forbidden pattern, env vars passed to spawned shells are scrubbed against the deny list. Both layers must approve before execution.
 
 Built-in security rules cannot be overridden by user config — only extended.
 
 ## Where to start when adding...
 
-| Change | Touch |
-|--------|-------|
-| New CLI flag | `src/cli/args.ts` (parser + usage) → `src/index.ts` (apply) |
-| New provider | `src/providers/<name>.ts` (or folder) + `descriptors.ts` + `registry.ts`. For OpenAI-compatible APIs, delegate transport to `./openai/index.js` (`buildChatBody`, `sendOpenAiChat`, `streamOpenAiChat`) — see `vercel.ts` or `groq.ts` as a template. (See [CONTRIBUTING.md](CONTRIBUTING.md).) |
-| New tool | `src/tools/<name>.ts` + `src/tools/registry.ts` (register in `ToolRegistry`) |
-| New slash command | `src/ui/tui/slash/<name>.ts` + `src/ui/tui/slash/dispatch.ts` (dispatcher) |
-| New session-log event | add a method on the `SessionLogger` interface in `src/core/session/session-log.ts` (alongside `logModelChange`, `logToolCall`, etc.) + call it from where the event fires |
-| New security rule | `src/security/<area>.ts` — built-in rules are an export list |
-| New hook event | `src/core/hooks/discovery.ts` (event enum) + caller (where the hook fires) |
-| New skill matcher | `src/core/skills/matcher.ts` |
+| Change                | Touch                                                                                                                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New CLI flag          | `src/cli/args.ts` (parser + usage) → `src/index.ts` (apply)                                                                                                                                                                                                                                     |
+| New provider          | `src/providers/<name>.ts` (or folder) + `descriptors.ts` + `registry.ts`. For OpenAI-compatible APIs, delegate transport to `./openai/index.js` (`buildChatBody`, `sendOpenAiChat`, `streamOpenAiChat`) — see `vercel.ts` or `groq.ts` as a template. (See [CONTRIBUTING.md](CONTRIBUTING.md).) |
+| New tool              | `src/tools/<name>.ts` + `src/tools/registry.ts` (register in `ToolRegistry`)                                                                                                                                                                                                                    |
+| New slash command     | `src/ui/tui/slash/<name>.ts` + `src/ui/tui/slash/dispatch.ts` (dispatcher)                                                                                                                                                                                                                      |
+| New session-log event | add a method on the `SessionLogger` interface in `src/core/session/session-log.ts` (alongside `logModelChange`, `logToolCall`, etc.) + call it from where the event fires                                                                                                                       |
+| New security rule     | `src/security/<area>.ts` — built-in rules are an export list                                                                                                                                                                                                                                    |
+| New hook event        | `src/core/hooks/discovery.ts` (event enum) + caller (where the hook fires)                                                                                                                                                                                                                      |
+| New skill matcher     | `src/core/skills/matcher.ts`                                                                                                                                                                                                                                                                    |

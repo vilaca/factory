@@ -1,7 +1,10 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import { handleAgentEvent } from '../../../../../src/ui/tui/agent-loop/event-handler.js';
-import type { AgentLoopDeps, RunRefs } from '../../../../../src/ui/tui/agent-loop/agent-loop-types.js';
+import type {
+  AgentLoopDeps,
+  RunRefs,
+} from '../../../../../src/ui/tui/agent-loop/agent-loop-types.js';
 
 // The event handler is a thin dispatch table; we exercise just the activity-
 // label branches (provider-retry, key-rotation, tuple-rotation, text-chunk,
@@ -105,7 +108,10 @@ describe('event-handler — activity surface', () => {
       ss,
     );
     assert.strictEqual(calls.setActivity.mock.callCount(), 1);
-    assert.match(calls.setActivity.mock.calls[0]!.arguments[0] as string, /rotating key.*rate-limit/);
+    assert.match(
+      calls.setActivity.mock.calls[0]!.arguments[0] as string,
+      /rotating key.*rate-limit/,
+    );
   });
 
   it('tuple-rotation sets a "rotating: <from> → <to>" activity', () => {
@@ -129,11 +135,7 @@ describe('event-handler — activity surface', () => {
 
   it('turn-complete clears any leftover activity even on error', () => {
     const { deps, calls } = fakeDeps();
-    handleAgentEvent(
-      { type: 'turn-complete', stopReason: 'error', turnsUsed: 1 },
-      deps,
-      ss,
-    );
+    handleAgentEvent({ type: 'turn-complete', stopReason: 'error', turnsUsed: 1 }, deps, ss);
     assert.strictEqual(calls.setActivity.mock.callCount(), 1);
     assert.strictEqual(calls.setActivity.mock.calls[0]!.arguments[0], null);
   });

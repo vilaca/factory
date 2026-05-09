@@ -5,7 +5,13 @@
 // preserved here. Translation happens at the boundary so the
 // orchestrator can stay route-agnostic.
 
-import type { ChatChunk, ChatMessage, ChatOptions, ToolCallMessage, ToolDefinition } from '../types.js';
+import type {
+  ChatChunk,
+  ChatMessage,
+  ChatOptions,
+  ToolCallMessage,
+  ToolDefinition,
+} from '../types.js';
 import { parseToolArgs } from './models.js';
 
 const PROVIDER_NAME = 'OpenCode Zen';

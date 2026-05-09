@@ -9,11 +9,26 @@ import {
 describe('classifyForRetry', () => {
   it('classifies 408 / 429 / 5xx as transient', () => {
     assert.deepStrictEqual(classifyForRetry({ status: 408 }), { retry: true, reason: 'timeout' });
-    assert.deepStrictEqual(classifyForRetry({ status: 429 }), { retry: true, reason: 'rate-limit' });
-    assert.deepStrictEqual(classifyForRetry({ status: 500 }), { retry: true, reason: 'server-error' });
-    assert.deepStrictEqual(classifyForRetry({ status: 502 }), { retry: true, reason: 'server-error' });
-    assert.deepStrictEqual(classifyForRetry({ status: 503 }), { retry: true, reason: 'server-error' });
-    assert.deepStrictEqual(classifyForRetry({ status: 504 }), { retry: true, reason: 'server-error' });
+    assert.deepStrictEqual(classifyForRetry({ status: 429 }), {
+      retry: true,
+      reason: 'rate-limit',
+    });
+    assert.deepStrictEqual(classifyForRetry({ status: 500 }), {
+      retry: true,
+      reason: 'server-error',
+    });
+    assert.deepStrictEqual(classifyForRetry({ status: 502 }), {
+      retry: true,
+      reason: 'server-error',
+    });
+    assert.deepStrictEqual(classifyForRetry({ status: 503 }), {
+      retry: true,
+      reason: 'server-error',
+    });
+    assert.deepStrictEqual(classifyForRetry({ status: 504 }), {
+      retry: true,
+      reason: 'server-error',
+    });
   });
 
   it('rejects 4xx auth errors and shape errors as non-retryable', () => {
@@ -44,11 +59,7 @@ describe('classifyForRetry', () => {
 
   it('does NOT retry mid-stream errors (those go through isStreamish in call-model)', () => {
     for (const msg of ['socket hang up', 'fetch failed', 'connection dropped']) {
-      assert.strictEqual(
-        classifyForRetry(new Error(msg)).retry,
-        false,
-        `should not retry: ${msg}`,
-      );
+      assert.strictEqual(classifyForRetry(new Error(msg)).retry, false, `should not retry: ${msg}`);
     }
   });
 

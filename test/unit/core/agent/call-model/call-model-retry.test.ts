@@ -80,10 +80,7 @@ describe('callModel — retry policy', () => {
       ['server-error', 'server-error'],
     );
     // Final reply made it through.
-    assert.deepStrictEqual(
-      (result as { fullContent: string }).fullContent,
-      'finally',
-    );
+    assert.deepStrictEqual((result as { fullContent: string }).fullContent, 'finally');
     // Retries respect their declared backoff. The default policy (base 250,
     // cap 4000) keeps two attempts under 8s in the worst case; if elapsed
     // were >> that, retries weren't actually sleeping.
@@ -100,10 +97,7 @@ describe('callModel — retry policy', () => {
     const { events, result } = await collect(callModel(provider, 'm', messages, tools, undefined));
     const retries = events.filter(e => e.type === 'provider-retry');
     assert.strictEqual(retries.length, 1);
-    assert.strictEqual(
-      (retries[0] as { reason: string }).reason,
-      'rate-limit',
-    );
+    assert.strictEqual((retries[0] as { reason: string }).reason, 'rate-limit');
     assert.strictEqual((result as { fullContent: string }).fullContent, 'after-throttle');
   });
 
@@ -157,9 +151,6 @@ describe('callModel — retry policy', () => {
     // once. That's fine — the contract under test is "no provider-retry
     // events fire after a stream chunk has landed".
     const { events } = await collect(callModel(provider, 'm', messages, tools, undefined));
-    assert.strictEqual(
-      events.filter(e => e.type === 'provider-retry').length,
-      0,
-    );
+    assert.strictEqual(events.filter(e => e.type === 'provider-retry').length, 0);
   });
 });

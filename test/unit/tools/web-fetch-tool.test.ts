@@ -83,11 +83,11 @@ describe('WebFetch tool', () => {
     // body=null Response. We refuse rather than fall back to res.text(),
     // which would buffer uncapped.
     const fetchImpl = (async () =>
-      new Response(null, { status: 200, headers: { 'content-type': 'text/plain' } })) as typeof fetch;
-    await assert.rejects(
-      fetchUrl('https://example.com/empty', { fetchImpl }),
-      /no streaming body/,
-    );
+      new Response(null, {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      })) as typeof fetch;
+    await assert.rejects(fetchUrl('https://example.com/empty', { fetchImpl }), /no streaming body/);
   });
 
   it('truncates the body at maxBytes and reports truncated=true', async () => {
