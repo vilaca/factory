@@ -1,26 +1,20 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp } from 'ink';
 import { TextInput } from './components/text-input.js';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config/types.js';
 import { ConversationDisplay } from './components/conversation-display.js';
 import { Separator } from './components/separator.js';
 import { StatusBar } from './components/status-bar.js';
-import { PermissionPanel, parsePermissionInput } from './components/permission-panel.js';
-import { PlanApprovalPanel, parsePlanInput } from './components/plan-approval-panel.js';
+import { PermissionPanel } from './components/permission-panel.js';
+import { PlanApprovalPanel } from './components/plan-approval-panel.js';
 import {
   ProviderPicker,
   type ProviderEntry,
   type RecentPair,
 } from './components/provider-picker.js';
-import {
-  RotationPromptPanel,
-  parseRotationPromptInput,
-} from './components/rotation-prompt-panel.js';
-import type { RotationEntry } from '../../core/config/types.js';
-import { updateGlobalConfig } from '../../core/config/index.js';
+import { RotationPromptPanel } from './components/rotation-prompt-panel.js';
 import { useAgentLoop, type AgentLoopApi } from './agent-loop/use-agent-loop.js';
-import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
 import { listProviderNames, createProvider } from '../../providers/registry.js';
 import { getRecentSessions } from '../../core/session-log.js';
@@ -32,6 +26,8 @@ import {
   listKeys,
 } from '../../core/credentials.js';
 import { descriptorByAlias, DESCRIPTORS, DESCRIPTOR_LIST } from '../../providers/descriptors.js';
+import { useRotationFallback } from './hooks/use-rotation-fallback.js';
+import { useSessionInput } from './hooks/use-session-input.js';
 
 // Providers whose auth flow is `simple-prompt` are the ones the picker
 // drives multi-key selection for. Others (Copilot device flow, Google AI
@@ -66,7 +62,7 @@ interface SessionProps {
   tabLabel?: string;
 }
 
-// eslint-disable-next-line max-lines-per-function, complexity -- TODO(complexity): extract subviews (input bar, transcript, modals) into child components.
+// eslint-disable-next-line complexity -- TODO(complexity): extract subviews (input bar, transcript, modals) into child components.
 export function Session(props: SessionProps): React.ReactElement {
   const isActive = props.isActive ?? true;
   const { exit } = useApp();
@@ -75,27 +71,13 @@ export function Session(props: SessionProps): React.ReactElement {
   const [pickerRecents, setPickerRecents] = useState<RecentPair[]>([]);
   const [pickerRecentsLoading, setPickerRecentsLoading] = useState(false);
   const [showFullOutput, setShowFullOutput] = useState(false);
-  // Two rotation-prompt-related pieces of state:
-  // 1. `rotationPrompt` — the y/n panel above the input. Resolves the host's
-  //    promptForFallback promise when the user answers.
-  // 2. `fallbackPickerResolver` — set when the picker is open in rotation-
-  //    fallback mode (after the user said yes). The picker's onCommit/
-  //    onCancel route through this resolver instead of agent.setProviderByName.
-  const [rotationPrompt, setRotationPrompt] = useState<{
-    provider: string;
-    model: string;
-    reason: 'rate-limit' | 'auth';
-    resolve: (decision: 'set-up' | 'decline') => void;
-  } | null>(null);
-  const [fallbackPickerResolver, setFallbackPickerResolver] = useState<
-    ((entry: RotationEntry | null) => void) | null
-  >(null);
   // Capture the latest value in a ref so the slash dispatch context's
   // toggle closure stays current without re-creating the dispatch arg
   // every render.
   const showFullOutputRef = useRef(showFullOutput);
   showFullOutputRef.current = showFullOutput;
   const agent = useAgentLoop(props);
+  const { rotationPrompt, fallbackPickerResolver } = useRotationFallback(agent, setPickerOpen);
 
   // Reload recents each time the picker opens so the freshest pairs are
   // offered. Cheap (~16 jsonl head reads) and avoids stale entries when the
@@ -162,72 +144,6 @@ export function Session(props: SessionProps): React.ReactElement {
     tabs.setWaiting(tabId, isWaiting);
   }, [tabs, tabId, isWaiting]);
 
-  // Bridge the rotation runtime → React state. The rotation runtime calls
-  // refs.current.requestFallback when both tiers exhaust; we drive the y/n
-  // panel and (on yes) the picker in fallback mode, then resolve the
-  // promise with the chosen entry (or null on cancel/decline).
-  useEffect(() => {
-    if (!agent.refs.current) return;
-    agent.refs.current.requestFallback = async context => {
-      if (!agent.refs.current) return null;
-      if (agent.refs.current.rotationPromptDeclined) return null;
-
-      // Step 1: y/n panel.
-      const decision = await new Promise<'set-up' | 'decline'>(resolve => {
-        setRotationPrompt({ ...context, resolve });
-      });
-      setRotationPrompt(null);
-      if (decision === 'decline') {
-        if (agent.refs.current) agent.refs.current.rotationPromptDeclined = true;
-        return null;
-      }
-
-      // Step 2: picker in select-rotation-entry mode.
-      const entry = await new Promise<RotationEntry | null>(resolve => {
-        setFallbackPickerResolver(() => (chosen: RotationEntry | null) => {
-          resolve(chosen);
-        });
-        setPickerOpen(true);
-      });
-      setFallbackPickerResolver(null);
-      setPickerOpen(false);
-      if (!entry) return null;
-
-      // Step 3: persist as an override for the active tuple. Use
-      // updateGlobalConfig so the read + mutate + write all happen under the
-      // config mutex — without it, two tabs hitting rate limits at the same
-      // time would each read the same baseline and one's append would clobber
-      // the other.
-      let added = false;
-      try {
-        const tupleKey = `${context.provider}:${context.model}`;
-        await updateGlobalConfig(cfg => {
-          const existing = cfg.agent?.rotation?.overrides?.[tupleKey] ?? [];
-          const dup = existing.some(e => e.provider === entry.provider && e.model === entry.model);
-          if (dup) return {};
-          added = true;
-          const nextOverrides = {
-            ...(cfg.agent?.rotation?.overrides ?? {}),
-            [tupleKey]: [...existing, entry],
-          };
-          return {
-            agent: {
-              ...cfg.agent,
-              rotation: { ...cfg.agent?.rotation, overrides: nextOverrides },
-            },
-          };
-        });
-        if (added && agent.refs.current) {
-          const existingRefs = agent.refs.current.rotation.overrides[tupleKey] ?? [];
-          agent.refs.current.rotation.overrides[tupleKey] = [...existingRefs, entry];
-        }
-      } catch (err) {
-        agent.addNotice('warn', `⚠ couldn't persist fallback: ${(err as Error).message}`);
-      }
-      return entry;
-    };
-  }, [agent]);
-
   const {
     items,
     state,
@@ -253,189 +169,21 @@ export function Session(props: SessionProps): React.ReactElement {
     emojiMode,
     userEmoji,
     refs,
-    addNotice,
   } = agent;
 
-  useInput(
-    (inputChar, key) => {
-      if (key.ctrl && inputChar === 'c') {
-        // While a turn is running, Ctrl+C aborts it without exiting — matches
-        // shell muscle memory ("interrupt this command, stay in the prompt").
-        // When idle, Ctrl+C exits the process.
-        if (state === 'running') {
-          addNotice('warn', '⏸ Ctrl+C — aborting agent run.');
-          agent.abort();
-          return;
-        }
-        agent.abort();
-        exit();
-        return;
-      }
-      if (!pickerOpen && key.ctrl && inputChar === 'k') {
-        if (refs.current) refs.current.rotationPromptDeclined = false;
-        setPickerOpen(true);
-        return;
-      }
-      if (pickerOpen) return;
-      if (key.escape && state === 'running') {
-        addNotice('warn', '⏸ Esc — aborting agent run.');
-        agent.abort();
-        return;
-      }
-      if (key.upArrow) {
-        const next = agent.historyUp(input);
-        if (next !== null) setInput(next);
-        return;
-      }
-      if (key.downArrow) {
-        const next = agent.historyDown();
-        if (next !== null) setInput(next);
-        return;
-      }
-    },
-    { isActive },
-  );
-
-  async function handleSubmit(value: string): Promise<void> {
-    const trimmed = value.trim();
-    setInput('');
-    agent.recordHistory(trimmed);
-    if (!trimmed) return;
-
-    // The rotation prompt panel takes priority over every other input
-    // route — y/n decides whether to keep the user staring at a 429 or
-    // open the picker in fallback mode. Slash commands still pass through
-    // (so the user can /q out without answering the prompt first).
-    if (rotationPrompt) {
-      if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
-        refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
-          agent,
-          exit,
-          tabs: tabs ?? undefined,
-          openPicker: () => {
-            if (refs.current) refs.current.rotationPromptDeclined = false;
-            setPickerOpen(true);
-          },
-          toggleFullOutput: () => {
-            const next = !showFullOutputRef.current;
-            setShowFullOutput(next);
-            return next;
-          },
-        });
-        return;
-      }
-      const decision = parseRotationPromptInput(trimmed);
-      rotationPrompt.resolve(decision);
-      return;
-    }
-
-    if (state === 'running') {
-      // Slash commands always fire immediately — they are UI/state ops,
-      // not prompts for the agent. Only plain text gets queued.
-      if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
-        refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
-          agent,
-          exit,
-          tabs: tabs ?? undefined,
-          openPicker: () => {
-            if (refs.current) refs.current.rotationPromptDeclined = false;
-            setPickerOpen(true);
-          },
-          toggleFullOutput: () => {
-            const next = !showFullOutputRef.current;
-            setShowFullOutput(next);
-            return next;
-          },
-        });
-        return;
-      }
-      agent.queueInput(trimmed);
-      return;
-    }
-
-    if (state === 'awaiting-permission') {
-      // Slash commands are UI/state ops — never interpret them as a
-      // permission decision (e.g. /clear shouldn't deny the pending tool).
-      // Dispatch them and leave the permission still pending.
-      if (trimmed.startsWith('/')) {
-        const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
-        refs.current?.sessionLogger?.logCommand(cmd, rest.join(' '));
-        void dispatchSlashCommand(cmd, rest.join(' ').trim(), {
-          agent,
-          exit,
-          tabs: tabs ?? undefined,
-          openPicker: () => {
-            if (refs.current) refs.current.rotationPromptDeclined = false;
-            setPickerOpen(true);
-          },
-          toggleFullOutput: () => {
-            const next = !showFullOutputRef.current;
-            setShowFullOutput(next);
-            return next;
-          },
-        });
-        return;
-      }
-      const decision = parsePermissionInput(trimmed, permissionRequest?.toolName);
-      agent.respondToPermission(decision);
-      return;
-    }
-
-    // Idle — process and drain queue.
-    await processIdleInput(trimmed);
-  }
-
-  async function processIdleInput(trimmed: string): Promise<void> {
-    if (!refs.current) return;
-
-    // Plan-mode approval shortcuts when a plan is queued.
-    if (refs.current.planMode && plannedCalls.length > 0) {
-      const kind = parsePlanInput(trimmed);
-      if (kind === 'approve') {
-        refs.current.sessionLogger?.logCommand('/approve', '');
-        await agent.approvePlan();
-        return;
-      }
-      if (kind === 'cancel') {
-        refs.current.sessionLogger?.logCommand('/cancel', '');
-        agent.cancelPlan();
-        addNotice('info', 'Plan dropped. Still in plan mode.');
-        return;
-      }
-      // 'revise' — non-slash input drops the plan and treats the input as a
-      // follow-up prompt; slash commands fall through to the dispatcher below.
-      if (!trimmed.startsWith('/')) {
-        agent.cancelPlan();
-        addNotice('info', '(revising plan...)');
-      }
-    }
-
-    if (trimmed.startsWith('/')) {
-      const [cmd, ...rest] = trimmed.split(' ') as [string, ...string[]];
-      refs.current.sessionLogger?.logCommand(cmd, rest.join(' '));
-      const handled = await dispatchSlashCommand(cmd, rest.join(' ').trim(), {
-        agent,
-        exit,
-        tabs: tabs ?? undefined,
-        openPicker: () => {
-          if (refs.current) refs.current.rotationPromptDeclined = false;
-          setPickerOpen(true);
-        },
-        toggleFullOutput: () => {
-          const next = !showFullOutputRef.current;
-          setShowFullOutput(next);
-          return next;
-        },
-      });
-      if (handled) return;
-    }
-
-    await agent.submitPrompt(trimmed);
-  }
+  const { handleSubmit } = useSessionInput({
+    isActive,
+    agent,
+    exit,
+    tabs,
+    input,
+    setInput,
+    pickerOpen,
+    setPickerOpen,
+    showFullOutputRef,
+    setShowFullOutput,
+    rotationPrompt,
+  });
 
   // Read capabilities from the live (per-tab) provider, not the launch-time
   // prop, so the StatusBar context-window figure follows /provider switches.
