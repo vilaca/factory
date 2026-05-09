@@ -4,9 +4,11 @@ import {
   applyCliRotationOverrides,
   buildExperimentalConfig,
   canResumeLastSession,
+  decideStartupSource,
+  persistRotationConfig,
 } from '../../../src/cli/startup-config.js';
 import type { StartupProviderName } from '../../../src/providers/descriptors.js';
-import type { RotationEntry } from '../../../src/core/config/types.js';
+import type { Config, RotationEntry } from '../../../src/core/config/types.js';
 
 describe('canResumeLastSession', () => {
   it('returns true when the descriptor resolves and the model is in the probe', () => {
@@ -208,5 +210,148 @@ describe('buildExperimentalConfig', () => {
   it('positive CLI flag wins over a config-file false setting', () => {
     const got = buildExperimentalConfig({ skills: false }, { skills: true });
     assert.strictEqual(got.skills, true);
+  });
+});
+
+describe('decideStartupSource', () => {
+  const probed = new Map<StartupProviderName, string[] | null>([
+    ['anthropic', ['claude-sonnet-4-6']],
+    ['groq', ['llama-3.3-70b']],
+  ]);
+
+  it('returns kind=config when config.provider is set, regardless of last session', () => {
+    const got = decideStartupSource(
+      { provider: 'anthropic' },
+      {},
+      { provider: 'groq', model: 'llama-3.3-70b' },
+      probed,
+    );
+    assert.deepStrictEqual(got, { kind: 'config', provider: 'anthropic' });
+  });
+
+  it('returns kind=last-session when fast-path conditions are met', () => {
+    const got = decideStartupSource(
+      {},
+      {},
+      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+      probed,
+    );
+    assert.deepStrictEqual(got, {
+      kind: 'last-session',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+  });
+
+  it('forwards lastSession.keyId when present', () => {
+    const got = decideStartupSource(
+      {},
+      {},
+      { provider: 'anthropic', model: 'claude-sonnet-4-6', keyId: 'abc-123' },
+      probed,
+    );
+    assert.strictEqual(got.kind, 'last-session');
+    if (got.kind === 'last-session') {
+      assert.strictEqual(got.keyId, 'abc-123');
+    }
+  });
+
+  it('falls through to picker when --pick forces it', () => {
+    const got = decideStartupSource(
+      {},
+      { pick: true },
+      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+      probed,
+    );
+    assert.deepStrictEqual(got, { kind: 'picker' });
+  });
+
+  it('falls through to picker when there is no last session', () => {
+    const got = decideStartupSource({}, {}, null, probed);
+    assert.deepStrictEqual(got, { kind: 'picker' });
+  });
+
+  it('falls through to picker when last session model is no longer probable', () => {
+    const got = decideStartupSource(
+      {},
+      {},
+      { provider: 'anthropic', model: 'unknown-model' },
+      probed,
+    );
+    assert.deepStrictEqual(got, { kind: 'picker' });
+  });
+
+  it('falls through to picker when last session provider is unreachable (probed=null)', () => {
+    const got = decideStartupSource(
+      {},
+      {},
+      { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+      new Map([['anthropic', null]]),
+    );
+    assert.deepStrictEqual(got, { kind: 'picker' });
+  });
+});
+
+describe('persistRotationConfig', () => {
+  it('reads global config, then writes back with the rotation block patched', async () => {
+    const global = {
+      provider: 'anthropic',
+      agent: { hooks: { PreToolUse: [{ command: 'echo' }] } },
+    } as unknown as Config;
+    let savedPatch: Partial<Config> | null = null;
+    const loadGlobal = async (): Promise<Config> => global;
+    const saveGlobal = async (patch: Partial<Config>): Promise<unknown> => {
+      savedPatch = patch;
+      return undefined;
+    };
+    const newRotation = {
+      keys: true,
+      models: false,
+      default: [{ provider: 'groq', model: 'llama-3.3-70b' }],
+    };
+    await persistRotationConfig(newRotation, loadGlobal, saveGlobal);
+
+    assert.notStrictEqual(savedPatch, null);
+    const patch = savedPatch as unknown as Partial<Config>;
+    // The rotation block was overwritten...
+    assert.deepStrictEqual(patch.agent?.rotation, newRotation);
+    // ...but the unrelated agent.hooks block was preserved.
+    assert.deepStrictEqual(
+      (patch.agent as Record<string, unknown> | undefined)?.hooks,
+      { PreToolUse: [{ command: 'echo' }] },
+    );
+  });
+
+  it('handles undefined existing agent block (no other agent fields to preserve)', async () => {
+    let savedPatch: Partial<Config> | null = null;
+    const loadGlobal = async (): Promise<Config> => ({}) as unknown as Config;
+    const saveGlobal = async (patch: Partial<Config>): Promise<unknown> => {
+      savedPatch = patch;
+      return undefined;
+    };
+    await persistRotationConfig({ keys: false }, loadGlobal, saveGlobal);
+    assert.deepStrictEqual(savedPatch, { agent: { rotation: { keys: false } } });
+  });
+
+  it('propagates load errors', async () => {
+    const loadGlobal = async (): Promise<Config> => {
+      throw new Error('disk read failed');
+    };
+    const saveGlobal = async (): Promise<unknown> => undefined;
+    await assert.rejects(
+      persistRotationConfig({ keys: true }, loadGlobal, saveGlobal),
+      /disk read failed/,
+    );
+  });
+
+  it('propagates save errors', async () => {
+    const loadGlobal = async (): Promise<Config> => ({}) as unknown as Config;
+    const saveGlobal = async (): Promise<unknown> => {
+      throw new Error('disk write failed');
+    };
+    await assert.rejects(
+      persistRotationConfig({ keys: true }, loadGlobal, saveGlobal),
+      /disk write failed/,
+    );
   });
 });

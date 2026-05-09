@@ -37,8 +37,10 @@ import { parseRotationChain } from './cli/parse-rotation.js';
 import {
   applyCliRotationOverrides,
   buildExperimentalConfig,
-  canResumeLastSession,
+  decideStartupSource,
+  persistRotationConfig,
 } from './cli/startup-config.js';
+import { withBoundedTimeout } from './utils/timeout.js';
 
 function dbg(message: string): void {
   if (process.env.FACTORY_DEBUG === '1') process.stderr.write(`[factory:debug] ${message}\n`);
@@ -95,14 +97,8 @@ async function main(): Promise<void> {
     config.agent = { ...config.agent, rotation: next };
     if (cliArgs.saveRotate) {
       try {
-        // saveGlobalConfig does top-level shallow merge — preserve the rest
-        // of `agent` by reading the existing global agent block and only
-        // overriding the rotation field.
         const { loadGlobalConfig, saveGlobalConfig } = await import('./core/config/index.js');
-        const global = await loadGlobalConfig();
-        await saveGlobalConfig({
-          agent: { ...global.agent, rotation: next },
-        });
+        await persistRotationConfig(next, loadGlobalConfig, saveGlobalConfig);
       } catch (err: unknown) {
         console.log(renderError(`Failed to save rotation config: ${errorMessage(err)}`));
         process.exit(1);
@@ -126,19 +122,16 @@ async function main(): Promise<void> {
   let providerName: string;
   let resumeModel: string | null = null;
   let resumeKeyId: string | undefined;
-
-  if (config.provider) {
-    providerName = config.provider;
-  } else if (!cliArgs.pick && lastSession && canResumeLastSession(lastSession, probedModels)) {
-    // Fast path: jump straight into the prompt with the same provider/model
-    // (and key) the user finished on. Use /pick or Ctrl+K mid-session to
-    // change, or pass --pick to force the startup menu.
+  const source = decideStartupSource(config, cliArgs, lastSession, probedModels);
+  if (source.kind === 'config') {
+    providerName = source.provider;
+  } else if (source.kind === 'last-session') {
     dbg(
-      `resuming last session: ${lastSession.provider}/${lastSession.model}${lastSession.keyId ? ` (key=${lastSession.keyId})` : ''}`,
+      `resuming last session: ${source.provider}/${source.model}${source.keyId ? ` (key=${source.keyId})` : ''}`,
     );
-    providerName = lastSession.provider;
-    resumeModel = lastSession.model;
-    resumeKeyId = lastSession.keyId;
+    providerName = source.provider;
+    resumeModel = source.model;
+    resumeKeyId = source.keyId;
   } else {
     const recentSessions = await getRecentSessions(10).catch(() => []);
     const startupOptions = buildPickerOptions(probedModels);
@@ -305,16 +298,9 @@ async function main(): Promise<void> {
     }
   };
   const boundedCleanup = (): Promise<void> =>
-    Promise.race([
-      cleanup(),
-      new Promise<void>(resolve => {
-        const t = setTimeout(() => {
-          process.stderr.write(`shutdown: cleanup exceeded ${SHUTDOWN_BUDGET_MS}ms, forcing exit\n`);
-          resolve();
-        }, SHUTDOWN_BUDGET_MS);
-        t.unref();
-      }),
-    ]);
+    withBoundedTimeout(cleanup, SHUTDOWN_BUDGET_MS, () => {
+      process.stderr.write(`shutdown: cleanup exceeded ${SHUTDOWN_BUDGET_MS}ms, forcing exit\n`);
+    }).then(() => undefined);
   process.on('SIGINT', () => {
     void boundedCleanup().finally(() => process.exit(130));
   });
