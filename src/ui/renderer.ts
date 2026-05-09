@@ -75,6 +75,32 @@ function formatExperimentalFlags(flags: ExperimentalFlags | undefined): string {
   return EXPERIMENTAL_FLAG_KEYS.map(key => `${key}=${flags?.[key] ? 'on' : 'off'}`).join(', ');
 }
 
+// Wrap a comma-separated value to fit `terminalWidth`, indenting continuation
+// lines by `labelWidth` spaces so they align under the value column. Tokens
+// longer than the available width are kept whole and allowed to overflow
+// rather than being split mid-name.
+function wrapCommaList(value: string, labelWidth: number, terminalWidth: number): string {
+  const tokens = value.split(', ');
+  if (tokens.length <= 1) return value;
+  const sep = ', ';
+  const available = Math.max(20, terminalWidth - labelWidth);
+  const indent = ' '.repeat(labelWidth);
+  const lines: string[] = [];
+  let current = '';
+  for (const token of tokens) {
+    if (!current) {
+      current = token;
+    } else if (current.length + sep.length + token.length <= available) {
+      current += sep + token;
+    } else {
+      lines.push(current + ',');
+      current = token;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.join('\n' + indent);
+}
+
 const LOGO_LETTERS_LEET: ReadonlyArray<{ color: string; rows: string[] }> = [
   {
     color: '#FFD93D',
@@ -160,8 +186,15 @@ export async function animateLogo(frameMs = 220): Promise<void> {
     return Math.max(max, rowWidth);
   }, 0);
 
+  // Fallback for narrow terminals or non-TTY: print normal-size "Factory" with the same per-letter colors.
   if (!process.stdout.isTTY || (process.stdout.columns ?? 0) < logoWidth) {
-    process.stdout.write(renderLogoFrame(LOGO_LETTERS.length) + '\n');
+    const palette = LOGO_LETTERS.map(l => l.color);
+    const word = 'FACTORY';
+    const colored = word
+      .split('')
+      .map((ch, i) => chalk.bold.hex(palette[i % palette.length]!)(ch))
+      .join(' ');
+    process.stdout.write('  ' + colored + '\n');
     return;
   }
 
@@ -181,11 +214,19 @@ export function renderWelcome(
   experimental?: ExperimentalFlags,
   sessionLogDestination?: string,
   gitBranch?: string,
+  tools: string[] = [],
 ): string {
   const cwdLine =
     chalk.dim('  CWD:   ') +
     chalk.white(cwd) +
     (gitBranch ? chalk.dim('  (') + chalk.cyan(gitBranch) + chalk.dim(')') : '');
+  // Both "Exp:" and "Tools:" produce comma-separated lists that can easily
+  // overflow narrow terminals; wrap them so continuation lines align under
+  // the value column instead of the left margin.
+  const labelWidth = '  Tools: '.length;
+  const cols = process.stdout.columns ?? 80;
+  const expValue = wrapCommaList(formatExperimentalFlags(experimental), labelWidth, cols);
+  const toolsValue = wrapCommaList(tools.join(', '), labelWidth, cols);
   const lines = [
     '',
     chalk.dim('  v' + getBuildInfo().version),
@@ -193,9 +234,9 @@ export function renderWelcome(
     chalk.dim('  Model: ') + chalk.white(model),
     cwdLine,
     chalk.dim('  Logs:  ') + chalk.white(sessionLogDestination ?? 'disabled'),
-    chalk.dim('  Exp:   ') + chalk.white(formatExperimentalFlags(experimental)),
+    chalk.dim('  Exp:   ') + chalk.white(expValue),
     '',
-    chalk.dim('  Tools: Read, Write, Edit, Bash, Glob, Grep'),
+    chalk.dim('  Tools: ') + chalk.white(toolsValue),
     chalk.dim('  Type /help for commands, /exit to quit'),
     '',
     chalk.dim('─'.repeat(60)),

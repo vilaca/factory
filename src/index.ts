@@ -157,6 +157,7 @@ async function main(): Promise<void> {
     mergedAgentConfig.experimental,
     cliArgs.noLog ? 'disabled' : sessionsDir(),
     gitBranch,
+    defaultRegistry.getNames(),
   );
 
   // Surface any hooks that will be active this session. With hooks
