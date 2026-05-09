@@ -28,7 +28,7 @@ For verbose startup output, set `FACTORY_DEBUG=1` (or pass `--debug`) — picker
 ### Tool calls not working / model outputs text instead
 
 - The startup banner reports `tool support: native | basic | none` for the chosen model.
-- For `none`, the text-tool parser (`src/core/text-tool-parser.ts`) recovers calls from prose. Quality varies by model.
+- For `none`, the text-tool parser (`src/core/agent/tool-calls/text-tool-parser.ts`) recovers calls from prose. Quality varies by model.
 - The LLM tool-call corrector tries to fix malformed calls; toggle with `/correct on|off`.
 
 ### Edit tool fails with "old_string not found"
