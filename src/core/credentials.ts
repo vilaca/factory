@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import type { Config, ProviderKey } from './config-types.js';
-import { updateGlobalConfig } from './config.js';
+import type { Config, ProviderKey } from './config/types.js';
+import { updateGlobalConfig } from './config/index.js';
 import { DESCRIPTOR_LIST } from '../providers/descriptors.js';
 
 /**

@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { supportsLanguage } from 'cli-highlight';
 import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
-import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config-types.js';
+import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config/types.js';
 import { getBuildInfo } from '../utils/build-info.js';
 
 /** Minimal shape of the marked-terminal extension we patch. The package's

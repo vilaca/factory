@@ -4,7 +4,7 @@ import type {
   ExperimentalFlags,
   HooksConfig,
   RotationEntry,
-} from '../../../core/config-types.js';
+} from '../../../core/config/types.js';
 import type { Conversation } from '../../../core/conversation.js';
 import type { ContextManager } from '../../../core/context-manager.js';
 import type { FileCache } from '../../../core/agent/file-cache.js';

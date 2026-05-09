@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useApp, useInput } from 'ink';
 import type { Provider } from '../../providers/types.js';
-import type { AgentConfig } from '../../core/config-types.js';
+import type { AgentConfig } from '../../core/config/types.js';
 import { Session } from './Session.js';
 import { TabsProvider } from './tabs/TabsContext.js';
 import { useTabs } from './tabs/use-tabs.js';

@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { Config, GoogleAiStudioAuthMode } from '../core/config-types.js';
+import type { Config, GoogleAiStudioAuthMode } from '../core/config/types.js';
 import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
 import {
   DESCRIPTOR_LIST,
@@ -8,15 +8,15 @@ import {
   saveSuccessMessageFor,
 } from '../providers/descriptors.js';
 import { createProvider, type CreateProviderOptions } from '../providers/registry.js';
-import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../core/config.js';
+import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../core/config/index.js';
 import { addKey, getKey } from '../core/credentials.js';
 import { appendProviderLog } from '../core/session-log.js';
-import { getCopilotAuthStorageNote, CopilotAuthManager } from '../providers/copilot-auth.js';
+import { getCopilotAuthStorageNote, CopilotAuthManager } from '../providers/copilot/auth.js';
 import {
   GoogleAiStudioAuthManager,
   getGoogleAiStudioOAuthErrorMessage,
   getGoogleAiStudioOAuthStorageNote,
-} from '../providers/googleaistudio-auth.js';
+} from '../providers/googleaistudio/auth.js';
 import { exitStartupSelection, isExitSelection, promptText } from './prompts.js';
 import { errorMessage } from '../utils/errors.js';
 

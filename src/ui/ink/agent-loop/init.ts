@@ -10,7 +10,7 @@ import {
 } from '../../../core/session-log.js';
 import { getBuildInfo } from '../../../utils/build-info.js';
 import { buildEnvironmentMessage } from '../../../core/system-prompt.js';
-import type { ExperimentalFlags } from '../../../core/config-types.js';
+import type { ExperimentalFlags } from '../../../core/config/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './types.js';
 
 // Dedicated exit code for log failures so callers can distinguish from

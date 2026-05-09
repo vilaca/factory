@@ -4,7 +4,7 @@
 // teardown — all of which used to live inline in a 150-line useEffect.
 
 import type { MutableRefObject } from 'react';
-import type { ExperimentalFlags } from '../../../core/config-types.js';
+import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './system-prompt.js';
 import {

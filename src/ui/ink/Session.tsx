@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { TextInput } from './components/text-input.js';
 import type { Provider } from '../../providers/types.js';
-import type { AgentConfig } from '../../core/config-types.js';
+import type { AgentConfig } from '../../core/config/types.js';
 import { ConversationDisplay } from './components/conversation-display.js';
 import { Separator } from './components/separator.js';
 import { StatusBar } from './components/status-bar.js';
@@ -17,14 +17,14 @@ import {
   RotationPromptPanel,
   parseRotationPromptInput,
 } from './components/rotation-prompt-panel.js';
-import type { RotationEntry } from '../../core/config-types.js';
-import { updateGlobalConfig } from '../../core/config.js';
-import { useAgentLoop, type AgentLoopApi } from './use-agent-loop.js';
+import type { RotationEntry } from '../../core/config/types.js';
+import { updateGlobalConfig } from '../../core/config/index.js';
+import { useAgentLoop, type AgentLoopApi } from './agent-loop/use-agent-loop.js';
 import { dispatchSlashCommand } from './slash-commands.js';
 import { TabsContext } from './tabs/TabsContext.js';
 import { listProviderNames, createProvider } from '../../providers/registry.js';
 import { getRecentSessions } from '../../core/session-log.js';
-import { loadGlobalConfig } from '../../core/config.js';
+import { loadGlobalConfig } from '../../core/config/index.js';
 import {
   addKey as addCredentialKey,
   deleteKey as deleteCredentialKey,

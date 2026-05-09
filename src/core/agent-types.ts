@@ -5,7 +5,7 @@ import type { Conversation } from './conversation.js';
 import type { ContextManager } from './context-manager.js';
 import type { PermissionManager, PermissionDecision } from '../permissions.js';
 import type { FileCache } from './agent/file-cache.js';
-import type { HooksConfig, ProviderKey, RotationEntry } from './config-types.js';
+import type { HooksConfig, ProviderKey, RotationEntry } from './config/types.js';
 import type { PathPolicy } from '../security/paths.js';
 import type { EnvPolicy } from '../security/env.js';
 

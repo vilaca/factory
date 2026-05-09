@@ -1,5 +1,5 @@
 import fs from 'fs/promises';
-import type { AgentLoopApi } from '../use-agent-loop.js';
+import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 
 interface SessionStats {
   turns: number;

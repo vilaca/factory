@@ -26,7 +26,7 @@ const RECENT_WINDOW = 5;
 //   1. npm test 2>&1 | tail -20
 //   2. npm test 2>&1 | grep -A 10 "copilot-auth\|copilot-provider" | head -40
 //   3. ls dist-test/.../copilot-auth.js && head -10 dist-test/.../copilot-auth.js
-//   4. head -5 dist/providers/copilot-auth.js || echo "no dist output"; ls dist/ | head -5
+//   4. head -5 dist/providers/copilot/auth.js || echo "no dist output"; ls dist/ | head -5
 //   5. npm run build 2>&1 && npm test 2>&1 | tail -15
 // Consider discounting shared shell scaffolding (`cd ... &&`), and weighting
 // the search pattern / target files more heavily than boilerplate. We may also

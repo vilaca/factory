@@ -1,8 +1,8 @@
-import { runAgent } from '../../../core/agent.js';
+import { runAgent } from '../../../core/agent/run-agent.js';
 import type { RotationOptions } from '../../../core/agent-types.js';
 import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
-import { loadGlobalConfig } from '../../../core/config.js';
+import { loadGlobalConfig } from '../../../core/config/index.js';
 import { listKeys } from '../../../core/credentials.js';
 import { getWarmthLog } from '../../../core/key-stats.js';
 import { defaultRegistry } from '../../../tools/index.js';

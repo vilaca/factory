@@ -1,5 +1,5 @@
 import os from 'os';
-import { loadProjectInstructions } from './config.js';
+import { loadProjectInstructions } from './config/index.js';
 import { extractProjectFacts } from './project-facts.js';
 import type { ModelTier } from '../providers/types.js';
 

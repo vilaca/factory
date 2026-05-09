@@ -1,6 +1,6 @@
 import type { Provider, ToolCallMessage } from '../../providers/types.js';
 import type { AgentEvent, PermissionDecision } from '../agent-types.js';
-import type { HooksConfig } from '../config-types.js';
+import type { HooksConfig } from '../config/types.js';
 import type { ToolRegistry } from '../../tools/registry.js';
 import type { ToolResult } from '../../tools/types.js';
 import { TOOL_NAMES } from '../../tools/types.js';

@@ -1,4 +1,4 @@
-import type { Config } from '../core/config-types.js';
+import type { Config } from '../core/config/types.js';
 import type { ProviderDescriptor, StartupProviderName } from '../providers/descriptors.js';
 import { DESCRIPTORS, DESCRIPTOR_LIST } from '../providers/descriptors.js';
 import { probeModels, type StartupCredentials } from './auth.js';

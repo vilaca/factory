@@ -1,8 +1,8 @@
-import type { AgentLoopApi } from '../use-agent-loop.js';
-import type { RotationEntry } from '../../../core/config-types.js';
+import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
+import type { RotationEntry } from '../../../core/config/types.js';
 import { parseRotationEntry } from '../../../cli/parse-rotation.js';
 import { descriptorByAlias } from '../../../providers/descriptors.js';
-import { loadGlobalConfig, saveGlobalConfig } from '../../../core/config.js';
+import { loadGlobalConfig, saveGlobalConfig } from '../../../core/config/index.js';
 import { listKeys } from '../../../core/credentials.js';
 
 /**
