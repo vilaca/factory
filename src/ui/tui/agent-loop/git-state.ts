@@ -1,5 +1,5 @@
 import { getGitBranch, isGitDirty } from '../../../utils/git.js';
-import type { AgentLoopDeps } from './types.js';
+import type { AgentLoopDeps } from './agent-loop-types.js';
 
 export async function refreshGitState(
   deps: AgentLoopDeps,

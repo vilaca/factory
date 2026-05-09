@@ -1,7 +1,7 @@
 import type { ToolCallMessage } from '../../providers/types.js';
 import type { AgentEvent } from './types.js';
-import { parseTextToolCalls } from '../tool-call/text-tool-parser.js';
-import { stripImitatedToolResults } from '../tool-call/tool-result-format.js';
+import { parseTextToolCalls } from './tool-calls/text-tool-parser.js';
+import { stripImitatedToolResults } from './tool-calls/tool-result-format.js';
 
 interface ParsedResponse {
   storedContent: string;

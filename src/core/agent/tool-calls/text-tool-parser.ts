@@ -1,6 +1,6 @@
-import type { ToolCallMessage } from '../../providers/types.js';
-import { extractAllJsonObjects } from '../../utils/json-extract.js';
-import { TOOL_NAMES } from '../../tools/types.js';
+import type { ToolCallMessage } from '../../../providers/types.js';
+import { extractAllJsonObjects } from '../../../utils/json-extract.js';
+import { TOOL_NAMES } from '../../../tools/types.js';
 
 const TOOL_CALL_TAG_PATTERN = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
 const JSON_FENCE_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/g;

@@ -13,7 +13,7 @@ import {
   loadInitialHistory,
   startSessionLogger,
 } from './init.js';
-import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './types.js';
+import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 
 export interface MountContext {
   refs: MutableRefObject<RunRefs | null>;

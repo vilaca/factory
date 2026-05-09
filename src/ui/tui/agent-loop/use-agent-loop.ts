@@ -23,7 +23,7 @@ import type {
   RunRefs,
   RunState,
   UseAgentLoopOptions,
-} from './types.js';
+} from './agent-loop-types.js';
 
 export type { AgentLoopApi };
 

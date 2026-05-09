@@ -1,7 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 import { handleAgentEvent } from '../../../../../src/ui/tui/agent-loop/event-handler.js';
-import type { AgentLoopDeps, RunRefs } from '../../../../../src/ui/tui/agent-loop/types.js';
+import type { AgentLoopDeps, RunRefs } from '../../../../../src/ui/tui/agent-loop/agent-loop-types.js';
 
 // The event handler is a thin dispatch table; we exercise just the activity-
 // label branches (provider-retry, key-rotation, tuple-rotation, text-chunk,

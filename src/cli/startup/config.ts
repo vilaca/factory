@@ -38,7 +38,7 @@ type RotationCliFlags = Pick<
  *
  * `parseChain` is injected so tests can stub it without coupling to the
  * real parser; production callers pass `parseRotationChain` from
- * `cli/parse-rotation.ts`. May throw if `parseChain` rejects the spec.
+ * `cli/startup/parse-rotation.ts`. May throw if `parseChain` rejects the spec.
  */
 export function applyCliRotationOverrides(
   existing: RotationConfig | undefined,

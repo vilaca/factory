@@ -1,4 +1,4 @@
-import type { RunRefs } from './types.js';
+import type { RunRefs } from './agent-loop-types.js';
 
 export function recordHistory(refs: { current: RunRefs | null }, text: string): void {
   if (!refs.current) return;

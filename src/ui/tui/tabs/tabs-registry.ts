@@ -1,4 +1,4 @@
-import type { AgentLoopApi } from '../agent-loop/types.js';
+import type { AgentLoopApi } from '../agent-loop/agent-loop-types.js';
 
 // Stores a getter, not the API object. AgentLoopApi changes every render, but
 // each Session keeps its api in a ref and exposes a stable getter — so the
