@@ -3,6 +3,8 @@ import type { TokenUsage } from '../types.js';
 /** OpenAI-compatible usage envelope. Cached split is a relatively recent
  *  addition; older proxies emit only the three core counters. */
 export interface OpenAiCompatUsageEnvelope {
+  // null is observed in the wild — some OpenAI-compat proxies stream `usage: null`
+  // before the final chunk. The runtime treats null and missing identically.
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -10,7 +12,7 @@ export interface OpenAiCompatUsageEnvelope {
     prompt_tokens_details?: {
       cached_tokens?: number;
     };
-  };
+  } | null;
 }
 
 export function extractUsage(data: OpenAiCompatUsageEnvelope | undefined): TokenUsage | undefined {
