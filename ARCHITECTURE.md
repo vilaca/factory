@@ -5,22 +5,21 @@ This document maps factory's internals so a new contributor can locate the right
 ## High level
 
 ```
-┌──────────┐   ┌──────────┐   ┌────────┐   ┌──────────┐   ┌────────────┐
-│ CLI args │ → │ loadConfig │ → │  auth  │ → │ provider │ → │ tools/MCP  │
-└──────────┘   └──────────┘   └────────┘   └──────────┘   └─────┬──────┘
-                                                                  │
-                                                                  ▼
-                                               ┌──────────────────────────┐
-                                               │ renderApp (TUI)          │
-                                               │   ↳ Session → useAgentLoop
-                                               │ runHeadless (no TTY)     │
-                                               └──────────────────────────┘
-                                                                  │
-                                                                  ▼
-                                                         ┌────────────────┐
-                                                         │   agent loop   │
-                                                         │  (core/agent)  │
-                                                         └────────────────┘
+┌──────────┐   ┌────────────┐   ┌──────┐   ┌──────────┐   ┌───────────┐
+│ CLI args │ → │ loadConfig │ → │ auth │ → │ provider │ → │ tools/MCP │
+└──────────┘   └────────────┘   └──────┘   └──────────┘   └─────┬─────┘
+                                                                │
+                                                                ▼
+                                                ┌──────────────────────────────┐
+                                                │  TUI: renderApp → Session    │
+                                                │  no TTY: runHeadless         │
+                                                └───────────────┬──────────────┘
+                                                                │
+                                                                ▼
+                                                      ┌──────────────────┐
+                                                      │    agent loop    │
+                                                      │   (core/agent)   │
+                                                      └──────────────────┘
 ```
 
 The entry in `src/index.ts` parses CLI flags, loads config, runs auth, picks a provider, registers tools, attaches MCP servers, then dispatches to either `renderApp` (TUI) or `runHeadless` (scripted/non-TTY) — both eventually call into the same agent loop.
@@ -93,14 +92,14 @@ Small helpers — `errors.ts` (extract `error.message`), `git.ts` (branch/dirty 
 ## Permission and security layering
 
 ```
-user input → slash dispatcher  ─┐
-                                ├─→ tool execute()
+user input → slash dispatcher ─┐
+                               ├─→ tool execute()
 agent tool_call → permissions ─┘       │
                                        ▼
-                              security/{paths,bash-rules,env}
+                       security/{paths, bash-rules, env}
                                        │
                                        ▼
-                                    actual I/O
+                                   actual I/O
 ```
 
 `src/permissions.ts` decides per-tool / per-domain whether a call needs interactive approval. `src/security/` checks the *content* of the call: paths must pass the jail, bash commands must not match a forbidden pattern, env vars passed to spawned shells are scrubbed against the deny list. Both layers must approve before execution.
