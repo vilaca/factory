@@ -167,17 +167,20 @@ describe('executeToolCall — WebFetch domain', () => {
     assert.ok(permissions.isDomainAllowed('docs.example.com'));
   });
 
-  it('passes through a malformed URL without prompting', async () => {
+  it('denies a malformed URL at the policy gate (fail-closed)', async () => {
+    // Previously the gate funnelled parse failures into pre-allow and let
+    // the tool's own validation produce the error. That's a fail-open path
+    // — if the two parsers ever diverge, an attacker-controlled URL that
+    // parses in the tool but not here would skip the prompt. Deny here.
     const tool = fakeTool({
       name: 'WebFetch',
-      execute: () => ({ success: false, output: 'bad url' }),
+      execute: () => ({ success: false, output: 'tool ran (should not happen)' }),
     });
     const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
     const { events } = await collect(executeToolCall(tc('WebFetch', { url: '::not-a-url::' }), ctx));
     assert.ok(!events.some(e => e.type === 'permission-request'));
-    // Tool itself ran (malformed URL is the tool's problem, not a policy
-    // problem — see comment in run-tool-calls-execute.ts).
-    assert.strictEqual(tool.calls.length, 1);
+    assert.ok(events.some(e => e.type === 'tool-call-denied'));
+    assert.strictEqual(tool.calls.length, 0);
   });
 });
 

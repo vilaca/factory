@@ -61,10 +61,15 @@ export async function* executeToolCall(
     return;
   }
   const webFetch = evaluateWebFetchAccess(tool, args, ctx.permissions);
+  if (webFetch.kind === 'deny') {
+    recordResult(webFetch.reason, tool.name);
+    yield { type: 'tool-call-denied', toolName: tool.name, args };
+    return;
+  }
 
   const skipPrompt =
     bashOutcome.kind === 'pre-allow' ||
-    webFetch.preAllowed ||
+    webFetch.kind === 'pre-allow' ||
     ctx.permissions.isAutoAllowed(tool.name);
 
   if (!skipPrompt) {
@@ -75,7 +80,8 @@ export async function* executeToolCall(
       yield { type: 'tool-call-denied', toolName: tool.name, args };
       return;
     }
-    applyAllowSideEffect(decision, tool.name, webFetch.hostname, ctx.permissions);
+    const promptedHostname = webFetch.kind === 'prompt' ? webFetch.hostname : undefined;
+    applyAllowSideEffect(decision, tool.name, promptedHostname, ctx.permissions);
   }
 
   yield* executeAndEmit(tool, args, ctx, recordResult);
@@ -123,28 +129,33 @@ function evaluateBashPolicy(
   return { kind: 'prompt' };
 }
 
-interface WebFetchAccess {
-  hostname?: string;
-  preAllowed: boolean;
-}
+type WebFetchOutcome =
+  | { kind: 'not-webfetch' }
+  | { kind: 'deny'; reason: string }
+  | { kind: 'pre-allow' }
+  | { kind: 'prompt'; hostname: string };
 
 /** WebFetch has a per-domain whitelist that gates *before* the standard
  *  tool-level permission check. A pre-allowed hostname skips the prompt for
  *  this URL even though `WebFetch` itself isn't in `allowedTools`. Malformed
- *  URLs short-circuit too — let the tool's own validation produce the error. */
+ *  URLs deny at the gate (fail-closed) rather than relying on the tool's
+ *  own validation: the security check shouldn't depend on the downstream
+ *  parser staying in lockstep with this one. */
 function evaluateWebFetchAccess(
   tool: ToolHandler,
   args: Record<string, unknown>,
   permissions: PermissionManager,
-): WebFetchAccess {
-  if (tool.name !== TOOL_NAMES.WebFetch) return { preAllowed: false };
+): WebFetchOutcome {
+  if (tool.name !== TOOL_NAMES.WebFetch) return { kind: 'not-webfetch' };
   const rawUrl = typeof args.url === 'string' ? args.url : '';
+  let hostname: string;
   try {
-    const hostname = new URL(rawUrl).hostname.toLowerCase();
-    return { hostname, preAllowed: permissions.isDomainAllowed(hostname) };
+    hostname = new URL(rawUrl).hostname.toLowerCase();
   } catch {
-    return { preAllowed: true };
+    return { kind: 'deny', reason: `WebFetch: invalid URL "${rawUrl}".` };
   }
+  if (permissions.isDomainAllowed(hostname)) return { kind: 'pre-allow' };
+  return { kind: 'prompt', hostname };
 }
 
 /** Yield a permission-request and wait for the response. Races against the
