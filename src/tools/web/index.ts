@@ -27,7 +27,7 @@ const definition: ToolDefinition = {
   },
 };
 
-async function execute(args: Record<string, unknown>, _ctx?: ToolContext): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
   const raw = typeof args.url === 'string' ? args.url.trim() : '';
   if (!raw) {
     return {
@@ -48,9 +48,28 @@ async function execute(args: Record<string, unknown>, _ctx?: ToolContext): Promi
     };
   }
 
+  // Re-apply the domain gate on every redirect target. The agent layer
+  // already gated `raw`'s hostname (allowlist hit or user prompt), but
+  // the manual-redirect loop in fetch.ts could otherwise be steered onto
+  // an un-approved host — a server can chain `allowed → http://127.0.0.1`,
+  // `allowed → http://169.254.169.254/`, or any other internal target.
+  // The initial hostname is implicitly trusted because the agent already
+  // approved it for this call.
+  const initialHostname = parsed.hostname.toLowerCase();
+  const isHostnameAllowed = ctx?.isHostnameAllowed;
+  const validateHop = (u: URL): string | null => {
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      return `redirect to unsupported protocol "${u.protocol}"`;
+    }
+    const host = u.hostname.toLowerCase();
+    if (host === initialHostname) return null;
+    if (isHostnameAllowed?.(host)) return null;
+    return `redirect to "${host}" blocked — host not in domain allowlist`;
+  };
+
   let result;
   try {
-    result = await fetchUrl(raw);
+    result = await fetchUrl(raw, { validateHop });
   } catch (err) {
     return { success: false, output: `WebFetch: ${(err as Error).message}` };
   }

@@ -76,6 +76,11 @@ export interface ToolContext {
    * AbortController) so an aborted turn doesn't wait out a multi-MB read.
    * Optional — older callers and tests can omit it. */
   signal?: AbortSignal;
+  /** WebFetch: probe for the per-session domain allowlist. Lets the tool
+   * re-apply the same gate the permission prompt used when validating a
+   * redirect target. Hostnames are compared case-insensitively (callers
+   * lowercase before passing). */
+  isHostnameAllowed?: (hostname: string) => boolean;
 }
 
 export interface ToolHandler {

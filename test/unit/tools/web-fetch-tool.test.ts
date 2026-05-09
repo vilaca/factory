@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { webFetchTool } from '../../../src/tools/web/index.js';
+import { fetchUrl } from '../../../src/tools/web/fetch.js';
 import { PermissionManager } from '../../../src/security/permissions.js';
 import { parsePermissionInput } from '../../../src/ui/tui/components/permission-panel.js';
 
@@ -21,6 +22,54 @@ describe('WebFetch tool', () => {
     const r = await webFetchTool.execute({ url: 'file:///etc/passwd' });
     assert.strictEqual(r.success, false);
     assert.match(r.output, /unsupported protocol/i);
+  });
+
+  it('blocks redirects to a host outside the allowlist', async () => {
+    // Server chains: docs.example.com → http://127.0.0.1/. The tool only
+    // approved docs.example.com, so the second hop must be refused.
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.startsWith('https://docs.example.com')) {
+        return new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/' } });
+      }
+      throw new Error(`unexpected fetch to ${url}`);
+    }) as typeof fetch;
+    await assert.rejects(
+      fetchUrl('https://docs.example.com/x', {
+        fetchImpl,
+        validateHop: (u: URL) =>
+          u.hostname.toLowerCase() === 'docs.example.com'
+            ? null
+            : `redirect to "${u.hostname}" blocked`,
+      }),
+      /redirect to "127\.0\.0\.1" blocked/,
+    );
+  });
+
+  it('permits redirects to a host explicitly in the allowlist', async () => {
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === 'https://docs.example.com/x') {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://www.example.com/y' },
+        });
+      }
+      if (url === 'https://www.example.com/y') {
+        return new Response('hello', {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        });
+      }
+      throw new Error(`unexpected fetch to ${url}`);
+    }) as typeof fetch;
+    const allowed = new Set(['docs.example.com', 'www.example.com']);
+    const result = await fetchUrl('https://docs.example.com/x', {
+      fetchImpl,
+      validateHop: (u: URL) => (allowed.has(u.hostname.toLowerCase()) ? null : 'blocked'),
+    });
+    assert.strictEqual(result.url, 'https://www.example.com/y');
+    assert.strictEqual(result.body, 'hello');
   });
 });
 
