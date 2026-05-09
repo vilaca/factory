@@ -171,7 +171,7 @@ describe('static-content prompts', () => {
   it('getPlanModePrompt describes plan mode and read-only investigation', () => {
     const text = getPlanModePrompt();
     assert.ok(text.startsWith('## PLAN MODE'));
-    assert.ok(text.includes('Read, Glob, and Grep'));
+    assert.ok(text.includes('Read, Glob, Grep, and WebFetch'));
     assert.ok(text.includes('Edit, Write, or Bash'));
     assert.ok(text.includes('queue'));
   });
