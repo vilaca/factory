@@ -138,11 +138,11 @@ Small helpers.
 
 1. User types into the input bar in `Session.tsx`.
 2. `Session.tsx:handleSubmit` dispatches: slash commands go to `dispatchSlashCommand`; plain text becomes `agent.queueInput(text)` on the `useAgentLoop` API.
-3. `use-agent-loop.ts` queues the message into a `Conversation` (from `core/conversation.ts`), then calls into `core/agent/run-agent.ts:runAgent`.
-4. `runAgent` builds the system prompt via `system-prompt.ts`, applies cache boundaries via `agent/cache-boundaries.ts`, then calls `agent/call-model.ts:callModel` which streams from the provider.
+3. `use-agent-loop.ts` queues the message into a `Conversation` (from `core/context/conversation.ts`), then calls into `core/agent/run-agent.ts:runAgent`.
+4. `runAgent` builds the system prompt via `core/context/system-prompt.ts`, applies cache boundaries via `agent/cache/cache-boundaries.ts`, then calls `agent/call-model/call-model.ts:callModel` which streams from the provider.
 5. The provider's `chat()` method yields `ChatChunk`s — content deltas, tool calls, and a final `done: true` with usage. `runAgent` consumes these and emits `AgentEvent`s.
 6. Events flow back to `use-agent-loop.ts` → `agent-loop/event-handler.ts:handleAgentEvent`, which mutates streaming state and the display item list.
-7. When the model emits `tool_calls`, `agent/run-tool-calls.ts` is invoked: each call is permission-checked (`src/security/permissions.ts`), security-checked (`src/security/`), executed, and the result appended to the conversation as a `tool` message.
+7. When the model emits `tool_calls`, `agent/tool-calls/run-tool-calls.ts` is invoked: each call is permission-checked (`src/security/permissions.ts`), security-checked (`src/security/`), executed, and the result appended to the conversation as a `tool` message.
 8. The loop repeats until the model returns `done: true` without tool calls, or until the turn timeout triggers.
 9. `session-log.ts` writes JSONL events throughout (start, model-changes, tool-call, tool-call-result, turn-complete, errors).
 
@@ -178,6 +178,6 @@ Built-in security rules cannot be overridden by user config — only extended.
 | New CLI flag | `src/cli/args.ts` (parser + usage) → `src/index.ts` (apply) |
 | New provider | `src/providers/<name>.ts` + `descriptors.ts` + `registry.ts` (see [CONTRIBUTING.md](CONTRIBUTING.md)) |
 | New tool | `src/tools/<name>.ts` + `src/tools/registry.ts` (register in `ToolRegistry`) |
-| New slash command | `src/ui/ink/slash/<name>.ts` + `src/ui/ink/slash/dispatch.ts` (dispatcher) |
-| New session-log event | `src/core/session-log.ts:logXxx` + corresponding caller |
+| New slash command | `src/ui/tui/slash/<name>.ts` + `src/ui/tui/slash/dispatch.ts` (dispatcher) |
+| New session-log event | `src/core/session/session-log.ts:logXxx` + corresponding caller |
 | New security rule | `src/security/<area>.ts` — built-in rules are an export list |

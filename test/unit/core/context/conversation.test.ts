@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { Conversation } from '../../../src/core/context/conversation.js';
+import { Conversation } from '../../../../src/core/context/conversation.js';
 
 describe('Conversation', () => {
   let conv: Conversation;

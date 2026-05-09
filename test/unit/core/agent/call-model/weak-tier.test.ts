@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { selectWeakTier } from '../../../../src/core/agent/call-model/weak-tier.js';
-import type { Provider, ProviderCapabilities } from '../../../../src/providers/types.js';
+import { selectWeakTier } from '../../../../../src/core/agent/call-model/weak-tier.js';
+import type { Provider, ProviderCapabilities } from '../../../../../src/providers/types.js';
 
 function fakeProvider(name: string, tier: ProviderCapabilities['modelTier']): Provider {
   return {
