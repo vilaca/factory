@@ -4,9 +4,9 @@ import type { ChatMessage, ToolDefinition } from '../providers/types.js';
  *  proxy; provider tokenizers vary but ~4 chars/token holds for English
  *  text and code well enough for heuristics — pre-turn compaction
  *  triggering, recency-window budgeting, and the per-tool-result size cap
- *  in `Conversation.addToolResult`. Real usage from the provider replaces
- *  the estimate at the consumer (see `ContextManager.refreshEstimate`)
- *  as soon as the first turn returns. */
+ *  in `Conversation.addToolResult`. Provider `promptTokens` floors the
+ *  heuristic in `ContextManager.refreshEstimate` (`max(heuristic, floor)`)
+ *  once a response returns — see that method for the full estimate. */
 export const CHARS_PER_TOKEN = 4;
 
 function estimateTokens(text: string): number {
