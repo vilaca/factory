@@ -142,7 +142,7 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   // per-turn from processInput.
   void initSkillsRegistry(
     process.cwd(),
-    initialExperimental.skills ?? false,
+    initialExperimental.skills ?? true,
     sessionLogger,
     ctx.addNotice,
   ).then(reg => {

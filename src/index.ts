@@ -420,7 +420,7 @@ async function main(): Promise<void> {
       readCache: true,
       lineCountHint: true,
       subagents: true,
-      skills: false,
+      skills: true,
       hooks: true,
       ...experimentalFromConfig,
       ...(cliArgs.bashDedup ? { bashDedup: true } : {}),

@@ -7,7 +7,7 @@
 
 ## Why factory
 
-- **Bring your own model.** 15 providers on equal footing — local-first ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://codestral.mistral.ai), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)). Pick what fits your privacy, cost, and latency budget — and rotate between them when one runs out. See [docs/providers.md](./docs/providers.md).
+- **Bring your own model.** 15 providers on equal footing — local-first ([Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://mistral.ai/news/codestral), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)). Pick what fits your privacy, cost, and latency budget — and rotate between them when one runs out. See [docs/providers.md](./docs/providers.md).
 - **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a frontier LLM on a refactor in one tab while a local LLM explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
 - **Two-tier rotation.** When a key hits a rate limit or auth failure, factory swaps to the next saved key for the same model; when keys for a model are exhausted, it walks a configurable chain of `<provider>:<model>` fallbacks — frontier → fast → free, automatic.
 - **Built for models that don't behave.** Text-tool fallback recovers tool calls from prose; an LLM corrector retries malformed calls; an imitation guard strips fabricated tool-result blocks; Bash dedup nudges the model out of spinning loops.
@@ -18,7 +18,7 @@
 ## Requirements
 
 - **Node.js >= 22**
-- At least one LLM provider — local ([Ollama](https://ollama.ai), [llama.cpp](https://github.com/ggerganov/llama.cpp)) or cloud (see [docs/providers.md](./docs/providers.md) for credentials per provider).
+- At least one LLM provider — local ([Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp)) or cloud (see [docs/providers.md](./docs/providers.md) for credentials per provider).
 
 ## Quick start
 
@@ -40,6 +40,7 @@ That's it. `factory` opens a picker for provider, model, and API key the first t
 - [docs/slash-commands.md](./docs/slash-commands.md) — every `/command` and what it does
 - [docs/hotkeys.md](./docs/hotkeys.md) — keybindings
 - [docs/headless.md](./docs/headless.md) — non-TTY mode, exit codes, CI patterns
+- [docs/web-fetch.md](./docs/web-fetch.md) — WebFetch tool, bounds, per-domain whitelist
 - [docs/troubleshooting.md](./docs/troubleshooting.md) — common issues and fixes
 - [docs/observability.md](./docs/observability.md) — session-log JSONL schema
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — module map, data flow, design overview
