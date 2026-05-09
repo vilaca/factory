@@ -149,7 +149,7 @@ Two render targets: the React + Ink TUI under `tui/`, and the non-TTY `headless.
   - `git-state.ts` — branch + dirty refresh.
   - `compose-system-prompt.ts` — per-turn system prompt composition.
   - `agent-loop-types.ts` — `RunRefs`, `AgentLoopApi`, `AgentLoopDeps` shapes.
-- `components/` — Ink components (status bar, conversation display, permission panel, plan-approval panel, rotation prompt, provider picker, etc.).
+- `components/` — Ink components (status bar, conversation display, permission panel, plan-approval panel, rotation prompt, etc.).
 - `slash/` — user-typed slash commands; `dispatch.ts` is the entry, individual handlers live alongside (`hooks.ts`, `keys.ts`, `rotate.ts`, `rotate-helpers.ts`, `rotate-subcommands.ts`, `stats.ts`).
 - `hooks/` — small React hooks (`use-rotation-fallback.ts`, `use-session-input.ts`).
 - `tabs/` — tab registry/context (`tabs-registry.ts`, `TabsContext.tsx`, `use-tabs.ts`).
