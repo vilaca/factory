@@ -52,7 +52,7 @@ describe('OpenAIProvider', () => {
               { id: 'gpt-5', object: 'model', owned_by: 'openai' },
               { id: 'gpt-4o', object: 'model', owned_by: 'openai' },
               { id: 'o4-mini', object: 'model', owned_by: 'openai' },
-              // These should all be filtered out by supportsChatCompletions:
+              // These should all be filtered out by filterChatModels:
               { id: 'whisper-1', object: 'model', owned_by: 'openai' },
               { id: 'tts-1', object: 'model', owned_by: 'openai' },
               { id: 'text-embedding-3-large', object: 'model', owned_by: 'openai' },

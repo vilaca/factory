@@ -15,6 +15,7 @@ import {
   sendOpenAiChat,
   streamOpenAiChat,
 } from './openai/index.js';
+import { filterChatModels, matchedPattern } from './list-models-filter.js';
 
 const DEFAULT_BASE_URL = 'https://api.mistral.ai/v1';
 const CODESTRAL_BASE_URL = 'https://codestral.mistral.ai/v1';
@@ -192,33 +193,40 @@ export class MistralProvider implements Provider {
       throw err;
     }
 
+    const idable: (MistralModelItem & { id: string })[] = [];
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const i = item as MistralModelItem;
+      const id = typeof i.id === 'string' ? i.id : typeof i.name === 'string' ? i.name : null;
+      if (!id) continue;
+      idable.push({ ...i, id });
+    }
     this.modelsCache = dedupeModels(
-      items
-        // Note: exclude obvious non-chat families (embedding/moderation/OCR/
-        // transcription/TTS) so the picker stays focused on usable chat models.
-        .filter((item): item is MistralModelItem => isSupportedMistralModel(item))
-        .map(item => ({
-          id: typeof item.id === 'string' ? item.id : item.name!,
-          name: typeof item.name === 'string' ? item.name : undefined,
-          description: typeof item.description === 'string' ? item.description : undefined,
-          max_context_length:
-            typeof item.max_context_length === 'number'
-              ? item.max_context_length
-              : typeof item.maxContextLength === 'number'
-                ? item.maxContextLength
-                : undefined,
-          capabilities:
-            typeof item.capabilities === 'object' && item.capabilities
-              ? {
-                  completion_chat:
-                    item.capabilities.completion_chat === true ||
-                    item.capabilities.chat_completion === true,
-                  function_calling:
-                    item.capabilities.function_calling === true || item.capabilities.tools === true,
-                  vision: item.capabilities.vision === true,
-                }
+      filterChatModels(this.name, idable, item => {
+        const matched = matchedPattern(item.id, MISTRAL_NON_CHAT_PATTERNS);
+        return matched ? `non-chat: matches '${matched}'` : true;
+      }).map(item => ({
+        id: item.id,
+        name: typeof item.name === 'string' ? item.name : undefined,
+        description: typeof item.description === 'string' ? item.description : undefined,
+        max_context_length:
+          typeof item.max_context_length === 'number'
+            ? item.max_context_length
+            : typeof item.maxContextLength === 'number'
+              ? item.maxContextLength
               : undefined,
-        })),
+        capabilities:
+          typeof item.capabilities === 'object' && item.capabilities
+            ? {
+                completion_chat:
+                  item.capabilities.completion_chat === true ||
+                  item.capabilities.chat_completion === true,
+                function_calling:
+                  item.capabilities.function_calling === true || item.capabilities.tools === true,
+                vision: item.capabilities.vision === true,
+              }
+            : undefined,
+      })),
     );
 
     return this.modelsCache;
@@ -264,15 +272,7 @@ interface MistralModelItem {
   };
 }
 
-function isSupportedMistralModel(item: unknown): item is MistralModelItem {
-  if (!item || typeof item !== 'object') return false;
-  const i = item as MistralModelItem;
-  const id = typeof i.id === 'string' ? i.id : typeof i.name === 'string' ? i.name : null;
-  if (!id) return false;
-  const lower = id.toLowerCase();
-  if (/(embed|moderation|ocr|transcri|tts)/i.test(lower)) return false;
-  return true;
-}
+const MISTRAL_NON_CHAT_PATTERNS = ['embed', 'moderation', 'ocr', 'transcri', 'tts'] as const;
 
 function dedupeModels(models: MistralModel[]): MistralModel[] {
   const byId = new Map<string, MistralModel>();

@@ -3,6 +3,7 @@
 // importing the orchestrator (which would create a cycle).
 
 import type { SessionErrorStatus } from '../../../../core/session/session-log.js';
+import type { ModelTier } from '../../../../providers/types.js';
 
 export interface RecentPair {
   provider: string;
@@ -31,6 +32,8 @@ export interface ModelDisplayInfo {
   label?: string;
   detail?: string;
   warning?: string;
+  /** Coding-suitability tier — drives picker sort order. */
+  tier?: ModelTier;
 }
 
 /** Subset of ProviderKey shown to the picker — token never crosses this surface. */

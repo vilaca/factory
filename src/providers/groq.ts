@@ -15,6 +15,7 @@ import {
   sendOpenAiChat,
   streamOpenAiChat,
 } from './openai/index.js';
+import { filterChatModels, matchedPattern } from './list-models-filter.js';
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const PROVIDER_NAME = 'Groq';
@@ -143,21 +144,20 @@ export class GroqProvider implements Provider {
       id?: string;
       owned_by?: string;
     }
-    this.modelsCache = items
-      .filter(
-        (item: unknown): item is GroqCatalogItem & { id: string } =>
-          !!item &&
-          typeof item === 'object' &&
-          typeof (item as GroqCatalogItem).id === 'string' &&
-          !!(item as GroqCatalogItem).id,
-      )
-      // Exclude Groq models that are clearly speech/audio, guardrail, or
-      // other non-chat endpoints even if they share the same catalog.
-      .filter(item => supportsChatCompletions(item.id))
-      .map(item => ({
-        id: item.id,
-        owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
-      }));
+    const valid = items.filter(
+      (item: unknown): item is GroqCatalogItem & { id: string } =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as GroqCatalogItem).id === 'string' &&
+        !!(item as GroqCatalogItem).id,
+    );
+    this.modelsCache = filterChatModels('groq', valid, item => {
+      const matched = matchedPattern(item.id, NON_CHAT_PATTERNS);
+      return matched ? `non-chat: matches '${matched}'` : true;
+    }).map(item => ({
+      id: item.id,
+      owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
+    }));
 
     return this.modelsCache;
   }
@@ -165,16 +165,7 @@ export class GroqProvider implements Provider {
 
 // ─── Catalog filter ────────────────────────────────────────────────────
 
-function supportsChatCompletions(modelId: string): boolean {
-  const lower = modelId.toLowerCase();
-  return !(
-    lower.includes('whisper') ||
-    lower.includes('prompt-guard') ||
-    lower.includes('orpheus') ||
-    lower.includes('transcribe') ||
-    lower.includes('tts')
-  );
-}
+const NON_CHAT_PATTERNS = ['whisper', 'prompt-guard', 'orpheus', 'transcribe', 'tts'] as const;
 
 // ─── Picker / capability helpers ───────────────────────────────────────
 

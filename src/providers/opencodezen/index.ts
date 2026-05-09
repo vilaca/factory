@@ -19,11 +19,11 @@ import {
   estimateContextWindow,
   estimateMaxOutput,
   estimateModelTier,
-  isSupportedOpenCodeZenModel,
   normalizeBaseUrl,
   supportsToolsByName,
   unsupportedOpenCodeZenRouteError,
 } from './models.js';
+import { filterChatModels } from '../list-models-filter.js';
 import { chatAnthropicNoStream, chatAnthropicStream } from './anthropic.js';
 import { chatGoogleNoStream, chatGoogleStream } from './google.js';
 
@@ -225,15 +225,21 @@ export class OpenCodeZenProvider implements Provider {
 
     const data = (await res.json()) as { data?: unknown[] };
     const rawItems: unknown[] = Array.isArray(data?.data) ? data.data : [];
-    this.modelsCache = rawItems
-      // Note: hide Zen models that route through OpenAI's /responses API until
-      // the provider layer can preserve Responses-native events and tool items.
-      .filter(isSupportedOpenCodeZenModel)
-      .map(item => ({
-        id: item.id,
-        owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
-        route: detectOpenCodeZenRoute(item.id),
-      }));
+    const idable: { id: string; owned_by?: unknown }[] = [];
+    for (const item of rawItems) {
+      if (!item || typeof item !== 'object') continue;
+      const i = item as { id?: unknown; owned_by?: unknown };
+      if (typeof i.id !== 'string' || !i.id) continue;
+      idable.push({ id: i.id, owned_by: i.owned_by });
+    }
+    this.modelsCache = filterChatModels('opencodezen', idable, item => {
+      const route = detectOpenCodeZenRoute(item.id);
+      return route === 'openai-responses' ? `non-chat: route='${route}'` : true;
+    }).map(item => ({
+      id: item.id,
+      owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
+      route: detectOpenCodeZenRoute(item.id),
+    }));
 
     return this.modelsCache ?? [];
   }

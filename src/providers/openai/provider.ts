@@ -10,6 +10,7 @@ import type {
   ModelTier,
 } from '../types.js';
 import { buildChatBody, fetchOpenAiCatalog, sendOpenAiChat, streamOpenAiChat } from './index.js';
+import { filterChatModels, matchedPattern } from '../list-models-filter.js';
 
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 const PROVIDER_NAME = 'OpenAI';
@@ -141,22 +142,20 @@ export class OpenAIProvider implements Provider {
       id?: string;
       owned_by?: string;
     }
-    this.modelsCache = items
-      .filter(
-        (item: unknown): item is CatalogItem & { id: string } =>
-          !!item &&
-          typeof item === 'object' &&
-          typeof (item as CatalogItem).id === 'string' &&
-          !!(item as CatalogItem).id,
-      )
-      // The /models catalog mixes chat models with embeddings, image, audio,
-      // moderation, and realtime endpoints. Keep only ids that look like a
-      // chat model so the picker doesn't surface ones we can't talk to.
-      .filter(item => supportsChatCompletions(item.id))
-      .map(item => ({
-        id: item.id,
-        owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
-      }));
+    const valid = items.filter(
+      (item: unknown): item is CatalogItem & { id: string } =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as CatalogItem).id === 'string' &&
+        !!(item as CatalogItem).id,
+    );
+    this.modelsCache = filterChatModels('openai', valid, item => {
+      const matched = matchedPattern(item.id, NON_CHAT_PATTERNS);
+      return matched ? `non-chat: matches '${matched}'` : true;
+    }).map(item => ({
+      id: item.id,
+      owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
+    }));
 
     return this.modelsCache;
   }
@@ -164,24 +163,21 @@ export class OpenAIProvider implements Provider {
 
 // ─── Catalog filter ────────────────────────────────────────────────────
 
-function supportsChatCompletions(modelId: string): boolean {
-  const lower = modelId.toLowerCase();
-  return !(
-    lower.includes('whisper') ||
-    lower.includes('tts') ||
-    lower.includes('embedding') ||
-    lower.includes('dall-e') ||
-    lower.includes('moderation') ||
-    lower.includes('davinci') ||
-    lower.includes('babbage') ||
-    lower.includes('realtime') ||
-    lower.includes('audio') ||
-    lower.includes('image') ||
-    lower.includes('transcribe') ||
-    lower.includes('search') ||
-    lower.includes('computer-use')
-  );
-}
+const NON_CHAT_PATTERNS = [
+  'whisper',
+  'tts',
+  'embedding',
+  'dall-e',
+  'moderation',
+  'davinci',
+  'babbage',
+  'realtime',
+  'audio',
+  'image',
+  'transcribe',
+  'search',
+  'computer-use',
+] as const;
 
 // ─── Picker / capability helpers ───────────────────────────────────────
 

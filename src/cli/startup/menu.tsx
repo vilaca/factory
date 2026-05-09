@@ -143,8 +143,14 @@ function ModelMenuApp(props: ModelMenuAppProps): React.ReactElement {
       getModelInfo={(_, m) => {
         const info = provider?.getModelPickerInfo?.(m);
         const label = info?.label ?? provider?.getDisplayModelName?.(m);
-        if (!label && !info?.warning && !info?.detail) return undefined;
-        return { label, warning: info?.warning, detail: info?.detail };
+        let tier;
+        try {
+          tier = provider?.getCapabilities(m).modelTier;
+        } catch {
+          // Unknown model — capabilities estimator may throw; sort puts it last.
+        }
+        if (!label && !info?.warning && !info?.detail && !tier) return undefined;
+        return { label, warning: info?.warning, detail: info?.detail, tier };
       }}
       onCommit={(_, model) => finish(model)}
       onCancel={() => finish(null)}
