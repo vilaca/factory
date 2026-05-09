@@ -492,6 +492,29 @@ describe('getRecentSessions', () => {
     assert.strictEqual(session.keyId, 'k2');
   });
 
+  it('updates keyId from a same-model model-change row (tier-1 key rotation)', async () => {
+    writeSessionLog(
+      'key-rotated',
+      [
+        {
+          type: 'session-start',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          cwd: '/x',
+          ts: '2026-05-08T13:00:00Z',
+          keyId: 'k1',
+        },
+        { type: 'user-input', content: 'hi' },
+        { type: 'model-change', from: 'claude-sonnet-4-6', to: 'claude-sonnet-4-6', keyId: 'k2' },
+      ],
+      new Date('2026-05-08T13:00:00Z'),
+    );
+    const [session] = await getRecentSessions();
+    assert.strictEqual(session.provider, 'anthropic');
+    assert.strictEqual(session.model, 'claude-sonnet-4-6');
+    assert.strictEqual(session.keyId, 'k2');
+  });
+
   it('updates provider from providerAfter when switching with /provider', async () => {
     writeSessionLog(
       'provider-switch',

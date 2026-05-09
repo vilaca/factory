@@ -108,8 +108,14 @@ export async function resolveProvider(
     startupOptions,
     defaultFromLast ?? fallbackDefault,
   );
-  dbg(`picker returned provider=${selection.provider} model=${selection.model ?? '<none>'}`);
-  return { providerName: selection.provider, resumeModel: selection.model ?? null };
+  dbg(
+    `picker returned provider=${selection.provider} model=${selection.model ?? '<none>'}${selection.keyId ? ` keyId=${selection.keyId}` : ''}`,
+  );
+  return {
+    providerName: selection.provider,
+    resumeModel: selection.model ?? null,
+    ...(selection.keyId ? { resumeKeyId: selection.keyId } : {}),
+  };
 }
 
 interface ConnectedProvider {

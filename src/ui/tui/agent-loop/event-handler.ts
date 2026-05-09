@@ -238,6 +238,14 @@ const HANDLERS: EventHandlers = {
     deps.addNotice('info', `⤳ Read cache hit: ${event.path} unchanged`),
 
   'key-rotation': (event, deps) => {
+    const refs = deps.refs.current;
+    // Mirror the new keyId into the session log via a same-model model-change
+    // row. Without this, rollupSessionLines keeps the original keyId from
+    // session-start, so getLastSessionSelection / getRecentSessions surface a
+    // stale keyId after rotation.
+    if (refs && event.to.keyId) {
+      refs.sessionLogger?.logModelChange(refs.model, refs.model, event.to.keyId);
+    }
     const fromLabel = event.from ? fingerprintLabel(event.from) : '<unknown>';
     const toLabel = fingerprintLabel(event.to);
     const reasonLabel = describeRotationReason(event.reason);

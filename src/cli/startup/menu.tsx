@@ -16,6 +16,8 @@ interface StartupSelection {
   provider: StartupProviderName;
   /** Set when the user picked a recent (provider, model) pair directly. */
   model?: string;
+  /** Set when that recent pair was tied to a specific saved key. */
+  keyId?: string;
 }
 
 export async function selectStartupSession(
@@ -32,6 +34,7 @@ export async function selectStartupSession(
     provider: s.provider,
     model: s.model,
     ...(s.status ? { status: s.status } : {}),
+    ...(s.keyId ? { keyId: s.keyId } : {}),
   }));
   const providers: ProviderEntry[] = providerOptions.map(o => ({
     name: o.descriptor.name,
@@ -107,9 +110,13 @@ function StartupShim({
           /* unmounted */
         });
       }}
-      onCommit={(provider, model) => {
+      onCommit={(provider, model, keyId) => {
         // Reachable only when the user picked from the recent list.
-        finish({ provider: provider as StartupProviderName, model });
+        finish({
+          provider: provider as StartupProviderName,
+          model,
+          ...(keyId ? { keyId } : {}),
+        });
       }}
       onCancel={() => finish(null)}
       bordered={false}
