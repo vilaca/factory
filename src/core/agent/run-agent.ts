@@ -139,6 +139,7 @@ export async function* runAgent(
     // Pre-flight: shrink the prompt before sending it. Doing this after the
     // model call wastes a model invocation on a bloated prompt and surfaces no
     // response when usage stays over the hard ceiling.
+    const toolDefinitions = useTextToolFallback ? undefined : toolRegistry.getDefinitions();
     let compaction;
     try {
       compaction = yield* maybeCompact(contextManager, provider, model, signal, fileCache, {
@@ -148,6 +149,7 @@ export async function* runAgent(
         envPolicy: options.envPolicy,
         onHookStderr: options.onHookStderr,
         onHookError: options.onHookError,
+        toolDefinitions,
       });
     } catch (err: unknown) {
       if (signal?.aborted || (isError(err) && err.name === 'AbortError')) {
@@ -180,7 +182,7 @@ export async function* runAgent(
     turnsUsed++;
 
     const messages = conversation.getMessages();
-    const tools = useTextToolFallback ? undefined : toolRegistry.getDefinitions();
+    const tools = toolDefinitions;
 
     let fullContent = '';
     let toolCalls: ToolCallMessage[] = [];
@@ -205,6 +207,7 @@ export async function* runAgent(
       fullContent = modelResult.fullContent;
       toolCalls = modelResult.toolCalls;
       if (modelResult.lastUsage) lastUsage = modelResult.lastUsage;
+      contextManager?.recordPromptUsage(modelResult.lastUsage);
 
       // User aborted mid-stream: preserve whatever was already produced as
       // both a committed text-done event and a real assistant message so the

@@ -6,23 +6,20 @@ import type {
   ProviderCapabilities,
 } from '../../../../src/providers/types.js';
 import type { AgentEvent } from '../../../../src/core/agent/types.js';
-import type { ContextManager } from '../../../../src/core/context/context-manager.js';
 import { Conversation } from '../../../../src/core/context/conversation.js';
 import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
 import { runAgent } from '../../../../src/core/agent/run-agent.js';
-import { createMockProvider, findEvents } from './agent-helpers.js';
+import { createMockProvider, findEvents, makeFakeCM } from './agent-helpers.js';
 
 describe('Agent loop — compaction', () => {
   it('yields a compaction event when ContextManager.shouldCompact is true', async () => {
-    const cm = {
-      updateUsage: () => {},
-      ageOldToolResults: () => 0,
+    const cm = makeFakeCM({
       shouldCompact: () => true,
       compact: async () => ({ oldCount: 5, newCount: 2 }),
       getUsagePercent: () => 0.5,
       getTokenEstimate: () => 100,
-    } as unknown as ContextManager;
+    });
 
     const provider = createMockProvider([{ content: 'hi' }]);
     const conversation = new Conversation('system');
@@ -50,14 +47,12 @@ describe('Agent loop — compaction', () => {
   });
 
   it('halts with token-limit when usage stays above 0.9 after compaction', async () => {
-    const cm = {
-      updateUsage: () => {},
-      ageOldToolResults: () => 0,
+    const cm = makeFakeCM({
       shouldCompact: () => true,
       compact: async () => ({ oldCount: 5, newCount: 2 }),
       getUsagePercent: () => 0.95,
       getTokenEstimate: () => 100,
-    } as unknown as ContextManager;
+    });
 
     const provider = createMockProvider([{ content: 'hi' }]);
     const conversation = new Conversation('system');
@@ -89,9 +84,7 @@ describe('Agent loop — compaction', () => {
     const compactCalls: Array<{ aggressive: boolean }> = [];
     let usagePercent = 0.95;
 
-    const cm = {
-      updateUsage: () => {},
-      ageOldToolResults: () => 0,
+    const cm = makeFakeCM({
       shouldCompact: () => true,
       compact: async (
         _provider: unknown,
@@ -111,7 +104,7 @@ describe('Agent loop — compaction', () => {
       },
       getUsagePercent: () => usagePercent,
       getTokenEstimate: () => 100,
-    } as unknown as ContextManager;
+    });
 
     const provider = createMockProvider([{ content: 'all good' }]);
     const conversation = new Conversation('system');
@@ -232,9 +225,7 @@ describe('Agent loop — compaction', () => {
   it("halts with token-limit when even aggressive compaction can't free enough", async () => {
     const compactCalls: Array<{ aggressive: boolean }> = [];
 
-    const cm = {
-      updateUsage: () => {},
-      ageOldToolResults: () => 0,
+    const cm = makeFakeCM({
       shouldCompact: () => true,
       compact: async (
         _provider: unknown,
@@ -248,7 +239,7 @@ describe('Agent loop — compaction', () => {
       // Stays pinned above the hard ceiling regardless of compaction.
       getUsagePercent: () => 0.97,
       getTokenEstimate: () => 100,
-    } as unknown as ContextManager;
+    });
 
     const provider = createMockProvider([{ content: 'never seen' }]);
     const conversation = new Conversation('system');
@@ -276,5 +267,75 @@ describe('Agent loop — compaction', () => {
     // Halt happened before the model was called — no streamed text.
     const chunks = findEvents(events, 'text-chunk');
     assert.strictEqual(chunks.length, 0);
+  });
+
+  it('threads promptTokens from the model response into ContextManager so the next turn floors on it', async () => {
+    // Wires the prompt-token floor end-to-end: a turn completes with a
+    // provider-reported promptTokens far above what the empty-conversation
+    // heuristic would produce, then refreshing without tools must keep
+    // that figure in place. Without the wire, this regresses to a tiny
+    // heuristic and compaction defers until an actual API overflow.
+    const REPORTED_PROMPT_TOKENS = 7500;
+    const provider: Provider = {
+      name: 'mock',
+      async listModels() {
+        return ['mock-model'];
+      },
+      getCapabilities(): ProviderCapabilities {
+        return {
+          contextWindow: 200_000,
+          maxOutputTokens: 4096,
+          toolSupport: 'native',
+          parallelToolCalls: false,
+          streaming: true,
+          tokenCounting: 'exact',
+          modelTier: 'strong',
+        };
+      },
+      async *chat(): AsyncGenerator<ChatChunk> {
+        yield { content: 'ok' };
+        yield {
+          done: true,
+          usage: {
+            promptTokens: REPORTED_PROMPT_TOKENS,
+            completionTokens: 10,
+            totalTokens: REPORTED_PROMPT_TOKENS + 10,
+          },
+        };
+      },
+      async chatNoStream(): Promise<ChatChunk> {
+        throw new Error('chatNoStream should not be called for this test');
+      },
+    };
+
+    const { ContextManager } = await import('../../../../src/core/context/context-manager.js');
+    const conversation = new Conversation('You are a test assistant.');
+    const cm = new ContextManager(conversation, provider.getCapabilities('mock-model'));
+    cm.refreshEstimate([]);
+    const heuristicBefore = cm.getTokenEstimate();
+    assert.ok(
+      heuristicBefore < REPORTED_PROMPT_TOKENS,
+      `expected tiny heuristic before the turn, got ${heuristicBefore}`,
+    );
+
+    const events: AgentEvent[] = [];
+    const agent = runAgent('hello', {
+      provider,
+      model: 'mock-model',
+      conversation,
+      permissions: new PermissionManager(),
+      toolRegistry: defaultRegistry,
+      contextManager: cm,
+      enableCorrector: false,
+    });
+    for await (const ev of agent) events.push(ev);
+
+    // Even after a clean refresh post-turn, the floor must persist —
+    // the next compaction decision will read this estimate.
+    cm.refreshEstimate([]);
+    assert.ok(
+      cm.getTokenEstimate() >= REPORTED_PROMPT_TOKENS,
+      `expected estimate floored at ${REPORTED_PROMPT_TOKENS}, got ${cm.getTokenEstimate()}`,
+    );
   });
 });
