@@ -2,6 +2,7 @@ import type { Provider } from '../providers/types.js';
 import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { runSubagent } from '../core/subagent/runner.js';
+import type { runAgent } from '../core/agent/run-agent.js';
 import type { SessionLogger } from '../core/session/session-log.js';
 
 /*
@@ -64,6 +65,10 @@ interface DelegateContext {
   sessionLogger?: SessionLogger;
   /** Wired in tests; production code leaves this undefined. */
   signal?: AbortSignal;
+  /** Test injection: replaces the default runAgent inside runSubagent so
+   *  the Delegate tool's execute() can be exercised end-to-end without a
+   *  real provider round-trip. Production leaves this undefined. */
+  runner?: typeof runAgent;
 }
 
 /**
@@ -90,6 +95,7 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
         model: subagentModel,
         task,
         signal: ctx.signal,
+        runner: ctx.runner,
       });
 
       // Mirror the subagent's full event stream into the parent session log

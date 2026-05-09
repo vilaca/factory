@@ -167,3 +167,173 @@ describe('Delegate tool', () => {
     assert.match(SUBAGENT_SYSTEM_PROMPT, /read-only/i);
   });
 });
+
+describe('Delegate tool — execute() post-processing', () => {
+  // Drive the tool end-to-end via the injected runner. These cover the
+  // post-runSubagent branches in delegate.ts that runSubagent-direct tests
+  // never reach: turn-limit footer, empty-text failure, error path,
+  // sessionLogger fan-out, and explicit/weak/parent model resolution.
+
+  function makeTool(opts: {
+    weakModel?: string;
+    parentModel?: string;
+    runner: RunAgentFn;
+    sessionLogger?: { logWarning: (k: string, v: string) => void };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  }): ReturnType<typeof createDelegateTool> {
+    return createDelegateTool({
+      provider: stubProvider(),
+      parentModel: opts.parentModel ?? 'parent-model',
+      weakModel: opts.weakModel,
+      runner: opts.runner,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sessionLogger: opts.sessionLogger as any,
+    });
+  }
+
+  it('returns success=true with the trimmed final text when the subagent completes', async () => {
+    const runner = makeFakeRunner([
+      { type: 'text-done', fullContent: '  the answer is 42  ' },
+      { type: 'turn-complete', stopReason: 'completed', turnsUsed: 2 },
+    ]);
+    const tool = makeTool({ runner });
+    const r = await tool.execute({ task: 'what is the answer?' });
+    assert.strictEqual(r.success, true);
+    assert.strictEqual(r.output, 'the answer is 42');
+  });
+
+  it('returns success=false with a turn-limit footer when the subagent exhausted its budget', async () => {
+    const runner = makeFakeRunner([
+      { type: 'text-done', fullContent: 'partial finding' },
+      { type: 'turn-complete', stopReason: 'turn-limit', turnsUsed: 30 },
+    ]);
+    const tool = makeTool({ runner });
+    const r = await tool.execute({ task: 'go investigate' });
+    assert.strictEqual(r.success, false);
+    assert.match(r.output, /partial finding/);
+    assert.match(r.output, /\[note: subagent hit its tool-call cap/);
+  });
+
+  it('returns success=false with a stopped-without-answer message when no text was produced', async () => {
+    const runner = makeFakeRunner([
+      { type: 'turn-complete', stopReason: 'user-abort', turnsUsed: 4 },
+    ]);
+    const tool = makeTool({ runner });
+    const r = await tool.execute({ task: 'go investigate' });
+    assert.strictEqual(r.success, false);
+    assert.match(r.output, /subagent stopped \(user-abort, 4 turns\) without producing/);
+  });
+
+  it('catches runner errors and returns them as a Delegate failure', async () => {
+    const runner: RunAgentFn = async function* () {
+      throw new Error('provider exploded');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const tool = makeTool({ runner });
+    const r = await tool.execute({ task: 'go investigate' });
+    assert.strictEqual(r.success, false);
+    assert.match(r.output, /Delegate: subagent failed: provider exploded/);
+  });
+
+  it('falls back to weakModel when no override is given', async () => {
+    let observedModel = '';
+    const runner: RunAgentFn = async function* (
+      _input: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      opts: any,
+    ): AsyncGenerator<AgentEvent> {
+      observedModel = opts.model;
+      yield { type: 'text-done', fullContent: 'ok' };
+      yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const tool = makeTool({ runner, weakModel: 'weak-1', parentModel: 'parent-1' });
+    await tool.execute({ task: 't' });
+    assert.strictEqual(observedModel, 'weak-1');
+  });
+
+  it('falls back to parentModel when neither override nor weakModel is set', async () => {
+    let observedModel = '';
+    const runner: RunAgentFn = async function* (
+      _input: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      opts: any,
+    ): AsyncGenerator<AgentEvent> {
+      observedModel = opts.model;
+      yield { type: 'text-done', fullContent: 'ok' };
+      yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const tool = makeTool({ runner, parentModel: 'parent-only' });
+    await tool.execute({ task: 't' });
+    assert.strictEqual(observedModel, 'parent-only');
+  });
+
+  it('honours an explicit model override even when weakModel is set', async () => {
+    let observedModel = '';
+    const runner: RunAgentFn = async function* (
+      _input: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      opts: any,
+    ): AsyncGenerator<AgentEvent> {
+      observedModel = opts.model;
+      yield { type: 'text-done', fullContent: 'ok' };
+      yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const tool = makeTool({ runner, weakModel: 'weak-1', parentModel: 'parent-1' });
+    await tool.execute({ task: 't', model: 'explicit-2' });
+    assert.strictEqual(observedModel, 'explicit-2');
+  });
+
+  it('treats a whitespace-only model arg as no override (falls through to weak/parent)', async () => {
+    let observedModel = '';
+    const runner: RunAgentFn = async function* (
+      _input: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      opts: any,
+    ): AsyncGenerator<AgentEvent> {
+      observedModel = opts.model;
+      yield { type: 'text-done', fullContent: 'ok' };
+      yield { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const tool = makeTool({ runner, weakModel: 'weak-1' });
+    await tool.execute({ task: 't', model: '   ' });
+    assert.strictEqual(observedModel, 'weak-1');
+  });
+
+  it('mirrors every subagent event into the parent session logger when one is provided', async () => {
+    const calls: Array<{ key: string; value: string }> = [];
+    const sessionLogger = {
+      logWarning: (key: string, value: string): void => {
+        calls.push({ key, value });
+      },
+    };
+    const runner = makeFakeRunner([
+      { type: 'text-done', fullContent: 'done' },
+      { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 },
+    ]);
+    const tool = makeTool({ runner, sessionLogger });
+    await tool.execute({ task: 't' });
+    assert.ok(calls.length >= 2);
+    assert.ok(calls.every(c => c.key === 'subagent'));
+    assert.ok(calls.some(c => /text-done/.test(c.value)));
+  });
+
+  it('does not let a sessionLogger throw bubble out of the tool result', async () => {
+    const sessionLogger = {
+      logWarning: (): void => {
+        throw new Error('disk full');
+      },
+    };
+    const runner = makeFakeRunner([
+      { type: 'text-done', fullContent: 'survived' },
+      { type: 'turn-complete', stopReason: 'completed', turnsUsed: 1 },
+    ]);
+    const tool = makeTool({ runner, sessionLogger });
+    const r = await tool.execute({ task: 't' });
+    assert.strictEqual(r.success, true);
+    assert.strictEqual(r.output, 'survived');
+  });
+});
