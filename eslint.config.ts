@@ -1,16 +1,23 @@
-// eslint.config.js
 import eslintPlugin from '@typescript-eslint/eslint-plugin';
 import parser from '@typescript-eslint/parser';
 import sonarjs from 'eslint-plugin-sonarjs';
+import type { Linter } from 'eslint';
 
-export default [
+const config: Linter.Config[] = [
   {
-    ignores: ['dist/**', 'dist-test/**', 'node_modules/**', 'coverage/**', '*.tsbuildinfo'],
+    ignores: [
+      'dist/**',
+      'dist-test/**',
+      'node_modules/**',
+      'coverage/**',
+      '*.tsbuildinfo',
+      'eslint.config.ts',
+    ],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
-      parser: parser,
+      parser,
       parserOptions: {
         project: ['./tsconfig.json', './tsconfig.test.json'],
       },
@@ -72,3 +79,5 @@ export default [
     },
   },
 ];
+
+export default config;
