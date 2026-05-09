@@ -1,5 +1,5 @@
-import { evaluateBash, type BashRule, type BashEvaluation } from './security/bash-rules.js';
-import { TOOL_NAMES } from './tools/types.js';
+import { evaluateBash, type BashRule, type BashEvaluation } from './bash-rules.js';
+import { TOOL_NAMES } from '../tools/types.js';
 
 export type PermissionDecision = 'allow' | 'deny' | 'allow-all' | 'allow-domain';
 

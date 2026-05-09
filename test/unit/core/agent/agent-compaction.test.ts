@@ -8,7 +8,7 @@ import type {
 import type { AgentEvent } from '../../../../src/core/agent-types.js';
 import type { ContextManager } from '../../../../src/core/context-manager.js';
 import { Conversation } from '../../../../src/core/conversation.js';
-import { PermissionManager } from '../../../../src/permissions.js';
+import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
 import { runAgent } from '../../../../src/core/agent/run-agent.js';
 import { createMockProvider, findEvents } from './agent-helpers.js';

@@ -1,6 +1,6 @@
 import { Conversation } from '../../../core/conversation.js';
 import { ContextManager } from '../../../core/context-manager.js';
-import { PermissionManager } from '../../../permissions.js';
+import { PermissionManager } from '../../../security/permissions.js';
 import { FileCache } from '../../../core/agent/file-cache.js';
 import { loadSkills, SkillsRegistry } from '../../../core/skills/index.js';
 import {
