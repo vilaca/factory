@@ -33,20 +33,15 @@ import {
 } from './cli/auth.js';
 import { buildPickerOptions, findDefaultSelection } from './cli/picker.js';
 import { selectStartupSession, selectModelInk } from './cli/startup-menu.js';
+import { parseRotationChain } from './cli/parse-rotation.js';
+import {
+  applyCliRotationOverrides,
+  buildExperimentalConfig,
+  canResumeLastSession,
+} from './cli/startup-config.js';
 
 function dbg(message: string): void {
   if (process.env.FACTORY_DEBUG === '1') process.stderr.write(`[factory:debug] ${message}\n`);
-}
-
-function canResumeLastSession(
-  last: { provider: string; model: string },
-  probed: Map<StartupProviderName, string[] | null>,
-): boolean {
-  const descriptor = descriptorByAlias(last.provider);
-  if (!descriptor) return false;
-  const models = probed.get(descriptor.name);
-  if (!models) return false;
-  return models.includes(last.model);
 }
 
 // eslint-disable-next-line max-lines-per-function, max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split startup phases (rotation / auth / picker / mode dispatch).
@@ -90,23 +85,13 @@ async function main(): Promise<void> {
     cliArgs.noRotateKeys ||
     cliArgs.noRotateModels
   ) {
-    const { parseRotationChain } = await import('./cli/parse-rotation.js');
-    const existing = config.agent?.rotation ?? {};
-    const next = { ...existing };
-    if (cliArgs.rotate !== undefined) {
-      try {
-        next.default = parseRotationChain(cliArgs.rotate);
-      } catch (err: unknown) {
-        console.log(renderError(errorMessage(err)));
-        process.exit(1);
-      }
+    let next;
+    try {
+      next = applyCliRotationOverrides(config.agent?.rotation, cliArgs, parseRotationChain);
+    } catch (err: unknown) {
+      console.log(renderError(errorMessage(err)));
+      process.exit(1);
     }
-    if (cliArgs.noRotate) {
-      next.keys = false;
-      next.models = false;
-    }
-    if (cliArgs.noRotateKeys) next.keys = false;
-    if (cliArgs.noRotateModels) next.models = false;
     config.agent = { ...config.agent, rotation: next };
     if (cliArgs.saveRotate) {
       try {
@@ -412,30 +397,9 @@ async function main(): Promise<void> {
 
   // Experimental flags default to on except for bashDedup, which is opt-in
   // for now. Config can override; CLI flags take final precedence.
-  const experimentalFromConfig = config.agent?.experimental ?? {};
   const mergedAgentConfig = {
     ...config.agent,
-    experimental: {
-      bashDedup: false,
-      readCache: true,
-      lineCountHint: true,
-      subagents: true,
-      skills: true,
-      hooks: true,
-      ...experimentalFromConfig,
-      ...(cliArgs.bashDedup ? { bashDedup: true } : {}),
-      ...(cliArgs.noBashDedup ? { bashDedup: false } : {}),
-      ...(cliArgs.readCache ? { readCache: true } : {}),
-      ...(cliArgs.noReadCache ? { readCache: false } : {}),
-      ...(cliArgs.lineCountHint ? { lineCountHint: true } : {}),
-      ...(cliArgs.noLineCountHint ? { lineCountHint: false } : {}),
-      ...(cliArgs.subagents ? { subagents: true } : {}),
-      ...(cliArgs.noSubagents ? { subagents: false } : {}),
-      ...(cliArgs.skills ? { skills: true } : {}),
-      ...(cliArgs.noSkills ? { skills: false } : {}),
-      ...(cliArgs.hooks ? { hooks: true } : {}),
-      ...(cliArgs.noHooks ? { hooks: false } : {}),
-    },
+    experimental: buildExperimentalConfig(config.agent?.experimental, cliArgs),
     ...(cliArgs.turnTimeoutSec !== undefined ? { turnTimeoutSec: cliArgs.turnTimeoutSec } : {}),
   };
 
