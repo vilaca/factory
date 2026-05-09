@@ -16,6 +16,7 @@ import { Conversation } from '../core/context/conversation.js';
 import { ContextManager } from '../core/context/context-manager.js';
 import { PermissionManager } from '../security/permissions.js';
 import { runAgent } from '../core/agent/run-agent.js';
+import type { ResponsesChain } from '../core/agent/types.js';
 import { errorMessage } from '../utils/errors.js';
 import { FileCache } from '../core/agent/cache/file-cache.js';
 import { defaultRegistry } from '../tools/index.js';
@@ -193,6 +194,18 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   let exitCode = 0;
   let permissionDeniedTool: string | undefined;
 
+  // Closure-state chain ref so multi-tool-call agentic runs can reuse
+  // server-side reasoning across turns within the same headless invocation.
+  // Chain lifetime is the runAgent call; reset hooks inside runAgent
+  // (compaction, abort, rotation) clear it as needed.
+  let responsesChain: ResponsesChain | undefined;
+  const responsesChainRef = {
+    get: () => responsesChain,
+    set: (v: ResponsesChain | undefined) => {
+      responsesChain = v;
+    },
+  };
+
   try {
     for await (const event of runAgent(userInput, {
       provider: options.provider,
@@ -224,6 +237,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       hooksConfig: options.agentConfig?.hooks,
       onHookStderr,
       onHookError,
+      responsesChainRef,
     })) {
       sessionLogger?.logAgentEvent(event);
 

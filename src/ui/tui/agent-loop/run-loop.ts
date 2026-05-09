@@ -1,5 +1,5 @@
 import { runAgent } from '../../../core/agent/run-agent.js';
-import type { RotationOptions } from '../../../core/agent/types.js';
+import type { AgentOptions, RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/registry.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
@@ -90,7 +90,11 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
           : {}),
       }),
     onActiveKeyChange: id => {
-      if (deps.refs.current) deps.refs.current.activeKeyId = id;
+      if (!deps.refs.current) return;
+      deps.refs.current.activeKeyId = id;
+      // Stored response chain is keyed server-side by API key; a rotated
+      // key can't continue the prior chain.
+      deps.refs.current.responsesChain = undefined;
     },
     onProviderChange: next => {
       if (deps.refs.current) deps.refs.current.provider = next;
@@ -144,6 +148,16 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
   // real time (subsequent tools in the same turn see the new directory).
   const cwdRef = { current: deps.refs.current.cwd };
 
+  // Adapter into RunRefs.responsesChain so chain state survives between
+  // runAgent invocations. The runtime reads it pre-call and writes it
+  // post-call; reset hooks live on /clear, swap, and inside runAgent itself.
+  const responsesChainRef: AgentOptions['responsesChainRef'] = {
+    get: () => deps.refs.current?.responsesChain,
+    set: v => {
+      if (deps.refs.current) deps.refs.current.responsesChain = v;
+    },
+  };
+
   // Build the rotation context for this turn. Loading global config here is
   // a few-ms fs read and lets the runtime see the latest saved keys (the
   // user may have added one via /pick mid-session).
@@ -178,6 +192,7 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
       deps.refs.current?.sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
     onHookError: (event, error) =>
       deps.refs.current?.sessionLogger?.logWarning('hook-error', `${event}: ${error}`),
+    responsesChainRef,
     ...(rotation ? { rotation } : {}),
   });
 

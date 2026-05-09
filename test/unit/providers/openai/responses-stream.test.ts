@@ -105,6 +105,9 @@ describe('streamOpenAiResponses', () => {
       assert.strictEqual(text, 'hello world');
       const terminal = chunks[chunks.length - 1]!;
       assert.strictEqual(terminal.done, true);
+      // responseId is captured from response.completed and surfaced on the
+      // terminal chunk so the agent loop can chain off it next call.
+      assert.strictEqual(terminal.responseId, 'resp_1');
       assert.deepStrictEqual(terminal.usage, {
         promptTokens: 5,
         completionTokens: 8,

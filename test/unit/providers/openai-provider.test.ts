@@ -189,7 +189,8 @@ describe('OpenAIProvider', () => {
           assert.strictEqual('temperature' in parsed, false);
           // max_output_tokens, not max_completion_tokens.
           assert.strictEqual(parsed.max_output_tokens, 1024);
-          assert.strictEqual(parsed.store, false);
+          // store:true so responses get retained server-side for chain continuation.
+          assert.strictEqual(parsed.store, true);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
@@ -239,6 +240,71 @@ describe('OpenAIProvider', () => {
     );
   });
 
+  it('threads previous_response_id and slices input across two consecutive codex calls', async () => {
+    const seenBodies: Record<string, unknown>[] = [];
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        let raw = '';
+        req.on('data', (chunk: Buffer) => {
+          raw += chunk.toString();
+        });
+        req.on('end', () => {
+          seenBodies.push(JSON.parse(raw));
+          const id = seenBodies.length === 1 ? 'resp_first' : 'resp_second';
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'ok' }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        const turn1 = await provider.chatNoStream('gpt-5-codex', [
+          { role: 'system', content: 'sys' },
+          { role: 'user', content: 'turn 1' },
+        ]);
+        assert.strictEqual(turn1.responseId, 'resp_first');
+
+        await provider.chatNoStream(
+          'gpt-5-codex',
+          [
+            { role: 'system', content: 'sys' },
+            { role: 'user', content: 'turn 1' },
+            { role: 'assistant', content: 'ok' },
+            { role: 'user', content: 'turn 2' },
+          ],
+          undefined,
+          { responsesChain: { lastResponseId: turn1.responseId!, messageCount: 3 } },
+        );
+
+        // First call: no chain, full input, store:true to seed.
+        assert.strictEqual('previous_response_id' in seenBodies[0]!, false);
+        assert.strictEqual(seenBodies[0]!.store, true);
+        // Second call: chain pointer + sliced input (only the new turn).
+        assert.strictEqual(seenBodies[1]!.previous_response_id, 'resp_first');
+        assert.strictEqual(seenBodies[1]!.store, true);
+        assert.deepStrictEqual(seenBodies[1]!.input, [
+          { type: 'message', role: 'user', content: 'turn 2' },
+        ]);
+      },
+    );
+  });
+
   it('routes dotted-minor codex variants (gpt-5.3-codex, gpt-5.1-codex-mini) through /v1/responses', async () => {
     const seen: string[] = [];
     await withServer(
@@ -249,10 +315,7 @@ describe('OpenAIProvider', () => {
           return;
         }
         seen.push(req.url ?? '');
-        let body = '';
-        req.on('data', (chunk: Buffer) => {
-          body += chunk.toString();
-        });
+        req.on('data', () => {});
         req.on('end', () => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(

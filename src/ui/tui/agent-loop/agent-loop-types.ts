@@ -10,6 +10,7 @@ import type { ContextManager } from '../../../core/context/context-manager.js';
 import type { FileCache } from '../../../core/agent/cache/file-cache.js';
 import type { PermissionManager } from '../../../security/permissions.js';
 import type { Provider } from '../../../providers/types.js';
+import type { ResponsesChain } from '../../../core/agent/types.js';
 import type { SessionLogger } from '../../../core/session/session-log.js';
 import type { SkillsRegistry } from '../../../core/skills/index.js';
 import type { PathPolicy } from '../../../security/paths.js';
@@ -75,6 +76,12 @@ export interface RunRefs {
   /** Per-tab in-memory failure log keyed by `keyId`. The rotation runtime
    *  reads + writes; reset on session restart. */
   keyFailureLog: Map<string, number>;
+  /** Active OpenAI Responses-API chain pointer. Captured from the terminal
+   *  chunk of a /v1/responses turn; passed back via ChatOptions on the
+   *  next call to reuse server-side reasoning tokens. Cleared on /clear,
+   *  on provider/model swap, on key rotation, on compaction, and on any
+   *  aborted turn. Undefined until the first codex response lands. */
+  responsesChain?: ResponsesChain;
   /** Set to true when the user declines the "set up a fallback?" prompt.
    *  Subsequent rate-limit failures bypass the prompt for the rest of the
    *  session. Cleared when the user opens the picker via /pick. */

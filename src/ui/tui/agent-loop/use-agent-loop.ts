@@ -190,6 +190,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   function clearConversation(): void {
     if (!refs.current) return;
     refs.current.conversation.clear();
+    refs.current.responsesChain = undefined;
     setItems([]);
     setStreamingText('');
     setLastUsage(undefined);

@@ -13,6 +13,25 @@ export type { PermissionDecision };
 
 type StopReason = 'completed' | 'user-abort' | 'token-limit' | 'turn-limit' | 'error';
 
+/** Per-session pointer into OpenAI's stored response chain. The agent
+ *  loop captures it from the terminal chunk of a /v1/responses turn and
+ *  feeds it back via ChatOptions.responsesChain on the next call so the
+ *  server reuses prior reasoning tokens instead of re-deriving them.
+ *
+ *  `provider`, `model`, and `keyId` are validated at use-site so a stale
+ *  pointer (left over from a swap that failed to clear it) cannot
+ *  corrupt the next call — the worst case is a missed optimization.
+ *  `messageCount` is the conversation length captured AFTER the assistant
+ *  response was appended; the body builder slices messages[messageCount:]
+ *  before mapping to the Responses API `input` array. */
+export interface ResponsesChain {
+  lastResponseId: string;
+  messageCount: number;
+  provider: string;
+  model: string;
+  keyId?: string;
+}
+
 export type AgentEvent =
   | { type: 'text-chunk'; content: string }
   | { type: 'text-done'; fullContent: string }
@@ -127,6 +146,15 @@ export interface AgentOptions {
   /** When set, the runtime rotates among saved keys for the active provider
    *  on rate-limit/auth failures before giving up. */
   rotation?: RotationOptions;
+  /** Mutable holder for the active OpenAI Responses-API chain pointer.
+   *  Read before each callModel; updated after a successful capture. The
+   *  host (TUI / headless) owns the storage so chain state survives
+   *  between turns within a session. Optional — providers that don't speak
+   *  the Responses API leave it absent and the runtime no-ops. */
+  responsesChainRef?: {
+    get(): ResponsesChain | undefined;
+    set(value: ResponsesChain | undefined): void;
+  };
   /** Optional sink invoked when a hook command writes to stderr; the host
    *  wires this to the session log. */
   onHookStderr?: (command: string, chunk: string) => void;

@@ -69,6 +69,7 @@ export async function swapModel(name: string, ctx: SwapContext): Promise<void> {
     refs.sessionLogger?.logSystemPrompt(sp);
   }
   refs.sessionLogger?.logModelChange(refs.model, name);
+  if (refs.model !== name) refs.responsesChain = undefined;
   refs.model = name;
   refs.primary = { provider: refs.provider.name, model: name };
   ctx.setModel(name);
@@ -171,6 +172,10 @@ export async function swapProvider(
   }
 
   refs.sessionLogger?.logModelChange(refs.model, nextModel, resolvedKeyId, nextProvider.name);
+  // Provider tuple is changing; the chain is provider/model/key-scoped on
+  // OpenAI's side. Drop it unconditionally — the new provider has no
+  // server-side state to chain off.
+  refs.responsesChain = undefined;
   refs.provider = nextProvider;
   refs.model = nextModel;
   refs.primary = { provider: nextProvider.name, model: nextModel };

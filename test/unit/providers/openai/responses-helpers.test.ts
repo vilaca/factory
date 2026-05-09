@@ -109,11 +109,37 @@ describe('buildResponsesBody', () => {
     });
     assert.strictEqual(body.model, 'gpt-5-codex');
     assert.strictEqual(body.stream, true);
-    assert.strictEqual(body.store, false);
+    // store:true is mandatory for previous_response_id continuation, even
+    // when no chain pointer is active on this call (we're seeding for next).
+    assert.strictEqual(body.store, true);
     assert.strictEqual(body.instructions, 'sys');
     assert.ok(Array.isArray(body.input));
     assert.strictEqual('messages' in body, false);
     assert.strictEqual('temperature' in body, false);
+    assert.strictEqual('previous_response_id' in body, false);
+  });
+
+  it('with responsesChain set, slices input and emits previous_response_id', () => {
+    const messages = [
+      { role: 'system' as const, content: 'sys' },
+      { role: 'user' as const, content: 'turn 1 user' },
+      { role: 'assistant' as const, content: 'turn 1 assistant' },
+      { role: 'user' as const, content: 'turn 2 user' },
+    ];
+    const body = buildResponsesBody({
+      model: 'gpt-5-codex',
+      messages,
+      stream: false,
+      options: { responsesChain: { lastResponseId: 'resp_abc', messageCount: 3 } },
+    });
+    assert.strictEqual(body.previous_response_id, 'resp_abc');
+    assert.strictEqual(body.store, true);
+    assert.strictEqual('instructions' in body, false);
+    // Only messages[3..] should map to input — the prior turns and system
+    // prompt are already retained server-side under previous_response_id.
+    assert.deepStrictEqual(body.input, [
+      { type: 'message', role: 'user', content: 'turn 2 user' },
+    ]);
   });
 
   it('flattens tools and sets parallel_tool_calls only when tools are present', () => {
