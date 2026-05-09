@@ -87,15 +87,17 @@ The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse
   - `bash-allowlist.ts` — restricted Bash policy for sub-agents.
 
 ### `src/providers/`
-All providers implement the `Provider` interface. They come in three flavors:
+All providers implement the `Provider` interface. The shared `openai/` folder is an internal adapter (no registry entry of its own) that owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction; most providers delegate to it via `buildChatBody` / `sendOpenAiChat` / `streamOpenAiChat`.
 
-1. **Shared OpenAI-compatible adapter** — `openai/` is one folder serving the ten-or-so OpenAI-compatible providers; owns SSE parsing, streaming chunk handling, tool-call accumulation, and usage extraction.
-2. **Folder-with-own-auth** — `copilot/`, `googleaistudio/` use the OpenAI adapter shape but have their own auth flow alongside; `opencodezen/` is a proxy that re-exposes Anthropic/Google through a single endpoint.
-3. **Flat-file native** — Anthropic, Ollama, HuggingFace, Cohere, Cerebras, Groq, Mistral, OpenRouter, Vercel, llama.cpp, workersai each live as a single file and parse their own response shapes.
+Three flavors:
+
+1. **Flat-file consumers of the shared adapter** — `cerebras.ts`, `groq.ts`, `mistral.ts`, `openrouter.ts`, `vercel.ts`, `llamacpp.ts`, `workersai.ts` are single files that delegate streaming and tool-call handling to `openai/`. `huggingface.ts` reuses only the tool-call helpers (its transport is the `@huggingface/inference` SDK).
+2. **Folder-with-own-auth on the shared adapter** — `copilot/` and `googleaistudio/` use `openai/` for transport but carry their own auth flow alongside; `opencodezen/` is a proxy folder that re-exposes Anthropic/Google through a single OpenAI-compatible endpoint.
+3. **Truly native** — `anthropic.ts` (uses `@anthropic-ai/sdk`), `ollama.ts` (uses the `ollama` package), and `cohere.ts` (hand-rolled) parse their own response shapes and don't touch `openai/`.
 
 Cross-cutting files:
 - `types.ts` — the `Provider` interface every adapter implements.
-- `registry.ts` — maps a provider name to a constructor.
+- `registry.ts` — maps a provider name to a constructor (no `openai` entry — the adapter is internal).
 - `descriptors.ts` — per-provider metadata (display label, aliases, env vars, default host).
 
 ### `src/tools/`
