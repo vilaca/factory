@@ -194,9 +194,25 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     setItems([]);
     setStreamingText('');
     setLastUsage(undefined);
+
+    // Restore the text-tool fallback flag to whatever the model's validated
+    // tool support says. The event-handler auto-flips useTextToolFallback to
+    // true on first text-tool recovery (one-way), so without this reset the
+    // system prompt stays in the fallback variant after /clear and keeps
+    // telling the model to emit tool calls as bare JSON/code fences. The
+    // invariant `useTextToolFallback === !nativeToolSupport` is what init.ts
+    // and swap.ts both establish, so /clear restores it here.
+    const fallbackWasAutoFlipped =
+      refs.current.useTextToolFallback && refs.current.nativeToolSupport;
+    refs.current.useTextToolFallback = !refs.current.nativeToolSupport;
+    refs.current.conversation.updateSystemPrompt(composeSystemPrompt());
+
     // TODO: /clear should also clear the screen, not just the conversation state.
     refreshTokenEstimate();
     addNotice('info', 'Conversation cleared.');
+    if (fallbackWasAutoFlipped) {
+      addNotice('info', 'Text-tool fallback reset; back to native tool calls.');
+    }
   }
 
   function buildSwapCtx(): Parameters<typeof swapModel>[1] {

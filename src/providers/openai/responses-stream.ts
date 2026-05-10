@@ -1,4 +1,5 @@
 import type { ChatChunk, ToolCallMessage } from '../types.js';
+import { apiError } from './errors.js';
 import { parseSseStream } from './sse.js';
 import { parseToolArgs } from './tool-calls.js';
 import {
@@ -36,7 +37,8 @@ interface ResponsesStreamEvent {
   };
   response?: ResponsesUsageEnvelope & {
     id?: string;
-    error?: { message?: string };
+    error?: { message?: string; type?: string; code?: string };
+    incomplete_details?: { reason?: string };
     output?: Array<{
       type?: string;
       role?: string;
@@ -54,6 +56,43 @@ interface DispatchState {
   usage: ChatChunk['usage'];
   responseId: string | undefined;
   providerName: string;
+  /** Set when a terminal SSE event signals a non-error stop reason (e.g.
+   *  `response.incomplete` with `incomplete_details.reason === 'max_output_tokens'`).
+   *  Surfaced as `doneReason` on the terminal chunk so the agent layer's
+   *  length-truncation path fires — same shape as chat-completions'
+   *  `finish_reason: 'length'`. Undefined for normal completion. */
+  doneReason: string | undefined;
+}
+
+/** Map an OpenAI SSE error envelope to an HTTP-style status so the retry
+ *  classifier in `call-model/provider-retry.ts` and the rotation classifier
+ *  in `call-model/provider-errors.ts` can decide whether to back off on the
+ *  same key vs. rotate to a different one. Aligned with
+ *  https://developers.openai.com/api/docs/guides/error-codes.md.
+ *
+ *  OpenAI's standard error envelope overloads `type: 'invalid_request_error'`
+ *  for several distinct HTTP statuses — `{type:'invalid_request_error',
+ *  code:'invalid_api_key'}` is 401, `code:'model_not_found'` is 404,
+ *  generic-shape errors are 400. So we consult `code` first (unambiguous)
+ *  and only fall back to `type` (general category) when no specific code
+ *  matched. Unknown errors default to 500 (`InternalServerError`, retryable
+ *  per OpenAI guidance) — better than the previous "no status, never
+ *  retries" behavior and consistent with treating mid-stream failures as
+ *  transient by default. */
+function sseErrorStatus(err: { type?: string; code?: string } | undefined): number {
+  const code = err?.code ?? '';
+  if (code === 'invalid_api_key' || code === 'account_deactivated') return 401;
+  if (code === 'rate_limit_exceeded' || code === 'insufficient_quota') return 429;
+  if (code === 'model_not_found') return 404;
+  if (code === 'server_error') return 500;
+
+  const type = err?.type ?? '';
+  if (type === 'authentication_error') return 401;
+  if (type === 'permission_error') return 403;
+  if (type === 'rate_limit_error' || type === 'rate_limit_exceeded') return 429;
+  if (type === 'server_error') return 500;
+  if (type === 'invalid_request_error' || type === 'invalid_request') return 400;
+  return 500;
 }
 
 /** Apply one parsed SSE event to the accumulator state and emit any
@@ -93,15 +132,37 @@ function dispatchResponsesEvent(
       state.usage = extractResponsesUsage(ev.response);
       if (ev.response?.id) state.responseId = ev.response.id;
       return undefined;
+    case 'response.incomplete': {
+      // The Responses API signals truncation via `response.incomplete` with
+      // an `incomplete_details.reason`. The `max_output_tokens` reason is the
+      // SSE equivalent of chat-completions' `finish_reason: 'length'` — it's
+      // a stop reason, not an error, and the agent layer already has a
+      // length-truncation retry path keyed off `doneReason: 'length'`. We
+      // therefore record the reason on the terminal chunk instead of throwing.
+      // Other incomplete reasons (e.g. `content_filter`) are real failures and
+      // are not retryable per OpenAI's BadRequestError guidance.
+      const reason = ev.response?.incomplete_details?.reason;
+      if (reason === 'max_output_tokens') {
+        state.doneReason = 'length';
+        if (ev.response) state.usage = extractResponsesUsage(ev.response);
+        if (ev.response?.id) state.responseId = ev.response.id;
+        return undefined;
+      }
+      const msg = ev.response?.error?.message ?? reason ?? 'incomplete response';
+      throw apiError(state.providerName, 400, msg);
+    }
     case 'response.failed':
-    case 'response.incomplete':
     case 'response.error': {
-      // TODO(retry): Consider tagging SSE terminal failures (response.failed /
-      // response.error) as transient when OpenAI reports internal/server-side
-      // issues, so call-model retry can re-attempt instead of treating this as
-      // a generic non-retryable message-only error.
+      // Tag SSE terminal failures with an HTTP-style status so the retry
+      // classifier can decide based on the error type. Unknown error types
+      // default to 500 (`InternalServerError`), which is what OpenAI's
+      // error-codes guide tells callers to retry with backoff — and matches
+      // the empirical pattern in the 2026-05-10 session log where a generic
+      // "Internal server error" via response.error killed a turn that a
+      // straight retry would have recovered.
       const msg = ev.response?.error?.message ?? ev.message ?? 'unknown error';
-      throw new Error(`${state.providerName} API error: ${msg}`);
+      const status = sseErrorStatus(ev.response?.error);
+      throw apiError(state.providerName, status, msg);
     }
     default:
       return undefined;
@@ -128,7 +189,7 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
   });
 
   if (!res.ok) {
-    throw new Error(`${req.providerName} API error ${res.status}: ${await res.text()}`);
+    throw apiError(req.providerName, res.status, await res.text());
   }
 
   const reader = res.body?.getReader();
@@ -139,6 +200,7 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
     usage: undefined,
     responseId: undefined,
     providerName: req.providerName,
+    doneReason: undefined,
   };
 
   try {
@@ -150,6 +212,7 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
     const finalized = finalizeResponsesToolCalls(state.toolCalls);
     const terminal: ChatChunk = { done: true };
     if (state.usage) terminal.usage = state.usage;
+    if (state.doneReason) terminal.doneReason = state.doneReason;
     // Surface responseId only when the response was actually persisted
     // server-side. With store=false the API still returns an id, but it
     // can't be used as `previous_response_id` on a later call (404). Keep
@@ -193,7 +256,7 @@ export async function sendOpenAiResponses(req: OpenAiChatRequest): Promise<ChatC
   });
 
   if (!res.ok) {
-    throw new Error(`${req.providerName} API error ${res.status}: ${await res.text()}`);
+    throw apiError(req.providerName, res.status, await res.text());
   }
 
   const data = (await res.json()) as ResponsesNonStreamResponse;
