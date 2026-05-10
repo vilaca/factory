@@ -129,6 +129,40 @@ describe('buildSystemPrompt — model tiers', () => {
     }
   });
 
+  it('includes the OpenAI agentic persistence preamble when provider=openai', async () => {
+    const dir = tmpDir();
+    try {
+      const prompt = await buildSystemPrompt(dir, 'strong', { provider: 'openai' });
+      assert.ok(prompt.includes('## Continuation'));
+      assert.ok(prompt.includes('You are an agent'));
+      assert.ok(prompt.includes('"ok"'));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it('omits the agentic persistence preamble for unknown providers', async () => {
+    const dir = tmpDir();
+    try {
+      const prompt = await buildSystemPrompt(dir, 'strong', { provider: 'anthropic' });
+      assert.ok(!prompt.includes('## Continuation'));
+      // The rest of the strong-tier prompt is still present.
+      assert.ok(prompt.includes('Action over description'));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it('omits the agentic persistence preamble when no provider context is passed', async () => {
+    const dir = tmpDir();
+    try {
+      const prompt = await buildSystemPrompt(dir, 'strong');
+      assert.ok(!prompt.includes('## Continuation'));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
   it('appends Project Instructions when CLAUDE.md exists in cwd', async () => {
     const dir = tmpDir();
     try {

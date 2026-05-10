@@ -100,7 +100,9 @@ async function main(): Promise<void> {
     );
 
   const modelTier = provider.getCapabilities(model).modelTier;
-  const systemPrompt = await buildSystemPrompt(cwd, modelTier);
+  const systemPrompt = await buildSystemPrompt(cwd, modelTier, {
+    provider: providerName,
+  });
 
   let mcpManager: McpManager | undefined;
   let mcpInfo: { servers: string[]; toolCount: number } | undefined;

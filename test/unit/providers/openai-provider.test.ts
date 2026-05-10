@@ -385,6 +385,131 @@ describe('OpenAIProvider', () => {
     );
   });
 
+  it('defaults reasoning.effort to "medium" for codex on /v1/responses', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          // Cookbook recommends low+ effort to keep codex from stalling into
+          // narration; medium is our chosen codex default.
+          assert.deepStrictEqual(parsed.reasoning, { effort: 'medium' });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id: 'resp_x',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'ok' }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        await provider.chatNoStream(
+          'gpt-5.3-codex',
+          [{ role: 'user', content: 'go' }],
+          undefined,
+        );
+      },
+    );
+  });
+
+  it('honors explicit reasoningEffort override on /v1/responses', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          // Caller-supplied reasoningEffort wins over the per-model default.
+          assert.deepStrictEqual(parsed.reasoning, { effort: 'high' });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id: 'resp_x',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'ok' }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        await provider.chatNoStream(
+          'gpt-5-codex',
+          [{ role: 'user', content: 'go' }],
+          undefined,
+          { reasoningEffort: 'high' },
+        );
+      },
+    );
+  });
+
+  it('omits reasoning block for non-reasoning chat models', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          // gpt-4o is not a reasoning model — body must not carry a reasoning field.
+          assert.strictEqual('reasoning' in parsed, false);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: 'ok' } }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        await provider.chatNoStream(
+          'gpt-4o',
+          [{ role: 'user', content: 'hi' }],
+          undefined,
+          { maxTokens: 8 },
+        );
+      },
+    );
+  });
+
   it('keeps temperature on non-reasoning chat models', async () => {
     await withServer(
       (req, res) => {

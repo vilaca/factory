@@ -1,6 +1,11 @@
-import type { ChatMessage, ChatOptions, ToolDefinition } from '../types.js';
+import type {
+  ChatMessage,
+  ChatOptions,
+  ReasoningEffort,
+  ToolDefinition,
+} from '../types.js';
 
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type { ReasoningEffort };
 
 interface BuildResponsesBodyOptions {
   model: string;
@@ -18,6 +23,7 @@ interface BuildResponsesBodyOptions {
  *  instead of `max_completion_tokens`, and accepts a `reasoning` block. The
  *  first system message is hoisted to `instructions` per the API's preferred
  *  shape; subsequent system turns stay inline.
+ *  Ref: https://platform.openai.com/docs/api-reference/responses
  *
  *  When `options.responsesChain` is set the input is sliced to messages
  *  produced after the captured count, and `previous_response_id` continues
