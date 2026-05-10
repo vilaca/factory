@@ -59,6 +59,13 @@ type ToolSupportLevel = 'native' | 'basic' | 'none';
 export type ModelTier = 'strong' | 'medium' | 'weak';
 type TokenCountingMethod = 'exact' | 'estimated';
 
+/** Reasoning effort hint passed through to providers that expose a native
+ *  reasoning control. OpenAI Responses API maps this to `reasoning.effort`
+ *  (https://platform.openai.com/docs/guides/reasoning). Other providers
+ *  (Anthropic `thinking`, Google `thinkingConfig`) can map the same enum to
+ *  their own shapes when wired. */
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+
 export interface ProviderCapabilities {
   contextWindow: number;
   maxOutputTokens: number;
@@ -100,6 +107,9 @@ export interface ChatOptions {
    *  the Responses API ignore this. Pairs with ChatChunk.responseId for
    *  capture on the way out. */
   responsesChain?: { lastResponseId: string; messageCount: number };
+  /** Reasoning effort override. When unset, providers pick a per-model
+   *  default. Providers without a native reasoning control ignore. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface Provider {

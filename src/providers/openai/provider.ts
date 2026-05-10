@@ -8,6 +8,7 @@ import type {
   ModelInfo,
   ModelPickerInfo,
   ModelTier,
+  ReasoningEffort,
 } from '../types.js';
 import {
   buildChatBody,
@@ -166,6 +167,7 @@ export class OpenAIProvider implements Provider {
     // Codex rejects `temperature` outright on the Responses path; strip it
     // unconditionally for responsesApiOnly models regardless of caller default.
     const adjusted = options ? { ...options, temperature: undefined } : undefined;
+    const reasoningEffort = options?.reasoningEffort ?? defaultReasoningEffort(lower);
     return buildResponsesBody({
       model,
       messages,
@@ -173,6 +175,7 @@ export class OpenAIProvider implements Provider {
       stream,
       options: adjusted,
       parallelToolCalls: supportsParallelToolCalls(lower),
+      reasoningEffort,
     });
   }
 
@@ -368,6 +371,19 @@ function estimateMaxOutput(model: string): number {
 
 function isReasoningModel(model: string): boolean {
   return lookupFamily(model)?.reasoning ?? false;
+}
+
+function defaultReasoningEffort(model: string): ReasoningEffort | undefined {
+  // Codex with no reasoning runs like a chat-tuned model and narrates instead
+  // of acting. `medium` gives action bias without the latency tax of `high`.
+  // Non-codex reasoning models (gpt-5, o-series) can run lower since they're
+  // less prone to the same failure mode.
+  // Refs:
+  //   https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_troubleshooting_guide
+  //   https://platform.openai.com/docs/guides/reasoning
+  if (!isReasoningModel(model)) return undefined;
+  if (/codex/i.test(model)) return 'medium';
+  return 'low';
 }
 
 function isResponsesApiOnly(model: string): boolean {

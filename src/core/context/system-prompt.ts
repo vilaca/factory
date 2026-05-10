@@ -37,12 +37,13 @@ export function buildEnvironmentMessage(cwd: string): string {
 export async function buildSystemPrompt(
   cwd: string,
   modelTier: ModelTier = 'strong',
+  context?: { provider?: string },
 ): Promise<string> {
   const projectInstructions = await loadProjectInstructions(cwd);
 
   const sections: string[] = [];
 
-  sections.push(getBasePrompt(modelTier));
+  sections.push(getBasePrompt(modelTier, context?.provider));
 
   // ## Environment used to live here. Moved to buildEnvironmentMessage()
   // (an initial user message) so the system prompt is byte-stable across
@@ -113,6 +114,22 @@ const TERMINAL_TOOL_BULLETS = `- **Read**: Read file contents with line numbers.
 
 const TERMINAL_INTRO = `You are an interactive coding assistant running in a terminal. You help users with software engineering tasks by reading, writing, and editing files, running shell commands, and searching codebases.`;
 
+// OpenAI's GPT-5 troubleshooting cookbook recommends an explicit persistence
+// preamble so codex/gpt-5 don't drop into deferential narration on short
+// continuations like "ok" or "go". Anthropic models are already action-biased
+// — including this for them tends to amplify over-claiming. Empty string
+// means "no addendum for this provider".
+// Ref: https://developers.openai.com/cookbook/examples/gpt-5/gpt-5_troubleshooting_guide
+const AGENTIC_PERSISTENCE_BY_PROVIDER: Record<string, string> = {
+  openai: `## Continuation
+You are an agent. Keep going until the user's request is fully resolved before yielding back. When the user issues a brief continuation like "ok", "go", "yes", or "continue", they are telling you to act on the most recent stated plan — perform it, do not restate it. Do not produce future-tense narration ("I'll now…", "starting now", "proceeding") in place of executing; state results, not intents.`,
+};
+
+function getAgenticPersistence(provider?: string): string {
+  if (!provider) return '';
+  return AGENTIC_PERSISTENCE_BY_PROVIDER[provider.toLowerCase()] ?? '';
+}
+
 const ACTION_OVER_DESCRIPTION_SHARED = `## Action over description
 When the user asks for a code change, you MUST emit at least one tool call in your response. Replying with prose only is failure for code-change requests. Do not describe what the change would look like — that is not the assignment.
 
@@ -140,10 +157,13 @@ function buildTerminalMediumStrongPrompt(opts: {
   deniedToolRecoveryLine: string;
   scopeLine: string;
   guidelinesSection: string;
+  provider?: string;
 }): string {
+  const persistence = getAgenticPersistence(opts.provider);
+  const persistenceBlock = persistence ? `${persistence}\n\n` : '';
   return `${TERMINAL_INTRO}
 
-${opts.toolsSectionHeader}
+${persistenceBlock}${opts.toolsSectionHeader}
 ${TERMINAL_TOOL_BULLETS}
 
 ${ACTION_OVER_DESCRIPTION_SHARED}
@@ -161,7 +181,7 @@ ${ANTI_FABRICATION_BLOCK}
 ${opts.guidelinesSection}`;
 }
 
-function getBasePrompt(modelTier: ModelTier): string {
+function getBasePrompt(modelTier: ModelTier, provider?: string): string {
   if (modelTier === 'weak') {
     return `You are a coding assistant. You have tools to read, write, edit files, run commands, search, and fetch web pages.
 
@@ -197,6 +217,7 @@ function getBasePrompt(modelTier: ModelTier): string {
 - Prefer Glob/Grep over Bash for file finding and searching.
 - Keep responses short and direct.
 - Do not add features beyond what was asked.`,
+      provider,
     });
   }
 
@@ -214,5 +235,6 @@ function getBasePrompt(modelTier: ModelTier): string {
 - Do not add features, refactoring, or improvements beyond what was asked.
 - Be careful not to introduce security vulnerabilities.
 - When running Bash commands, quote paths with spaces.`,
+    provider,
   });
 }
