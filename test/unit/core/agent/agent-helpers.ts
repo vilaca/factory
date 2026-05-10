@@ -22,6 +22,10 @@ export interface MockResponse {
   >;
   /** When set, chat() throws this Error message on this queue slot (chatNoStream consumes the next slot). */
   streamError?: string;
+  /** When set, the terminal chunk carries this `doneReason` so tests can
+   *  exercise run-agent's branches on `length`, `content_filter`, `refusal`,
+   *  etc. Mirrors what real providers surface via the same field. */
+  doneReason?: string;
 }
 
 export function createMockProvider(responses: MockResponse[]): Provider {
@@ -59,10 +63,25 @@ export function createMockProvider(responses: MockResponse[]): Provider {
           yield { content: word + ' ' };
         }
       }
+      // run-agent's `output-cap-reached` branch gates on `lastUsage`, so
+      // attach a minimal usage chunk when the test exercises a doneReason —
+      // existing tests don't set doneReason and stay byte-stable.
+      const usage = resp.doneReason
+        ? { promptTokens: 1, completionTokens: 1, totalTokens: 2 }
+        : undefined;
       if (resp.tool_calls) {
-        yield { tool_calls: resp.tool_calls as any, done: true };
+        yield {
+          tool_calls: resp.tool_calls as any,
+          done: true,
+          ...(resp.doneReason ? { doneReason: resp.doneReason } : {}),
+          ...(usage ? { usage } : {}),
+        };
       } else {
-        yield { done: true };
+        yield {
+          done: true,
+          ...(resp.doneReason ? { doneReason: resp.doneReason } : {}),
+          ...(usage ? { usage } : {}),
+        };
       }
     },
     async chatNoStream(
@@ -71,10 +90,15 @@ export function createMockProvider(responses: MockResponse[]): Provider {
       _tools?: ToolDefinition[],
     ): Promise<ChatChunk> {
       const resp = queue.shift() ?? { content: 'No mock response.' };
+      const usage = resp.doneReason
+        ? { promptTokens: 1, completionTokens: 1, totalTokens: 2 }
+        : undefined;
       return {
         content: resp.content,
         tool_calls: resp.tool_calls as any,
         done: true,
+        ...(resp.doneReason ? { doneReason: resp.doneReason } : {}),
+        ...(usage ? { usage } : {}),
       };
     },
   };

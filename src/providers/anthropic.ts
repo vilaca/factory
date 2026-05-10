@@ -143,7 +143,8 @@ export class AnthropicProvider implements Provider {
             ? { cacheCreationTokens: u.cache_creation_input_tokens }
             : {}),
         };
-        yield { done: true, usage };
+        const doneReason = mapAnthropicStopReason(event.delta?.stop_reason);
+        yield { done: true, usage, ...(doneReason ? { doneReason } : {}) };
       }
     }
   }
@@ -197,10 +198,12 @@ export class AnthropicProvider implements Provider {
         ? { cacheCreationTokens: u.cache_creation_input_tokens }
         : {}),
     };
+    const doneReason = mapAnthropicStopReason(response.stop_reason);
     return {
       content: content || undefined,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       done: true,
+      ...(doneReason ? { doneReason } : {}),
       usage,
     };
   }
@@ -323,4 +326,22 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
   }
 
   return { system, msgs };
+}
+
+
+/** Map Anthropic's native `stop_reason` (`end_turn` | `max_tokens` |
+ *  `stop_sequence` | `tool_use` | `pause_turn` | `refusal`) to the agent
+ *  layer's wire-format `doneReason` set so cross-provider consumers in
+ *  `run-agent.ts` see the same vocabulary regardless of which provider
+ *  produced the turn:
+ *  - `max_tokens` → `'length'` so `output-cap-reached` fires for Anthropic
+ *    truncations the same way it does for OpenAI/Ollama.
+ *  - `refusal`    → `'refusal'` so `output-blocked` fires when Claude 4.x
+ *    declines mid-turn.
+ *  - Natural stops (`end_turn`, `stop_sequence`, `tool_use`, `pause_turn`)
+ *    return undefined; the agent layer doesn't branch on them. */
+function mapAnthropicStopReason(raw: string | null | undefined): string | undefined {
+  if (raw === 'max_tokens') return 'length';
+  if (raw === 'refusal') return 'refusal';
+  return undefined;
 }

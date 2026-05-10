@@ -201,4 +201,60 @@ describe('streamOpenAiResponses', () => {
       );
     });
   });
+
+  it('omits responseId from the terminal chunk when the request body has store=false', async () => {
+    // The Responses API still returns an id when store=false, but it can't
+    // be referenced as `previous_response_id` on a later call. Surfacing it
+    // would poison the agent-layer chain pointer; the provider must hide
+    // the id at the boundary so chainRef never captures an unreferenceable
+    // value. Symmetric with the chat-completions path (sendOpenAiResponses).
+    const events = [
+      dataLine({
+        type: 'response.completed',
+        response: {
+          id: 'resp_unstored',
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      const chunks = await collect(
+        streamOpenAiResponses({
+          url,
+          headers: {},
+          body: { model: 'gpt-5-codex', store: false },
+          providerName: 'OpenAI',
+        }),
+      );
+      const terminal = chunks[chunks.length - 1]!;
+      assert.strictEqual(terminal.done, true);
+      assert.strictEqual(terminal.responseId, undefined);
+    });
+  });
+
+  it('preserves responseId on the terminal chunk when store is omitted (defaults to true)', async () => {
+    // Sanity counter-test for the suppression above — without store=false in
+    // the body, the response is referenceable and the id must come through.
+    const events = [
+      dataLine({
+        type: 'response.completed',
+        response: {
+          id: 'resp_chainable',
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      const chunks = await collect(
+        streamOpenAiResponses({
+          url,
+          headers: {},
+          body: { model: 'gpt-5-codex' },
+          providerName: 'OpenAI',
+        }),
+      );
+      const terminal = chunks[chunks.length - 1]!;
+      assert.strictEqual(terminal.responseId, 'resp_chainable');
+    });
+  });
 });

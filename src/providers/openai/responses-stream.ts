@@ -146,7 +146,12 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
     const finalized = finalizeResponsesToolCalls(state.toolCalls);
     const terminal: ChatChunk = { done: true };
     if (state.usage) terminal.usage = state.usage;
-    if (state.responseId) terminal.responseId = state.responseId;
+    // Surface responseId only when the response was actually persisted
+    // server-side. With store=false the API still returns an id, but it
+    // can't be used as `previous_response_id` on a later call (404). Keep
+    // this policy at the wire-format boundary so chainRef on the agent
+    // side never holds an unreferenceable id.
+    if (state.responseId && isChainable(req.body)) terminal.responseId = state.responseId;
     if (finalized.length > 0) terminal.tool_calls = finalized;
     yield terminal;
   } finally {
@@ -213,8 +218,18 @@ export async function sendOpenAiResponses(req: OpenAiChatRequest): Promise<ChatC
     done: true,
     usage: extractResponsesUsage(data),
   };
-  if (data.id) result.responseId = data.id;
+  // Mirror the streaming path: skip responseId when store=false so the agent
+  // chainRef never captures an unreferenceable id (see streamOpenAiResponses).
+  if (data.id && isChainable(req.body)) result.responseId = data.id;
   if (content) result.content = content;
   if (tcs.length > 0) result.tool_calls = tcs;
   return result;
+}
+
+/** True when the request body permits a future call to chain via
+ *  `previous_response_id`. The Responses API returns a response id even when
+ *  `store: false`, but the id can't be referenced later — surfacing it would
+ *  poison the agent-layer chain pointer. */
+function isChainable(body: Record<string, unknown>): boolean {
+  return body.store !== false;
 }

@@ -79,12 +79,15 @@ describe('toResponsesInput', () => {
 
 describe('toResponsesTools', () => {
   it('flattens chat-completions tool shape to the Responses API shape', () => {
-    const flat = toResponsesTools([
-      {
-        type: 'function',
-        function: { name: 'Read', description: 'read file', parameters: { type: 'object' } },
-      },
-    ]);
+    const flat = toResponsesTools(
+      [
+        {
+          type: 'function',
+          function: { name: 'Read', description: 'read file', parameters: { type: 'object' } },
+        },
+      ],
+      false,
+    );
     assert.deepStrictEqual(flat, [
       {
         type: 'function',
@@ -94,6 +97,19 @@ describe('toResponsesTools', () => {
         strict: false,
       },
     ]);
+  });
+
+  it('passes through strict=true when requested', () => {
+    const flat = toResponsesTools(
+      [
+        {
+          type: 'function',
+          function: { name: 'Read', description: 'read file', parameters: { type: 'object' } },
+        },
+      ],
+      true,
+    );
+    assert.strictEqual((flat[0] as Record<string, unknown>).strict, true);
   });
 });
 
@@ -117,6 +133,47 @@ describe('buildResponsesBody', () => {
     assert.strictEqual('messages' in body, false);
     assert.strictEqual('temperature' in body, false);
     assert.strictEqual('previous_response_id' in body, false);
+  });
+
+  it('honors responsesStore override', () => {
+    const body = buildResponsesBody({
+      model: 'gpt-5-codex',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: false,
+      options: { responsesStore: false },
+    });
+    assert.strictEqual(body.store, false);
+  });
+
+  it('drops chain pointer when responsesStore is false', () => {
+    // Chaining requires the prior response to be retained server-side. With
+    // store=false the prior response wasn't kept either, so previous_response_id
+    // would 404 and message slicing would drop turns the server never saw.
+    const messages = [
+      { role: 'system' as const, content: 'sys' },
+      { role: 'user' as const, content: 'turn 1 user' },
+      { role: 'assistant' as const, content: 'turn 1 assistant' },
+      { role: 'user' as const, content: 'turn 2 user' },
+    ];
+    const body = buildResponsesBody({
+      model: 'gpt-5-codex',
+      messages,
+      stream: false,
+      options: {
+        responsesStore: false,
+        responsesChain: { lastResponseId: 'resp_stale', messageCount: 3 },
+      },
+    });
+    assert.strictEqual(body.store, false);
+    assert.strictEqual('previous_response_id' in body, false);
+    // Full conversation goes through (no slicing); first system message is
+    // hoisted to instructions per the API's preferred shape.
+    assert.strictEqual(body.instructions, 'sys');
+    assert.deepStrictEqual(body.input, [
+      { type: 'message', role: 'user', content: 'turn 1 user' },
+      { type: 'message', role: 'assistant', content: 'turn 1 assistant' },
+      { type: 'message', role: 'user', content: 'turn 2 user' },
+    ]);
   });
 
   it('with responsesChain set, slices input and emits previous_response_id', () => {

@@ -30,12 +30,19 @@ interface BuildResponsesBodyOptions {
  *  the server-side chain — codex reuses prior reasoning tokens instead of
  *  re-deriving them, which is the whole point of this transport.
  *
- *  `store: true` is always sent on this path: even when no chain pointer is
- *  active on this call, the response must be retained server-side so the
- *  *next* call has something to chain off. OpenAI retains stored responses
- *  for ~30 days; users who need to opt out should pick a non-codex model. */
+ *  `store` defaults to true on this path: even when no chain pointer is
+ *  active on this call, the response is retained server-side so the *next*
+ *  call can chain off it. Callers may override with `options.responsesStore`
+ *  when policy requires opt-out — chaining is incompatible with store=false
+ *  (an unstored response can't be referenced by a later `previous_response_id`),
+ *  so the chain pointer is dropped on this call when store is off. */
 export function buildResponsesBody(opts: BuildResponsesBodyOptions): Record<string, unknown> {
-  const chain = opts.options?.responsesChain;
+  const store = opts.options?.responsesStore ?? true;
+  // When store is off, the resulting response is not retained server-side and
+  // can't anchor a future chain. Honoring the inbound chain pointer would
+  // either send a `previous_response_id` for an unstored prior response (404)
+  // or slice off messages the server never saw — both wrong. Drop the chain.
+  const chain = store ? opts.options?.responsesChain : undefined;
   const messages = chain ? opts.messages.slice(chain.messageCount) : opts.messages;
   const { instructions, input } = toResponsesInput(messages);
 
@@ -43,13 +50,13 @@ export function buildResponsesBody(opts: BuildResponsesBodyOptions): Record<stri
     model: opts.model,
     input,
     stream: opts.stream,
-    store: true,
+    store,
   };
   if (chain) body.previous_response_id = chain.lastResponseId;
   if (instructions) body.instructions = instructions;
 
   if (opts.tools && opts.tools.length > 0) {
-    body.tools = toResponsesTools(opts.tools);
+    body.tools = toResponsesTools(opts.tools, opts.options?.toolStrict ?? false);
     body.parallel_tool_calls = opts.parallelToolCalls ?? true;
   }
   if (opts.options?.maxTokens) {
@@ -66,12 +73,13 @@ interface ResponsesInputResult {
   input: unknown[];
 }
 
-/** Map ChatMessage[] into the Responses API `input` array. The first
- *  contiguous system messages collapse into `instructions`; later system
- *  turns become inline messages. Assistant messages with tool_calls split
- *  into one `function_call` item per call (the assistant text, if any,
- *  goes first as a regular message). Tool results become
- *  `function_call_output` items keyed by `call_id`. */
+/** Map ChatMessage[] into the Responses API `input` array. A system message
+ *  at index 0 is hoisted into `instructions`; any other system messages
+ *  (including a second one at index 1) stay inline as regular `message`
+ *  items. Assistant messages with tool_calls split into one `function_call`
+ *  item per call (the assistant text, if any, goes first as a regular
+ *  message). Tool results become `function_call_output` items keyed by
+ *  `call_id`. */
 export function toResponsesInput(messages: ChatMessage[]): ResponsesInputResult {
   let instructions: string | undefined;
   const input: unknown[] = [];
@@ -112,13 +120,17 @@ export function toResponsesInput(messages: ChatMessage[]): ResponsesInputResult 
 
 /** Unwrap chat-completions tool shape (`{type:'function', function:{name,
  *  description, parameters}}`) into the Responses API's flat shape
- *  (`{type:'function', name, description, parameters, strict}`). */
-export function toResponsesTools(tools: ToolDefinition[]): unknown[] {
+ *  (`{type:'function', name, description, parameters, strict}`). The `strict`
+ *  flag is caller-supplied (defaults false at the body builder via
+ *  `options.toolStrict`) — turning it on requires every tool's `parameters`
+ *  schema to be fully closed-form (`additionalProperties: false`, no
+ *  unconstrained types), which arbitrary MCP tools won't always satisfy. */
+export function toResponsesTools(tools: ToolDefinition[], strict: boolean): unknown[] {
   return tools.map(t => ({
     type: 'function',
     name: t.function.name,
     description: t.function.description,
     parameters: t.function.parameters,
-    strict: false,
+    strict,
   }));
 }

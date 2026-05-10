@@ -50,10 +50,9 @@ interface OpenAiNonStreamResponse extends OpenAiCompatUsageEnvelope {
 /**
  * Stream a /chat/completions response and yield ChatChunks.
  *
- * Yields a `done: true` chunk when finish_reason is `stop` or `tool_calls`,
- * matching the existing OpenAI-compat providers' behaviour. Other finish
- * reasons (e.g. `length`) are ignored at this layer; providers that need to
- * surface them can handle that in their own chat() wrapper.
+ * Yields a `done: true` chunk when a finish_reason arrives and forwards it as
+ * `doneReason` (`stop`, `tool_calls`, `length`, etc.) so the agent layer can
+ * react (e.g. truncation retry on `length`).
  */
 export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<ChatChunk> {
   const headers = {
@@ -96,8 +95,8 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
       }
 
       const finishReason = p.choices?.[0]?.finish_reason;
-      if (finishReason === 'stop' || finishReason === 'tool_calls') {
-        yield { done: true, usage: extractUsage(p) };
+      if (typeof finishReason === 'string') {
+        yield { done: true, doneReason: finishReason, usage: extractUsage(p) };
       }
     }
 
@@ -138,6 +137,7 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
   const result: ChatChunk = {
     content: choice?.message?.content ?? undefined,
     done: true,
+    doneReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
     usage: extractUsage(data),
   };
 

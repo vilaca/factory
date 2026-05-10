@@ -76,6 +76,15 @@ export type AgentEvent =
   | { type: 'repetition-detected'; line: string; streak: number }
   | { type: 'empty-turn-warning'; completionTokens: number }
   | { type: 'output-cap-reached'; completionTokens: number }
+  /** Provider terminated the turn because the response was blocked or
+   *  refused — distinct from a natural stop. `reason` carries the raw
+   *  provider-side `finish_reason`/`stop_reason` for forensics:
+   *  - OpenAI: `content_filter` (output blocked by policy classifier).
+   *  - Anthropic: `refusal` (Claude declined the request mid-stream, 4.x).
+   *  - Other providers (Ollama, Gemini, Mistral) don't currently emit
+   *    a refusal/filter reason; the event will not fire for them. Wire a
+   *    new mapping here when one starts. */
+  | { type: 'output-blocked'; reason: string }
   | { type: 'pre-turn-stats'; tokenEstimate: number; messageCount: number; percentOfWindow: number }
   | {
       type: 'key-rotation';
