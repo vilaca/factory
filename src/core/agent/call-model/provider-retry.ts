@@ -83,6 +83,10 @@ function messageOf(err: unknown): string {
  * the server is having a bad day.
  */
 export function classifyForRetry(err: unknown): RetryDecision {
+  // TODO(openai-docs): Keep this classifier aligned with OpenAI API guidance:
+  // retry transient failures (429, 408, 5xx, network), but do NOT same-key
+  // retry auth/permission failures (401/403). Prefer key/model rotation or
+  // surfacing an actionable auth error for those.
   const status = statusOf(err);
   if (status !== undefined) {
     if (status === 408) return { retry: true, reason: 'timeout' };

@@ -96,6 +96,10 @@ function dispatchResponsesEvent(
     case 'response.failed':
     case 'response.incomplete':
     case 'response.error': {
+      // TODO(retry): Consider tagging SSE terminal failures (response.failed /
+      // response.error) as transient when OpenAI reports internal/server-side
+      // issues, so call-model retry can re-attempt instead of treating this as
+      // a generic non-retryable message-only error.
       const msg = ev.response?.error?.message ?? ev.message ?? 'unknown error';
       throw new Error(`${state.providerName} API error: ${msg}`);
     }
