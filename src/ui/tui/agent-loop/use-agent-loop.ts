@@ -194,6 +194,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     setItems([]);
     setStreamingText('');
     setLastUsage(undefined);
+    // TODO: /clear should also clear the screen, not just the conversation state.
     refreshTokenEstimate();
     addNotice('info', 'Conversation cleared.');
   }
