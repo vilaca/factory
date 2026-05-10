@@ -33,7 +33,10 @@ const ext = markedTerminal({
   reflowText: false,
   width: 0,
   showSectionPrefix: false,
-}) as unknown as MarkedTerminalExt;
+  // marked-terminal supports `tab` (indent width), but its exported
+  // `MarkedTerminalOptions` type doesn't currently include it.
+  tab: 2,
+} as unknown as Record<string, unknown>) as unknown as MarkedTerminalExt;
 const origText = ext.renderer.text;
 ext.renderer.text = function (token: unknown): string {
   if (token && typeof token === 'object') {
