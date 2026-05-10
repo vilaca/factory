@@ -162,7 +162,11 @@ describe('streamOpenAiResponses', () => {
     });
   });
 
-  it('throws when the stream emits response.failed', async () => {
+  it('throws an Error with status=500 when the stream emits response.failed without a type', async () => {
+    // SSE terminal failures default to InternalServerError per OpenAI's
+    // error-codes guide: "Retry your request after a brief wait." Without the
+    // .status tag, classifyForRetry would never see this as a 5xx and would
+    // treat it as non-retryable — which is the bug this change fixes.
     const events = [
       dataLine({
         type: 'response.failed',
@@ -180,13 +184,29 @@ describe('streamOpenAiResponses', () => {
               providerName: 'OpenAI',
             }),
           ),
-        /model unavailable/,
+        (err: unknown) => {
+          assert.ok(err instanceof Error);
+          assert.match(err.message, /model unavailable/);
+          assert.strictEqual((err as Error & { status?: number }).status, 500);
+          return true;
+        },
       );
     });
   });
 
-  it('surfaces non-2xx responses as a thrown provider error', async () => {
-    await withFailingServer(404, '{"error":{"message":"not a chat model"}}', async url => {
+  it('tags response.error with status=429 when error.code is rate_limit_exceeded', async () => {
+    // OpenAI's standard envelope is `{type:'rate_limit_error', code:'rate_limit_exceeded'}`;
+    // some newer events drop the type and only carry the code. Either way the
+    // code wins and we tag 429 so retry uses exponential backoff.
+    const events = [
+      dataLine({
+        type: 'response.error',
+        response: {
+          error: { message: 'too many', type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+        },
+      }),
+    ];
+    await withSseServer(events, async url => {
       await assert.rejects(
         () =>
           collect(
@@ -197,7 +217,236 @@ describe('streamOpenAiResponses', () => {
               providerName: 'OpenAI',
             }),
           ),
-        /OpenAI API error 404/,
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 429);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('tags response.failed with status=401 when code is invalid_api_key (type is the generic invalid_request_error)', async () => {
+    // This is the bug-fixing case: OpenAI returns
+    //   {type:'invalid_request_error', code:'invalid_api_key'}
+    // for an invalid key, with HTTP semantics 401. A naive type-first
+    // lookup would tag this 400, which would prevent the rotation layer
+    // from swapping to a different key. The code-first lookup catches it.
+    const events = [
+      dataLine({
+        type: 'response.failed',
+        response: {
+          error: { message: 'bad key', type: 'invalid_request_error', code: 'invalid_api_key' },
+        },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 401);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('falls back to type when code is absent (authentication_error → 401)', async () => {
+    const events = [
+      dataLine({
+        type: 'response.failed',
+        response: { error: { message: 'unauthorized', type: 'authentication_error' } },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 401);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('tags permission_error type as 403', async () => {
+    // The API type field is `permission_error`, not the Python SDK's
+    // `PermissionDeniedError` exception name — the wire format wins.
+    const events = [
+      dataLine({
+        type: 'response.failed',
+        response: { error: { message: 'forbidden', type: 'permission_error' } },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 403);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('falls back to generic invalid_request_error → 400 when no specific code is set', async () => {
+    const events = [
+      dataLine({
+        type: 'response.failed',
+        response: {
+          error: { message: 'bad shape', type: 'invalid_request_error' },
+        },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 400);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('treats response.incomplete with max_output_tokens as a length-truncation terminal chunk, not an error', async () => {
+    // This is the SSE equivalent of chat-completions' finish_reason: 'length'.
+    // The agent layer has a length-truncation retry path keyed on
+    // `doneReason: 'length'`; surfacing it here as a stop reason routes the
+    // call into that path instead of killing the turn with a thrown error.
+    const events = [
+      dataLine({ type: 'response.output_text.delta', output_index: 0, delta: 'partial ' }),
+      dataLine({ type: 'response.output_text.delta', output_index: 0, delta: 'answer' }),
+      dataLine({
+        type: 'response.incomplete',
+        response: {
+          id: 'resp_incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          usage: { input_tokens: 2, output_tokens: 64, total_tokens: 66 },
+        },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      const chunks = await collect(
+        streamOpenAiResponses({
+          url,
+          headers: {},
+          body: { model: 'gpt-5-codex' },
+          providerName: 'OpenAI',
+        }),
+      );
+      const text = chunks.map(c => c.content ?? '').join('');
+      assert.strictEqual(text, 'partial answer');
+      const terminal = chunks[chunks.length - 1]!;
+      assert.strictEqual(terminal.done, true);
+      assert.strictEqual(terminal.doneReason, 'length');
+      assert.strictEqual(terminal.responseId, 'resp_incomplete');
+      assert.deepStrictEqual(terminal.usage, {
+        promptTokens: 2,
+        completionTokens: 64,
+        totalTokens: 66,
+      });
+    });
+  });
+
+  it('throws status=400 on response.incomplete with a non-length reason (e.g. content_filter)', async () => {
+    // content_filter is a policy stop, not a transient failure. Routing it
+    // through 400 makes it a BadRequestError-class signal: not retryable on
+    // the same key, surfacing for the user instead.
+    const events = [
+      dataLine({
+        type: 'response.incomplete',
+        response: { incomplete_details: { reason: 'content_filter' } },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 400);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('surfaces non-2xx responses as a thrown provider error tagged with the HTTP status', async () => {
+    await withFailingServer(503, '{"error":{"message":"engine overloaded"}}', async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.ok(err instanceof Error);
+          assert.match(err.message, /OpenAI API error 503/);
+          assert.strictEqual((err as Error & { status?: number }).status, 503);
+          return true;
+        },
+      );
+    });
+  });
+
+  it('still tags 4xx auth failures so the rotation layer (not retry) handles them', async () => {
+    await withFailingServer(401, '{"error":{"message":"invalid api key"}}', async url => {
+      await assert.rejects(
+        () =>
+          collect(
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          ),
+        (err: unknown) => {
+          assert.strictEqual((err as Error & { status?: number }).status, 401);
+          return true;
+        },
       );
     });
   });

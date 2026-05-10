@@ -1,4 +1,5 @@
 import type { ChatChunk, ToolCallMessage } from '../types.js';
+import { apiError } from './errors.js';
 import { parseSseStream } from './sse.js';
 import {
   finalizeToolCalls,
@@ -68,7 +69,7 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
   });
 
   if (!res.ok) {
-    throw new Error(`${req.providerName} API error ${res.status}: ${await res.text()}`);
+    throw apiError(req.providerName, res.status, await res.text());
   }
 
   const reader = res.body?.getReader();
@@ -129,7 +130,7 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
   });
 
   if (!res.ok) {
-    throw new Error(`${req.providerName} API error ${res.status}: ${await res.text()}`);
+    throw apiError(req.providerName, res.status, await res.text());
   }
 
   const data = (await res.json()) as OpenAiNonStreamResponse;

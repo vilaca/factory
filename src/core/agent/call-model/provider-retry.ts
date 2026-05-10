@@ -81,13 +81,25 @@ function messageOf(err: unknown): string {
  * malformed (other 4xx → bug). 501 ("Not Implemented") and 505 ("Version
  * Not Supported") are 5xx but signal the call shape is wrong, not that
  * the server is having a bad day.
+ *
+ * Aligned with OpenAI's API error guide
+ * (https://developers.openai.com/api/docs/guides/error-codes.md):
+ *   - 408 APITimeoutError, 429 RateLimitError, 500 InternalServerError,
+ *     503 "engine overloaded" → retry with backoff
+ *   - 401 AuthenticationError, 403 PermissionDeniedError, 400 BadRequestError
+ *     → do not same-key retry (rotate or surface)
+ *
+ * Providers must attach `.status` to thrown errors at their boundary (see
+ * `providers/openai/errors.ts::apiError`); otherwise this classifier falls
+ * through to the network-regex bucket and treats real 5xx as non-retryable.
+ *
+ * TODO: distinguish OpenAI's 503 "Slow Down" body from the 503 "engine
+ * overloaded" body — the former is a hard rate-limit signal that the docs
+ * say to back off from for 15 minutes, not to immediately retry. Today both
+ * land in the 5xx-retry bucket. Cheap fix is a regex on the body in
+ * `apiError` returning status=429 for the Slow Down variant.
  */
 export function classifyForRetry(err: unknown): RetryDecision {
-  // TODO(openai-docs): Keep this classifier aligned with OpenAI API guidance:
-  // retry transient failures (429, 408, 5xx, network), but do NOT same-key
-  // retry auth/permission failures (401/403). Prefer key/model rotation or
-  // surfacing an actionable auth error for those.
-  // Reference: https://developers.openai.com/api/docs/guides/error-codes.md
   const status = statusOf(err);
   if (status !== undefined) {
     if (status === 408) return { retry: true, reason: 'timeout' };
