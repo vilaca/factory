@@ -17,8 +17,7 @@
     "nsTypes",
     "duplicates",
     "enumMembers",
-    "namespaceMembers",
-    "catalog"
+    "namespaceMembers"
   ],
   "treatConfigHintsAsErrors": true
 }

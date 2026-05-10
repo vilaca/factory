@@ -43,6 +43,7 @@ For verbose startup output, set `FACTORY_DEBUG=1` (or pass `--debug`) — picker
 - `Ctrl+C` once aborts; `Ctrl+C` twice in quick succession force-exits.
 - Use `--turn-timeout 120` to auto-abort turns after N seconds.
 - `/log` to grab the session-log path, then check the last few events for a stuck tool call or provider call.
+- OpenAI / OpenAI-compatible streams have a 30 s idle watchdog: if the server stops emitting events mid-stream the call fails with a 504 "OpenAI SSE stream stalled (idle timeout)" instead of hanging. Tune via `FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS` (longer for heavy o1/o3/o4/gpt-5 reasoning, shorter for aggressive failover).
 
 ### Permission prompts are noisy
 

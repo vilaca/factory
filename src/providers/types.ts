@@ -124,6 +124,50 @@ export interface ChatOptions {
   /** Reasoning effort override. When unset, providers pick a per-model
    *  default. Providers without a native reasoning control ignore. */
   reasoningEffort?: ReasoningEffort;
+  /** Reasoning summary visibility for the OpenAI Responses API. When set,
+   *  the request asks the model to emit `response.reasoning_summary_text.delta`
+   *  events at the chosen granularity. We already surface those events as
+   *  text deltas (responses-stream.ts), but the model only emits them when
+   *  asked. Providers that don't speak the Responses API ignore. */
+  reasoningSummary?: 'auto' | 'concise' | 'detailed';
+  /** OpenAI prompt cache partitioning key. When the same prefix is sent
+   *  from many concurrent sessions, supplying a stable key per logical
+   *  session improves the hit rate vs the auto-derived prefix hash.
+   *  Providers other than OpenAI / OpenAI-compatible ignore. */
+  promptCacheKey?: string;
+  /** OpenAI service tier knob. `flex` is ~50% cheaper but higher latency;
+   *  `priority` is faster at premium price; `auto` (server-chosen) and
+   *  `default` cover the common cases. Providers without an equivalent
+   *  ignore. */
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority';
+  /** Deterministic-sampling seed. When set, identical inputs yield the
+   *  same output across calls (best-effort — reasoning models still vary
+   *  because hidden CoT sampling isn't seedable). Useful for evals and
+   *  reproducible bug reports. */
+  seed?: number;
+  /** Stable hash of the end-user identifier. OpenAI uses this for abuse-
+   *  pattern detection and recommends sending one in production traffic.
+   *  Replaces the legacy `user` field. */
+  safetyIdentifier?: string;
+  /** Up to 16 free-form key/value pairs the server attaches to the
+   *  response record. Filterable in the OpenAI dashboard and via
+   *  responses-retrieval. Useful for telemetry binding (session id,
+   *  feature flag values, etc.). */
+  metadata?: Record<string, string>;
+  /** When true, send `truncation: "auto"` so the OpenAI Responses API
+   *  trims the start of `input` when it would exceed the model's context
+   *  window, instead of failing the call. Only honored on the Responses
+   *  path. */
+  truncationAuto?: boolean;
+  /** Constrain the model's output to a JSON schema. Maps to OpenAI's
+   *  `response_format: { type: "json_schema", json_schema: {...} }` on
+   *  chat completions, and to `text.format` on Responses. When set,
+   *  callers should not also rely on tool calling for the same output. */
+  responseFormat?: {
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
 }
 
 export interface Provider {

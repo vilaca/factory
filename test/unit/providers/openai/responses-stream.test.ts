@@ -1,62 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import http from 'node:http';
 import { streamOpenAiResponses } from '../../../../src/providers/openai/index.js';
 import type { ChatChunk } from '../../../../src/providers/types.js';
+import { makeSseHelpers } from './sse-test-helpers.js';
 
-function withSseServer(
-  events: string[],
-  fn: (baseUrl: string) => Promise<void>,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((_req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      for (const e of events) res.write(e);
-      res.end();
-    });
-    server.listen(0, '127.0.0.1', async () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('no address'));
-        return;
-      }
-      try {
-        await fn(`http://127.0.0.1:${address.port}/v1/responses`);
-        server.close(err => (err ? reject(err) : resolve()));
-      } catch (err) {
-        server.close(() => reject(err));
-      }
-    });
-  });
-}
-
-function withFailingServer(
-  status: number,
-  body: string,
-  fn: (baseUrl: string) => Promise<void>,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((_req, res) => {
-      res.writeHead(status, { 'Content-Type': 'application/json' });
-      res.end(body);
-    });
-    server.listen(0, '127.0.0.1', async () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('no address'));
-        return;
-      }
-      try {
-        await fn(`http://127.0.0.1:${address.port}/v1/responses`);
-        server.close(err => (err ? reject(err) : resolve()));
-      } catch (err) {
-        server.close(() => reject(err));
-      }
-    });
-  });
-}
+const { withSseServer, withFailingServer, withHangingSseServer } = makeSseHelpers('/v1/responses');
 
 async function collect(gen: AsyncGenerator<ChatChunk>): Promise<ChatChunk[]> {
   const out: ChatChunk[] = [];
@@ -66,6 +14,31 @@ async function collect(gen: AsyncGenerator<ChatChunk>): Promise<ChatChunk[]> {
 
 function dataLine(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
+}
+
+async function expectStallAndCaptureDefaultTimeoutUsage(
+  makeStream: () => AsyncGenerator<ChatChunk>,
+): Promise<boolean> {
+  const originalSetTimeout = globalThis.setTimeout;
+  let sawDefault30sTimeout = false;
+  globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+    const [handler, timeout, ...rest] = args;
+    if (timeout === 30_000) sawDefault30sTimeout = true;
+    const adjustedTimeout = timeout === 30_000 ? 10 : timeout;
+    return originalSetTimeout(handler, adjustedTimeout, ...rest);
+  }) as typeof setTimeout;
+
+  try {
+    await assert.rejects(() => collect(makeStream()), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /stalled|idle timeout/i);
+      assert.strictEqual((err as Error & { status?: number }).status, 504);
+      return true;
+    });
+    return sawDefault30sTimeout;
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
 }
 
 describe('streamOpenAiResponses', () => {
@@ -114,6 +87,30 @@ describe('streamOpenAiResponses', () => {
         totalTokens: 13,
         reasoningTokens: 3,
       });
+    });
+  });
+
+  it('surfaces reasoning_summary_text deltas as content chunks', async () => {
+    const events = [
+      dataLine({ type: 'response.reasoning_summary_text.delta', output_index: 0, delta: 'thinking ' }),
+      dataLine({ type: 'response.reasoning_summary_text.delta', output_index: 0, delta: 'summary' }),
+      dataLine({
+        type: 'response.completed',
+        response: { id: 'resp_reasoning_summary', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+      }),
+    ];
+    await withSseServer(events, async url => {
+      const chunks = await collect(
+        streamOpenAiResponses({
+          url,
+          headers: {},
+          body: { model: 'gpt-5-codex' },
+          providerName: 'OpenAI',
+        }),
+      );
+      const text = chunks.map(c => c.content ?? '').join('');
+      assert.strictEqual(text, 'thinking summary');
+      assert.strictEqual(chunks[chunks.length - 1]?.done, true);
     });
   });
 
@@ -505,5 +502,98 @@ describe('streamOpenAiResponses', () => {
       const terminal = chunks[chunks.length - 1]!;
       assert.strictEqual(terminal.responseId, 'resp_chainable');
     });
+  });
+
+  it('fails a stalled SSE stream with status=504 (idle timeout)', async () => {
+    const originalIdleTimeout = process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+    process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = '10';
+    try {
+      await withHangingSseServer(async url => {
+        await assert.rejects(
+          () =>
+            collect(
+              streamOpenAiResponses({
+                url,
+                headers: {},
+                body: { model: 'gpt-5-codex' },
+                providerName: 'OpenAI',
+              }),
+            ),
+          (err: unknown) => {
+            assert.ok(err instanceof Error);
+            assert.match(err.message, /stalled|idle timeout/i);
+            assert.strictEqual((err as Error & { status?: number }).status, 504);
+            return true;
+          },
+        );
+      });
+    } finally {
+      if (originalIdleTimeout === undefined) {
+        delete process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+      } else {
+        process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = originalIdleTimeout;
+      }
+    }
+  });
+
+  it('propagates user abort from req.signal instead of rewriting it as idle-timeout', async () => {
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(new Error('user aborted stream')), 10);
+    try {
+      await withHangingSseServer(async url => {
+        await assert.rejects(
+          () =>
+            collect(
+              streamOpenAiResponses({
+                url,
+                headers: {},
+                body: { model: 'gpt-5-codex' },
+                signal: controller.signal,
+                providerName: 'OpenAI',
+              }),
+            ),
+          (err: unknown) => {
+            assert.ok(err instanceof Error);
+            assert.strictEqual((err as Error & { status?: number }).status, undefined);
+            assert.match(err.message, /abort/i);
+            return true;
+          },
+        );
+      });
+    } finally {
+      clearTimeout(abortTimer);
+    }
+  });
+
+  it('defaults idle-timeout env parsing to 30s for missing/invalid/negative values', async () => {
+    const originalIdleTimeout = process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+    const cases: Array<string | undefined> = [undefined, 'not-a-number', '-1'];
+    try {
+      for (const value of cases) {
+        if (value === undefined) {
+          delete process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+        } else {
+          process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = value;
+        }
+
+        await withHangingSseServer(async url => {
+          const usedDefaultTimeout = await expectStallAndCaptureDefaultTimeoutUsage(() =>
+            streamOpenAiResponses({
+              url,
+              headers: {},
+              body: { model: 'gpt-5-codex' },
+              providerName: 'OpenAI',
+            }),
+          );
+          assert.strictEqual(usedDefaultTimeout, true);
+        });
+      }
+    } finally {
+      if (originalIdleTimeout === undefined) {
+        delete process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+      } else {
+        process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = originalIdleTimeout;
+      }
+    }
   });
 });

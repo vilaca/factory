@@ -4,6 +4,7 @@ import type {
   ReasoningEffort,
   ToolDefinition,
 } from '../types.js';
+import { applyCommonOpenAiOptions, buildJsonSchemaFormat, isStrictCompatible } from './messages.js';
 
 interface BuildResponsesBodyOptions {
   model: string;
@@ -14,6 +15,21 @@ interface BuildResponsesBodyOptions {
   parallelToolCalls?: boolean;
   /** Optional pin; when undefined the server picks the family default. */
   reasoningEffort?: ReasoningEffort;
+}
+
+/** Resolve the effective `store` flag. Precedence: explicit per-call
+ *  override (opts.options.responsesStore) → env (FACTORY_OPENAI_RESPONSES_STORE)
+ *  → default true. The env variable is the short-term escape hatch for users
+ *  who need server-side opt-out before a proper config-schema field lands.
+ *
+ *  TODO(config/responsesStore): plumb ChatOptions.responsesStore (types.ts:120)
+ *  through the user-facing config so it isn't only env-overridable. When
+ *  that lands, drop the env path. */
+function resolveStore(explicit: boolean | undefined): boolean {
+  if (explicit !== undefined) return explicit;
+  const raw = process.env.FACTORY_OPENAI_RESPONSES_STORE;
+  if (raw === 'false' || raw === '0') return false;
+  return true;
 }
 
 /** OpenAI Responses API request body. Different shape from chat-completions:
@@ -35,7 +51,7 @@ interface BuildResponsesBodyOptions {
  *  (an unstored response can't be referenced by a later `previous_response_id`),
  *  so the chain pointer is dropped on this call when store is off. */
 export function buildResponsesBody(opts: BuildResponsesBodyOptions): Record<string, unknown> {
-  const store = opts.options?.responsesStore ?? true;
+  const store = resolveStore(opts.options?.responsesStore);
   // When store is off, the resulting response is not retained server-side and
   // can't anchor a future chain. Honoring the inbound chain pointer would
   // either send a `previous_response_id` for an unstored prior response (404)
@@ -50,6 +66,9 @@ export function buildResponsesBody(opts: BuildResponsesBodyOptions): Record<stri
     stream: opts.stream,
     store,
   };
+  // TODO: wire OpenAI Responses `background: true` for genuinely long-running
+  // jobs (10min+), with polling/reattach semantics in the agent loop. The
+  // streaming transport intentionally enforces a short idle timeout.
   if (chain) body.previous_response_id = chain.lastResponseId;
   if (instructions) body.instructions = instructions;
 
@@ -60,8 +79,27 @@ export function buildResponsesBody(opts: BuildResponsesBodyOptions): Record<stri
   if (opts.options?.maxTokens) {
     body.max_output_tokens = opts.options.maxTokens;
   }
-  if (opts.reasoningEffort) {
-    body.reasoning = { effort: opts.reasoningEffort };
+  if (opts.reasoningEffort || opts.options?.reasoningSummary) {
+    const reasoning: Record<string, unknown> = {};
+    if (opts.reasoningEffort) reasoning.effort = opts.reasoningEffort;
+    if (opts.options?.reasoningSummary) reasoning.summary = opts.options.reasoningSummary;
+    body.reasoning = reasoning;
+  }
+  // When server-side storage is off, request client-returnable encrypted
+  // reasoning so the agent layer can re-attach reasoning continuity on the
+  // next call instead of starting cold. The capture/replay half of this
+  // feature is not yet wired — see TODO at responses-stream.ts:isChainable.
+  if (!store) {
+    body.include = ['reasoning.encrypted_content'];
+  }
+  applyCommonOpenAiOptions(body, opts.options);
+  if (opts.options?.truncationAuto) {
+    body.truncation = 'auto';
+  }
+  if (opts.options?.responseFormat) {
+    body.text = {
+      format: { type: 'json_schema', ...buildJsonSchemaFormat(opts.options.responseFormat) },
+    };
   }
   return body;
 }
@@ -118,17 +156,18 @@ export function toResponsesInput(messages: ChatMessage[]): ResponsesInputResult 
 
 /** Unwrap chat-completions tool shape (`{type:'function', function:{name,
  *  description, parameters}}`) into the Responses API's flat shape
- *  (`{type:'function', name, description, parameters, strict}`). The `strict`
- *  flag is caller-supplied (defaults false at the body builder via
- *  `options.toolStrict`) — turning it on requires every tool's `parameters`
- *  schema to be fully closed-form (`additionalProperties: false`, no
- *  unconstrained types), which arbitrary MCP tools won't always satisfy. */
+ *  (`{type:'function', name, description, parameters, strict}`). When
+ *  `strict` is true we still gate per-tool on schema compatibility:
+ *  strict mode requires `additionalProperties: false` on every object and
+ *  standard JSON-schema types only. Tools that don't satisfy this — common
+ *  for third-party (MCP) schemas — keep `strict: false` so the request as
+ *  a whole still passes. */
 export function toResponsesTools(tools: ToolDefinition[], strict: boolean): unknown[] {
   return tools.map(t => ({
     type: 'function',
     name: t.function.name,
     description: t.function.description,
     parameters: t.function.parameters,
-    strict,
+    strict: strict && isStrictCompatible(t.function.parameters),
   }));
 }
