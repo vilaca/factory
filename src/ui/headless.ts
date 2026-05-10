@@ -358,6 +358,15 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
             `  ⚠ output cap reached (${event.completionTokens} tokens) — response truncated\n`,
           );
           break;
+        case 'output-blocked':
+          // Provider's policy classifier blocked the response (OpenAI
+          // content_filter) or the model refused mid-turn (Anthropic
+          // refusal). Distinct from a natural stop — surface so scripted
+          // callers don't treat the partial output as authoritative.
+          process.stderr.write(
+            `  ⚠ output blocked by provider (${event.reason}) — partial response only\n`,
+          );
+          break;
         case 'empty-turn-warning':
           process.stderr.write(
             `  ⚠ ${event.completionTokens} tokens of internal reasoning, no visible output\n`,

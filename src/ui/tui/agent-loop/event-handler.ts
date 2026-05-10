@@ -221,6 +221,12 @@ const HANDLERS: EventHandlers = {
       `⚠ Output cap reached (${event.completionTokens} tokens). Response was truncated — ask for the rest if needed.`,
     ),
 
+  'output-blocked': (event, deps) =>
+    deps.addNotice(
+      'danger',
+      `⚠ Output blocked by provider (${event.reason}). The model declined or its output was filtered — partial response only.`,
+    ),
+
   'empty-turn-warning': (event, deps) =>
     deps.addNotice(
       'warn',

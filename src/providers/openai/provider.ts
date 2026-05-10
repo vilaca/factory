@@ -336,11 +336,19 @@ const OPENAI_FAMILIES: ReadonlyArray<OpenAIFamily> = [
   { prefix: 'gpt-3.5-turbo',         contextWindow:  16_385, maxOutputTokens: 4_096, deprecated: true },
 ];
 
-function lookupFamily(model: string): OpenAIFamily | undefined {
+function canonicalizeModelForFamilyLookup(model: string): string {
   const lower = model.toLowerCase();
+  // Normalize dotted codex minors so capability lookup hits the codex family
+  // row (`gpt-5.3-codex` -> `gpt-5-codex`, `gpt-5.1-codex-mini` ->
+  // `gpt-5-codex-mini`) while routing still keys off `/codex/i` separately.
+  return lower.replace(/^gpt-5\.\d+-codex/, 'gpt-5-codex');
+}
+
+function lookupFamily(model: string): OpenAIFamily | undefined {
+  const normalized = canonicalizeModelForFamilyLookup(model);
   let best: OpenAIFamily | undefined;
   for (const family of OPENAI_FAMILIES) {
-    if (lower.startsWith(family.prefix) && (!best || family.prefix.length > best.prefix.length)) {
+    if (normalized.startsWith(family.prefix) && (!best || family.prefix.length > best.prefix.length)) {
       best = family;
     }
   }
@@ -402,8 +410,12 @@ function supportsToolsByName(model: string): boolean {
 
 function supportsParallelToolCalls(model: string): boolean {
   if (!supportsToolsByName(model)) return false;
-  // o-series reasoning models don't support parallel tool calls.
-  if (isReasoningModel(model)) return false;
+  // Narrowed to o-series specifically. gpt-5 and codex are reasoning models
+  // too but they support parallel tool calls and the GPT-5 cookbook
+  // explicitly recommends parallelization for read-only tool batches —
+  // gating on the broader `isReasoningModel` predicate would needlessly
+  // serialize them.
+  if (/^o\d/i.test(model)) return false;
   return true;
 }
 

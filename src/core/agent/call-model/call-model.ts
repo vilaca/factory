@@ -86,6 +86,9 @@ async function* recoverViaNonStream(
   if (response.responseId) {
     state.responseId = response.responseId;
   }
+  if (response.doneReason) {
+    state.doneReason = response.doneReason;
+  }
   if (state.fullContent) {
     yield { type: 'text-chunk', content: state.fullContent };
   }

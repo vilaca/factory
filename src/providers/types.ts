@@ -41,6 +41,13 @@ export interface TokenUsage {
 export interface ChatChunk {
   content?: string;
   tool_calls?: ToolCallMessage[];
+  /** Streaming providers MAY emit more than one `done: true` chunk per call.
+   *  The OpenAI chat stream, for example, yields a first `done` carrying
+   *  `doneReason` and `usage` when `finish_reason` arrives in the SSE
+   *  channel, then a second `done` carrying finalized `tool_calls` after
+   *  delta accumulation completes. Consumers must iterate to the generator's
+   *  actual end and merge fields chunk-by-chunk; do not break on the first
+   *  `done: true` or tool calls will be lost. */
   done?: boolean;
   usage?: TokenUsage;
   /** Provider-supplied stop reason on the final chunk. Ollama uses values like
@@ -107,6 +114,13 @@ export interface ChatOptions {
    *  the Responses API ignore this. Pairs with ChatChunk.responseId for
    *  capture on the way out. */
   responsesChain?: { lastResponseId: string; messageCount: number };
+  /** OpenAI Responses API persistence toggle. Defaults to true when omitted so
+   *  codex turns can chain via `previous_response_id`. Set false to opt out of
+   *  server-side storage on providers that honor this flag. */
+  responsesStore?: boolean;
+  /** Responses-API tool strictness hint. When true, providers that support
+   *  strict JSON-schema tool calling set the equivalent native flag. */
+  toolStrict?: boolean;
   /** Reasoning effort override. When unset, providers pick a per-model
    *  default. Providers without a native reasoning control ignore. */
   reasoningEffort?: ReasoningEffort;

@@ -282,6 +282,19 @@ export async function* runAgent(
         yield { type: 'output-cap-reached', completionTokens: lastUsage.completionTokens };
       }
 
+      // Provider blocked or refused the response. The `doneReason` set is
+      // narrow and provider-specific — keep this branch in sync with the
+      // event-type docs above when a new provider starts emitting a
+      // refusal/filter signal.
+      //   OpenAI:    `content_filter` — output classified as policy-violating.
+      //   Anthropic: `refusal`        — Claude declined mid-turn (4.x).
+      if (
+        modelResult.doneReason === 'content_filter' ||
+        modelResult.doneReason === 'refusal'
+      ) {
+        yield { type: 'output-blocked', reason: modelResult.doneReason };
+      }
+
       const useUserResultFraming = !nativeToolSupport || recoveredFromText;
       conversation.addAssistant(
         storedContent,

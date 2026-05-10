@@ -549,4 +549,166 @@ describe('OpenAIProvider', () => {
       },
     );
   });
+
+  it('surfaces non-stream finish_reason as doneReason', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { content: 'trimmed' }, finish_reason: 'length' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+        );
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream('gpt-4o', [{ role: 'user', content: 'hi' }]);
+        assert.strictEqual(result.doneReason, 'length');
+      },
+    );
+  });
+
+  it('normalizes dotted codex variants to codex capability metadata', () => {
+    const provider = new OpenAIProvider({ token: 'test-token', host: 'http://unused' });
+    const dotted = provider.getCapabilities('gpt-5.3-codex');
+    const canonical = provider.getCapabilities('gpt-5-codex');
+    assert.deepStrictEqual(dotted, canonical);
+  });
+
+  it('supports Responses API store opt-out and strict tool mode', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          assert.strictEqual(parsed.store, false);
+          assert.strictEqual(parsed.tools[0].strict, true);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id: 'resp_strict',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'ok' }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        await provider.chatNoStream(
+          'gpt-5.3-codex',
+          [{ role: 'user', content: 'go' }],
+          [
+            {
+              type: 'function',
+              function: { name: 'Read', description: 'read', parameters: {} },
+            },
+          ],
+          { responsesStore: false, toolStrict: true },
+        );
+      },
+    );
+  });
+
+  it('suppresses responseId when store=false so chainRef cannot capture an unreferenceable id', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          // Server returns a response id regardless; provider must hide it
+          // upstream when the request opted out of storage.
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id: 'resp_will_404_later',
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'ok' }],
+                },
+              ],
+              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream(
+          'gpt-5.3-codex',
+          [{ role: 'user', content: 'go' }],
+          undefined,
+          { responsesStore: false },
+        );
+        assert.strictEqual(result.responseId, undefined);
+      },
+    );
+  });
+
+  it('preserves responseId when store defaults to true', async () => {
+    await withServer(
+      (req, res) => {
+        if (req.url === '/v1/models') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ data: [] }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            id: 'resp_real',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'ok' }],
+              },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          }),
+        );
+      },
+      async baseUrl => {
+        const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream(
+          'gpt-5.3-codex',
+          [{ role: 'user', content: 'go' }],
+          undefined,
+        );
+        assert.strictEqual(result.responseId, 'resp_real');
+      },
+    );
+  });
 });
