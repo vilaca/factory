@@ -87,6 +87,7 @@ export function classifyForRetry(err: unknown): RetryDecision {
   // retry transient failures (429, 408, 5xx, network), but do NOT same-key
   // retry auth/permission failures (401/403). Prefer key/model rotation or
   // surfacing an actionable auth error for those.
+  // Reference: https://developers.openai.com/api/docs/guides/error-codes.md
   const status = statusOf(err);
   if (status !== undefined) {
     if (status === 408) return { retry: true, reason: 'timeout' };
