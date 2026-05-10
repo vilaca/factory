@@ -5,8 +5,6 @@ import type {
   ToolDefinition,
 } from '../types.js';
 
-export type { ReasoningEffort };
-
 interface BuildResponsesBodyOptions {
   model: string;
   messages: ChatMessage[];
