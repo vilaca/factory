@@ -38,7 +38,7 @@ Top-level `main()`. Parses argv, applies `--debug`, branches on `--version` / `-
 
 ### `src/core/`
 
-The agent core. **`agent/run-agent.ts`** is the loop: stream model output, parse tool calls, dispatch, append results, loop until `done`. Sibling files under `agent/` split the loop into call/parse/run/compact/recover phases.
+The agent core. **`agent/run-agent.ts`** is the turn orchestrator: append user input, pre-flight compact, call/stream the model, parse/sanitize output, execute tool calls, and re-enter the loop until a terminal `turn-complete` stop reason (`completed`, `user-abort`, `token-limit`, or `error`). The `StopReason` union in `types.ts` also includes `turn-limit` (e.g. subagent runners); the main `runAgent` generator does not emit that value. Sibling files under `agent/` split the loop into call/parse/run/compact/recover phases.
 
 - `agent/` — the loop and its phases:
   - `run-agent.ts` — the top-level async generator; orchestrates one turn end-to-end.
@@ -204,15 +204,75 @@ Small helpers.
 
 ## Data flow: one user prompt → one response
 
-1. User types into the input bar in `Session.tsx`.
-2. `Session.tsx` wires the input bar to `useSessionInput` (`src/ui/tui/hooks/use-session-input.ts`); its `handleSubmit` dispatches: slash commands go to `dispatchSlashCommand`; plain text becomes `agent.queueInput(text)` on the `useAgentLoop` API.
-3. `use-agent-loop.ts` queues the message into a `Conversation` (from `core/context/conversation.ts`), then calls into `core/agent/run-agent.ts:runAgent`.
-4. `runAgent` builds the system prompt via `core/context/system-prompt.ts`, applies cache boundaries via `agent/cache/cache-boundaries.ts`, then calls `agent/call-model/call-model.ts:callModel` which streams from the provider.
-5. The provider's `chat()` method yields `ChatChunk`s — content deltas, tool calls, and a final `done: true` with usage. `runAgent` consumes these and emits `AgentEvent`s.
-6. Events flow back to `use-agent-loop.ts` → `agent-loop/event-handler.ts:handleAgentEvent`, which mutates streaming state and the display item list.
-7. When the model emits `tool_calls`, `agent/tool-calls/run-tool-calls.ts` is invoked: each call is permission-checked (`src/security/permissions.ts`), security-checked (`src/security/`), executed, and the result appended to the conversation as a `tool` message.
-8. The loop repeats until the model returns `done: true` without tool calls, or until the turn timeout triggers.
-9. `core/session/session-log.ts` writes JSONL events throughout (start, model-changes, tool-call, tool-call-result, turn-complete, errors).
+1. User submits input in `Session.tsx`.
+2. `useSessionInput` routes slash commands to `dispatchSlashCommand`; plain text reaches `run-loop.ts:processInput` via the `useAgentLoop` API (session log + UI item + optional skill injection, then the loop driver).
+3. `run-loop.ts:runAgentLoopInternal` sets per-turn runtime refs (abort controller, timeout, mutable `cwdRef`, responses-chain adapter, rotation context) and calls `core/agent/run-agent.ts:runAgent`.
+4. `runAgent` appends the user message to `Conversation`, fires `UserPromptSubmit` hook (optional), then enters `while (true)`.
+5. Each loop iteration does pre-flight compaction (`maybeCompact`), emits `pre-turn-stats` when a `contextManager` is present, then calls `call-model.ts:callModel`.
+6. `callModel` streams provider `ChatChunk`s into `text-chunk` events, handles retry/rotation, and returns final text/tool calls/usage metadata.
+7. `runAgent` parses/sanitizes response text (`parse-response.ts`), emits `text-done`, stores assistant content, and either:
+   - completes the turn if no tool calls, or
+   - runs `tool-calls/run-tool-calls.ts` (permissions/security/hooks/execution/corrector), appends tool results to conversation, and loops again so the model can react.
+8. The turn exits only via `turn-complete` with stop reason `completed`, `user-abort`, `token-limit`, or `error` from this generator (`turn-limit` is reserved for other runners — see `StopReason` in `types.ts`).
+9. In TUI mode, `event-handler.ts` consumes each `AgentEvent` and mutates UI state; in headless mode, `src/ui/headless.ts` consumes the same events and renders stdout/stderr + process exit codes.
+10. `core/session/session-log.ts` records JSONL telemetry throughout (turn/model/tool/hook/rotation events).
+
+## AgentEvent lifecycle and UI state transitions
+
+`AgentEvent` is the contract between the core loop (`core/agent`) and renderers (`ui/tui`, `ui/headless`).
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant T as TUI/Headless driver
+  participant R as runAgent
+  participant M as callModel
+  participant X as runToolCalls
+
+  U->>T: submit prompt
+  T->>R: runAgent(userInput, options)
+  loop turn loop (while true)
+    R->>R: maybeCompact + pre-turn-stats
+    R->>M: callModel(messages, tools)
+    M-->>R: text-chunk* / retries / rotations
+    R-->>T: AgentEvent stream
+    R->>R: parseModelResponse + text-done
+    alt tool calls present
+      R->>X: runToolCalls(toolCalls)
+      X-->>R: tool-call-* / permission-request / hook-*
+      R-->>T: AgentEvent stream
+    else no tool calls
+      R-->>T: turn-complete(completed)
+    end
+  end
+```
+
+Typical sequence for one successful turn:
+
+1. `text-chunk` (0..N)
+2. `text-done` (if any text)
+3. `tool-call-start` → optional `permission-request` → `tool-call-result` / `tool-call-denied` (0..N calls)
+4. repeat model + tool phases as needed
+5. `turn-complete`
+
+Important event families (full union: `AgentEvent` in `core/agent/types.ts`):
+
+- **Context/control:** `compaction-start`, `compaction`, `pre-turn-stats` (only with a context manager), `turn-complete`, `error`
+- **Model transport:** `provider-retry`, `key-rotation`, `key-rotation-exhausted`, `tuple-rotation`, `tuple-rotation-exhausted`, `repetition-detected`
+- **Permissions:** `permission-request` (interactive approval before a gated tool runs)
+- **Tool calls:** `tool-call-start`, `tool-call-result`, `tool-call-denied`, `tool-call-planned`, `tool-call-recovered`, `tool-call-corrected`, `tool-call-corrector-aborted`, `all-denied-halt`, `bash-dedup-nudge`
+- **Recovery/safety:** `auto-retry-injected`, `auto-retry-exhausted`, `tool-result-imitation-stripped`, `output-cap-reached`, `empty-turn-warning`
+- **Hooks/cache:** `hook-fired`, `hook-error`, `hook-veto`, `read-cache-hit`
+
+TUI run-state transitions (`agent-loop/event-handler.ts`):
+
+- `idle` → `running` on prompt submission.
+- `running` → `awaiting-permission` on `permission-request`.
+- `awaiting-permission` → `running` after user decision resolves.
+- turn-finalization path resets transient activity labels (`retrying…`, `rotating…`) and returns to idle at loop end.
+
+Headless consumes the same events but maps them to stderr notices and exit codes (`error`→1, `token-limit`→5, non-TTY permission block→3).
 
 ## Permission and security layering
 
