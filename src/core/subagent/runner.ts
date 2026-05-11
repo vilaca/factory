@@ -83,9 +83,11 @@ interface SubagentResult {
 /** Hard ceiling on the number of tool calls a single Delegate run may make.
  *  The agent loop on main has no built-in maxTurns; without an external cap
  *  a chatty model could investigate forever in a default-on configuration.
- *  30 is well above the typical 3–8 read-only tool calls a real
- *  investigation needs, while still bounding the worst case. */
-const SUBAGENT_TOOL_CALL_LIMIT = 30;
+ *  Broad codebase investigations (multi-file reads, cross-repo searches)
+ *  routinely need 30-50 tool calls; the previous cap of 30 fired too often,
+ *  forcing truncated answers and costly re-delegations. 80 gives comfortable
+ *  headroom for real tasks while still bounding runaway loops. */
+const SUBAGENT_TOOL_CALL_LIMIT = 80;
 
 interface SubagentRunOptions {
   provider: Provider;
