@@ -60,6 +60,62 @@ describe('runToolCalls — read-cache short-circuit', () => {
     }
   });
 
+  it('skips cache hit when Read has a non-zero offset (partial read)', async () => {
+    const fp = tmp();
+    await fs.writeFile(fp, 'line1\nline2\nline3');
+    try {
+      const cache = new FileCache();
+      const stamp = await FileCache.stamp(fp);
+      assert.ok(stamp);
+      cache.record(fp, stamp!);
+
+      const readTool = fakeTool({ name: 'Read' });
+      const permissions = new PermissionManager();
+      permissions.allowAll('Read');
+      const ctx = makeCtx({
+        permissions,
+        toolRegistry: makeRegistry([readTool]),
+        fileCache: cache,
+      });
+      const { events } = await collect(
+        runToolCalls([callOf('Read', { file_path: fp, offset: 1 })], ctx, 'sig', makeRecovery()),
+      );
+      // Should NOT get a cache hit — the model is asking for a range it may
+      // not have seen in any earlier full-file read.
+      assert.strictEqual(readTool.calls.length, 1, 'tool should have been called');
+      assert.ok(!events.some(e => e.type === 'read-cache-hit'));
+    } finally {
+      await fs.unlink(fp).catch(() => undefined);
+    }
+  });
+
+  it('skips cache hit when Read has an explicit limit (partial read)', async () => {
+    const fp = tmp();
+    await fs.writeFile(fp, 'line1\nline2\nline3');
+    try {
+      const cache = new FileCache();
+      const stamp = await FileCache.stamp(fp);
+      assert.ok(stamp);
+      cache.record(fp, stamp!);
+
+      const readTool = fakeTool({ name: 'Read' });
+      const permissions = new PermissionManager();
+      permissions.allowAll('Read');
+      const ctx = makeCtx({
+        permissions,
+        toolRegistry: makeRegistry([readTool]),
+        fileCache: cache,
+      });
+      const { events } = await collect(
+        runToolCalls([callOf('Read', { file_path: fp, limit: 10 })], ctx, 'sig', makeRecovery()),
+      );
+      assert.strictEqual(readTool.calls.length, 1, 'tool should have been called');
+      assert.ok(!events.some(e => e.type === 'read-cache-hit'));
+    } finally {
+      await fs.unlink(fp).catch(() => undefined);
+    }
+  });
+
   it('falls through to a real read when fingerprint mismatches', async () => {
     const fp = tmp();
     await fs.writeFile(fp, 'hello');
@@ -138,6 +194,50 @@ describe('runToolCalls — file cache maintenance', () => {
       });
       await collect(runToolCalls([callOf('Read', { file_path: fp })], ctx, 'sig', makeRecovery()));
       assert.ok(cache.get(fp), 'fileCache should have recorded the file');
+    } finally {
+      await fs.unlink(fp).catch(() => undefined);
+    }
+  });
+
+  it('does not record a fingerprint after a partial Read (offset)', async () => {
+    const fp = tmp();
+    await fs.writeFile(fp, 'data\nmore');
+    try {
+      const cache = new FileCache();
+      const tool = fakeTool({ name: 'Read', execute: () => ({ success: true, output: 'ok' }) });
+      const permissions = new PermissionManager();
+      permissions.allowAll('Read');
+      const ctx = makeCtx({
+        permissions,
+        toolRegistry: makeRegistry([tool]),
+        fileCache: cache,
+      });
+      await collect(
+        runToolCalls([callOf('Read', { file_path: fp, offset: 1 })], ctx, 'sig', makeRecovery()),
+      );
+      assert.strictEqual(cache.get(fp), undefined, 'partial Read should not seed the cache');
+    } finally {
+      await fs.unlink(fp).catch(() => undefined);
+    }
+  });
+
+  it('does not record a fingerprint after a partial Read (limit)', async () => {
+    const fp = tmp();
+    await fs.writeFile(fp, 'data\nmore');
+    try {
+      const cache = new FileCache();
+      const tool = fakeTool({ name: 'Read', execute: () => ({ success: true, output: 'ok' }) });
+      const permissions = new PermissionManager();
+      permissions.allowAll('Read');
+      const ctx = makeCtx({
+        permissions,
+        toolRegistry: makeRegistry([tool]),
+        fileCache: cache,
+      });
+      await collect(
+        runToolCalls([callOf('Read', { file_path: fp, limit: 5 })], ctx, 'sig', makeRecovery()),
+      );
+      assert.strictEqual(cache.get(fp), undefined, 'partial Read should not seed the cache');
     } finally {
       await fs.unlink(fp).catch(() => undefined);
     }
