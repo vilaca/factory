@@ -99,8 +99,32 @@ describe('toResponsesTools', () => {
     ]);
   });
 
-  it('passes through strict=true when requested', () => {
-    const flat = toResponsesTools(
+  it('sets strict=true only when the schema is strict-compatible', () => {
+    // Closed-form schema → strict turns on.
+    const compatible = toResponsesTools(
+      [
+        {
+          type: 'function',
+          function: {
+            name: 'Read',
+            description: 'read file',
+            parameters: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['path'],
+              properties: { path: { type: 'string' } },
+            },
+          },
+        },
+      ],
+      true,
+    );
+    assert.strictEqual((compatible[0] as Record<string, unknown>).strict, true);
+
+    // Loose schema → strict stays off even though the caller requested it.
+    // Sending strict:true here would 400 server-side, so the gate is the
+    // safer wire format.
+    const loose = toResponsesTools(
       [
         {
           type: 'function',
@@ -109,7 +133,7 @@ describe('toResponsesTools', () => {
       ],
       true,
     );
-    assert.strictEqual((flat[0] as Record<string, unknown>).strict, true);
+    assert.strictEqual((loose[0] as Record<string, unknown>).strict, false);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   extractUsage,
   formatMessage,
   buildChatBody,
+  isStrictCompatible,
 } from '../../../../src/providers/openai/index.js';
 
 function makeReader(chunks: string[]): ReadableStreamDefaultReader<Uint8Array> {
@@ -17,6 +18,40 @@ function makeReader(chunks: string[]): ReadableStreamDefaultReader<Uint8Array> {
     read(): Promise<ReadableStreamReadResult<Uint8Array>> {
       if (i >= chunks.length) return Promise.resolve({ done: true, value: undefined });
       return Promise.resolve({ done: false, value: encoder.encode(chunks[i++]) });
+    },
+    cancel: () => Promise.resolve(),
+    closed: Promise.resolve(undefined),
+    releaseLock: () => {},
+  } as any;
+}
+
+function makeHangingReader(): ReadableStreamDefaultReader<Uint8Array> {
+  return {
+    read(): Promise<ReadableStreamReadResult<Uint8Array>> {
+      return new Promise(() => {
+        // Intentionally never resolves.
+      });
+    },
+    cancel: () => Promise.resolve(),
+    closed: Promise.resolve(undefined),
+    releaseLock: () => {},
+  } as any;
+}
+
+function makeDelayedReader(
+  chunks: Array<{ chunk: string; delayMs: number }>,
+): ReadableStreamDefaultReader<Uint8Array> {
+  const encoder = new TextEncoder();
+  let i = 0;
+  return {
+    read(): Promise<ReadableStreamReadResult<Uint8Array>> {
+      if (i >= chunks.length) return Promise.resolve({ done: true, value: undefined });
+      const next = chunks[i++];
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ done: false, value: encoder.encode(next.chunk) });
+        }, next.delayMs);
+      });
     },
     cancel: () => Promise.resolve(),
     closed: Promise.resolve(undefined),
@@ -52,6 +87,24 @@ describe('parseSseStream', () => {
   it('skips lines that fail to JSON-parse rather than throwing', async () => {
     const reader = makeReader(['data: not-json\ndata: {"ok":true}\n']);
     const items = await collect(parseSseStream(reader));
+    assert.deepStrictEqual(items, [{ ok: true }]);
+  });
+
+  it('throws when no SSE bytes arrive before idleTimeoutMs', async () => {
+    const reader = makeHangingReader();
+    await assert.rejects(() => collect(parseSseStream(reader, { idleTimeoutMs: 5 })), /idle timeout/i);
+  });
+
+  it('resets idle timeout when keepalive comments keep arriving', async () => {
+    const reader = makeDelayedReader([
+      { chunk: ': keepalive\n\n', delayMs: 0 },
+      { chunk: ': keepalive\n\n', delayMs: 5 },
+      { chunk: ': keepalive\n\n', delayMs: 5 },
+      { chunk: ': keepalive\n\n', delayMs: 5 },
+      { chunk: 'data: {"ok":true}\n\n', delayMs: 5 },
+      { chunk: 'data: [DONE]\n\n', delayMs: 0 },
+    ]);
+    const items = await collect(parseSseStream(reader, { idleTimeoutMs: 50 }));
     assert.deepStrictEqual(items, [{ ok: true }]);
   });
 });
@@ -276,5 +329,78 @@ describe('buildChatBody', () => {
     const tools = body.tools as any[];
     assert.strictEqual(tools[0].cache_control, undefined);
     assert.deepStrictEqual(tools[1].cache_control, { type: 'ephemeral' });
+  });
+});
+
+describe('isStrictCompatible', () => {
+  it('accepts a closed-form object with required + additionalProperties:false', () => {
+    assert.strictEqual(
+      isStrictCompatible({
+        type: 'object',
+        additionalProperties: false,
+        required: ['a', 'b'],
+        properties: {
+          a: { type: 'string' },
+          b: { type: 'integer' },
+        },
+      }),
+      true,
+    );
+  });
+
+  it('rejects when additionalProperties is not explicitly false', () => {
+    assert.strictEqual(
+      isStrictCompatible({ type: 'object', required: ['a'], properties: { a: { type: 'string' } } }),
+      false,
+    );
+  });
+
+  it('rejects when a property is missing from required', () => {
+    assert.strictEqual(
+      isStrictCompatible({
+        type: 'object',
+        additionalProperties: false,
+        required: ['a'],
+        properties: { a: { type: 'string' }, b: { type: 'integer' } },
+      }),
+      false,
+    );
+  });
+
+  it('rejects an array without an items schema', () => {
+    assert.strictEqual(isStrictCompatible({ type: 'array' }), false);
+  });
+
+  it('recurses into nested objects', () => {
+    assert.strictEqual(
+      isStrictCompatible({
+        type: 'object',
+        additionalProperties: false,
+        required: ['outer'],
+        properties: {
+          outer: {
+            type: 'object',
+            // inner object is missing additionalProperties:false → whole tree rejected
+            required: ['inner'],
+            properties: { inner: { type: 'string' } },
+          },
+        },
+      }),
+      false,
+    );
+  });
+
+  it('rejects schemas using oneOf/anyOf (no top-level type)', () => {
+    assert.strictEqual(
+      isStrictCompatible({ oneOf: [{ type: 'string' }, { type: 'number' }] }),
+      false,
+    );
+  });
+
+  it('accepts an empty closed-form object', () => {
+    assert.strictEqual(
+      isStrictCompatible({ type: 'object', additionalProperties: false }),
+      true,
+    );
   });
 });

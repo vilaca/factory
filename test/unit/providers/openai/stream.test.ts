@@ -1,59 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import http from 'node:http';
 import { sendOpenAiChat, streamOpenAiChat } from '../../../../src/providers/openai/index.js';
 import type { ChatChunk } from '../../../../src/providers/types.js';
+import { makeSseHelpers } from './sse-test-helpers.js';
 
-function withSseServer(events: string[], fn: (url: string) => Promise<void>): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((_req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-      for (const e of events) res.write(e);
-      res.end();
-    });
-    server.listen(0, '127.0.0.1', async () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('no address'));
-        return;
-      }
-      try {
-        await fn(`http://127.0.0.1:${address.port}/v1/chat/completions`);
-        server.close(err => (err ? reject(err) : resolve()));
-      } catch (err) {
-        server.close(() => reject(err));
-      }
-    });
-  });
-}
-
-function withFailingServer(
-  status: number,
-  body: string,
-  fn: (url: string) => Promise<void>,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((_req, res) => {
-      res.writeHead(status, { 'Content-Type': 'application/json' });
-      res.end(body);
-    });
-    server.listen(0, '127.0.0.1', async () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        server.close();
-        reject(new Error('no address'));
-        return;
-      }
-      try {
-        await fn(`http://127.0.0.1:${address.port}/v1/chat/completions`);
-        server.close(err => (err ? reject(err) : resolve()));
-      } catch (err) {
-        server.close(() => reject(err));
-      }
-    });
-  });
-}
+const { withSseServer, withFailingServer, withHangingSseServer } = makeSseHelpers(
+  '/v1/chat/completions',
+);
 
 async function collect(gen: AsyncGenerator<ChatChunk>): Promise<ChatChunk[]> {
   const out: ChatChunk[] = [];
@@ -63,6 +16,31 @@ async function collect(gen: AsyncGenerator<ChatChunk>): Promise<ChatChunk[]> {
 
 function dataLine(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
+}
+
+async function expectStallAndCaptureDefaultTimeoutUsage(
+  makeStream: () => AsyncGenerator<ChatChunk>,
+): Promise<boolean> {
+  const originalSetTimeout = globalThis.setTimeout;
+  let sawDefault30sTimeout = false;
+  globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+    const [handler, timeout, ...rest] = args;
+    if (timeout === 30_000) sawDefault30sTimeout = true;
+    const adjustedTimeout = timeout === 30_000 ? 10 : timeout;
+    return originalSetTimeout(handler, adjustedTimeout, ...rest);
+  }) as typeof setTimeout;
+
+  try {
+    await assert.rejects(() => collect(makeStream()), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /stalled|idle timeout/i);
+      assert.strictEqual((err as Error & { status?: number }).status, 504);
+      return true;
+    });
+    return sawDefault30sTimeout;
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
 }
 
 describe('streamOpenAiChat', () => {
@@ -139,5 +117,98 @@ describe('streamOpenAiChat', () => {
         totalTokens: 7,
       });
     });
+  });
+
+  it('fails a stalled SSE stream with status=504 (idle timeout)', async () => {
+    const originalIdleTimeout = process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+    process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = '10';
+    try {
+      await withHangingSseServer(async url => {
+        await assert.rejects(
+          () =>
+            collect(
+              streamOpenAiChat({
+                url,
+                headers: {},
+                body: { model: 'gpt-4o', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+                providerName: 'OpenAI',
+              }),
+            ),
+          (err: unknown) => {
+            assert.ok(err instanceof Error);
+            assert.match(err.message, /stalled|idle timeout/i);
+            assert.strictEqual((err as Error & { status?: number }).status, 504);
+            return true;
+          },
+        );
+      });
+    } finally {
+      if (originalIdleTimeout === undefined) {
+        delete process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+      } else {
+        process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = originalIdleTimeout;
+      }
+    }
+  });
+
+  it('propagates user abort from req.signal instead of rewriting it as idle-timeout', async () => {
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(new Error('user aborted stream')), 10);
+    try {
+      await withHangingSseServer(async url => {
+        await assert.rejects(
+          () =>
+            collect(
+              streamOpenAiChat({
+                url,
+                headers: {},
+                body: { model: 'gpt-4o', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+                signal: controller.signal,
+                providerName: 'OpenAI',
+              }),
+            ),
+          (err: unknown) => {
+            assert.ok(err instanceof Error);
+            assert.strictEqual((err as Error & { status?: number }).status, undefined);
+            assert.match(err.message, /abort/i);
+            return true;
+          },
+        );
+      });
+    } finally {
+      clearTimeout(abortTimer);
+    }
+  });
+
+  it('defaults idle-timeout env parsing to 30s for missing/invalid/negative values', async () => {
+    const originalIdleTimeout = process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+    const cases: Array<string | undefined> = [undefined, 'not-a-number', '-1'];
+    try {
+      for (const value of cases) {
+        if (value === undefined) {
+          delete process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+        } else {
+          process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = value;
+        }
+
+        await withHangingSseServer(async url => {
+          const usedDefaultTimeout = await expectStallAndCaptureDefaultTimeoutUsage(() =>
+            streamOpenAiChat({
+              url,
+              headers: {},
+              body: { model: 'gpt-4o', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+              providerName: 'OpenAI',
+            }),
+          );
+          assert.strictEqual(usedDefaultTimeout, true);
+        });
+      }
+    } finally {
+      if (originalIdleTimeout === undefined) {
+        delete process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS;
+      } else {
+        process.env.FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS = originalIdleTimeout;
+      }
+    }
   });
 });

@@ -1,6 +1,12 @@
 import type { ChatChunk, ToolCallMessage } from '../types.js';
 import { apiError } from './errors.js';
 import { parseSseStream } from './sse.js';
+import {
+  createLinkedAbortController,
+  isIdleTimeoutFailure,
+  openAiSseIdleTimeoutMs,
+  OpenAiSseIdleAbortReason,
+} from './stream-common.js';
 import { parseToolArgs } from './tool-calls.js';
 import {
   appendArgsDelta,
@@ -114,6 +120,9 @@ function dispatchResponsesEvent(
       return undefined;
     case 'response.output_text.delta':
     case 'response.refusal.delta':
+    case 'response.reasoning_summary_text.delta':
+      // Reasoning summaries are provider-redacted visibility text (safe to
+      // surface, unlike raw chain-of-thought). Treat as normal text deltas.
       return ev.delta;
     case 'response.function_call_arguments.delta':
       if (typeof ev.output_index === 'number' && ev.delta) {
@@ -181,52 +190,71 @@ export async function* streamOpenAiResponses(req: OpenAiChatRequest): AsyncGener
     'Content-Type': 'application/json',
     ...req.headers,
   };
-  const res = await fetch(req.url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(req.body),
-    signal: req.signal,
-  });
-
-  if (!res.ok) {
-    throw apiError(req.providerName, res.status, await res.text());
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error('No response body');
-
-  const state: DispatchState = {
-    toolCalls: new Map(),
-    usage: undefined,
-    responseId: undefined,
-    providerName: req.providerName,
-    doneReason: undefined,
-  };
+  const { controller, dispose } = createLinkedAbortController(req.signal);
 
   try {
-    for await (const parsed of parseSseStream(reader)) {
-      const content = dispatchResponsesEvent(parsed as ResponsesStreamEvent, state);
-      if (content) yield { content };
+    const res = await fetch(req.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
+
+    // TODO(observability/request-id): capture `x-request-id` from res.headers
+    // and propagate it through ChatChunk + apiError so support tickets and
+    // session logs can reference the OpenAI-side request id. Both
+    // openai-node and openai-python surface it on every response; today we
+    // discard it. Attach to apiError on the !res.ok path below as well.
+    if (!res.ok) {
+      throw apiError(req.providerName, res.status, await res.text());
     }
 
-    const finalized = finalizeResponsesToolCalls(state.toolCalls);
-    const terminal: ChatChunk = { done: true };
-    if (state.usage) terminal.usage = state.usage;
-    if (state.doneReason) terminal.doneReason = state.doneReason;
-    // Surface responseId only when the response was actually persisted
-    // server-side. With store=false the API still returns an id, but it
-    // can't be used as `previous_response_id` on a later call (404). Keep
-    // this policy at the wire-format boundary so chainRef on the agent
-    // side never holds an unreferenceable id.
-    if (state.responseId && isChainable(req.body)) terminal.responseId = state.responseId;
-    if (finalized.length > 0) terminal.tool_calls = finalized;
-    yield terminal;
-  } finally {
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const state: DispatchState = {
+      toolCalls: new Map(),
+      usage: undefined,
+      responseId: undefined,
+      providerName: req.providerName,
+      doneReason: undefined,
+    };
+
     try {
-      await reader.cancel();
-    } catch {
-      /* already-cancelled or stream errored */
+      for await (const parsed of parseSseStream(reader, {
+        idleTimeoutMs: openAiSseIdleTimeoutMs(),
+        onIdleTimeout: () => controller.abort(new OpenAiSseIdleAbortReason()),
+      })) {
+        const content = dispatchResponsesEvent(parsed as ResponsesStreamEvent, state);
+        if (content) yield { content };
+      }
+
+      const finalized = finalizeResponsesToolCalls(state.toolCalls);
+      const terminal: ChatChunk = { done: true };
+      if (state.usage) terminal.usage = state.usage;
+      if (state.doneReason) terminal.doneReason = state.doneReason;
+      // Surface responseId only when the response was actually persisted
+      // server-side. With store=false the API still returns an id, but it
+      // can't be used as `previous_response_id` on a later call (404). Keep
+      // this policy at the wire-format boundary so chainRef on the agent
+      // side never holds an unreferenceable id.
+      if (state.responseId && isChainable(req.body)) terminal.responseId = state.responseId;
+      if (finalized.length > 0) terminal.tool_calls = finalized;
+      yield terminal;
+    } catch (error) {
+      if (isIdleTimeoutFailure(error, controller)) {
+        throw apiError(req.providerName, 504, 'OpenAI SSE stream stalled (idle timeout)');
+      }
+      throw error;
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        /* already-cancelled or stream errored */
+      }
     }
+  } finally {
+    dispose();
   }
 }
 
@@ -296,7 +324,28 @@ export async function sendOpenAiResponses(req: OpenAiChatRequest): Promise<ChatC
 /** True when the request body permits a future call to chain via
  *  `previous_response_id`. The Responses API returns a response id even when
  *  `store: false`, but the id can't be referenced later — surfacing it would
- *  poison the agent-layer chain pointer. */
+ *  poison the agent-layer chain pointer.
+ *
+ *  TODO(encrypted-reasoning): finish the store:false reasoning continuity
+ *  feature. Request side is done — when store:false, buildResponsesBody now
+ *  sets `include: ["reasoning.encrypted_content"]`. Remaining work:
+ *    (1) capture: in dispatchResponsesEvent, observe `response.output_item.done`
+ *        events whose `item.type === "reasoning"` and stash item.encrypted_content
+ *        plus the item shape onto DispatchState (new field encryptedReasoning).
+ *    (2) terminal chunk: extend ChatChunk with optional encryptedReasoning and
+ *        emit it on the terminal yield (parallel to how responseId is emitted).
+ *    (3) chainRef shape: extend the agent-layer chain pointer (run-agent.ts)
+ *        to carry either lastResponseId (store:true path) OR encryptedReasoning
+ *        blobs (store:false path).
+ *    (4) replay: in toResponsesInput / buildResponsesBody, when the chain
+ *        carries encryptedReasoning instead of lastResponseId, prepend those
+ *        reasoning items into the `input` array.
+ *    (5) tests: parallel to the existing chained-turn tests in
+ *        responses-stream.test.ts.
+ *  Without (1)-(5) the include is sent but its output is dropped, so
+ *  store:false sessions still lose the cache-hit (~40%→80%) and reasoning-
+ *  reuse benchmark gains documented at
+ *  https://developers.openai.com/cookbook/examples/responses_api/reasoning_items. */
 function isChainable(body: Record<string, unknown>): boolean {
   return body.store !== false;
 }

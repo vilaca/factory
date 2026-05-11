@@ -2,6 +2,12 @@ import type { ChatChunk, ToolCallMessage } from '../types.js';
 import { apiError } from './errors.js';
 import { parseSseStream } from './sse.js';
 import {
+  createLinkedAbortController,
+  isIdleTimeoutFailure,
+  openAiSseIdleTimeoutMs,
+  OpenAiSseIdleAbortReason,
+} from './stream-common.js';
+import {
   finalizeToolCalls,
   mergeStreamedToolCalls,
   parseToolArgs,
@@ -61,58 +67,77 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
     'Content-Type': 'application/json',
     ...req.headers,
   };
-  const res = await fetch(req.url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(req.body),
-    signal: req.signal,
-  });
+  const { controller, dispose } = createLinkedAbortController(req.signal);
 
-  if (!res.ok) {
-    throw apiError(req.providerName, res.status, await res.text());
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error('No response body');
-
-  let toolCalls: StreamingToolCallAcc | undefined;
-
-  // try/finally so an early exit (consumer break, downstream throw, signal
-  // abort propagating after fetch's body becomes unreadable) cancels the
-  // reader and releases its lock on the response body. Without this, an
-  // abandoned stream holds the underlying connection open until GC.
   try {
-    for await (const parsed of parseSseStream(reader)) {
-      const p = parsed as OpenAiStreamChunk & OpenAiCompatUsageEnvelope;
-      const delta = p.choices?.[0]?.delta;
+    const res = await fetch(req.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
 
-      if (delta?.content) {
-        yield { content: delta.content };
-      }
-
-      if (delta?.tool_calls) {
-        toolCalls ??= [];
-        mergeStreamedToolCalls(toolCalls, delta.tool_calls);
-      }
-
-      const finishReason = p.choices?.[0]?.finish_reason;
-      if (typeof finishReason === 'string') {
-        yield { done: true, doneReason: finishReason, usage: extractUsage(p) };
-      }
+    // TODO(observability/request-id): capture `x-request-id` from res.headers
+    // and propagate it through ChatChunk + apiError so support tickets and
+    // session logs can reference the OpenAI-side request id. Both
+    // openai-node and openai-python surface it on every response; today we
+    // discard it. Attach to apiError on the !res.ok path below as well.
+    if (!res.ok) {
+      throw apiError(req.providerName, res.status, await res.text());
     }
 
-    if (toolCalls && toolCalls.length > 0) {
-      const finalized = finalizeToolCalls(toolCalls);
-      if (finalized.length > 0) {
-        yield { tool_calls: finalized, done: true };
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    let toolCalls: StreamingToolCallAcc | undefined;
+
+    // try/finally so an early exit (consumer break, downstream throw, signal
+    // abort propagating after fetch's body becomes unreadable) cancels the
+    // reader and releases its lock on the response body. Without this, an
+    // abandoned stream holds the underlying connection open until GC.
+    try {
+      for await (const parsed of parseSseStream(reader, {
+        idleTimeoutMs: openAiSseIdleTimeoutMs(),
+        onIdleTimeout: () => controller.abort(new OpenAiSseIdleAbortReason()),
+      })) {
+        const p = parsed as OpenAiStreamChunk & OpenAiCompatUsageEnvelope;
+        const delta = p.choices?.[0]?.delta;
+
+        if (delta?.content) {
+          yield { content: delta.content };
+        }
+
+        if (delta?.tool_calls) {
+          toolCalls ??= [];
+          mergeStreamedToolCalls(toolCalls, delta.tool_calls);
+        }
+
+        const finishReason = p.choices?.[0]?.finish_reason;
+        if (typeof finishReason === 'string') {
+          yield { done: true, doneReason: finishReason, usage: extractUsage(p) };
+        }
+      }
+
+      if (toolCalls && toolCalls.length > 0) {
+        const finalized = finalizeToolCalls(toolCalls);
+        if (finalized.length > 0) {
+          yield { tool_calls: finalized, done: true };
+        }
+      }
+    } catch (error) {
+      if (isIdleTimeoutFailure(error, controller)) {
+        throw apiError(req.providerName, 504, 'OpenAI SSE stream stalled (idle timeout)');
+      }
+      throw error;
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        /* already-cancelled or stream errored */
       }
     }
   } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      /* already-cancelled or stream errored */
-    }
+    dispose();
   }
 }
 
