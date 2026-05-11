@@ -184,6 +184,13 @@ export function useSessionInput(args: UseSessionInputArgs): UseSessionInputResul
         dispatchSlash(trimmed);
         return;
       }
+      // TODO: if the input doesn't parse as a valid permission response (y/n/
+      // always/etc.), treat it as a new prompt rather than silently dropping it.
+      // The user may be trying to redirect the agent mid-permission (e.g. "stop,
+      // do X instead") — currently that text is lost and they have to retype it
+      // after resolving the permission. One approach: auto-deny the pending
+      // permission, then feed the input through processIdleInput as a fresh
+      // prompt so the agent can act on the new direction immediately.
       const decision = parsePermissionInput(trimmed, agent.permissionRequest?.toolName);
       agent.respondToPermission(decision);
       return;

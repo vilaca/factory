@@ -333,6 +333,14 @@ export async function* runAgent(
         const shouldRetry = !!recovery.lastFailureMessage && recovery.autoRetryBudget > 0;
         if (shouldRetry && recovery.lastFailureMessage) {
           recovery.autoRetryBudget--;
+          // TODO: before injecting the nudge, consider prompting the user to
+          // confirm they want the agent to retry. Silent auto-retry is convenient
+          // for transient errors (network blip, bad URL guess) but surprising when
+          // the failure is substantive (permission denied, wrong file, logic error)
+          // — the user may prefer to redirect rather than let the agent self-correct
+          // in an undesirable direction. A simple y/n prompt with the failure
+          // message shown would give them the escape hatch without blocking the
+          // common case (could default to auto-accept after a short timeout).
           conversation.addUser(
             `Your last tool call failed with: "${recovery.lastFailureMessage}". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.`,
           );

@@ -115,6 +115,15 @@ export function parseTextToolCalls(
   if (toolCalls.length === 0) {
     const objects = extractAllJsonObjects(cleaned);
     if (objects.length > 0) {
+      // TODO: when a bare JSON object has no `name` field but its keys exactly
+      // match the required parameters of exactly one registered tool, infer the
+      // tool name rather than dropping the recovery. This covers the case where
+      // the model emits only the arguments (e.g. `{"url":"https://..."}` instead
+      // of `{"name":"WebFetch","arguments":{"url":"..."}}`) — seen in the wild
+      // after auto-retry injection. Requires passing tool definitions into this
+      // function so the key-set comparison can be done. Consider prompting the
+      // user to confirm the inferred tool before executing, since the mapping is
+      // a guess (even if unambiguous) rather than an explicit model intent.
       let allMatched = true;
       const recovered: ToolCallMessage[] = [];
       for (const obj of objects) {
