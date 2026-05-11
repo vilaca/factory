@@ -6,6 +6,20 @@ import { FileCache } from '../cache/file-cache.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import type { ToolLoopContext } from './run-tool-calls.js';
 
+/** Returns true when args request a partial read (explicit offset or limit).
+ *  The cache only knows the file is unchanged — it doesn't track which line
+ *  ranges were returned to the model.  Serving a "refer to your earlier Read"
+ *  hit for a range the model never saw produces a hallucination-inducing gap,
+ *  so partial reads always bypass the cache. */
+function isPartialRead(args: Record<string, unknown> | undefined): boolean {
+  if (!args) return false;
+  const offset = args.offset;
+  const limit = args.limit;
+  if (typeof offset === 'number' && offset !== 0) return true;
+  if (limit !== undefined && limit !== null) return true;
+  return false;
+}
+
 export async function* tryReadCacheHit(
   toolCall: ToolCallMessage,
   ctx: ToolLoopContext,
@@ -14,6 +28,12 @@ export async function* tryReadCacheHit(
   const args = toolCall.function?.arguments as Record<string, unknown> | undefined;
   const path = typeof args?.file_path === 'string' ? args.file_path : null;
   if (!path) return false;
+
+  // Never serve a cache hit for partial reads (non-zero offset or explicit
+  // limit).  The cached entry only proves the file hasn't changed — not that
+  // the model has already seen the specific line range it's asking for now.
+  if (isPartialRead(args)) return false;
+
   const cached = ctx.fileCache.get(path);
   if (!cached) return false;
   // If the prior Read was already swept into a compaction summary, the model
@@ -53,6 +73,12 @@ export async function maintainFileCache(
     return;
   }
   if (fnName === TOOL_NAMES.Read) {
+    // Only seed the cache when the Read returned the full file.  A partial
+    // read (offset/limit) doesn't guarantee the model saw every line, so
+    // caching it would let a later full-file Read get a misleading
+    // "unchanged — refer to earlier Read" hit that omits lines the model
+    // never received.
+    if (isPartialRead(args)) return;
     const fp = await FileCache.stamp(path, cache.get(path));
     if (fp) cache.record(path, fp);
   }
