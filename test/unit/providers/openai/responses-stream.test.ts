@@ -16,6 +16,8 @@ function dataLine(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
 
+// TODO(test/refactor-timeout-probe): this helper is duplicated in
+// stream.test.ts; move to a shared test util.
 async function expectStallAndCaptureDefaultTimeoutUsage(
   makeStream: () => AsyncGenerator<ChatChunk>,
 ): Promise<boolean> {

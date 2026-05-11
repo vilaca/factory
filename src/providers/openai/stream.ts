@@ -69,6 +69,10 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
   };
   const { controller, dispose } = createLinkedAbortController(req.signal);
 
+  // TODO(stream/refactor-shared-runner): this fetch + SSE loop + idle-timeout
+  // mapping + reader-cancel pattern is duplicated in responses-stream.ts.
+  // Extract a shared runner that takes an event dispatcher + terminalizer so
+  // behavior stays aligned across both transports.
   try {
     const res = await fetch(req.url, {
       method: 'POST',
