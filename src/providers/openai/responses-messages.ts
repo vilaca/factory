@@ -24,7 +24,10 @@ interface BuildResponsesBodyOptions {
  *
  *  TODO(config/responsesStore): plumb ChatOptions.responsesStore (types.ts:120)
  *  through the user-facing config so it isn't only env-overridable. When
- *  that lands, drop the env path. */
+ *  that lands, drop the env path.
+ *  TODO(config/pure-builders): keep request-body builders pure by resolving
+ *  env/config once in provider construction and passing the effective value
+ *  via ChatOptions; avoid direct process.env reads in this module. */
 function resolveStore(explicit: boolean | undefined): boolean {
   if (explicit !== undefined) return explicit;
   const raw = process.env.FACTORY_OPENAI_RESPONSES_STORE;

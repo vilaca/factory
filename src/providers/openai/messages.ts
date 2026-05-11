@@ -108,6 +108,11 @@ export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknow
   if (opts.options?.temperature !== undefined) {
     body.temperature = opts.options.temperature;
   }
+  // TODO(provider-capabilities/openai-options): buildChatBody is reused by
+  // multiple "OpenAI-compatible" providers, some of which reject unknown
+  // OpenAI-only fields. Gate these pass-through options (and response_format
+  // below) behind per-provider capability flags or move this logic to the
+  // OpenAI provider-specific body builder.
   applyCommonOpenAiOptions(body, opts.options);
   if (opts.options?.responseFormat) {
     body.response_format = {
