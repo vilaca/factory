@@ -12,21 +12,20 @@ const CWD_SENTINEL_PREFIX = '__FACTORY_CWD_AFTER__';
 // Default per-call wall-clock cap. Long enough for most builds/tests but
 // short enough that a runaway command can't hold the agent loop hostage.
 // Callers can override per-call via the `timeout` parameter.
-const DEFAULT_TIMEOUT_MS = 120_000;
+const BASH_TIMEOUT = 900_000; // 15 minutes
 // Hard bounds on the model-supplied timeout. Without these, a `0` would
 // disable the timeout entirely (Node treats falsy as no timeout, so the
 // command could block the agent loop indefinitely), and `Infinity`/huge
 // values are equivalent. 1s lower bound is past any reasonable command
-// startup; 10min upper bound is past any test/build we'd want to run
-// inline (longer ones should use a background runner anyway).
+// startup; 15min upper bound matches the default.
 const MIN_TIMEOUT_MS = 1_000;
-const MAX_TIMEOUT_MS = 600_000;
-const DEFAULT_TIMEOUT_DESCRIPTION = `Timeout in milliseconds. Default: ${DEFAULT_TIMEOUT_MS} (${DEFAULT_TIMEOUT_MS / 60_000} minutes). Clamped to [${MIN_TIMEOUT_MS}, ${MAX_TIMEOUT_MS}].`;
+const MAX_TIMEOUT_MS = 900_000;
+const DEFAULT_TIMEOUT_DESCRIPTION = `Timeout in milliseconds. Default: ${BASH_TIMEOUT} (${BASH_TIMEOUT / 60_000} minutes). Clamped to [${MIN_TIMEOUT_MS}, ${MAX_TIMEOUT_MS}].`;
 
 function clampTimeout(raw: unknown): number {
-  if (raw === undefined || raw === null) return DEFAULT_TIMEOUT_MS;
+  if (raw === undefined || raw === null) return BASH_TIMEOUT;
   const n = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isFinite(n)) return DEFAULT_TIMEOUT_MS;
+  if (!Number.isFinite(n)) return BASH_TIMEOUT;
   return Math.max(MIN_TIMEOUT_MS, Math.min(n, MAX_TIMEOUT_MS));
 }
 
@@ -281,4 +280,4 @@ export const bashTool: ToolHandler = {
 };
 
 // Exported for tests.
-export const __testing = { clampTimeout, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS, DEFAULT_TIMEOUT_MS };
+export const __testing = { clampTimeout, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS, BASH_TIMEOUT };
