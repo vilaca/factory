@@ -55,3 +55,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0002](0002-core-independent-of-ui-and-cli.md) | `src/core/` has no dependency on `src/ui/` or `src/cli/` | Accepted |
 | [0003](0003-security-and-utils-are-primitive-layers.md) | `src/security/` and `src/utils/` are primitive layers with no sibling deps | Accepted |
 | [0004](0004-providers-independent-of-ui-and-tools.md) | `src/providers/` has no dependency on `src/ui/` or `src/tools/` | Accepted |
+| [0005](0005-openai-adapter-is-internal-to-providers.md) | `src/providers/openai/` is an internal adapter — no external importers | Accepted |
