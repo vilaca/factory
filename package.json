@@ -37,7 +37,7 @@
     "chalk": "^5.4.1",
     "cli-highlight": "^2.1.11",
     "google-auth-library": "^10.6.2",
-    "ink": "^7.0.1",
+    "ink": "^7.0.3",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "ollama": "^0.6.3",
