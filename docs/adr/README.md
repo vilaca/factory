@@ -53,3 +53,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | --- | ----- | ------ |
 | [0001](0001-no-cyclic-imports.md) | No cyclic imports anywhere under `src/` | Accepted |
 | [0002](0002-core-independent-of-ui-and-cli.md) | `src/core/` has no dependency on `src/ui/` or `src/cli/` | Accepted |
+| [0003](0003-security-and-utils-are-primitive-layers.md) | `src/security/` and `src/utils/` are primitive layers with no sibling deps | Accepted |
