@@ -58,3 +58,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0005](0005-openai-adapter-is-internal-to-providers.md) | `src/providers/openai/` is an internal adapter — no external importers | Accepted |
 | [0006](0006-mcp-and-ui-mutually-isolated.md) | `src/mcp/` and `src/ui/` must not import each other | Accepted |
 | [0007](0007-headless-must-not-depend-on-tui.md) | `src/ui/headless.ts` must not depend on the TUI tree | Accepted |
+| [0008](0008-ui-is-presentation-only.md) | `src/ui/` is a presentation layer (no concrete providers/tools, no SDKs, no direct network) | Accepted |
