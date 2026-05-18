@@ -63,3 +63,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0010](0010-two-tier-rotation.md) | Two-tier rotation: per-key, then per-`provider:model` tuple | Accepted |
 | [0011](0011-agent-event-contract.md) | `AgentEvent` as the single contract between core loop and renderers | Accepted |
 | [0012](0012-plan-mode-gating.md) | Plan mode: read-only tools execute freely; writes are queued | Accepted |
+| [0013](0013-builtin-security-rules-not-user-overridable.md) | Built-in security rules cannot be user-overridden, only extended | Accepted |
