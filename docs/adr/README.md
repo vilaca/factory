@@ -62,3 +62,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0009](0009-provider-abstraction-shared-openai-adapter.md) | Provider abstraction with a shared OpenAI-compatible adapter | Accepted |
 | [0010](0010-two-tier-rotation.md) | Two-tier rotation: per-key, then per-`provider:model` tuple | Accepted |
 | [0011](0011-agent-event-contract.md) | `AgentEvent` as the single contract between core loop and renderers | Accepted |
+| [0012](0012-plan-mode-gating.md) | Plan mode: read-only tools execute freely; writes are queued | Accepted |
