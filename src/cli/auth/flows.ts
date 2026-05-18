@@ -12,7 +12,7 @@ import {
 } from '../../providers/googleaistudio/auth.js';
 import { exitStartupSelection, isExitSelection, promptText } from '../prompts.js';
 import { errorMessage } from '../../utils/errors.js';
-import type { AuthResult } from './index.js';
+import type { AuthResult } from './types.js';
 
 export function resolveGoogleAiStudioAuthMode(
   config: Config,

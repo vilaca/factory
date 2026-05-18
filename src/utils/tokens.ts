@@ -1,4 +1,5 @@
-import type { ChatMessage, ToolDefinition } from '../providers/types.js';
+import type { ChatMessage } from './chat-message.js';
+import type { ToolDefinition } from './tool-definition.js';
 
 /** Approximate char-to-token ratio. Char count is the cheapest available
  *  proxy; provider tokenizers vary but ~4 chars/token holds for English

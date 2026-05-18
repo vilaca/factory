@@ -1,33 +1,10 @@
 import type { PathPolicy } from '../security/paths.js';
 import type { EnvPolicy } from '../security/env.js';
+import type { ToolDefinition } from '../utils/tool-definition.js';
+import { TOOL_NAMES } from '../utils/tool-names.js';
 
-/**
- * Canonical names for every built-in tool. String literals were sprinkled
- * across security checks, the text-tool parser, system prompts, the agent
- * loop, and permission gates — a typo at any of those sites silently broke
- * behavior (no match, fallthrough). Routing call sites through this const
- * makes typos a compile error and gives `grep TOOL_NAMES.X` exhaustive
- * coverage when reasoning about a tool's wiring.
- */
-export const TOOL_NAMES = {
-  Bash: 'Bash',
-  Read: 'Read',
-  Write: 'Write',
-  Edit: 'Edit',
-  Grep: 'Grep',
-  Glob: 'Glob',
-  WebFetch: 'WebFetch',
-  Delegate: 'Delegate',
-} as const;
-
-export interface ToolDefinition {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-}
+export type { ToolDefinition };
+export { TOOL_NAMES };
 
 export type ToolCategory = 'read-only' | 'write' | 'execute';
 

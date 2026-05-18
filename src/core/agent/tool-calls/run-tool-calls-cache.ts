@@ -4,7 +4,7 @@ import type { ToolResult } from '../../../tools/types.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
 import { FileCache } from '../cache/file-cache.js';
 import { formatToolResultMessage } from './tool-result-format.js';
-import type { ToolLoopContext } from './run-tool-calls.js';
+import type { ToolLoopContext } from './types.js';
 
 /** Returns true when args request a partial read (explicit offset or limit).
  *  The cache only knows the file is unchanged — it doesn't track which line
