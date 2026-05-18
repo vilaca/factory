@@ -89,3 +89,7 @@ The project follows [Semantic Versioning](https://semver.org/). Pre-1.0, breakin
 ## Architecture overview
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a full module map and data-flow walkthrough.
+
+## Architecture Decision Records
+
+Decisions that change an invariant in [ARCHITECTURE.md](ARCHITECTURE.md), `src/security/`, or the `core/agent/` loop require an ADR — see [docs/adr/README.md](docs/adr/README.md) for the catalogue, conventions, and template. Reference the ADR number in the PR description.
