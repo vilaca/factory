@@ -67,3 +67,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0014](0014-tool-call-resilience-stack.md) | Tool-call resilience stack for non-frontier models | Accepted |
 | [0015](0015-context-compaction.md) | Context compaction: recency window + summary, fingerprinted in cache | Accepted |
 | [0016](0016-mcp-as-toolhandlers.md) | MCP servers wrapped as `ToolHandler`s in the shared registry | Accepted |
+| [0017](0017-session-log-jsonl.md) | Session log as JSONL in `~/.factory/sessions/` | Accepted |
