@@ -5,7 +5,7 @@ import type { PermissionManager } from '../../../security/permissions.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import { errorMessage } from '../../../utils/errors.js';
-import type { ToolLoopContext } from './run-tool-calls.js';
+import type { ToolLoopContext } from './types.js';
 
 export interface ExecuteToolCallOptions {
   /**
