@@ -73,7 +73,24 @@ export async function* executeToolCall(
     ctx.permissions.isAutoAllowed(tool.name);
 
   if (!skipPrompt) {
-    const decision = yield* requestPermission(tool.name, args, ctx.signal);
+    // ctx.permissionMutex is set by the parallel-Delegate batch path so
+    // that N concurrent pipelines surface their prompts to the host one
+    // at a time. Other call sites leave it undefined; acquire() is a no-
+    // op fast-path in that case.
+    const release = ctx.permissionMutex ? await ctx.permissionMutex.acquire() : undefined;
+    let decision: PermissionDecision | 'aborted';
+    try {
+      // Re-check the auto-allow cache *after* taking the lock — an earlier
+      // prompt in the same batch may have answered "allow-all" for this
+      // tool, in which case we skip the redundant prompt entirely.
+      if (ctx.permissions.isAutoAllowed(tool.name)) {
+        decision = 'allow';
+      } else {
+        decision = yield* requestPermission(tool.name, args, ctx.signal);
+      }
+    } finally {
+      release?.();
+    }
     if (decision === 'aborted') return;
     if (decision === 'deny') {
       recordResult(`Tool call "${tool.name}" was denied by the user.`, tool.name);
@@ -167,6 +184,13 @@ async function* requestPermission(
   args: Record<string, unknown>,
   signal: AbortSignal | undefined,
 ): AsyncGenerator<AgentEvent, PermissionDecision | 'aborted'> {
+  // Short-circuit if the signal already fired before we got here. addEventListener('abort')
+  // doesn't auto-invoke for an already-dispatched event, so without this check a permission
+  // request entered post-abort would hang forever waiting on a listener that can't fire.
+  // Reachable from the parallel-Delegate batch path when an abort lands while a prior
+  // pipeline holds the permission mutex.
+  if (signal?.aborted) return 'aborted';
+
   let resolvePermission!: (d: PermissionDecision | 'abort') => void;
   const permissionPromise = new Promise<PermissionDecision | 'abort'>(resolve => {
     resolvePermission = resolve;

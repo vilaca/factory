@@ -17,6 +17,8 @@ import { runHook } from '../../hooks/index.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { tryReadCacheHit, maintainFileCache } from './run-tool-calls-cache.js';
 import { executeToolCall } from './run-tool-calls-execute.js';
+import { mergeAsyncGenerators } from './merge-async-generators.js';
+import { AsyncMutex } from './async-mutex.js';
 
 export interface ToolLoopContext {
   conversation: Conversation;
@@ -46,6 +48,13 @@ export interface ToolLoopContext {
   hooksConfig?: HooksConfig;
   onHookStderr?: (command: string, chunk: string) => void;
   onHookError?: (event: string, error: string) => void;
+  /** When set, executeToolCall serializes its `permission-request` yield
+   *  through this mutex. The parallel-Delegate batch path uses it so that
+   *  N concurrent pipelines never produce N overlapping prompts — the UI
+   *  was built assuming one prompt at a time, and a shared mutex preserves
+   *  that invariant without forcing execution itself to serialize. Other
+   *  call sites leave this undefined and pay no overhead. */
+  permissionMutex?: AsyncMutex;
 }
 
 interface ToolLoopResult {
@@ -72,20 +81,45 @@ export async function* runToolCalls(
 ): AsyncGenerator<AgentEvent, ToolLoopResult> {
   let deniedCount = 0;
 
-  // Strict sequential execution is load-bearing here, not an implementation
-  // detail. Bash can mutate ctx.cwdRef.current via cwdAfter (so a `cd` in
-  // one call is visible to the next), and the read-cache short-circuit
-  // assumes earlier results are already committed to ctx.fileCache. A
-  // future refactor that parallelizes this loop must first redesign cwd
-  // propagation (probably: each Bash call gets a snapshot of cwd, the
-  // last-completed cwdAfter wins — but "last" isn't well-defined under
-  // parallel execution, so this needs explicit policy).
-  for (const toolCall of toolCalls) {
+  // Sequential by default, with one carve-out for Delegate batches (below).
+  //
+  // Sequential is load-bearing for every other tool: Bash can mutate
+  // ctx.cwdRef.current via cwdAfter (so a `cd` in one call is visible to the
+  // next), and the read-cache short-circuit assumes earlier Read results are
+  // already committed to ctx.fileCache. A future refactor that parallelizes
+  // those tools must first redesign cwd propagation (probably: each Bash
+  // call gets a snapshot of cwd, the last-completed cwdAfter wins — but
+  // "last" isn't well-defined under parallel execution, so this needs
+  // explicit policy).
+  //
+  // Delegate is exempt: it's read-only, never touches cwdRef or fileCache,
+  // and each subagent has its own Conversation. When the model emits
+  // multiple Delegate calls in one turn, we run them concurrently — see
+  // `runDelegateBatch` below.
+  let i = 0;
+  while (i < toolCalls.length) {
     if (ctx.signal?.aborted) {
       const err = new Error('aborted');
       err.name = 'AbortError';
       throw err;
     }
+
+    const batchEnd = findDelegateBatchEnd(toolCalls, i);
+    if (batchEnd > i + 1) {
+      const batch = toolCalls.slice(i, batchEnd);
+      const { deniedCount: batchDenied } = yield* runDelegateBatch(
+        batch,
+        ctx,
+        recovery,
+        callSignature,
+      );
+      deniedCount += batchDenied;
+      i = batchEnd;
+      continue;
+    }
+
+    const toolCall = toolCalls[i]!;
+    i++;
 
     // Read-cache short-circuit: if the same file was Read earlier in this
     // session, the prior result is still in conversation (not compacted away),
@@ -120,6 +154,82 @@ export async function* runToolCalls(
   }
 
   return { deniedCount };
+}
+
+/** Walk forward from `start` while the run consists of Delegate calls.
+ *  Returns the exclusive end index of the contiguous Delegate run. */
+function findDelegateBatchEnd(toolCalls: ToolCallMessage[], start: number): number {
+  let j = start;
+  while (j < toolCalls.length && toolCalls[j]?.function?.name === TOOL_NAMES.Delegate) {
+    j++;
+  }
+  return j;
+}
+
+/** Run a contiguous batch of Delegate calls concurrently.
+ *
+ *  Each call gets its own pipeline (PreToolUse → execute → PostToolUse →
+ *  corrector) as an independent async generator; `mergeAsyncGenerators`
+ *  interleaves their events in completion order. The host (UI / test
+ *  driver) sees permission-request events as they happen and responds to
+ *  each independently — there's no shared prompt slot, only the renderer's
+ *  policy on how to display concurrent prompts.
+ *
+ *  Recovery state is touched by every call's `executeAndTrack`. Under
+ *  parallel execution "the last failure wins" is no longer well-defined,
+ *  but recovery only feeds the corrector and the consecutive-same-failure
+ *  detector — neither cares about strict ordering across siblings in the
+ *  same turn, since they only fire on cross-turn repetition. Per-call
+ *  corrector still runs at the end of each pipeline as before. */
+async function* runDelegateBatch(
+  batch: ToolCallMessage[],
+  ctx: ToolLoopContext,
+  recovery: RecoveryState,
+  callSignature: string,
+): AsyncGenerator<AgentEvent, { deniedCount: number }> {
+  // Share one mutex across every pipeline in the batch. executeToolCall
+  // reads ctx.permissionMutex and gates its permission-request yield
+  // behind it, so prompts surface to the host one at a time even though
+  // each pipeline's execute() can run concurrently. The mutex stays local
+  // to this batch — no cross-batch contention.
+  const batchCtx: ToolLoopContext = { ...ctx, permissionMutex: new AsyncMutex() };
+  const pipelines = batch.map(toolCall =>
+    runSingleDelegatePipeline(toolCall, batchCtx, recovery, callSignature),
+  );
+  const perCallDenied = yield* mergeAsyncGenerators(pipelines);
+  return { deniedCount: perCallDenied.reduce((a, b) => a + b, 0) };
+}
+
+/** One Delegate call's full pipeline. Mirrors the inline body of the
+ *  sequential loop, returning the call's denial total so the batch driver
+ *  can sum across siblings. */
+async function* runSingleDelegatePipeline(
+  toolCall: ToolCallMessage,
+  ctx: ToolLoopContext,
+  recovery: RecoveryState,
+  callSignature: string,
+): AsyncGenerator<AgentEvent, number> {
+  let deniedDelta = 0;
+
+  const { vetoed } = yield* runPreToolUseHook(toolCall, ctx);
+  if (vetoed) return deniedDelta + 1;
+
+  const tracking = yield* executeAndTrack(toolCall, ctx, recovery, callSignature);
+  deniedDelta += tracking.deniedCount;
+
+  yield* runPostToolUseHook(toolCall, ctx, tracking.lastResultForPostHook);
+  yield* maybeBashDedupNudge(toolCall, ctx);
+
+  if (tracking.lastFailedResult) {
+    const { deniedDelta: corrDenied } = yield* runCorrectorIfNeeded(
+      { toolCall, lastFailedResult: tracking.lastFailedResult, callSignature },
+      ctx,
+      recovery,
+    );
+    deniedDelta += corrDenied;
+  }
+
+  return deniedDelta;
 }
 
 interface ExecutionTracking {
