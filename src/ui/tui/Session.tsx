@@ -28,6 +28,7 @@ import {
 } from '../../core/auth/credentials.js';
 import { descriptorByAlias, DESCRIPTORS, DESCRIPTOR_LIST } from '../../providers/registry.js';
 import { useRotationFallback } from './hooks/use-rotation-fallback.js';
+import { useCompactionPicker } from './hooks/use-compaction-picker.js';
 import { useSessionInput } from './hooks/use-session-input.js';
 
 // Providers whose auth flow is `simple-prompt` are the ones the picker
@@ -90,6 +91,7 @@ export function Session(props: SessionProps): React.ReactElement {
   showFullOutputRef.current = showFullOutput;
   const agent = useAgentLoop(props);
   const { rotationPrompt, fallbackPickerResolver } = useRotationFallback(agent, setPickerOpen);
+  const { compactionPickerResolver } = useCompactionPicker(agent, setPickerOpen);
   // Cache picker-created Provider instances so getModelInfo can call their
   // pure picker-info methods (getModelPickerInfo, getDisplayModelName,
   // getCapabilities) without re-instantiating per render. Keyed by
@@ -334,16 +336,24 @@ export function Session(props: SessionProps): React.ReactElement {
             if (!descriptor) return;
             await deleteCredentialKey(descriptor.name, keyId);
           }}
-          purpose={fallbackPickerResolver ? 'select-rotation-entry' : 'select-active'}
+          purpose={
+            fallbackPickerResolver || compactionPickerResolver
+              ? 'select-rotation-entry'
+              : 'select-active'
+          }
           onCancel={() => {
-            if (fallbackPickerResolver) {
+            if (compactionPickerResolver) {
+              compactionPickerResolver(null);
+            } else if (fallbackPickerResolver) {
               fallbackPickerResolver(null);
             } else {
               setPickerOpen(false);
             }
           }}
           onCommit={(provider, chosenModel, keyId) => {
-            if (fallbackPickerResolver) {
+            if (compactionPickerResolver) {
+              compactionPickerResolver({ providerName: provider, model: chosenModel });
+            } else if (fallbackPickerResolver) {
               fallbackPickerResolver({ provider, model: chosenModel });
             } else {
               setPickerOpen(false);

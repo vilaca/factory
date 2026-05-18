@@ -1,5 +1,7 @@
+import type { MutableRefObject } from 'react';
 import { Conversation } from '../../../core/context/conversation.js';
 import { ContextManager } from '../../../core/context/context-manager.js';
+import { makeCompactionResolver } from './compaction-resolver.js';
 import { PermissionManager } from '../../../security/permissions.js';
 import { FileCache } from '../../../core/agent/cache/file-cache.js';
 import { loadSkills, SkillsRegistry } from '../../../core/skills/index.js';
@@ -65,6 +67,11 @@ interface InitialRefsInput {
   initialPlanMode: boolean;
   initialExperimental: ExperimentalFlags;
   initialGitDirty: boolean | null;
+  /** Live holder for the refs being built. The compaction-target
+   *  resolver closes over this so it can read freshly-set fields
+   *  (provider after a swap, the user-picked compactionTarget) without
+   *  the construction-time snapshot going stale. */
+  refsHolder: MutableRefObject<RunRefs | null>;
 }
 
 // eslint-disable-next-line complexity -- TODO(complexity): split optional-feature wiring (cache, hooks, planner) into builders.
@@ -93,12 +100,17 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     permissions.setBashRules(opts.bashRules);
   }
   const capabilities = opts.provider.getCapabilities(opts.model);
-  const contextManager = new ContextManager(conversation, capabilities, {
-    compactionThreshold: opts.agentConfig?.compactionThreshold,
-    recencyWindow: opts.agentConfig?.recencyWindow,
-    recencyTokens: opts.agentConfig?.recencyTokens,
-    toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
-  });
+  const contextManager = new ContextManager(
+    conversation,
+    capabilities,
+    {
+      compactionThreshold: opts.agentConfig?.compactionThreshold,
+      recencyWindow: opts.agentConfig?.recencyWindow,
+      recencyTokens: opts.agentConfig?.recencyTokens,
+      toolResultAgingTurns: opts.agentConfig?.toolResultAgingTurns,
+    },
+    makeCompactionResolver(input.refsHolder),
+  );
 
   return {
     sessionLogger,
@@ -135,6 +147,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     },
     keyFailureLog: new Map(),
     rotationPromptDeclined: false,
+    ...(opts.compactionModel ? { compactionTarget: opts.compactionModel } : {}),
     gitBranch: opts.gitBranch,
     gitDirty: input.initialGitDirty,
     cwd,

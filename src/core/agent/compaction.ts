@@ -54,6 +54,11 @@ export async function* maybeCompact(
   opts: CompactionOptions | undefined,
 ): AsyncGenerator<AgentEvent, CompactionDecision> {
   if (!contextManager) return { halt: false, compacted: false };
+  // Reset the "user cancelled compaction this turn" latch — it's a
+  // turn-scoped suppressor for the aggressive pass below, not a session
+  // setting. Without this, a cancel in turn N would silently disable
+  // compaction prompts in turn N+1.
+  contextManager.clearCompactionCancelled();
   // Normalize once — `[]` matches "no tools sent" everywhere downstream
   // (`refreshEstimate`, `ageOldToolResults`, the post-compact refresh).
   const toolDefinitions = opts?.toolDefinitions ?? [];

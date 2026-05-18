@@ -7,6 +7,7 @@ import type {
   ToolDefinition,
   ToolCallMessage,
   ProviderCapabilities,
+  ModelPickerInfo,
   ChatOptions,
 } from './types.js';
 
@@ -20,6 +21,19 @@ type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
 export class AnthropicProvider implements Provider {
   name = 'anthropic';
   private client: Anthropic;
+  /** Per-model metadata captured during listModels(). The SDK's
+   *  models.list endpoint returns max_input_tokens / max_tokens for every
+   *  model id, so we use that as the source of truth for context window
+   *  and output cap instead of hardcoding per-family numbers (which
+   *  miss things like Opus 4.x's 1M-token context). The map stays empty
+   *  until listModels() runs; getCapabilities() throws on a cache miss
+   *  rather than inventing defaults, so any code path that resolves a
+   *  model without going through the picker / startup listing surfaces
+   *  loudly instead of silently using wrong numbers. Startup
+   *  (cli/startup/phases.ts) and probeModels (cli/auth/index.ts) both
+   *  call listModels() before any capability read, which is what keeps
+   *  the cache warm in practice. */
+  private modelInfoCache = new Map<string, Anthropic.Models.ModelInfo>();
 
   constructor(apiKey?: string) {
     const key = apiKey ?? process.env.ANTHROPIC_API_KEY;
@@ -32,48 +46,54 @@ export class AnthropicProvider implements Provider {
   }
 
   async listModels(): Promise<string[]> {
-    // Note: Anthropic discovery is still a curated allowlist of the main chat
-    // families we expect to work well here, not a live API catalog.
-    return ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'];
+    const models: string[] = [];
+    for await (const model of this.client.models.list({ limit: 1000 })) {
+      models.push(model.id);
+      this.modelInfoCache.set(model.id, model);
+    }
+    return models;
+  }
+
+  getModelPickerInfo(model: string): ModelPickerInfo {
+    const lower = model.toLowerCase();
+    const caps = this.getCapabilities(model);
+    const info = this.modelInfoCache.get(model);
+    return {
+      label: model,
+      detail: buildModelDetail(caps, info?.capabilities ?? null),
+      warning: buildModelWarning(lower),
+    };
   }
 
   getCapabilities(model: string): ProviderCapabilities {
-    const lower = model.toLowerCase();
-    if (lower.includes('opus')) {
-      return {
-        contextWindow: 200000,
-        maxOutputTokens: 32000,
-        toolSupport: 'native',
-        parallelToolCalls: true,
-        streaming: true,
-        tokenCounting: 'exact',
-        modelTier: 'strong',
-      };
+    const info = this.modelInfoCache.get(model);
+    if (!info) {
+      throw new Error(
+        `Anthropic model ${model} has no cached ModelInfo — listModels() must run before getCapabilities(). ` +
+          `This indicates a code-path that resolves a model without going through the picker / startup listing.`,
+      );
     }
-    if (lower.includes('haiku')) {
-      return {
-        contextWindow: 200000,
-        maxOutputTokens: 8192,
-        toolSupport: 'native',
-        parallelToolCalls: true,
-        streaming: true,
-        tokenCounting: 'exact',
-        modelTier: 'medium',
-      };
+    if (typeof info.max_input_tokens !== 'number' || typeof info.max_tokens !== 'number') {
+      throw new Error(
+        `Anthropic model ${model} is missing max_input_tokens / max_tokens in the SDK response — ` +
+          `cannot derive capabilities without inventing numbers.`,
+      );
     }
-    // Sonnet (default)
     return {
-      contextWindow: 200000,
-      maxOutputTokens: 16000,
+      contextWindow: info.max_input_tokens,
+      maxOutputTokens: info.max_tokens,
       toolSupport: 'native',
       parallelToolCalls: true,
       streaming: true,
       tokenCounting: 'exact',
-      modelTier: 'strong',
+      // Tier isn't on Anthropic's ModelInfo; derived from the id as a UX hint
+      // for system-prompt selection and weak-tier routing. Not a hard fact —
+      // see the cross-provider capabilities reshape follow-up.
+      modelTier: anthropicTierFromId(model.toLowerCase()),
     };
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- TODO(complexity): split request build / stream parse / usage emit.
+  // eslint-disable-next-line sonarjs/cognitive-complexity, complexity -- TODO(complexity): split request build / stream parse / usage emit.
   async *chat(
     model: string,
     messages: ChatMessage[],
@@ -93,7 +113,7 @@ export class AnthropicProvider implements Provider {
         : {}),
     };
 
-    const stream = this.client.messages.stream(params);
+    const stream = this.client.messages.stream(params, this.requestOptionsFor(model));
 
     let currentToolCall: { id: string; name: string; rawArgs: string } | null = null;
 
@@ -167,7 +187,7 @@ export class AnthropicProvider implements Provider {
         : {}),
     };
 
-    const response = await this.client.messages.create(params);
+    const response = await this.client.messages.create(params, this.requestOptionsFor(model));
 
     let content = '';
     const toolCalls: ToolCallMessage[] = [];
@@ -213,6 +233,25 @@ export class AnthropicProvider implements Provider {
     msgs: MessageParam[];
   } {
     return splitMessagesForAnthropic(messages);
+  }
+
+  /** Per-request options layered on top of the SDK client defaults.
+   *  Opts into Anthropic's `context-1m-2025-08-07` beta when the cached
+   *  ModelInfo for this id advertises an input window larger than 200k
+   *  tokens — without the header the API silently caps at 200k
+   *  regardless of what the model "supports". Returns undefined
+   *  (= no extra options) otherwise so the common path stays a plain
+   *  default-headers request.
+   *
+   *  Reads from the same modelInfoCache the picker uses, so what the
+   *  picker shows ("1M ctx") and what the request actually sends (1M
+   *  beta header) come from the same source — the SDK. If the cache is
+   *  cold the user couldn't have selected the model through the picker
+   *  in the first place, so undefined here is the right behavior. */
+  private requestOptionsFor(model: string): { headers: Record<string, string> } | undefined {
+    const info = this.modelInfoCache.get(model);
+    if (!info?.max_input_tokens || info.max_input_tokens <= 200000) return undefined;
+    return { headers: { 'anthropic-beta': 'context-1m-2025-08-07' } };
   }
 }
 
@@ -328,6 +367,56 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
   return { system, msgs };
 }
 
+
+// ─── Picker / capability helpers ───────────────────────────────────────
+
+/** Tier classification derived from the model id. The Models API doesn't
+ *  expose a tier/size signal, so this is a name-based UX hint used by
+ *  weak-tier routing and system-prompt selection — not a hard
+ *  capability. The cross-provider capabilities reshape (see follow-up)
+ *  will likely promote this into an explicit, source-tagged field. */
+function anthropicTierFromId(lowerModelId: string): ProviderCapabilities['modelTier'] {
+  if (lowerModelId.includes('haiku')) return 'medium';
+  // opus, sonnet, and anything else default to strong.
+  return 'strong';
+}
+
+/** Build the picker's "detail" line for an Anthropic model.
+ *
+ *  Modality / feature badges come from the SDK's `ModelInfo.capabilities`
+ *  object, not from id-substring guessing. Older API responses (and any
+ *  non-chat model variants) leave `capabilities` null — in that case we
+ *  emit only the cost + context/output badges and skip the feature flags
+ *  rather than asserting things we don't know. */
+function buildModelDetail(
+  caps: ProviderCapabilities,
+  modelCaps: Anthropic.Models.ModelCapabilities | null,
+): string {
+  const details: string[] = ['paid'];
+  if (modelCaps?.image_input?.supported) details.push('vision');
+  if (modelCaps?.pdf_input?.supported) details.push('pdf');
+  if (modelCaps?.thinking?.supported) details.push('extended thinking');
+  details.push(`max ${formatTokenCount(caps.maxOutputTokens)} out`);
+  details.push(`${formatTokenCount(caps.contextWindow)} ctx`);
+  return details.join(' · ');
+}
+
+function buildModelWarning(modelId: string): string | undefined {
+  if (modelId.includes('preview')) return 'preview';
+  return undefined;
+}
+
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
+  }
+  if (value >= 1_000) {
+    const thousands = value / 1_000;
+    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
+  }
+  return String(value);
+}
 
 /** Map Anthropic's native `stop_reason` (`end_turn` | `max_tokens` |
  *  `stop_sequence` | `tool_use` | `pause_turn` | `refusal`) to the agent

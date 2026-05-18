@@ -5,6 +5,7 @@
 
 import type { MutableRefObject } from 'react';
 import { ContextManager } from '../../../core/context/context-manager.js';
+import { makeCompactionResolver } from './compaction-resolver.js';
 import { validateModelToolSupport } from '../../../core/auth/model-validation.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { getKey } from '../../../core/auth/credentials.js';
@@ -25,12 +26,17 @@ export interface SwapContext {
 
 function rebuildContextManager(refs: NonNullable<RunRefs>, ctx: SwapContext): void {
   const caps = refs.provider.getCapabilities(refs.model);
-  refs.contextManager = new ContextManager(refs.conversation, caps, {
-    compactionThreshold: ctx.opts.agentConfig?.compactionThreshold,
-    recencyWindow: ctx.opts.agentConfig?.recencyWindow,
-    recencyTokens: ctx.opts.agentConfig?.recencyTokens,
-    toolResultAgingTurns: ctx.opts.agentConfig?.toolResultAgingTurns,
-  });
+  refs.contextManager = new ContextManager(
+    refs.conversation,
+    caps,
+    {
+      compactionThreshold: ctx.opts.agentConfig?.compactionThreshold,
+      recencyWindow: ctx.opts.agentConfig?.recencyWindow,
+      recencyTokens: ctx.opts.agentConfig?.recencyTokens,
+      toolResultAgingTurns: ctx.opts.agentConfig?.toolResultAgingTurns,
+    },
+    makeCompactionResolver(ctx.refs),
+  );
 }
 
 /** Swap to another model on the *current* provider. Honors `provider:model`
@@ -176,6 +182,16 @@ export async function swapProvider(
   // OpenAI's side. Drop it unconditionally — the new provider has no
   // server-side state to chain off.
   refs.responsesChain = undefined;
+  // Loose invalidation of the compaction-model choice: only clear when
+  // the *old* main provider matches the compaction target's provider.
+  // If the user picked a cross-provider compaction target earlier (e.g.
+  // Anthropic for compaction while running on Cerebras), and now swaps
+  // the main provider (Cerebras → Groq), the Anthropic target is still
+  // valid and shouldn't be re-prompted. Only when they leave the
+  // provider their compaction target lives on do we drop the choice.
+  if (refs.compactionTarget && refs.compactionTarget.providerName === refs.provider.name) {
+    refs.compactionTarget = undefined;
+  }
   refs.provider = nextProvider;
   refs.model = nextModel;
   refs.primary = { provider: nextProvider.name, model: nextModel };

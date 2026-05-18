@@ -26,6 +26,13 @@ export function selectWeakTier(provider: Provider, currentModel: string): string
 /** Static map of provider → weak-tier model. Curated, not auto-discovered;
  *  if a provider's weak-tier model name shifts, update here. */
 const WEAK_TIER_MAP: Record<string, string> = {
+  // TODO: dated snapshot id — silently 404s at first compaction / delegate
+  // call if Anthropic retires it. The pre-live-listing AnthropicProvider
+  // used to hardcode the same id in its allowlist, which kept the two in
+  // sync by force; now that listModels() is live, this id can drift out
+  // from under us. Options: switch to the undated alias 'claude-haiku-4-5',
+  // or validate against listModels() output at startup and null out the
+  // mapping with a warning if absent.
   anthropic: 'claude-haiku-4-5-20251001',
   openrouter: 'anthropic/claude-haiku-4-5',
   cerebras: 'llama3.1-8b',

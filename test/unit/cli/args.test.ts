@@ -70,4 +70,12 @@ describe('parseArgs', () => {
     assert.strictEqual(parseArgs(['--help']).help, true);
     assert.strictEqual(parseArgs(['-h']).help, true);
   });
+
+  it('parses --compaction-model "<provider>:<model>"', () => {
+    assert.strictEqual(
+      parseArgs(['--compaction-model', 'anthropic:claude-haiku-4-5']).compactionModel,
+      'anthropic:claude-haiku-4-5',
+    );
+    assert.strictEqual(parseArgs([]).compactionModel, undefined);
+  });
 });

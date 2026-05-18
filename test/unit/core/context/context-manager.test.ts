@@ -219,53 +219,17 @@ describe('ContextManager — token-weighted recency window', () => {
   });
 });
 
-describe('ContextManager — summary routes to weak-tier when available', () => {
-  it('calls the provider summary on the mapped weak-tier model', async () => {
-    let summaryModelSeen: string | undefined;
-    const provider: Provider = {
-      name: 'anthropic',
-      async listModels() {
-        return [];
-      },
-      getCapabilities(model: string): ProviderCapabilities {
-        // Both strong-tier (sonnet) and weak-tier (haiku) report capabilities.
-        const isHaiku = model.includes('haiku');
-        return {
-          contextWindow: 200000,
-          maxOutputTokens: isHaiku ? 8192 : 16000,
-          toolSupport: 'native',
-          parallelToolCalls: true,
-          streaming: true,
-          tokenCounting: 'exact',
-          modelTier: isHaiku ? 'medium' : 'strong',
-        };
-      },
-      async *chat() {
-        yield { done: true } as ChatChunk;
-      },
-      async chatNoStream(model: string) {
-        summaryModelSeen = model;
-        return { content: 'a summary string', done: true } as ChatChunk;
-      },
-    };
+describe('ContextManager — summary model selection without a resolver', () => {
+  // Pre-resolver behavior was "route the summary call through
+  // selectWeakTier()" — that lookup table now lives in core/agent/call-
+  // model/weak-tier.ts and is no longer consulted from the compaction
+  // path. Compaction's model choice is the resolver's job (see
+  // "ContextManager.compact resolver routing"); when no resolver is
+  // wired, the summary call uses whatever model the caller passed in.
+  // That matches the legacy "no weak-tier mapping" behavior for any
+  // provider that wasn't in the table.
 
-    const conv = new Conversation('SYSTEM');
-    for (let i = 0; i < 12; i++) {
-      conv.addUser(`q${i}`);
-      conv.addAssistant(`a${i}`);
-    }
-    const cm = new ContextManager(conv, provider.getCapabilities('claude-sonnet-4-6'), {
-      compactionThreshold: 0.0001,
-      recencyWindow: 4,
-      recencyTokens: 0,
-    });
-    cm.updateUsage(undefined);
-    await cm.compact(provider, 'claude-sonnet-4-6', undefined);
-
-    assert.strictEqual(summaryModelSeen, 'claude-haiku-4-5-20251001');
-  });
-
-  it('falls back to the primary model when no weak-tier mapping exists', async () => {
+  it('falls back to the primary model when no resolver is wired', async () => {
     let summaryModelSeen: string | undefined;
     const provider: Provider = {
       name: 'cohere',
@@ -415,5 +379,127 @@ describe('ContextManager.ageOldToolResults', () => {
     const aged = cm.ageOldToolResults([]);
     assert.strictEqual(aged, 0);
     assert.strictEqual(cm.getTokenEstimate(), before);
+  });
+});
+
+// Recording provider for resolver tests. Captures the name of the
+// provider whose chatNoStream was invoked (used to assert that the
+// summary call routed to the resolver's pick rather than the
+// passed-in primary provider). Returns "" for the summary so callers
+// drop into the mechanical-summary path uniformly — we're asserting
+// routing, not the produced text.
+function recordingProvider(name: string, calls: string[]): Provider {
+  return {
+    name,
+    async listModels() {
+      return [];
+    },
+    getCapabilities() {
+      return capabilities;
+    },
+    async *chat() {
+      yield { done: true } as ChatChunk;
+    },
+    async chatNoStream() {
+      calls.push(name);
+      return { type: 'text-done', text: 'recorded summary' } as ChatChunk;
+    },
+  };
+}
+
+describe('ContextManager.compact resolver routing', () => {
+  function seedFatConversation(conv: Conversation): void {
+    // Need enough messages to clear the recency window so compact() actually
+    // summarizes (not "too few turns"). Six exchanges is plenty.
+    for (let i = 0; i < 8; i++) {
+      conv.addUser(`prompt ${i}`);
+      conv.addAssistant(`reply ${i}`);
+    }
+  }
+
+  it('resolver null → compact returns null and skips the summary call', async () => {
+    const conv = new Conversation('SYSTEM');
+    seedFatConversation(conv);
+    const calls: string[] = [];
+    const primary = recordingProvider('primary', calls);
+    const cm = new ContextManager(conv, capabilities, undefined, async () => null);
+    const result = await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    assert.strictEqual(result, null, 'compact should bail out');
+    assert.deepStrictEqual(calls, [], 'no provider call should have happened');
+  });
+
+  it('resolver target → summary routes to the target provider, not the primary', async () => {
+    const conv = new Conversation('SYSTEM');
+    seedFatConversation(conv);
+    const calls: string[] = [];
+    const primary = recordingProvider('primary', calls);
+    const target = recordingProvider('compaction-target', calls);
+    const cm = new ContextManager(conv, capabilities, undefined, async () => ({
+      provider: target,
+      model: 'target-model',
+    }));
+    const result = await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    assert.ok(result, 'compaction should run');
+    assert.deepStrictEqual(
+      calls,
+      ['compaction-target'],
+      'only the resolver-chosen provider should be called',
+    );
+  });
+
+  it('cancel latch suppresses a second resolver call within the same turn', async () => {
+    const conv = new Conversation('SYSTEM');
+    seedFatConversation(conv);
+    let resolverCalls = 0;
+    const cm = new ContextManager(conv, capabilities, undefined, async () => {
+      resolverCalls++;
+      return null;
+    });
+    const primary = recordingProvider('primary', []);
+    await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    assert.strictEqual(resolverCalls, 1, 'second compact in same turn must not re-prompt');
+  });
+
+  it('clearCompactionCancelled re-arms the latch for the next turn', async () => {
+    const conv = new Conversation('SYSTEM');
+    seedFatConversation(conv);
+    let resolverCalls = 0;
+    const cm = new ContextManager(conv, capabilities, undefined, async () => {
+      resolverCalls++;
+      return null;
+    });
+    const primary = recordingProvider('primary', []);
+    await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    cm.clearCompactionCancelled();
+    await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    assert.strictEqual(resolverCalls, 2, 'next turn should re-prompt after clear');
+  });
+
+  it('precomputedSummary bypasses the resolver entirely', async () => {
+    const conv = new Conversation('SYSTEM');
+    seedFatConversation(conv);
+    let resolverCalls = 0;
+    const cm = new ContextManager(conv, capabilities, undefined, async () => {
+      resolverCalls++;
+      return null;
+    });
+    const primary = recordingProvider('primary', []);
+    const result = await cm.compact(primary, 'primary-model', undefined, {
+      aggressive: true,
+      precomputedSummary: 'pre-baked summary content',
+    });
+    assert.ok(result, 'compaction should run with a precomputed summary');
+    assert.strictEqual(resolverCalls, 0, 'precomputed summary must not trigger the prompt');
+  });
+
+  it('no resolver wired → falls back to using the passed provider/model', async () => {
+    const conv = new Conversation('SYSTEM');
+    seedFatConversation(conv);
+    const calls: string[] = [];
+    const primary = recordingProvider('primary', calls);
+    const cm = new ContextManager(conv, capabilities); // no resolver
+    await cm.compact(primary, 'primary-model', undefined, { aggressive: true });
+    assert.deepStrictEqual(calls, ['primary'], 'legacy callers stay on the passed provider');
   });
 });
