@@ -66,3 +66,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0013](0013-builtin-security-rules-not-user-overridable.md) | Built-in security rules cannot be user-overridden, only extended | Accepted |
 | [0014](0014-tool-call-resilience-stack.md) | Tool-call resilience stack for non-frontier models | Accepted |
 | [0015](0015-context-compaction.md) | Context compaction: recency window + summary, fingerprinted in cache | Accepted |
+| [0016](0016-mcp-as-toolhandlers.md) | MCP servers wrapped as `ToolHandler`s in the shared registry | Accepted |
