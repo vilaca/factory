@@ -52,3 +52,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | #   | Title | Status |
 | --- | ----- | ------ |
 | [0001](0001-no-cyclic-imports.md) | No cyclic imports anywhere under `src/` | Accepted |
+| [0002](0002-core-independent-of-ui-and-cli.md) | `src/core/` has no dependency on `src/ui/` or `src/cli/` | Accepted |
