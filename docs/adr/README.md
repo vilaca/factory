@@ -64,3 +64,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0011](0011-agent-event-contract.md) | `AgentEvent` as the single contract between core loop and renderers | Accepted |
 | [0012](0012-plan-mode-gating.md) | Plan mode: read-only tools execute freely; writes are queued | Accepted |
 | [0013](0013-builtin-security-rules-not-user-overridable.md) | Built-in security rules cannot be user-overridden, only extended | Accepted |
+| [0014](0014-tool-call-resilience-stack.md) | Tool-call resilience stack for non-frontier models | Accepted |
