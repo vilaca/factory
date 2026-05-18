@@ -31,7 +31,7 @@
     "coverage": "c8 --reporter=text --reporter=html --reporter=lcov --check-coverage --lines 60 --branches 75 --functions 83 tsx --test 'test/unit/**/*.test.ts'"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.1",
+    "@anthropic-ai/sdk": "^0.96.0",
     "@huggingface/inference": "^4.13.15",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "chalk": "^5.4.1",
