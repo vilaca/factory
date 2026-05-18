@@ -135,6 +135,7 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
     initialPlanMode,
     initialExperimental,
     initialGitDirty,
+    refsHolder: ctx.refs,
   });
 
   // Skills load asynchronously; once loaded, attach the registry and rebuild

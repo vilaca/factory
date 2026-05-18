@@ -14,6 +14,9 @@ import type { PathPolicy } from '../security/paths.js';
 import type { EnvPolicy } from '../security/env.js';
 import { Conversation } from '../core/context/conversation.js';
 import { ContextManager } from '../core/context/context-manager.js';
+import { createProvider, descriptorByAlias } from '../providers/registry.js';
+import { getKey } from '../core/auth/credentials.js';
+import { loadGlobalConfig } from '../core/config/index.js';
 import { PermissionManager } from '../security/permissions.js';
 import { runAgent } from '../core/agent/run-agent.js';
 import type { ResponsesChain } from '../core/agent/types.js';
@@ -49,6 +52,13 @@ interface HeadlessOptions {
    *  callers can vary policy per run instead of mutating process state. */
   pathPolicy?: PathPolicy;
   envPolicy?: EnvPolicy;
+  /** Compaction-target override from --compaction-model. When unset, the
+   *  compaction summary call routes to the primary (provider, model) —
+   *  this matches the spec's "if --compaction-model NOT set use the
+   *  primary provider/model for compaction" rule. When set with a
+   *  cross-provider tuple, the resolver instantiates the target
+   *  provider on demand the same way swap.ts does. */
+  compactionModel?: { providerName: string; model: string };
 }
 
 async function readAllStdin(): Promise<string> {
@@ -184,12 +194,51 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   }
 
   const capabilities = options.provider.getCapabilities(options.model);
-  const contextManager = new ContextManager(conversation, capabilities, {
-    compactionThreshold: options.agentConfig?.compactionThreshold,
-    recencyWindow: options.agentConfig?.recencyWindow,
-    recencyTokens: options.agentConfig?.recencyTokens,
-    toolResultAgingTurns: options.agentConfig?.toolResultAgingTurns,
-  });
+  // Headless never prompts — the resolver returns a fixed tuple every
+  // call. Honors --compaction-model when supplied (possibly
+  // cross-provider, in which case we instantiate the target provider on
+  // demand). When unset, routes the summary call to the primary
+  // (provider, model) — exact spec rule.
+  const compactionResolver = async (): Promise<{
+    provider: Provider;
+    model: string;
+  } | null> => {
+    const target = options.compactionModel;
+    if (!target || target.providerName === options.provider.name) {
+      return { provider: options.provider, model: target?.model ?? options.model };
+    }
+    try {
+      const descriptor = descriptorByAlias(target.providerName);
+      const createOpts: Parameters<typeof createProvider>[1] = {};
+      if (descriptor) {
+        const cfg = await loadGlobalConfig();
+        const key = getKey(cfg, descriptor.name);
+        if (key) {
+          createOpts.token = key.token;
+          if (descriptor.needsAccountId && key.extras?.accountId) {
+            createOpts.accountId = key.extras.accountId;
+          }
+        }
+      }
+      return { provider: createProvider(target.providerName, createOpts), model: target.model };
+    } catch {
+      // Same fallback shape as the TUI resolver — never block compaction
+      // on auth/registry failures; the model call will trip the
+      // mechanical-summary path.
+      return { provider: options.provider, model: options.model };
+    }
+  };
+  const contextManager = new ContextManager(
+    conversation,
+    capabilities,
+    {
+      compactionThreshold: options.agentConfig?.compactionThreshold,
+      recencyWindow: options.agentConfig?.recencyWindow,
+      recencyTokens: options.agentConfig?.recencyTokens,
+      toolResultAgingTurns: options.agentConfig?.toolResultAgingTurns,
+    },
+    compactionResolver,
+  );
 
   let exitCode = 0;
   let permissionDeniedTool: string | undefined;

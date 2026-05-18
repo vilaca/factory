@@ -11,8 +11,17 @@ import {
   estimateSingleMessageTokens,
   estimateToolDefinitionsTokens,
 } from '../../utils/tokens.js';
-import { selectWeakTier } from '../agent/call-model/weak-tier.js';
 import { isError } from '../../utils/errors.js';
+
+/** Caller-provided async hook that resolves the (provider, model) used
+ *  for the summarization call inside compaction. Returning `null` means
+ *  "user declined / not available" — `compact()` will return null
+ *  without rewriting the conversation, so the agent continues with
+ *  un-compacted history (and likely overflows on the next turn). */
+export type CompactionTargetResolver = () => Promise<{
+  provider: Provider;
+  model: string;
+} | null>;
 
 interface ContextConfig {
   compactionThreshold: number; // 0-1, fraction of context window (default 0.75)
@@ -64,13 +73,27 @@ export class ContextManager {
   private lastPromptTokensFromApi: number = 0;
   private config: ContextConfig;
   private contextWindow: number;
+  /** Resolver used by compact() to obtain the summary-call (provider,
+   *  model). Optional — when unset, compact() falls back to using the
+   *  primary (provider, model) passed in. This is the headless /
+   *  legacy-test path; the TUI always wires a resolver that prompts the
+   *  user once per session. */
+  private resolveCompactionTarget?: CompactionTargetResolver;
+  /** Latched when a resolver call in the current turn returned null
+   *  (user cancelled). Suppresses re-prompting during the aggressive
+   *  pass in the same `maybeCompact` invocation. Cleared by
+   *  `clearCompactionCancelled()`, which the agent loop calls at the
+   *  start of each turn. */
+  private compactionCancelledThisTurn = false;
 
   constructor(
     private conversation: Conversation,
     capabilities: ProviderCapabilities,
     config?: Partial<ContextConfig>,
+    resolveCompactionTarget?: CompactionTargetResolver,
   ) {
     this.contextWindow = capabilities.contextWindow;
+    if (resolveCompactionTarget) this.resolveCompactionTarget = resolveCompactionTarget;
     // Build the merged config with explicit `??` fallbacks so callers passing
     // `{ compactionThreshold: undefined }` don't clobber the default. (Object
     // spread copies undefined values verbatim.)
@@ -133,6 +156,13 @@ export class ContextManager {
     return this.getUsagePercent() > this.config.compactionThreshold;
   }
 
+  /** Reset the "user cancelled compaction this turn" latch. Called by the
+   *  agent loop at the start of each turn so a cancel in turn N doesn't
+   *  bleed into turn N+1. */
+  clearCompactionCancelled(): void {
+    this.compactionCancelledThisTurn = false;
+  }
+
   /** Age tool results from turns older than the configured threshold. Runs
    *  before compaction in the agent's pre-flight pass — cheaper than full
    *  compaction and cache-friendly because only old messages mutate, so
@@ -180,12 +210,27 @@ export class ContextManager {
     const toSummarize = messages.slice(1, summarizeEnd);
     if (toSummarize.length === 0) return null;
 
-    // For the summary call, route to a weak-tier model on the same provider
-    // when available — Haiku / Llama-3.1-8B / Gemini-Flash etc. The
-    // summarization workload doesn't need the strong tier, and routing the
-    // user's primary turn through this is explicitly NOT a goal (see
-    // selectWeakTier docs). Both aggressive and normal compaction benefit.
-    const summaryModel = selectWeakTier(provider, model) ?? model;
+    // For the summary call, ask the caller (TUI session) which (provider,
+    // model) to use. The resolver typically prompts the user once per
+    // session via the picker and caches the choice; headless callers
+    // pre-seed the choice from --compaction-model. On cancel the resolver
+    // returns null and we abort this compaction pass entirely — the
+    // conversation stays uncompacted, the cancel latch fires so the
+    // aggressive pass in the same maybeCompact() doesn't re-prompt, and
+    // the agent loop will retry the prompt on the next turn (the latch
+    // is cleared by clearCompactionCancelled()).
+    let summaryProvider: Provider = provider;
+    let summaryModel: string = model;
+    if (this.resolveCompactionTarget && !opts?.precomputedSummary) {
+      if (this.compactionCancelledThisTurn) return null;
+      const target = await this.resolveCompactionTarget();
+      if (target === null) {
+        this.compactionCancelledThisTurn = true;
+        return null;
+      }
+      summaryProvider = target.provider;
+      summaryModel = target.model;
+    }
 
     let summary: string;
     if (opts?.precomputedSummary !== undefined) {
@@ -215,11 +260,11 @@ export class ContextManager {
       if (skipLlmCompaction) {
         summary = this.buildMechanicalSummary(toSummarize);
       } else {
-        // Both aggressive and normal compaction try the weak-tier model first;
-        // mechanical is the fallback when the model call fails (per the source
-        // plan: "skip-model-entirely path is overcautious").
+        // Try the chosen compaction target first; mechanical is the fallback
+        // when the model call fails (per the source plan: "skip-model-entirely
+        // path is overcautious").
         summary =
-          (await this.buildModelSummary(provider, summaryModel, toSummarize, signal)) ??
+          (await this.buildModelSummary(summaryProvider, summaryModel, toSummarize, signal)) ??
           this.buildMechanicalSummary(toSummarize);
       }
     }

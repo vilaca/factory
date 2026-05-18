@@ -86,6 +86,23 @@ export interface RunRefs {
    *  Subsequent rate-limit failures bypass the prompt for the rest of the
    *  session. Cleared when the user opens the picker via /pick. */
   rotationPromptDeclined: boolean;
+  /** Session-scoped compaction-model choice. Unset until the user is
+   *  prompted on the first compaction. Cleared on a provider swap whose
+   *  *old* provider matches `providerName` (loose invalidation — a swap
+   *  that doesn't affect the compaction provider leaves the choice
+   *  alone). When set, the compaction code path uses this exact
+   *  (provider, model) for the summary call instead of routing through
+   *  the weak-tier picker. */
+  compactionTarget?: { providerName: string; model: string };
+  /** UI bridge for the compaction-model picker. Called by ContextManager
+   *  on the first compaction of a session when `compactionTarget` is
+   *  unset. Resolves to the user's pick, or null if they cancel — in
+   *  which case the current turn's compaction is skipped entirely (no
+   *  weak-tier fallback) and the prompt is re-shown next turn. Set by
+   *  Session.tsx on mount; left undefined for headless callers, which
+   *  must pre-seed `compactionTarget` via --compaction-model (or accept
+   *  the primary-tuple default seeded at init time). */
+  requestCompactionModel?: () => Promise<{ providerName: string; model: string } | null>;
   /** UI bridge for the rotation prompt + fallback picker dance. Called by
    *  the rotation runtime after both tiers exhaust; returns the chosen
    *  entry or `null` if the user declined / cancelled. Set by Session.tsx
@@ -145,6 +162,11 @@ export interface UseAgentLoopOptions {
    *  snapshots them onto each tab's RunRefs. */
   pathPolicy?: PathPolicy;
   envPolicy?: EnvPolicy;
+  /** Pre-seed for `RunRefs.compactionTarget`. Set by the headless entry
+   *  from the --compaction-model CLI flag; when present, the first
+   *  compaction skips the interactive prompt and uses this tuple
+   *  directly. Undefined for TUI launches — those prompt on demand. */
+  compactionModel?: { providerName: string; model: string };
 }
 
 export interface AgentLoopApi {

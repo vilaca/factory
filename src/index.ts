@@ -176,6 +176,28 @@ async function main(): Promise<void> {
     });
   }
 
+  // Parse --compaction-model "<provider>:<model>" into a structured tuple.
+  // Empty / malformed values are surfaced as a warning and ignored — falling
+  // back to the primary-tuple default rather than aborting startup over a
+  // compaction-only flag.
+  let compactionModel: { providerName: string; model: string } | undefined;
+  if (cliArgs.compactionModel) {
+    const raw = cliArgs.compactionModel;
+    const sep = raw.indexOf(':');
+    if (sep <= 0 || sep === raw.length - 1) {
+      console.error(
+        chalk.yellow(
+          `  ⚠ --compaction-model expects "<provider>:<model>", got "${raw}" — ignoring.`,
+        ),
+      );
+    } else {
+      compactionModel = {
+        providerName: raw.slice(0, sep),
+        model: raw.slice(sep + 1),
+      };
+    }
+  }
+
   const appOptions = {
     model,
     systemPrompt,
@@ -196,6 +218,7 @@ async function main(): Promise<void> {
     validationWarning,
     pathPolicy,
     envPolicy,
+    ...(compactionModel ? { compactionModel } : {}),
   };
 
   const isInteractiveTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);

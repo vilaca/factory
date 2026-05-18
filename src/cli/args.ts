@@ -38,6 +38,10 @@ export interface CliArgs {
   noRotate?: boolean;
   noRotateKeys?: boolean;
   noRotateModels?: boolean;
+  /** Headless compaction target as "<provider>:<model>". When unset, the
+   *  summary call routes to the primary (provider, model). Ignored by
+   *  the TUI — interactive sessions prompt on first compaction instead. */
+  compactionModel?: string;
 }
 
 /** Flags whose presence sets a boolean field on `CliArgs`. */
@@ -81,6 +85,7 @@ const STRING_FLAGS: Record<string, keyof CliArgs> = {
   '--token': 'token',
   '-t': 'token',
   '--rotate': 'rotate',
+  '--compaction-model': 'compactionModel',
 };
 
 function parsePositiveSeconds(raw: string | undefined): number {
@@ -173,6 +178,7 @@ export function printUsage(): void {
     '    --no-rotate              Disable both key rotation and model rotation',
     '    --no-rotate-keys         Disable key rotation (still rotate (provider, model) entries)',
     '    --no-rotate-models       Disable model rotation (still rotate keys within the same model)',
+    '    --compaction-model <p:m> Headless only: model used for the compaction summary call (defaults to the primary provider/model)',
     '    --help, -h               Show this help',
     '    --version, -V            Print version and exit',
     '    --debug                  Enable debug logging to stderr (alias for FACTORY_DEBUG=1)',
