@@ -61,3 +61,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0008](0008-ui-is-presentation-only.md) | `src/ui/` is a presentation layer (no concrete providers/tools, no SDKs, no direct network) | Accepted |
 | [0009](0009-provider-abstraction-shared-openai-adapter.md) | Provider abstraction with a shared OpenAI-compatible adapter | Accepted |
 | [0010](0010-two-tier-rotation.md) | Two-tier rotation: per-key, then per-`provider:model` tuple | Accepted |
+| [0011](0011-agent-event-contract.md) | `AgentEvent` as the single contract between core loop and renderers | Accepted |
