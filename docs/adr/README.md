@@ -72,3 +72,4 @@ Include the load-bearing parts of the codebase that now depend on this decision.
 | [0019](0019-multi-tab-session-model.md) | Multi-tab session model: each tab is an independent agent | Accepted |
 | [0020](0020-manual-argv-parser.md) | Manual argv parser; no `commander`/`yargs` | Accepted |
 | [0021](0021-renderer-split-tui-headless.md) | Renderer split: Ink TUI vs plain-stdout headless, one core loop | Accepted |
+| [0022](0022-subagent-isolation.md) | Subagent isolation: separate conversation + restricted Bash allowlist | Accepted |
