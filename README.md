@@ -23,13 +23,22 @@
 ## Quick start
 
 ```bash
+npm install -g factory-code
+factory
+```
+
+That's it. `factory` opens a picker for provider, model, and API key the first time. Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
+
+> The npm package is `factory-code` (the bare name `factory` was already taken on npm); the command it installs is `factory`.
+
+### From source
+
+```bash
 git clone https://github.com/vilaca/factory.git
 cd factory
 npm install && npm run build && npm link
 factory
 ```
-
-That's it. `factory` opens a picker for provider, model, and API key the first time. Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
 
 > **`npm link` permission errors?** It writes a symlink into your npm global prefix; if that's a system path it needs sudo. Either set a user-writable prefix once (`npm config set prefix "$HOME/.npm-global"` and add `$HOME/.npm-global/bin` to your `PATH`), skip linking and run `npx factory` from the repo, or invoke directly with `node /path/to/factory/dist/index.js`.
 
