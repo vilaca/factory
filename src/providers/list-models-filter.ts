@@ -1,4 +1,4 @@
-import { appendProviderLog } from '../core/session/session-log.js';
+import { appendProviderLog } from '../utils/provider-log.js';
 
 export type ChatCheck<T> = (item: T) => true | string;
 

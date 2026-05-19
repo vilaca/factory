@@ -79,10 +79,12 @@ describe('architecture: module boundaries', () => {
     }
   });
 
-  it('src/providers/** must not depend on src/ui/** or src/tools/**', async () => {
-    for (const upstream of ['src/ui/**', 'src/tools/**']) {
+  it('src/providers/** must not depend on src/ui/, src/tools/, src/core/, src/mcp/, or src/cli/', async () => {
+    for (const upstream of ['src/ui/**', 'src/tools/**', 'src/core/**', 'src/mcp/**', 'src/cli/**']) {
       const rule = projectFiles()
-        .inFolder('src/providers/**')
+        .inFolder('src/providers/**', {
+          except: ['src/providers/registry.ts', 'src/providers/copilot/auth.ts'],
+        })
         .shouldNot()
         .dependOnFiles()
         .inFolder(upstream);

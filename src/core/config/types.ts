@@ -1,6 +1,7 @@
 import type { McpServerConfig } from '../../mcp/types.js';
+import type { GoogleAiStudioAuthMode } from '../../providers/auth-modes.js';
 
-export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
+export type { GoogleAiStudioAuthMode };
 
 export interface AgentConfig {
   compactionThreshold?: number;

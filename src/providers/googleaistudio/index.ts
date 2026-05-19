@@ -9,8 +9,8 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from '../types.js';
-import type { GoogleAiStudioAuthMode } from '../../core/config/types.js';
-import { appendProviderLog } from '../../core/session/session-log.js';
+import type { GoogleAiStudioAuthMode } from '../auth-modes.js';
+import { appendProviderLog } from '../../utils/provider-log.js';
 import { GoogleAiStudioAuthManager } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 import { filterChatModels } from '../list-models-filter.js';
