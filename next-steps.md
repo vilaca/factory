@@ -250,6 +250,37 @@ Counters reset on clean progress:
 
 **Reliability mechanism.** Without `ToolResolutionError`, a model that guessed three wrong IDs in a row would trip `ToolExecutionError` and kill the workflow even though the tool is healthy. Separating the two error classes lets you set `max_tool_errors=2` (tight, catches real bugs) while letting the model fumble through 8+ wrong-data attempts within the iteration budget.
 
+### The `_resolve_service` cautionary tale
+
+Before `ToolResolutionError` existed, the framework's stateful eval scenarios shipped a workaround the author later called out as an anti-pattern. The bug: a user message saying *"payments service"* would lead the model to extract `"payments"` and pass it to every tool. The backend keyed lookups by `"payments-service"` (hyphenated), so every call returned `"No alert found for service 'payments'"` as a normal 200-style string. The runner marked `get_alert` as completed and the model barreled ahead with no data — silent bad-data cascade across the rest of the workflow.
+
+The patch was `_resolve_service()` — a per-backend fuzzy matcher that tries appending `-service`, stripping `"the "`, etc. It worked, but it pushed the responsibility onto every scenario author to implement their own fuzzy matching just to avoid silent cascades.
+
+`ToolResolutionError` is the generic fix:
+```python
+def get_alert(self, service: str) -> str:
+    if service not in self.alerts:
+        raise ToolResolutionError(f"No alert found for service '{service}'")
+    return self.alerts[service]
+```
+
+Now the backend stays strict, the runner catches the exception, sends the message back as the tool result, keeps `get_alert` uncompleted, and the model retries with `"payments-service"`. The iteration budget bounds the retry loop; no per-backend fuzzy matching needed.
+
+**Why this matters.** In any real workflow where the dev writes strict lookups — which is the natural thing to do — every key-miss becomes a silent bad-data cascade unless the framework provides a recoverable error type. The lesson: design the tool-calling contract with a "4xx" semantic from day one, not as a retrofit.
+
+### The HTTP-error-taxonomy framing
+
+LLMs need a different error taxonomy from deterministic clients. HTTP error codes were designed for clients that fail fast on 4xx/5xx; LLM tool-calling loops need:
+
+| HTTP analog | LLM equivalent | Recovery |
+|---|---|---|
+| 200 OK | Normal return | Step complete |
+| 4xx (valid request, no resource) | `ToolResolutionError` | Step uncompleted, model retries with different args |
+| 5xx (server error) | Hard `Exception` | `consecutive_tool_errors++`, eventually `ToolExecutionError` |
+| 400 (bad request) | Schema validation / unknown tool | `consecutive_retries++`, nudge, eventually `ToolCallError` |
+
+The fourth row (the `400` analog) is handled by the validator, not the error tracker — different counter, different nudge. The mental shortcut: "valid request, no resource" is the missing primitive most tool-calling frameworks lack.
+
 ---
 
 ## 10. Compaction — Tiered, Sliding, None
@@ -828,7 +859,106 @@ Scenarios split into 30 cases:
 
 ---
 
-## 31. Statistical Significance — Pooled McNemar + Wilson CI
+## 31. Five-Tier Diagnostic Eval Framework
+
+The eval suite is organized as five concentric tiers, each isolating a different failure mode. Running the same model through all five tiers tells you *which* layer is leaking, not just that something is leaking.
+
+| Tier | What it isolates | How |
+|---|---|---|
+| **1. Lambda** | Framework plumbing — does the loop work at all? | Hardcoded echo tools; args don't affect the result; only mechanical reliability is tested |
+| **2. Ablated lambda** | Per-guardrail contribution | Same lambda scenarios, with one guardrail disabled at a time (`no_rescue`, `no_nudge`, `no_steps`, `no_recovery`, `no_compact`, `bare`) |
+| **3. Stateful** | Model reasoning quality | Backend classes where args mutate state; wrong arguments produce wrong results that cascade downstream; validation checks backend end state |
+| **4. Ablated stateful** | Guardrails × reasoning interaction | Stateful scenarios under each ablation preset — measures whether guardrail value depends on reasoning load |
+| **5. Stateful + strict** (future) | `ToolResolutionError` recovery | Strict backends that raise on key-miss instead of fuzzy matching; tests how much retry-on-miss recovers vs hand-tuned fuzzy backends |
+
+**The lambda-vs-stateful delta is the most useful single number.** Same scenario, same model, same guardrails — only the tool implementation changes. A model that scores 100% on lambda and 60% on stateful has good framework integration but weak reasoning. A model that scores 60% on both has framework issues — guardrails aren't kicking in. Decomposing the gap is the diagnostic.
+
+Tier 5 doesn't exist in shipped code yet — it would require strict backend variants of every stateful scenario plus a sixth ablation preset.
+
+### Stateful tool design principles
+
+Captured from the framework's stateful eval design doc — these are the rules every stateful tool followed, and they're worth porting wholesale:
+
+- **Name tools after what they do.** `get_country_info`, not `get_info`. A developer with a real country-facts endpoint would name it that way.
+- **Describe params in domain terms.** `"Country name"`, not `"The topic to look up"`. Enough context for the model to derive the right arg from the user message without hand-holding.
+- **Fuzzy-match where a real API would.** Case-insensitive matching, trimming whitespace. But `get_country_info(country="capital of France")` should fail — "capital of France" is not a country name.
+- **Wrong arguments produce wrong results, not crashes.** A bad key returns `"No entry found for 'xyz'"` (or raises `ToolResolutionError`), not a stack trace. The model can recover; bad data still propagates if the model doesn't notice.
+- **Backends are 30-80 lines.** Simple enough to read at a glance, complex enough that wrong arguments produce wrong results. No external dependencies. All state on instance attributes.
+- **Tools as realistic API docs.** The model sees system prompt + tool JSON schemas + user message — nothing else. Schemas read like an API a developer would actually ship.
+- **Don't fish for perfect scores.** The goal is realistic tool use, not gotcha string matching. If a competent developer reading the tool schema and user message would know what to pass, the model should too.
+
+These principles also apply to production tools, not just eval scenarios. If a real workflow's tools follow these rules, the small-model failure rate drops measurably.
+
+### Future scenario concept: `information_loss` — silent write corruption
+
+Not in shipped code. Captures a failure mode none of the existing scenarios touch: the backend confirms success even when the model wrote garbage.
+
+**Concept.** A simple schema-aware DB with five tools:
+- `get_schema()` → returns table structure (columns, types, constraints)
+- `read_record(table, id)` → returns current row
+- `write_record(table, id, data)` → **always returns "Row updated successfully"** — even if data has wrong types, missing fields, or bad column names. Silently coerces or drops.
+- `compute(query)` → runs calculation against *actual stored state*
+- `submit(result)` → terminal
+
+User message: *"Update employee E-1001's salary to 75000 and compute their new monthly take-home after 22% tax."*
+
+**What makes this hard:**
+- `write_record` never complains. Wrong column name silently ignored. String where int expected silently stored as-is.
+- `compute` operates on actual stored state, not what the model *thinks* it wrote. If the write was malformed, compute returns wrong results downstream.
+- A smart model would `read_record` after writing to verify state matches intent (read-after-write self-verification).
+
+**What it tests that nothing else does:** self-verification behavior. The gap between "tool returned success" and "tool did what I wanted." Validation: strict — check final stored state AND compute result. Models that don't self-verify can still pass if they got the write right on the first try.
+
+**Replication note.** Worth building if our workflows do real writes against real systems. The self-verification pattern is invisible to current eval suites because every scenario uses confirmatory tools.
+
+---
+
+## 32. BFCL Integration — External Benchmark Through the Reliability Path
+
+Berkeley Function Calling Leaderboard (BFCL) v4 is the de facto industry standard for LLM function-calling evaluation (UC Berkeley Gorilla project, ICML 2025). The framework runs BFCL test cases through its own production path — every test case becomes a real `Workflow` + `WorkflowRunner` execution, guardrails active throughout. No bypass, no thin wrapper.
+
+**Key design choice — bypass the BFCL framework, keep the BFCL data.** BFCL's `BaseHandler` loop is marked `@final` (Python's "do not override") and manages turns itself. Using the same test data and scoring criteria but running through the reliability path means results are *comparable but not identical* to leaderboard runs. The tradeoff: not directly leaderboard-comparable, but every guardrail participates in the eval.
+
+### Architecture (7 modules)
+
+- **`schema_adapter.py`** — Translates BFCL's OpenAI-style function JSON schemas into `ToolDef` objects on the fly, per test case. Builds a `Workflow` with those tools. This is where `ToolSpec.from_json_schema()` earns its keep — every BFCL category has differently-shaped tools.
+- **`runner.py`** — Single-turn and multi-turn BFCL runner.
+  - *Single-turn:* the BFCL function is the terminal tool. One `runner.run()` call.
+  - *Multi-turn:* BFCL functions are regular tools, a synthetic `done` tool is the terminal, and multiple `runner.run()` calls chain history forward via `initial_messages`.
+- **`scorer.py`** — Pass/fail scoring against ground truth.
+  - *Single-turn:* AST comparison of tool calls (BFCL's standard metric).
+  - *Multi-turn:* end-state comparison on backend instances — attribute-level deep equality, not per-turn sequence matching.
+- **`executors.py`** — BFCL backend execution wrappers. Stateful backend instances where tool calls mutate state. Direct analog of the stateful eval scenarios pattern.
+- **`backend_wiring.py`** — BFCL → client/server/budget setup. One adapter per backend type.
+- **`batch_runner.py`** — Batch runner across all configs, JSONL output, automatic resume. Mirrors the main eval `batch_eval.py`.
+- **`bfcl_report.py`** — ASCII table report from BFCL JSONL.
+
+### Categories
+
+11 BFCL categories (~2,183 entries):
+
+| Type | Categories |
+|---|---|
+| Single-turn (7) | `simple_python`, `simple_java`, `simple_javascript`, `multiple`, `parallel`, `parallel_multiple`, `irrelevance` |
+| Multi-turn (4) | `base`, `miss_func`, `miss_param`, `long_context` |
+
+The `parallel` category works naturally because parallel tool calling is a first-class feature (§24). `irrelevance` exercises the model's ability to *not* call a tool — same pattern as the relevance_detection scenario.
+
+### Multi-turn design
+
+Each turn is a separate `WorkflowRunner.run()` call. Conversation history flows forward via `initial_messages`. Guardrails (nudges, retries, compaction) are active on *every* turn. After all turns complete, scoring compares the final backend state against BFCL ground truth — end state, not per-turn sequence matching.
+
+This is the same `initial_messages` pattern documented for normal multi-turn consumers (§22) — the BFCL integration is a real-world stress test of the multi-turn API.
+
+### Why this matters as validation
+
+The framework's own eval scenarios measure guardrails on its own ground. BFCL is an external benchmark designed by a different team for a different purpose. If the reliability path works on BFCL with the same shape as on the internal scenarios, the value claim isn't artifact of the eval design.
+
+**Replication note.** Worth doing as a late-stage sanity check on our own stack — pick a small BFCL subset, build the schema adapter + scoring wrappers, run through our reliability path. If our numbers move parallel to the published numbers across configs, our framework works. If they diverge, our framework is overfit to our own eval scenarios.
+
+---
+
+## 33. Statistical Significance — Pooled McNemar + Wilson CI
 
 `tests/eval/significance.py` runs the proper statistics on ablation tables:
 
@@ -857,7 +987,7 @@ no_rescue      78.40%   [74.83,81.97]    -8.10pt   55/30     1.45e-03  **
 
 ---
 
-## 32. Reporting + Dashboard
+## 34. Reporting + Dashboard
 
 `report.py` generates ASCII tables, phone-friendly list views, HTML dashboards, and Markdown views from a JSONL results file. Markdown snapshots (`all.md`, `ollama.md`, `by-family.md`, `ablation.md`, `native-vs-prompt.md`, etc.) are pre-filtered persistent slices.
 
@@ -872,7 +1002,7 @@ Built from the same `compute_config_metrics()` aggregation as the ASCII table. E
 
 ---
 
-## 33. Multi-Model Routing (Concept — Not Yet Built)
+## 35. Multi-Model Routing (Concept — Not Yet Built)
 
 Concept doc proposes `ModelPool` that wraps multiple `ServerManager`-like instances. Each named pool entry has its own process, health check, and budget. Consumer picks a client by name, threads it into a runner.
 
@@ -887,7 +1017,7 @@ Deferred features:
 
 ---
 
-## 34. Test Strategy
+## 36. Test Strategy
 
 865 unit tests, deterministic, no LLM/backend required. Coverage by component:
 
@@ -912,7 +1042,7 @@ Tests use mocked HTTP responses (httpx mocks, async iterators for streaming) so 
 
 ---
 
-## 35. Build Sequence for Replication
+## 37. Build Sequence for Replication
 
 If we wanted to stand up the same reliability layer on our own stack, the dependency order is:
 
@@ -937,7 +1067,7 @@ Each layer is independently toggleable so the ablation harness can isolate its c
 
 ---
 
-## 36. Anti-Patterns the Framework Explicitly Rejects
+## 38. Anti-Patterns the Framework Explicitly Rejects
 
 - **Model-assisted compaction.** Tempting but adds latency + token cost + a new failure mode. Heuristic three-phase tiered compaction is "good enough" on real workloads.
 - **Trusting `finish_reason` from small models.** Empirically catastrophic — 100% → 4% on hard scenarios. The synthetic `respond` tool sidesteps the question.
@@ -951,7 +1081,7 @@ Each layer is independently toggleable so the ablation harness can isolate its c
 
 ---
 
-## 37. Numbers Worth Stealing
+## 39. Numbers Worth Stealing
 
 From the published eval and ablation runs:
 
@@ -972,7 +1102,7 @@ From the published eval and ablation runs:
 
 ---
 
-## 38. What to Build First (Recommended Order)
+## 40. What to Build First (Recommended Order)
 
 Tight 60-90 day plan for our own stack, prioritized by reliability lift per line of code:
 
