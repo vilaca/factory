@@ -6,13 +6,35 @@
 import type { MutableRefObject } from 'react';
 import { ContextManager } from '../../../core/context/context-manager.js';
 import { makeCompactionResolver } from './compaction-resolver.js';
-import { validateModelToolSupport } from '../../../core/auth/model-validation.js';
-import { loadGlobalConfig } from '../../../core/config/index.js';
-import { getKey } from '../../../core/auth/credentials.js';
-import { descriptorByAlias } from '../../../providers/registry.js';
-import { createProvider } from '../../../providers/registry.js';
+import { validateModelToolSupport as defaultValidateModelToolSupport } from '../../../core/auth/model-validation.js';
+import { loadGlobalConfig as defaultLoadGlobalConfig } from '../../../core/config/index.js';
+import { getKey as defaultGetKey } from '../../../core/auth/credentials.js';
+import {
+  descriptorByAlias as defaultDescriptorByAlias,
+  createProvider as defaultCreateProvider,
+} from '../../../providers/registry.js';
 import type { Provider } from '../../../providers/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
+
+/** Injectable seams for swapProvider. The defaults are the real registry /
+ *  auth / config functions; tests substitute fakes to assert the
+ *  createProvider → listModels → getCapabilities ordering invariant
+ *  (see cf880ed) without standing up a real provider. */
+export interface SwapProviderDeps {
+  createProvider: typeof defaultCreateProvider;
+  descriptorByAlias: typeof defaultDescriptorByAlias;
+  loadGlobalConfig: typeof defaultLoadGlobalConfig;
+  getKey: typeof defaultGetKey;
+  validateModelToolSupport: typeof defaultValidateModelToolSupport;
+}
+
+const DEFAULT_DEPS: SwapProviderDeps = {
+  createProvider: defaultCreateProvider,
+  descriptorByAlias: defaultDescriptorByAlias,
+  loadGlobalConfig: defaultLoadGlobalConfig,
+  getKey: defaultGetKey,
+  validateModelToolSupport: defaultValidateModelToolSupport,
+};
 
 export interface SwapContext {
   refs: MutableRefObject<RunRefs | null>;
@@ -43,7 +65,11 @@ function rebuildContextManager(refs: NonNullable<RunRefs>, ctx: SwapContext): vo
  *  syntax by delegating to swapProvider, so the user can switch both in one
  *  shot — useful so they don't end up on a provider whose default model
  *  isn't valid for it. */
-export async function swapModel(name: string, ctx: SwapContext): Promise<void> {
+export async function swapModel(
+  name: string,
+  ctx: SwapContext,
+  deps: SwapProviderDeps = DEFAULT_DEPS,
+): Promise<void> {
   const refs = ctx.refs.current;
   if (!refs) return;
   if (name.includes(':')) {
@@ -53,11 +79,11 @@ export async function swapModel(name: string, ctx: SwapContext): Promise<void> {
       ctx.addNotice('warn', 'Usage: /model <name> or /model <provider>:<model>');
       return;
     }
-    await swapProvider(providerPart, modelPart, undefined, ctx);
+    await swapProvider(providerPart, modelPart, undefined, ctx, deps);
     return;
   }
   const provider = refs.provider;
-  const validation = await validateModelToolSupport(provider, name);
+  const validation = await deps.validateModelToolSupport(provider, name);
   if (validation.mode === 'unreachable') {
     ctx.addNotice('danger', validation.reason);
     return;
@@ -84,7 +110,7 @@ export async function swapModel(name: string, ctx: SwapContext): Promise<void> {
 }
 
 interface ResolvedProviderKey {
-  createOpts: Parameters<typeof createProvider>[1];
+  createOpts: Parameters<typeof defaultCreateProvider>[1];
   resolvedKeyId: string | undefined;
 }
 
@@ -97,14 +123,15 @@ interface ResolvedProviderKey {
 async function resolveProviderKey(
   alias: string,
   keyId: string | undefined,
+  deps: SwapProviderDeps,
 ): Promise<ResolvedProviderKey> {
-  const descriptor = descriptorByAlias(alias);
-  const createOpts: Parameters<typeof createProvider>[1] = {};
+  const descriptor = deps.descriptorByAlias(alias);
+  const createOpts: Parameters<typeof defaultCreateProvider>[1] = {};
   let resolvedKeyId = keyId;
   if (descriptor) {
     try {
-      const cfg = await loadGlobalConfig();
-      const key = getKey(cfg, descriptor.name, keyId);
+      const cfg = await deps.loadGlobalConfig();
+      const key = deps.getKey(cfg, descriptor.name, keyId);
       if (key) {
         createOpts.token = key.token;
         if (descriptor.needsAccountId && key.extras?.accountId) {
@@ -129,6 +156,7 @@ export async function swapProvider(
   requestedModel: string | undefined,
   keyId: string | undefined,
   ctx: SwapContext,
+  deps: SwapProviderDeps = DEFAULT_DEPS,
 ): Promise<void> {
   const refs = ctx.refs.current;
   if (!refs) return;
@@ -138,16 +166,16 @@ export async function swapProvider(
     return;
   }
   if (trimmed === refs.provider.name && !keyId) {
-    if (requestedModel) await swapModel(requestedModel, ctx);
+    if (requestedModel) await swapModel(requestedModel, ctx, deps);
     else ctx.addNotice('info', `Already on ${trimmed}.`);
     return;
   }
 
-  const { createOpts, resolvedKeyId } = await resolveProviderKey(trimmed, keyId);
+  const { createOpts, resolvedKeyId } = await resolveProviderKey(trimmed, keyId, deps);
 
   let nextProvider: Provider;
   try {
-    nextProvider = createProvider(trimmed, createOpts);
+    nextProvider = deps.createProvider(trimmed, createOpts);
   } catch (err) {
     ctx.addNotice('danger', `Cannot switch to ${trimmed}: ${(err as Error).message}`);
     return;
@@ -176,7 +204,7 @@ export async function swapProvider(
     return;
   }
 
-  const validation = await validateModelToolSupport(nextProvider, nextModel);
+  const validation = await deps.validateModelToolSupport(nextProvider, nextModel);
   if (validation.mode === 'unreachable') {
     ctx.addNotice('danger', validation.reason);
     return;
