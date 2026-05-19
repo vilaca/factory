@@ -6,7 +6,11 @@ import * as path from 'path';
 import { runHook } from '../../../../src/core/hooks/index.js';
 import { resolveHooks, listAllHooks } from '../../../../src/core/hooks/discovery.js';
 import type { HookEntry, HooksConfig } from '../../../../src/core/config/types.js';
-import { fingerprintHooks } from '../../../../src/core/hooks/trust.js';
+import {
+  fingerprintHooks,
+  fingerprintProjectTrustables,
+} from '../../../../src/core/hooks/trust.js';
+import type { McpServerConfig } from '../../../../src/mcp/types.js';
 
 let tmpDir: string;
 
@@ -332,5 +336,55 @@ describe('fingerprintHooks', () => {
     const a: HooksConfig = { PreToolUse: [{ matcher: 'Bash', command: 'x' }] };
     const b: HooksConfig = { PreToolUse: [{ matcher: 'Read', command: 'x' }] };
     assert.notStrictEqual(fingerprintHooks(a), fingerprintHooks(b));
+  });
+});
+
+describe('fingerprintProjectTrustables', () => {
+  const hooks: HooksConfig = { SessionStart: [{ command: 'echo hi' }] };
+  const mcp: McpServerConfig[] = [{ name: 's', transport: 'stdio', command: '/bin/x' }];
+
+  it('matches fingerprintHooks when no MCP servers are present (back-compat)', () => {
+    assert.strictEqual(
+      fingerprintProjectTrustables({ hooks, mcpServers: undefined }),
+      fingerprintHooks(hooks),
+    );
+    assert.strictEqual(
+      fingerprintProjectTrustables({ hooks, mcpServers: [] }),
+      fingerprintHooks(hooks),
+    );
+  });
+
+  it('changes when an MCP server is added', () => {
+    const without = fingerprintProjectTrustables({ hooks, mcpServers: [] });
+    const withMcp = fingerprintProjectTrustables({ hooks, mcpServers: mcp });
+    assert.notStrictEqual(without, withMcp);
+  });
+
+  it('changes when an MCP command changes', () => {
+    const a = fingerprintProjectTrustables({ hooks, mcpServers: mcp });
+    const b = fingerprintProjectTrustables({
+      hooks,
+      mcpServers: [{ name: 's', transport: 'stdio', command: '/bin/y' }],
+    });
+    assert.notStrictEqual(a, b);
+  });
+
+  it('changes when an MCP arg changes', () => {
+    const a = fingerprintProjectTrustables({
+      hooks,
+      mcpServers: [{ name: 's', transport: 'stdio', command: '/bin/x', args: ['--a'] }],
+    });
+    const b = fingerprintProjectTrustables({
+      hooks,
+      mcpServers: [{ name: 's', transport: 'stdio', command: '/bin/x', args: ['--b'] }],
+    });
+    assert.notStrictEqual(a, b);
+  });
+
+  it('treats undefined hooks the same as empty hooks', () => {
+    assert.strictEqual(
+      fingerprintProjectTrustables({ hooks: undefined, mcpServers: mcp }),
+      fingerprintProjectTrustables({ hooks: {}, mcpServers: mcp }),
+    );
   });
 });

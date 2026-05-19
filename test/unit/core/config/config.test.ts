@@ -508,3 +508,85 @@ describe('saveGlobalConfig', () => {
     }
   });
 });
+
+describe('loadProjectConfig - mcp validation', () => {
+  it('accepts a well-formed stdio MCP server entry', async () => {
+    const content = JSON.stringify({
+      mcp: {
+        servers: [
+          {
+            name: 'fs',
+            transport: 'stdio',
+            command: '/usr/local/bin/mcp-fs',
+            args: ['--root', '/tmp'],
+            env: { FOO: 'bar' },
+          },
+        ],
+      },
+    });
+    await withTempProject(content, async cwd => {
+      const cfg = await loadProjectConfig(cwd);
+      assert.strictEqual(cfg.mcp?.servers?.length, 1);
+      assert.strictEqual(cfg.mcp.servers[0].name, 'fs');
+    });
+  });
+
+  it('rejects an MCP entry that is not a plain object', async () => {
+    const content = JSON.stringify({ mcp: { servers: ['not-an-object'] } });
+    await withTempProject(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /mcp\.servers\[0\].*must be an object/);
+    });
+  });
+
+  it('rejects an MCP entry missing a name', async () => {
+    const content = JSON.stringify({
+      mcp: { servers: [{ transport: 'stdio', command: '/bin/x' }] },
+    });
+    await withTempProject(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /mcp\.servers\[0\]\.name/);
+    });
+  });
+
+  it('rejects an MCP entry with an unsupported transport', async () => {
+    const content = JSON.stringify({
+      mcp: { servers: [{ name: 's', transport: 'websocket', command: '/bin/x' }] },
+    });
+    await withTempProject(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /mcp\.servers\[0\]\.transport/);
+    });
+  });
+
+  it('rejects a stdio MCP entry missing a command', async () => {
+    const content = JSON.stringify({
+      mcp: { servers: [{ name: 's', transport: 'stdio' }] },
+    });
+    await withTempProject(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /mcp\.servers\[0\]\.command/);
+    });
+  });
+
+  it('rejects MCP args that are not all strings', async () => {
+    const content = JSON.stringify({
+      mcp: {
+        servers: [{ name: 's', transport: 'stdio', command: '/bin/x', args: ['ok', 123] }],
+      },
+    });
+    await withTempProject(content, async cwd => {
+      await assert.rejects(loadProjectConfig(cwd), /mcp\.servers\[0\]\.args/);
+    });
+  });
+
+  it('rejects MCP env values that are not strings', async () => {
+    const content = JSON.stringify({
+      mcp: {
+        servers: [{ name: 's', transport: 'stdio', command: '/bin/x', env: { K: 1 } }],
+      },
+    });
+    await withTempProject(content, async cwd => {
+      await assert.rejects(
+      loadProjectConfig(cwd),
+      /"mcp\.servers\[0\]\.env\["K"\]" must be a string/,
+    );
+    });
+  });
+});

@@ -23,7 +23,7 @@ import {
   applyRotationPhase,
   authenticateAndConnect,
   gatherGitState,
-  handleProjectHookTrust,
+  handleProjectTrust,
   installShutdownHandlers,
   registerSubagentTool,
   resolveProvider,
@@ -104,6 +104,13 @@ async function main(): Promise<void> {
     provider: providerName,
   });
 
+  // Project-config trust check runs BEFORE we spawn any MCP server or
+  // register any project-declared hook. A hostile `.factory/config.json`
+  // could otherwise auto-spawn arbitrary commands the moment a user runs
+  // factory inside a cloned repo. handleProjectTrust strips project entries
+  // from `config.mcp.servers` and `config.agent.hooks` on reject.
+  await handleProjectTrust(config, cwd);
+
   let mcpManager: McpManager | undefined;
   let mcpInfo: { servers: string[]; toolCount: number } | undefined;
   if (config.mcp?.servers?.length) {
@@ -124,8 +131,6 @@ async function main(): Promise<void> {
   });
 
   const { gitBranch, gitDirty } = await gatherGitState(cwd);
-
-  await handleProjectHookTrust(config, cwd);
 
   // Experimental flags default to on except for bashDedup, which is opt-in
   // for now. Config can override; CLI flags take final precedence.
