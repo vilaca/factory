@@ -94,7 +94,7 @@ export class McpManager {
             setTimeout(
               () => reject(new Error(`disconnect timed out after ${perServerTimeoutMs}ms`)),
               perServerTimeoutMs,
-            ).unref(),
+            ),
           ),
         ]);
       } catch {

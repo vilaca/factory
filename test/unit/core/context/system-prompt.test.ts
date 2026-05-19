@@ -44,7 +44,10 @@ describe('getGitStatusSnippet', () => {
 
 describe('buildSystemPrompt — stable prefix', () => {
   it('does not embed cwd, platform, or shell in the system prompt', async () => {
-    const cwd = os.tmpdir();
+    // Use a uniquely-named path so a substring check can't false-match
+    // against incidental occurrences (on Linux os.tmpdir() is `/tmp`,
+    // short enough to appear in unrelated prompt content).
+    const cwd = path.join(os.tmpdir(), `factory-test-${crypto.randomUUID()}`);
     const prompt = await buildSystemPrompt(cwd, 'strong');
     // cwd, platform, and SHELL used to live in a `## Environment` section
     // here; they're now in buildEnvironmentMessage so the prompt bytes are
