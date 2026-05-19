@@ -546,6 +546,27 @@ Health polling uses `/props` rather than `/health` because `/health` is gated be
 - Returns `(ServerManager, ContextManager)` ready to plug into `WorkflowRunner`
 - Ollama path: also calls `client.set_num_ctx(budget)` so the resolved budget appears in every request
 
+### Operational gotcha — `--reasoning-budget 0`
+
+llama.cpp builds after **2026-04-10** activate an unbounded reasoning-budget sampler by default. On reasoning-tuned models — **Gemma 4, Qwen 3.5, Ministral Reasoning** — this causes **silent hangs**: the model generates reasoning tokens indefinitely without ever closing the `<think>` block, and the client never sees a tool call or finish reason. No error, no timeout from the backend, just a stalled stream.
+
+The workaround is a launch-time flag:
+
+```bash
+llama-server -m model.gguf --jinja -ngl 999 --port 8080 \
+  --reasoning-budget 0
+```
+
+`--reasoning-budget 0` disables the unbounded reasoning sampler and restores the pre-April-2026 behavior (the model still emits `<think>` blocks for reasoning, but bounded by `max_tokens` like everything else).
+
+**For our replication.** If we run Gemma 4 / Qwen 3.5 / Ministral Reasoning on a recent llama.cpp build, pass `--reasoning-budget 0` via `ServerManager`'s `extra_flags`. Without it, eval runs hang at the 300s wall-clock timeout (see §30) and look like model failures when they're actually backend bugs. Catch this once or it eats a whole batch run.
+
+Other operational gotchas worth knowing:
+- **`/props` over `/health`** (covered above) — `/health` returns 200 before the model is fully loaded.
+- **Null-byte JSONL corruption** — interrupted writes to the eval results file can leave null bytes mid-line. Read-side: skip lines that don't parse as JSON rather than failing the whole report.
+- **Backend process death** — `ServerManager` does not auto-restart on crash. The eval runner records the failed iteration and the next scenario start would re-invoke `start()`, but mid-run crashes manifest as `BackendError(502)` with no recovery.
+- **Ollama `ollama stop`** — the framework calls `subprocess.run(["ollama", "stop", model])` to free VRAM between model switches. Required for clean batch runs across models on a single GPU.
+
 ---
 
 ## 19. KV Cache Quantization
@@ -622,6 +643,100 @@ Streaming callback is `Callable[[StreamChunk], Awaitable[None]]` — awaited per
 
 ### Sync `on_message`
 One callback per message-append, fires outside the hot SSE loop. Stays sync because blocking cost is negligible. Used by the eval harness for `_verbose_printer` and history collection.
+
+### Production observability wiring
+
+The three callbacks (`on_message`, `on_chunk`, `on_compact`) are the production telemetry surface. They're intentionally low-level — the framework emits structured events, the consumer wires them to whatever logging / metrics / tracing backend they use. Patterns worth copying:
+
+**Structured logger.** Fan out each event type to a named logger so downstream filtering works:
+
+```python
+import logging
+import time
+
+log = logging.getLogger("agent.workflow")
+
+class WorkflowObserver:
+    def __init__(self, workflow_id: str):
+        self.workflow_id = workflow_id
+        self.started_at = time.monotonic()
+        self.nudge_counts = {"retry": 0, "step": 0, "prerequisite": 0}
+
+    def on_message(self, msg: Message) -> None:
+        match msg.metadata.type:
+            case MessageType.TOOL_CALL:
+                names = [tc.name for tc in (msg.tool_calls or [])]
+                log.info("tool_call", extra={
+                    "workflow_id": self.workflow_id,
+                    "step": msg.metadata.step_index,
+                    "tools": names,
+                    "parallel": len(names) > 1,
+                })
+            case MessageType.TOOL_RESULT:
+                is_error = msg.content.startswith("[Tool")
+                log.log(logging.WARNING if is_error else logging.DEBUG,
+                        "tool_result",
+                        extra={"workflow_id": self.workflow_id,
+                               "tool": msg.tool_name,
+                               "error": is_error,
+                               "bytes": len(msg.content)})
+            case MessageType.RETRY_NUDGE:
+                self.nudge_counts["retry"] += 1
+                log.warning("retry_nudge", extra={"workflow_id": self.workflow_id})
+            case MessageType.STEP_NUDGE:
+                self.nudge_counts["step"] += 1
+                log.warning("step_nudge", extra={"workflow_id": self.workflow_id,
+                                                  "tier": msg.metadata.step_index})
+            case MessageType.PREREQUISITE_NUDGE:
+                self.nudge_counts["prerequisite"] += 1
+                log.warning("prereq_nudge", extra={"workflow_id": self.workflow_id})
+            case MessageType.CONTEXT_WARNING:
+                log.warning("context_warning", extra={"workflow_id": self.workflow_id})
+
+    def on_compact(self, event: CompactEvent) -> None:
+        log.info("compaction", extra={
+            "workflow_id": self.workflow_id,
+            "step": event.step_index,
+            "phase": event.phase_reached,
+            "tokens_before": event.tokens_before,
+            "tokens_after": event.tokens_after,
+            "budget": event.budget_tokens,
+            "messages_dropped": event.messages_before - event.messages_after,
+        })
+```
+
+**OpenTelemetry / Prometheus metrics.** The events map cleanly to a small set of counters and histograms:
+
+```python
+from prometheus_client import Counter, Histogram
+
+NUDGES = Counter("agent_nudges_total", "Nudges emitted", ["kind", "workflow"])
+COMPACTIONS = Counter("agent_compactions_total", "Compaction events", ["phase", "workflow"])
+TOOL_LATENCY = Histogram("agent_tool_latency_seconds", "Tool execution latency", ["tool"])
+TOKENS_DROPPED = Histogram("agent_compaction_tokens_dropped",
+                           "Tokens removed by compaction",
+                           ["phase"])
+
+def on_compact(event):
+    COMPACTIONS.labels(phase=str(event.phase_reached), workflow=wf_id).inc()
+    TOKENS_DROPPED.labels(phase=str(event.phase_reached)).observe(
+        event.tokens_before - event.tokens_after,
+    )
+```
+
+**What to alert on.** From running the eval many times:
+- `retry_nudges > 0` on a successful run — model needed correction. Not an alert, but useful for trend analysis.
+- `step_nudges` reaching tier 3 — model is fighting the workflow. Alert if rate spikes.
+- `compaction_phase >= 3` — emergency cutoff fired. Should be very rare; alert if regular.
+- `tool_errors >= max_tool_errors - 1` — about to bail. Alert if rate spikes.
+- `iterations_used >= max_iterations * 0.8` — workflow is using most of its budget. Tune `max_iterations` up if real, model is stuck if rate spikes.
+- `ToolCallError` / `StepEnforcementError` / `PrerequisiteError` / `MaxIterationsError` — these are the terminal failure modes. Each tells you something different about whether to fix the model, the workflow, or the prompt.
+
+**Tracing.** The runner doesn't emit spans directly. The cleanest integration is a wrapping span at `runner.run()` boundaries, plus child spans inside `on_message` for tool calls (start span on `TOOL_CALL`, end on the matching `TOOL_RESULT`). Match by `tool_call_id` from `ToolCallInfo`.
+
+**Cost accounting.** Anthropic's `last_usage` dict (`input_tokens`, `output_tokens`) is populated after each call. For local models, `last_usage[slot_id]` is a `TokenUsage` with `prompt_tokens`/`completion_tokens`/`total_tokens` — but only if the backend reports it. Wrap the client (the eval harness's `CountingClientWrapper` pattern) to accumulate usage across a run.
+
+The on-callback story is small but load-bearing. Without it, every production failure becomes a forensic puzzle from logs alone.
 
 ---
 
@@ -876,6 +991,61 @@ Scenarios split into 30 cases:
 - Speed = avg seconds per run
 
 `analyze_history(messages)` extracts per-run `HistoryStats` (retry nudges, step nudges, tool errors, reasoning messages) for diagnostic breakdowns. Also correlates `correctness_with_reasoning` vs `correctness_without_reasoning` to detect whether reasoning traces help on this scenario.
+
+### JSONL row schema — one row per run, resume-friendly
+
+Every batch run appends one JSON line per `(config × scenario × ablation × run_index)` cell. The flat-row shape is what enables auto-resume: the runner loads the file, counts existing rows per `(model, backend, mode, ablation, scenario)` tuple, and only runs the remainder.
+
+```jsonc
+{
+  // Identity — composite key for resume + grouping
+  "model":          "ministral-3:8b-instruct-2512-q4_K_M",
+  "backend":        "llamaserver",       // "ollama" | "llamaserver" | "llamafile" | "anthropic"
+  "mode":           "native",            // "native" | "prompt"
+  "ablation":       "baseline",          // preset name; "baseline" = all guardrails on
+  "tool_choice":    "auto",              // Anthropic-only; "any" forces tool call
+  "scenario":       "data_gap_recovery_extended",
+  "run":            42,                  // 1-indexed within this (config, ablation, scenario)
+
+  // Outcome
+  "completeness":   true,                // reached terminal tool
+  "accuracy":       true,                // terminal args / backend state passed validate()
+  "validate_error": null,                // exception type if validator threw
+
+  // Mechanics
+  "iterations":     7,                   // total LLM calls (retries consume iterations)
+  "ideal_iterations": 5,                 // workflow's minimum-call count
+  "wasted_calls":   2,                   // max(0, iterations - ideal); null if !completeness
+  "elapsed_s":      4.73,
+  "error_type":     null,                // framework-error subclass name on failure
+  "error_message":  null,
+  "stream_retries": 0,                   // omitted if zero; capped by EvalConfig.stream_retries (default 2)
+  "compaction_events": 0,
+  "budget_tokens":  8192,                // resolved budget for this scenario
+
+  // History-derived stats (null when keep_message_history=False)
+  "retry_nudges":   0,                   // count of RETRY_NUDGE messages
+  "step_nudges":    0,                   // count of STEP_NUDGE messages
+  "tool_errors":    0,                   // count of TOOL_RESULT messages with [ToolError]
+  "reasoning_msgs": 3,                   // count of REASONING messages
+
+  // Cost — Anthropic only; local backends omit these fields
+  "input_tokens":   1240,
+  "output_tokens":  186,
+  "cost_usd":       0.0023,
+
+  // Hardware provenance (multi-rig consolidated datasets)
+  "rig":            "rig-02"             // optional; arbitrary string label
+}
+```
+
+**Resume semantics.** `batch_eval` opens the JSONL on startup, scans every line, and builds `completed_counts: dict[(model, backend, mode, ablation, scenario), int]`. For each requested cell, it skips `existing_count` runs and starts at index `existing + 1`. This means a crashed batch resumes cleanly — no duplicate runs, no lost progress. Interrupted writes get truncated to the last complete `\n`; the read side skips lines that don't parse as JSON.
+
+**Why one row per run, not one per config.** Per-run rows let you compute per-scenario accuracy *and* aggregate scores from the same file. Aggregating in the writer would lock you out of the per-scenario view. McNemar (§33) needs the (scenario, run) granularity to pair runs across ablations.
+
+**Hardware provenance.** The optional `rig` field lets multi-rig consolidated datasets stay attributable. The published v0.6.0 dataset is 119,600 rows across 46 configs × 26 scenarios × 2 ablations × 50 runs, consolidated from 4 rigs (rig-00..rig-03) — a `eval_rigs.json` at the repo root records the hardware topology. We'd want the same field if we run our own eval across multiple machines.
+
+**Replication implication.** Pick this schema before writing the harness. Trying to retrofit a key later means re-running the entire dataset.
 
 ---
 
