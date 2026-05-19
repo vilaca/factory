@@ -14,6 +14,7 @@ import {
   type RecentPair,
 } from './components/provider-picker/index.js';
 import { buildPickerInfo } from './components/provider-picker/build-info.js';
+import { makePickerCommitHandler } from './components/provider-picker/commit-handler.js';
 import { RotationPromptPanel } from './components/rotation-prompt-panel.js';
 import { useAgentLoop, type AgentLoopApi } from './agent-loop/use-agent-loop.js';
 import { TabsContext } from './tabs/TabsContext.js';
@@ -350,22 +351,12 @@ export function Session(props: SessionProps): React.ReactElement {
               setPickerOpen(false);
             }
           }}
-          onCommit={(provider, chosenModel, keyId) => {
-            if (compactionPickerResolver) {
-              compactionPickerResolver({ providerName: provider, model: chosenModel });
-            } else if (fallbackPickerResolver) {
-              fallbackPickerResolver({ provider, model: chosenModel });
-            } else {
-              // Hold the picker open until the swap resolves. Closing first
-              // un-gates TextInput (focus={!pickerOpen}), so a fast-typing
-              // user can submit a prompt before refs.current.{provider,model}
-              // are mutated by setProviderByName — sending the first post-pick
-              // turn against the old tuple.
-              void agent.setProviderByName(provider, chosenModel, keyId).finally(() => {
-                setPickerOpen(false);
-              });
-            }
-          }}
+          onCommit={makePickerCommitHandler({
+            compactionPickerResolver,
+            fallbackPickerResolver,
+            setProviderByName: agent.setProviderByName,
+            setPickerOpen,
+          })}
         />
       )}
 
