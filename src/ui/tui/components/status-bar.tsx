@@ -12,6 +12,12 @@ interface StatusBarProps {
   activity?: string | null;
   providerName: string;
   model: string;
+  /** Tokens in the *current* prompt (everything the next turn would send:
+   *  system prompt + running conversation since the last compaction). This
+   *  is what gets compared against `contextWindow` to answer "how much room
+   *  is left until compaction is needed?". Excludes completion tokens — they
+   *  go into the message history as a (usually small) assistant message, not
+   *  back into the prompt verbatim. */
   totalTokens?: number;
   /** When true, the totalTokens figure is an estimate, not a model-reported
    * count — render it with a leading `~` so the user can tell. */
@@ -58,8 +64,14 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
     gitDirty,
     cwd,
   } = props;
+  // Render percentage with one decimal place when it would otherwise round to
+  // 0% (i.e. <1% used) — a fresh session on a 200k-window model can sit at
+  // 0.3% for a long time, and a flat "0%" reads as broken. Above 1% we keep
+  // the integer form so the bar stays compact.
+  const rawPct =
+    totalTokens && contextWindow ? (totalTokens / contextWindow) * 100 : undefined;
   const tokenPct =
-    totalTokens && contextWindow ? Math.round((totalTokens / contextWindow) * 100) : undefined;
+    rawPct === undefined ? undefined : rawPct < 1 ? rawPct.toFixed(1) : Math.round(rawPct).toString();
   const suffix = tokensAreEstimate ? ' (est.)' : '';
 
   return (
@@ -106,7 +118,7 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
           </>
         )}
         {tokenPct !== undefined
-          ? ` · ${totalTokens!.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}`
+          ? ` · ctx ${totalTokens!.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}`
           : ''}
         {sessionTurns > 0 ? ` · ${sessionTurns} ${sessionTurns === 1 ? 'turn' : 'turns'}` : ''}
         {sessionToolCalls > 0
