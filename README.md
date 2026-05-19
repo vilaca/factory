@@ -59,7 +59,7 @@ factory
 ## Quick reference
 
 ```bash
-factory --version                                    # 0.1.0
+factory --version                                    # print version
 factory --help                                       # full flag list
 factory                                              # interactive picker
 factory -p anthropic -m claude-sonnet-4-6            # one-shot
