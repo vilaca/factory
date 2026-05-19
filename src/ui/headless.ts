@@ -27,6 +27,7 @@ import { createSessionLogger, type SessionLogger } from '../core/session/session
 import { getBuildInfo } from '../utils/build-info.js';
 import { buildEnvironmentMessage } from '../core/context/system-prompt.js';
 import { runHook } from '../core/hooks/index.js';
+import type { AgentEvent } from '../core/agent/types.js';
 
 interface HeadlessOptions {
   model: string;
@@ -78,6 +79,170 @@ function formatArgsBrief(args: Record<string, unknown>): string {
     parts.push(`${k}=${truncated}`);
   }
   return parts.join(' ');
+}
+
+/** Side-effect log of one agent event to stdout/stderr for the headless
+ *  runner. Returns the (possibly updated) {exitCode, permissionDeniedTool}
+ *  so the caller can thread state through the for-await loop without
+ *  hoisting the giant switch into the main function body. */
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- exhaustive switch over AgentEvent variants; each case is a one-liner.
+function handleAgentEvent(
+  event: AgentEvent,
+  state: { exitCode: number; permissionDeniedTool: string | undefined },
+): void {
+  switch (event.type) {
+    case 'text-chunk':
+      process.stdout.write(event.content);
+      break;
+    case 'tool-call-start':
+      process.stderr.write(`▶ ${event.toolName} ${formatArgsBrief(event.args)}\n`);
+      break;
+    case 'tool-call-result': {
+      // Always emit the completion marker — pairs with the `▶ start` line
+      // above so a piped run isn't missing one half of every call.
+      process.stderr.write(`  ${event.result.success ? '✓' : '✗'} ${event.toolName}\n`);
+      // Surface the body for tool failures (success=false) and for
+      // results flagged as `important` (e.g. Bash non-zero exit). Without
+      // this a piped run sees just `✗ Bash` with no clue why — or `✓ Bash`
+      // hiding a non-zero exit code. Successful non-error bodies stay
+      // suppressed; the model has them and the piped stdout isn't the
+      // place for verbose tool output.
+      if (!event.result.success || event.result.important) {
+        for (const line of event.result.output.split('\n')) {
+          process.stderr.write(`    ${line}\n`);
+        }
+      }
+      break;
+    }
+    case 'tool-call-denied':
+      process.stderr.write(`  (denied: ${event.toolName})\n`);
+      break;
+    case 'permission-request':
+      // Non-TTY: nobody to answer. Deny and surface a clear pointer.
+      state.permissionDeniedTool = event.toolName;
+      event.respond('deny');
+      break;
+    case 'hook-fired': {
+      const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;
+      const display = name.split('/').pop() ?? name;
+      const suffix = event.notice ? ` — ${event.notice}` : '';
+      process.stderr.write(`  ↪ ${event.event} hook (${display})${suffix}\n`);
+      break;
+    }
+    case 'hook-veto': {
+      const reason = event.errorMessage ? ` — ${event.errorMessage}` : '';
+      process.stderr.write(`  ⛔ ${event.event} hook vetoed ${event.toolName}${reason}\n`);
+      break;
+    }
+    case 'hook-error':
+      process.stderr.write(`  ⚠ Hook ${event.event}: ${event.error}\n`);
+      break;
+    case 'compaction-start':
+      process.stderr.write(
+        event.aggressive ? '  ⊕ aggressively compacting…\n' : '  ⊕ compacting…\n',
+      );
+      break;
+    case 'compaction':
+      process.stderr.write(
+        `  ✓ compacted ${event.oldMessages} → ${event.newMessages}` +
+          (event.aggressive ? ' (aggressive)\n' : '\n'),
+      );
+      break;
+    case 'key-rotation': {
+      const fromLabel = event.from
+        ? event.from.label
+          ? `${event.from.label} · …${event.from.fingerprint}`
+          : `…${event.from.fingerprint}`
+        : '<unknown>';
+      const toLabel = event.to.label
+        ? `${event.to.label} · …${event.to.fingerprint}`
+        : `…${event.to.fingerprint}`;
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      process.stderr.write(`  ⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}\n`);
+      break;
+    }
+    case 'key-rotation-exhausted': {
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      process.stderr.write(`  ⟲ no more keys for ${event.provider} (${reasonLabel})\n`);
+      break;
+    }
+    case 'tuple-rotation': {
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      process.stderr.write(
+        `  ⟲ ${event.from.provider}/${event.from.model} ${reasonLabel}, falling back to ${event.to.provider}/${event.to.model}\n`,
+      );
+      break;
+    }
+    case 'tuple-rotation-exhausted': {
+      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      process.stderr.write(`  ⟲ rotation chain exhausted (${reasonLabel})\n`);
+      break;
+    }
+    case 'provider-retry': {
+      // Surface the in-flight retry so CI logs aren't silent during a
+      // multi-second backoff. The TTY path shows this on the StatusBar;
+      // here the equivalent affordance is a single labeled stderr line.
+      const seconds = (event.delayMs / 1000).toFixed(1);
+      process.stderr.write(
+        `  [activity] retrying ${event.attempt}/${event.maxAttempts} (${event.reason}, ${seconds}s)\n`,
+      );
+      break;
+    }
+    case 'auto-retry-exhausted':
+      // Model bailed after a tool failure and couldn't recover. Piped
+      // output may be truncated mid-task — surface so CI doesn't treat
+      // a partial response as a successful one.
+      process.stderr.write("  ⚠ auto-retry exhausted — model couldn't recover\n");
+      break;
+    case 'all-denied-halt':
+      process.stderr.write(
+        `  ⏸ all ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting\n`,
+      );
+      break;
+    case 'output-cap-reached':
+      // Response was truncated at the provider's completion-token cap.
+      // The caller's piped stdout is incomplete — flag it so `factory <
+      // prompt > out.md` doesn't silently produce a half-document.
+      process.stderr.write(
+        `  ⚠ output cap reached (${event.completionTokens} tokens) — response truncated\n`,
+      );
+      break;
+    case 'output-blocked':
+      // Provider's policy classifier blocked the response (OpenAI
+      // content_filter) or the model refused mid-turn (Anthropic
+      // refusal). Distinct from a natural stop — surface so scripted
+      // callers don't treat the partial output as authoritative.
+      process.stderr.write(
+        `  ⚠ output blocked by provider (${event.reason}) — partial response only\n`,
+      );
+      break;
+    case 'empty-turn-warning':
+      process.stderr.write(
+        `  ⚠ ${event.completionTokens} tokens of internal reasoning, no visible output\n`,
+      );
+      break;
+    case 'repetition-detected':
+      process.stderr.write(
+        `  ⚠ runaway repetition (${event.streak} identical lines) — turn aborted\n`,
+      );
+      break;
+    case 'tool-result-imitation-stripped':
+      // Security signal: the model fabricated tool result blocks in the
+      // stream. The fakes are stripped before storing, but a piped run
+      // shouldn't trust the output without knowing this happened.
+      process.stderr.write(
+        `  ⚠ stripped ${event.count} fabricated tool-result block${event.count === 1 ? '' : 's'} from response\n`,
+      );
+      break;
+    case 'error':
+      process.stderr.write(`factory: ${event.error.message}\n`);
+      state.exitCode = 1;
+      break;
+    case 'turn-complete':
+      if (event.stopReason === 'error') state.exitCode = state.exitCode || 1;
+      else if (event.stopReason === 'token-limit') state.exitCode = state.exitCode || 5;
+      break;
+  }
 }
 
 // eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): split into setup / event-pump / shutdown phases.
@@ -240,8 +405,10 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     compactionResolver,
   );
 
-  let exitCode = 0;
-  let permissionDeniedTool: string | undefined;
+  const state: { exitCode: number; permissionDeniedTool: string | undefined } = {
+    exitCode: 0,
+    permissionDeniedTool: undefined,
+  };
 
   // Closure-state chain ref so multi-tool-call agentic runs can reuse
   // server-side reasoning across turns within the same headless invocation.
@@ -289,169 +456,16 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       responsesChainRef,
     })) {
       sessionLogger?.logAgentEvent(event);
-
-      switch (event.type) {
-        case 'text-chunk':
-          process.stdout.write(event.content);
-          break;
-        case 'tool-call-start':
-          process.stderr.write(`▶ ${event.toolName} ${formatArgsBrief(event.args)}\n`);
-          break;
-        case 'tool-call-result': {
-          // Always emit the completion marker — pairs with the `▶ start` line
-          // above so a piped run isn't missing one half of every call.
-          process.stderr.write(`  ${event.result.success ? '✓' : '✗'} ${event.toolName}\n`);
-          // Surface the body for tool failures (success=false) and for
-          // results flagged as `important` (e.g. Bash non-zero exit). Without
-          // this a piped run sees just `✗ Bash` with no clue why — or `✓ Bash`
-          // hiding a non-zero exit code. Successful non-error bodies stay
-          // suppressed; the model has them and the piped stdout isn't the
-          // place for verbose tool output.
-          if (!event.result.success || event.result.important) {
-            for (const line of event.result.output.split('\n')) {
-              process.stderr.write(`    ${line}\n`);
-            }
-          }
-          break;
-        }
-        case 'tool-call-denied':
-          process.stderr.write(`  (denied: ${event.toolName})\n`);
-          break;
-        case 'permission-request':
-          // Non-TTY: nobody to answer. Deny and surface a clear pointer.
-          permissionDeniedTool = event.toolName;
-          event.respond('deny');
-          break;
-        case 'hook-fired': {
-          const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;
-          const display = name.split('/').pop() ?? name;
-          const suffix = event.notice ? ` — ${event.notice}` : '';
-          process.stderr.write(`  ↪ ${event.event} hook (${display})${suffix}\n`);
-          break;
-        }
-        case 'hook-veto': {
-          const reason = event.errorMessage ? ` — ${event.errorMessage}` : '';
-          process.stderr.write(`  ⛔ ${event.event} hook vetoed ${event.toolName}${reason}\n`);
-          break;
-        }
-        case 'hook-error':
-          process.stderr.write(`  ⚠ Hook ${event.event}: ${event.error}\n`);
-          break;
-        case 'compaction-start':
-          process.stderr.write(
-            event.aggressive ? '  ⊕ aggressively compacting…\n' : '  ⊕ compacting…\n',
-          );
-          break;
-        case 'compaction':
-          process.stderr.write(
-            `  ✓ compacted ${event.oldMessages} → ${event.newMessages}` +
-              (event.aggressive ? ' (aggressive)\n' : '\n'),
-          );
-          break;
-        case 'key-rotation': {
-          const fromLabel = event.from
-            ? event.from.label
-              ? `${event.from.label} · …${event.from.fingerprint}`
-              : `…${event.from.fingerprint}`
-            : '<unknown>';
-          const toLabel = event.to.label
-            ? `${event.to.label} · …${event.to.fingerprint}`
-            : `…${event.to.fingerprint}`;
-          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
-          process.stderr.write(`  ⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}\n`);
-          break;
-        }
-        case 'key-rotation-exhausted': {
-          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
-          process.stderr.write(`  ⟲ no more keys for ${event.provider} (${reasonLabel})\n`);
-          break;
-        }
-        case 'tuple-rotation': {
-          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
-          process.stderr.write(
-            `  ⟲ ${event.from.provider}/${event.from.model} ${reasonLabel}, falling back to ${event.to.provider}/${event.to.model}\n`,
-          );
-          break;
-        }
-        case 'tuple-rotation-exhausted': {
-          const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
-          process.stderr.write(`  ⟲ rotation chain exhausted (${reasonLabel})\n`);
-          break;
-        }
-        case 'provider-retry': {
-          // Surface the in-flight retry so CI logs aren't silent during a
-          // multi-second backoff. The TTY path shows this on the StatusBar;
-          // here the equivalent affordance is a single labeled stderr line.
-          const seconds = (event.delayMs / 1000).toFixed(1);
-          process.stderr.write(
-            `  [activity] retrying ${event.attempt}/${event.maxAttempts} (${event.reason}, ${seconds}s)\n`,
-          );
-          break;
-        }
-        case 'auto-retry-exhausted':
-          // Model bailed after a tool failure and couldn't recover. Piped
-          // output may be truncated mid-task — surface so CI doesn't treat
-          // a partial response as a successful one.
-          process.stderr.write("  ⚠ auto-retry exhausted — model couldn't recover\n");
-          break;
-        case 'all-denied-halt':
-          process.stderr.write(
-            `  ⏸ all ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting\n`,
-          );
-          break;
-        case 'output-cap-reached':
-          // Response was truncated at the provider's completion-token cap.
-          // The caller's piped stdout is incomplete — flag it so `factory <
-          // prompt > out.md` doesn't silently produce a half-document.
-          process.stderr.write(
-            `  ⚠ output cap reached (${event.completionTokens} tokens) — response truncated\n`,
-          );
-          break;
-        case 'output-blocked':
-          // Provider's policy classifier blocked the response (OpenAI
-          // content_filter) or the model refused mid-turn (Anthropic
-          // refusal). Distinct from a natural stop — surface so scripted
-          // callers don't treat the partial output as authoritative.
-          process.stderr.write(
-            `  ⚠ output blocked by provider (${event.reason}) — partial response only\n`,
-          );
-          break;
-        case 'empty-turn-warning':
-          process.stderr.write(
-            `  ⚠ ${event.completionTokens} tokens of internal reasoning, no visible output\n`,
-          );
-          break;
-        case 'repetition-detected':
-          process.stderr.write(
-            `  ⚠ runaway repetition (${event.streak} identical lines) — turn aborted\n`,
-          );
-          break;
-        case 'tool-result-imitation-stripped':
-          // Security signal: the model fabricated tool result blocks in the
-          // stream. The fakes are stripped before storing, but a piped run
-          // shouldn't trust the output without knowing this happened.
-          process.stderr.write(
-            `  ⚠ stripped ${event.count} fabricated tool-result block${event.count === 1 ? '' : 's'} from response\n`,
-          );
-          break;
-        case 'error':
-          process.stderr.write(`factory: ${event.error.message}\n`);
-          exitCode = 1;
-          break;
-        case 'turn-complete':
-          if (event.stopReason === 'error') exitCode = exitCode || 1;
-          else if (event.stopReason === 'token-limit') exitCode = exitCode || 5;
-          break;
-      }
+      handleAgentEvent(event, state);
     }
   } finally {
     process.stdout.write('\n');
-    if (permissionDeniedTool && exitCode === 0) {
+    if (state.permissionDeniedTool && state.exitCode === 0) {
       process.stderr.write(
-        `factory: tool '${permissionDeniedTool}' requires permission but stdin is not a TTY. ` +
-          `Add '${permissionDeniedTool}' to permissions.allowAll in ~/.factory/config.json to allow it in headless mode.\n`,
+        `factory: tool '${state.permissionDeniedTool}' requires permission but stdin is not a TTY. ` +
+          `Add '${state.permissionDeniedTool}' to permissions.allowAll in ~/.factory/config.json to allow it in headless mode.\n`,
       );
-      exitCode = 3;
+      state.exitCode = 3;
     }
     if (hooksEnabled) {
       try {
@@ -474,5 +488,5 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     sessionLogger?.close();
   }
 
-  process.exit(exitCode);
+  process.exit(state.exitCode);
 }

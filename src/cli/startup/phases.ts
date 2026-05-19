@@ -4,6 +4,7 @@ import type { ProviderDescriptor, StartupProviderName } from '../../providers/re
 import { DESCRIPTORS, descriptorByAlias } from '../../providers/registry.js';
 import { createProvider } from '../../providers/registry.js';
 import type { Config, HookEntry } from '../../core/config/types.js';
+import type { McpServerConfig } from '../../mcp/types.js';
 import type { McpManager } from '../../mcp/client.js';
 import type { ToolRegistry } from '../../tools/registry.js';
 import { validateModelToolSupport } from '../../core/auth/model-validation.js';
@@ -358,23 +359,15 @@ export async function gatherGitState(cwd: string): Promise<GitState> {
  * project MCP server entries from the merged config so neither fires for
  * this session.
  */
-export async function handleProjectTrust(config: Config, cwd: string): Promise<void> {
-  const { loadProjectConfig } = await import('../../core/config/index.js');
-  const projectOnly = await loadProjectConfig(cwd);
-  const projectHooks = projectOnly.agent?.hooks;
-  const projectMcp = projectOnly.mcp?.servers;
-  const hasHooks = !!projectHooks && Object.keys(projectHooks).length > 0;
-  const hasMcp = !!projectMcp && projectMcp.length > 0;
-  if (!hasHooks && !hasMcp) return;
+type ProjectHooks = NonNullable<NonNullable<Config['agent']>['hooks']>;
 
-  const { isProjectTrusted, recordTrust } = await import('../../core/hooks/trust.js');
-  const trustables = {
-    hooks: projectHooks,
-    mcpServers: projectMcp,
-  };
-  if (await isProjectTrusted(cwd, trustables)) return;
-
-  const { promptText } = await import('../prompts.js');
+/** Render the trust-prompt summary listing project hooks + MCP servers. */
+function printTrustSummary(
+  projectHooks: ProjectHooks | undefined,
+  projectMcp: McpServerConfig[] | undefined,
+  hasHooks: boolean,
+  hasMcp: boolean,
+): void {
   console.log('');
   console.log(
     chalk.yellow(' ⚠ This project declares startup automation in .factory/config.json:'),
@@ -382,7 +375,7 @@ export async function handleProjectTrust(config: Config, cwd: string): Promise<v
   if (hasHooks && projectHooks) {
     console.log(chalk.yellow('   hooks:'));
     for (const [event, entries] of Object.entries(projectHooks)) {
-      for (const entry of entries ?? []) {
+      for (const entry of (entries as HookEntry[] | undefined) ?? []) {
         const matcher = entry.matcher ? ` [${entry.matcher}]` : '';
         console.log(chalk.dim(`     ${event}${matcher}: ${entry.command}`));
       }
@@ -401,18 +394,17 @@ export async function handleProjectTrust(config: Config, cwd: string): Promise<v
       ' These run programs on your machine automatically. Trust this project? [y/N]',
     ),
   );
-  const answer =
-    process.stdout.isTTY && process.stdin.isTTY ? (await promptText(' > ')).toLowerCase() : 'n';
-  if (answer === 'y' || answer === 'yes') {
-    await recordTrust(cwd, trustables);
-    console.log(
-      chalk.dim(' Trusted. Will not prompt again unless the hook or MCP config changes.'),
-    );
-    return;
-  }
-  // Strip the project hooks from the merged config. User hooks
-  // (from ~/.factory/config.json) survive — those came from a
-  // different file and aren't in question.
+}
+
+/** Remove project-declared hooks and MCP servers from the merged config so
+ *  the rejected session doesn't fire them. User-level entries survive. */
+function stripProjectAutomation(
+  config: Config,
+  projectHooks: ProjectHooks | undefined,
+  projectMcp: McpServerConfig[] | undefined,
+  hasHooks: boolean,
+  hasMcp: boolean,
+): void {
   if (hasHooks && projectHooks && config.agent?.hooks) {
     const userOnlyHooks: typeof config.agent.hooks = {};
     for (const [event, entries] of Object.entries(config.agent.hooks) as Array<
@@ -427,13 +419,45 @@ export async function handleProjectTrust(config: Config, cwd: string): Promise<v
     }
     config.agent.hooks = userOnlyHooks;
   }
-  // Strip the project MCP servers from the merged config so the spawn
-  // step in main() doesn't launch them. User-level MCP servers (from
-  // ~/.factory/config.json) survive.
   if (hasMcp && projectMcp && config.mcp?.servers) {
     const projectNames = new Set(projectMcp.map(s => s.name));
     config.mcp = { servers: config.mcp.servers.filter(s => !projectNames.has(s.name)) };
   }
+}
+
+export async function handleProjectTrust(config: Config, cwd: string): Promise<void> {
+  const { loadProjectConfig } = await import('../../core/config/index.js');
+  const projectOnly = await loadProjectConfig(cwd);
+  const projectHooks = projectOnly.agent?.hooks;
+  const projectMcp = projectOnly.mcp?.servers;
+  const hasHooks = !!projectHooks && Object.keys(projectHooks).length > 0;
+  const hasMcp = !!projectMcp && projectMcp.length > 0;
+  if (!hasHooks && !hasMcp) return;
+
+  const { isProjectTrusted, recordTrust } = await import('../../core/hooks/trust.js');
+  const trustables = {
+    hooks: projectHooks,
+    mcpServers: projectMcp,
+  };
+  if (await isProjectTrusted(cwd, trustables)) return;
+
+  const { promptText } = await import('../prompts.js');
+  printTrustSummary(projectHooks, projectMcp, hasHooks, hasMcp);
+  const answer =
+    process.stdout.isTTY && process.stdin.isTTY ? (await promptText(' > ')).toLowerCase() : 'n';
+  if (answer === 'y' || answer === 'yes') {
+    await recordTrust(cwd, trustables);
+    console.log(
+      chalk.dim(' Trusted. Will not prompt again unless the hook or MCP config changes.'),
+    );
+    return;
+  }
+  // Strip the project hooks from the merged config. User hooks
+  // (from ~/.factory/config.json) survive — those came from a
+  // different file and aren't in question.
+  // Project MCP servers stripped the same way so the spawn step in main()
+  // doesn't launch them.
+  stripProjectAutomation(config, projectHooks, projectMcp, hasHooks, hasMcp);
   const rejected = [hasHooks ? 'hooks' : null, hasMcp ? 'MCP servers' : null]
     .filter(Boolean)
     .join(' and ');

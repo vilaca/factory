@@ -650,10 +650,7 @@ describe('OpenAIProvider', () => {
           res.end(JSON.stringify({ data: [] }));
           return;
         }
-        let body = '';
-        req.on('data', (chunk: Buffer) => {
-          body += chunk.toString();
-        });
+        req.on('data', () => {});
         req.on('end', () => {
           // Server returns a response id regardless; provider must hide it
           // upstream when the request opted out of storage.

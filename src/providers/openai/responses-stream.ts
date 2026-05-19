@@ -101,14 +101,9 @@ function sseErrorStatus(err: { type?: string; code?: string } | undefined): numb
   return 500;
 }
 
-/** Apply one parsed SSE event to the accumulator state and emit any
- *  user-visible content delta. Throwing here rejects the outer generator
- *  so terminal errors propagate correctly. Pulled out of the main stream
- *  loop so the loop's complexity stays under the project's lint cap. */
-function dispatchResponsesEvent(
-  ev: ResponsesStreamEvent,
-  state: DispatchState,
-): string | undefined {
+/** Handle the tool-call lifecycle events. Splits out of dispatchResponsesEvent
+ *  to keep the dispatcher's branch count under the lint cap. */
+function applyToolCallEvent(ev: ResponsesStreamEvent, state: DispatchState): void {
   switch (ev.type) {
     case 'response.output_item.added':
       if (ev.item?.type === 'function_call' && typeof ev.output_index === 'number') {
@@ -117,18 +112,12 @@ function dispatchResponsesEvent(
           name: ev.item.name,
         });
       }
-      return undefined;
-    case 'response.output_text.delta':
-    case 'response.refusal.delta':
-    case 'response.reasoning_summary_text.delta':
-      // Reasoning summaries are provider-redacted visibility text (safe to
-      // surface, unlike raw chain-of-thought). Treat as normal text deltas.
-      return ev.delta;
+      return;
     case 'response.function_call_arguments.delta':
       if (typeof ev.output_index === 'number' && ev.delta) {
         appendArgsDelta(state.toolCalls, ev.output_index, ev.delta);
       }
-      return undefined;
+      return;
     case 'response.function_call_arguments.done':
       if (typeof ev.output_index === 'number') {
         noteArgsDone(state.toolCalls, ev.output_index, {
@@ -136,11 +125,17 @@ function dispatchResponsesEvent(
           arguments: ev.arguments,
         });
       }
-      return undefined;
+  }
+}
+
+/** Handle terminal events (completed / incomplete / failed / error). May
+ *  throw to reject the outer generator on real failures. */
+function applyTerminalEvent(ev: ResponsesStreamEvent, state: DispatchState): void {
+  switch (ev.type) {
     case 'response.completed':
       state.usage = extractResponsesUsage(ev.response);
       if (ev.response?.id) state.responseId = ev.response.id;
-      return undefined;
+      return;
     case 'response.incomplete': {
       // The Responses API signals truncation via `response.incomplete` with
       // an `incomplete_details.reason`. The `max_output_tokens` reason is the
@@ -155,7 +150,7 @@ function dispatchResponsesEvent(
         state.doneReason = 'length';
         if (ev.response) state.usage = extractResponsesUsage(ev.response);
         if (ev.response?.id) state.responseId = ev.response.id;
-        return undefined;
+        return;
       }
       const msg = ev.response?.error?.message ?? reason ?? 'incomplete response';
       throw apiError(state.providerName, 400, msg);
@@ -173,6 +168,35 @@ function dispatchResponsesEvent(
       const status = sseErrorStatus(ev.response?.error);
       throw apiError(state.providerName, status, msg);
     }
+  }
+}
+
+/** Apply one parsed SSE event to the accumulator state and emit any
+ *  user-visible content delta. Throwing here rejects the outer generator
+ *  so terminal errors propagate correctly. Pulled out of the main stream
+ *  loop so the loop's complexity stays under the project's lint cap. */
+function dispatchResponsesEvent(
+  ev: ResponsesStreamEvent,
+  state: DispatchState,
+): string | undefined {
+  switch (ev.type) {
+    case 'response.output_text.delta':
+    case 'response.refusal.delta':
+    case 'response.reasoning_summary_text.delta':
+      // Reasoning summaries are provider-redacted visibility text (safe to
+      // surface, unlike raw chain-of-thought). Treat as normal text deltas.
+      return ev.delta;
+    case 'response.output_item.added':
+    case 'response.function_call_arguments.delta':
+    case 'response.function_call_arguments.done':
+      applyToolCallEvent(ev, state);
+      return undefined;
+    case 'response.completed':
+    case 'response.incomplete':
+    case 'response.failed':
+    case 'response.error':
+      applyTerminalEvent(ev, state);
+      return undefined;
     default:
       return undefined;
   }
