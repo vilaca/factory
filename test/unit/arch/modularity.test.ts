@@ -186,6 +186,8 @@ describe('architecture: module boundaries', () => {
       'node:child_process',
       'http',
       'https',
+      'net',
+      'dgram',
       'child_process',
     ];
     const importRegex = /(?:from|require\()\s*['"]([^'"]+)['"]/g;
