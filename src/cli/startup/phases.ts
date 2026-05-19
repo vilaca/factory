@@ -464,10 +464,6 @@ export async function handleProjectTrust(config: Config, cwd: string): Promise<v
   console.log(chalk.dim(` Project ${rejected} rejected for this session.`));
 }
 
-/** @deprecated use {@link handleProjectTrust}. Kept as a thin alias for
- *  external callers; remove once no longer referenced. */
-export const handleProjectHookTrust = handleProjectTrust;
-
 /**
  * Register the Delegate tool when the `subagents` experimental flag is
  * on. The subagent runs on the provider's weak-tier model (Haiku /
