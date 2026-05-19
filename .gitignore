@@ -34,3 +34,8 @@ coverage/
 
 # Local-only scratch
 IDEAS.md
+
+# VitePress docs site build output + deps
+.vitepress/dist/
+.vitepress/cache/
+.vitepress/node_modules/
