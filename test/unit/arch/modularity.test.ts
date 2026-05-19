@@ -202,4 +202,31 @@ describe('architecture: module boundaries', () => {
       }, 'UI files must not perform direct HTTP or process IO — go through providers/tools');
     await expectNoViolations(rule, 'ui → node network/process modules');
   });
+
+  it('src/** must not import a CLI argument-parsing library', async () => {
+    const bannedCliLibs = [
+      'commander',
+      'yargs',
+      'yargs/yargs',
+      'yargs/helpers',
+      'meow',
+      'minimist',
+      'arg',
+      'cmd-ts',
+      'sade',
+      'mri',
+      'cac',
+    ];
+    const importRegex = /(?:from|require\()\s*['"]([^'"]+)['"]/g;
+    const rule = projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo((file) => {
+        for (const m of file.content.matchAll(importRegex)) {
+          if (bannedCliLibs.includes(m[1])) return false;
+        }
+        return true;
+      }, 'CLI argument parsing is hand-rolled in src/cli/args.ts — do not introduce a parsing library');
+    await expectNoViolations(rule, 'src → CLI parsing library');
+  });
 });
