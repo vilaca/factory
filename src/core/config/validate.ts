@@ -286,12 +286,54 @@ function validateSecuritySection(sec: unknown, filePath: string): void {
   }
 }
 
+function validateMcpServerEntry(entry: unknown, i: number, filePath: string): void {
+  const at = (field?: string): string =>
+    field === undefined ? `"mcp.servers[${i}]"` : `"mcp.servers[${i}].${field}"`;
+  if (!isPlainObject(entry)) {
+    throw new Error(`${filePath}: ${at()} must be an object`);
+  }
+  if (typeof entry.name !== 'string' || !entry.name) {
+    throw new Error(`${filePath}: ${at('name')} must be a non-empty string`);
+  }
+  if (entry.transport !== 'stdio' && entry.transport !== 'sse') {
+    throw new Error(`${filePath}: ${at('transport')} must be "stdio" or "sse"`);
+  }
+  if (entry.transport === 'stdio') {
+    if (typeof entry.command !== 'string' || !entry.command) {
+      throw new Error(
+        `${filePath}: ${at('command')} must be a non-empty string for stdio transport`,
+      );
+    }
+  }
+  if (entry.args !== undefined) {
+    if (!Array.isArray(entry.args) || entry.args.some(a => typeof a !== 'string')) {
+      throw new Error(`${filePath}: ${at('args')} must be an array of strings`);
+    }
+  }
+  if (entry.url !== undefined && typeof entry.url !== 'string') {
+    throw new Error(`${filePath}: ${at('url')} must be a string`);
+  }
+  if (entry.env !== undefined) {
+    if (!isPlainObject(entry.env)) {
+      throw new Error(`${filePath}: ${at('env')} must be an object`);
+    }
+    for (const [k, v] of Object.entries(entry.env)) {
+      if (typeof v !== 'string') {
+        throw new Error(`${filePath}: ${at(`env[${JSON.stringify(k)}]`)} must be a string`);
+      }
+    }
+  }
+}
+
 function validateMcpSection(mcp: unknown, filePath: string): void {
   if (!isPlainObject(mcp)) {
     throw new Error(`${filePath}: "mcp" must be an object`);
   }
-  if (mcp.servers !== undefined && !Array.isArray(mcp.servers)) {
-    throw new Error(`${filePath}: "mcp.servers" must be an array`);
+  if (mcp.servers !== undefined) {
+    if (!Array.isArray(mcp.servers)) {
+      throw new Error(`${filePath}: "mcp.servers" must be an array`);
+    }
+    mcp.servers.forEach((entry, i) => validateMcpServerEntry(entry, i, filePath));
   }
 }
 

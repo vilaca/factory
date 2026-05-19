@@ -1,24 +1,29 @@
-// First-run trust prompt for project-local hooks.
+// First-run trust prompt for project-local hooks and MCP servers.
 //
-// Threat: a hostile project's `.factory/config.json` declares hooks that fire
-// the moment you `cd` into the repo and run `factory`. SessionStart auto-
-// executes — even with env-scrub and forbidden-patterns the hook still has
-// the user's read access to the filesystem and can run any non-blocked
-// command. Defense: prompt once per project before any project-local hook
-// runs; persist a fingerprint so subsequent runs skip the prompt; re-prompt
-// when the fingerprint changes (the hook config was edited).
+// Threat: a hostile project's `.factory/config.json` can declare hooks AND
+// MCP servers. Both fire the moment you `cd` into the repo and run `factory`:
+// SessionStart hooks auto-execute, and stdio MCP servers spawn arbitrary
+// binaries via `child_process.spawn`. Even with env-scrub and
+// forbidden-patterns, those processes inherit the user's filesystem access
+// and can run any non-blocked command. Defense: prompt once per project
+// before any project-local hook or MCP server runs; persist a fingerprint
+// so subsequent runs skip the prompt; re-prompt when the fingerprint
+// changes (the hook or MCP config was edited).
 //
 // Trust state lives in `~/.factory/trusted-projects.json`:
 //   { "<absolute-project-dir>": { "fingerprint": "<sha256-hex>" } }
 //
-// The fingerprint covers ONLY the project's hook block (not the whole
-// config), so unrelated config edits don't void the trust decision.
+// The fingerprint covers only the project's hook block and MCP server list
+// (not the whole config), so unrelated config edits don't void the trust
+// decision. Projects with hooks-only (no MCP) keep the same fingerprint as
+// before this change — existing trust entries stay valid.
 
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import type { HooksConfig } from '../config/types.js';
+import type { McpServerConfig } from '../../mcp/types.js';
 import { writeFileAtomic } from '../../utils/atomic-write.js';
 
 interface TrustEntry {
@@ -39,6 +44,24 @@ function trustFile(): string {
  *  fire in declared order). */
 export function fingerprintHooks(hooks: HooksConfig): string {
   return crypto.createHash('sha256').update(canonicalize(hooks)).digest('hex');
+}
+
+export interface ProjectTrustables {
+  hooks: HooksConfig | undefined;
+  mcpServers: McpServerConfig[] | undefined;
+}
+
+/** Fingerprint the project's hook block plus its MCP server list. When the
+ *  project has no MCP servers, this collapses to `fingerprintHooks(hooks)` so
+ *  trust entries recorded before MCP-trust shipped remain valid. */
+export function fingerprintProjectTrustables(t: ProjectTrustables): string {
+  const hooks = t.hooks ?? {};
+  const mcp = t.mcpServers ?? [];
+  if (mcp.length === 0) {
+    return fingerprintHooks(hooks);
+  }
+  const payload = { hooks, mcpServers: mcp };
+  return crypto.createHash('sha256').update(canonicalize(payload)).digest('hex');
 }
 
 function canonicalize(value: unknown): string {
@@ -87,14 +110,20 @@ async function writeDb(db: TrustDb): Promise<void> {
   await writeFileAtomic(file, JSON.stringify(db, null, 2));
 }
 
-export async function isProjectTrusted(projectDir: string, hooks: HooksConfig): Promise<boolean> {
+export async function isProjectTrusted(
+  projectDir: string,
+  trustables: ProjectTrustables,
+): Promise<boolean> {
   const entry = (await readDb())[projectDir];
   if (!entry) return false;
-  return entry.fingerprint === fingerprintHooks(hooks);
+  return entry.fingerprint === fingerprintProjectTrustables(trustables);
 }
 
-export async function recordTrust(projectDir: string, hooks: HooksConfig): Promise<void> {
+export async function recordTrust(
+  projectDir: string,
+  trustables: ProjectTrustables,
+): Promise<void> {
   const db = await readDb();
-  db[projectDir] = { fingerprint: fingerprintHooks(hooks) };
+  db[projectDir] = { fingerprint: fingerprintProjectTrustables(trustables) };
   await writeDb(db);
 }
