@@ -12,6 +12,10 @@ const config: Linter.Config[] = [
       'coverage/**',
       '*.tsbuildinfo',
       'eslint.config.ts',
+      // VitePress site config is built by Vite, not by our tsc project.
+      // Linting it would require adding it to a tsconfig, which would
+      // pull docs-site code into the main type-check pass.
+      '.vitepress/**',
     ],
   },
   {

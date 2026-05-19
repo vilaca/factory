@@ -1,0 +1,66 @@
+name: Deploy docs site
+
+# Builds the VitePress site under .vitepress/ and publishes it to the
+# repo's GitHub Pages environment. Triggered on pushes to main that
+# touch docs sources (README, ARCHITECTURE, CONTRIBUTING, SECURITY,
+# docs/**, or the VitePress config itself), plus a manual dispatch for
+# republishing without a content change.
+#
+# Pages must be enabled on the repo with the "GitHub Actions" source
+# (Settings → Pages → Source: GitHub Actions) for the deploy step to
+# succeed. The published URL is https://vilaca.github.io/factory/.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'ARCHITECTURE.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'docs/**'
+      - '.vitepress/**'
+      - '.github/workflows/docs.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+# One in-flight deploy at a time; newer pushes preempt older ones so
+# the site reflects HEAD without queueing redundant builds.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build VitePress site
+        run: npm run docs:build
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
