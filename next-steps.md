@@ -814,6 +814,26 @@ ABLATION_PRESETS = {
 - Mistral 8B bare: ~38%; full: ~99%.
 - `bare+any` variant (bare + Anthropic `tool_choice: "any"`) tested on Claude — Haiku recovers to 89%, showing forced-tool-choice helps but doesn't replace structural guardrails.
 
+### Per-guardrail impact ranking
+
+From the author's own HN-thread commentary on the ablation runs:
+
+| Guardrail | Drop when disabled | Notes |
+|---|---|---|
+| **Retry nudges** | 24–49 pt | Highest-impact single layer. Without retry-on-text-response, the model never gets a chance to self-correct after a malformed call. |
+| **Error recovery** | ~10 pt | Universal — every model, local and frontier, drops to 0% on the error-recovery scenario without it. |
+| **Step enforcement** | Situational | Only fires for models with weak sequencing. Strong models satisfy required steps naturally and never trigger the nudge. |
+| **Rescue parsing** | No significance in eval | But author keeps it on production-experience grounds — surfaces models that emit JSON-as-text instead of structured calls. |
+| **Context compaction** | No significance in eval | Same — eval workflows are too short to exercise compaction; production multi-day sessions need it. |
+
+### The eval-vs-production caveat
+
+**Rescue parsing and context compaction show no statistical significance in the ablation harness.** The author keeps them anyway. Why: the eval scenarios are deliberately bounded (≤15 iterations, ≤8K tokens) — too small to exercise compaction under real pressure, too short to surface the occasional "model emits a JSON code fence instead of a tool call" failure that rescue catches.
+
+The eval harness is a *necessary but not sufficient* validation surface. Layers that protect against rare-but-catastrophic failures don't show up in 50-run McNemar tests; they show up in production over weeks. This is worth noting for our own replication: don't strip a guardrail just because the ablation can't measure its contribution.
+
+**Replication implication.** Our ablation will likely under-value the same two guardrails for the same reason. Keep them. Validate them by running the framework against a real multi-week workload, not just the bench.
+
 ---
 
 ## 30. Eval Harness — Scenarios + Metrics
@@ -1099,10 +1119,31 @@ From the published eval and ablation runs:
 - **Default `keep_recent`:** 2 iterations preserved fully.
 - **Truncation length in phase 1:** 200 chars per tool result.
 - **KV cache Q8:** 1.86× context lift, no eval regression measured.
+- **Coverage of evidence base:** 97 model/backend configurations tested across the consolidated v0.6.0 dataset (vs the 50+ reported in the IEEE preprint snapshot).
+- **Top of the suite is not solved:** the v0.6.0 26-scenario suite is hard enough that Claude Opus 4.6 cannot sweep it. Top score across all configs is 86.5%, not 100%.
+- **Per-guardrail ablation impact:** retry nudges 24–49pt drop when disabled; error recovery ~10pt; rescue parsing and compaction show no eval significance but are kept on production grounds.
 
 ---
 
-## 40. What to Build First (Recommended Order)
+## 40. Related Work — Adjacent Libraries and Why They're Not Substitutes
+
+A few related libraries get raised when discussing reliability for tool-calling LLMs. They solve overlapping problems but at different layers:
+
+| Library | What it does | Why it's not a substitute |
+|---|---|---|
+| **Instructor** (Pydantic + retry loops for structured output) | Validates LLM JSON output against a Pydantic schema. Retries on validation failure with structured error feedback. | Operates one layer below tool-calling orchestration. Solves "did the model produce valid JSON?" — not "did the model call the right tool in the right order with the right prereqs satisfied." Compatible: a reliability stack could use Instructor as the JSON validator inside its `ResponseValidator`, then layer step enforcement / prereqs / error recovery on top. |
+| **LangChain / LangGraph** | Agent orchestration framework with graph-based workflow definitions. | Heavyweight, opinionated about graph structure, owns the loop. The middleware-mode pattern described in §26 is the right comparison — guardrails can plug into LangChain rather than replace it. |
+| **DSPy** | Programming-by-example for LLM pipelines; optimizes prompts via teacher/student loops. | Optimization framework, not a reliability layer. Different axis — DSPy improves the prompt; the reliability stack catches what the prompt couldn't fix. |
+| **Outlines** (constrained decoding via FSMs / regex / grammars) | Constrains the model's sampling at generation time to enforce structural correctness. | Lower-level: constrains output *during* generation, not after. Eliminates malformed-JSON failures entirely on backends that support it (llama.cpp grammars), but doesn't address step ordering, prerequisite satisfaction, or error recovery. Best used *together* with the reliability stack — Outlines for the JSON shape, the stack for the workflow shape. |
+| **Anthropic `tool_choice="any"`** | Forces the model to call *some* tool rather than respond with text. | Helps — Haiku bare recovers from 43.8% to 88.9% with `tool_choice="any"`. But doesn't replace structural guardrails: the remaining 11-point gap to 100% is what step enforcement, error recovery, and rescue parsing provide. Use both. |
+
+**The differentiator** in plain terms: structured-output libraries (Instructor, Outlines) make the model's response well-shaped. The reliability stack makes the model's *behavior* well-shaped across a multi-step workflow. They're orthogonal — and stacking them is the right move, not picking one.
+
+If we replicate, we should consider using Outlines or llama.cpp's GBNF grammars as a layer beneath our `ResponseValidator` to eliminate the malformed-JSON case entirely on backends that support it. The retry nudge and rescue parsing would still catch the cases where the model produces *valid* JSON for the *wrong* tool — which Outlines/Instructor can't detect, because they don't know what the right tool is.
+
+---
+
+## 41. What to Build First (Recommended Order)
 
 Tight 60-90 day plan for our own stack, prioritized by reliability lift per line of code:
 
