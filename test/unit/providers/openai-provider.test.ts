@@ -624,7 +624,16 @@ describe('OpenAIProvider', () => {
           [
             {
               type: 'function',
-              function: { name: 'Read', description: 'read', parameters: {} },
+              function: {
+                name: 'Read',
+                description: 'read',
+                parameters: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {},
+                  required: [],
+                },
+              },
             },
           ],
           { responsesStore: false, toolStrict: true },

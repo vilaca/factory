@@ -280,4 +280,9 @@ export const bashTool: ToolHandler = {
 };
 
 // Exported for tests.
-export const __testing = { clampTimeout, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS, BASH_TIMEOUT };
+export const __testing = {
+  clampTimeout,
+  MIN_TIMEOUT_MS,
+  MAX_TIMEOUT_MS,
+  DEFAULT_TIMEOUT_MS: BASH_TIMEOUT,
+};
