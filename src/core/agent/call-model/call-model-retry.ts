@@ -4,10 +4,7 @@ import type { resolveRetryPolicy } from './provider-retry.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => {
-    const t = setTimeout(resolve, ms);
-    // Don't keep the event loop alive just for the backoff — if the host
-    // is shutting down, the timer should not block exit.
-    t.unref?.();
+    setTimeout(resolve, ms);
   });
 }
 
