@@ -8,8 +8,9 @@
  * Used by the SIGINT/SIGTERM handler to cap shutdown time: an MCP
  * server that hangs on `close()` should not block process exit forever.
  *
- * The timer is `unref()`'d so it doesn't keep the event loop alive on
- * its own.
+ * Timer is intentionally refed: callers that race against it need the
+ * event loop kept alive until either `work` settles or the budget fires.
+ * Signals and process.exit() preempt this anyway.
  */
 export function withBoundedTimeout<T>(
   work: () => Promise<T>,
@@ -19,11 +20,10 @@ export function withBoundedTimeout<T>(
   return Promise.race([
     work(),
     new Promise<undefined>(resolve => {
-      const t = setTimeout(() => {
+      setTimeout(() => {
         onTimeout();
         resolve(undefined);
       }, budgetMs);
-      t.unref?.();
     }),
   ]);
 }
