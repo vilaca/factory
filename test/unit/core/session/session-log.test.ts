@@ -7,11 +7,11 @@ import crypto from 'crypto';
 import {
   createSessionLogger,
   sessionsDir,
-  appendProviderLog,
   getLastSessionSelection,
   getRecentSessions,
   loadHistoryFromSessions,
 } from '../../../../src/core/session/session-log.js';
+import { appendProviderLog } from '../../../../src/utils/provider-log.js';
 
 let originalHome: string | undefined;
 let homeDir: string;

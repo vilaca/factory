@@ -1,4 +1,5 @@
-import type { Config, GoogleAiStudioAuthMode } from '../core/config/types.js';
+import type { Config } from '../core/config/types.js';
+import type { GoogleAiStudioAuthMode } from './auth-modes.js';
 import type { Provider } from './types.js';
 import { OllamaProvider } from './ollama.js';
 import { HuggingFaceProvider } from './huggingface.js';
