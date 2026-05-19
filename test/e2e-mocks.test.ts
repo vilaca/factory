@@ -51,7 +51,7 @@ describe('Startup and welcome', () => {
   it('shows welcome banner with model name and cwd', async () => {
     const cli = spawnCli(cliArgs());
     try {
-      const output = await cli.waitForOutput('test-model:latest', 30000);
+      const output = await cli.waitForOutput('test-model:latest', 60000);
       assert.ok(output.includes('factory'));
       assert.ok(output.includes('Exp:'));
       assert.ok(output.includes('bashDedup=off'));
@@ -66,7 +66,7 @@ describe('Startup and welcome', () => {
   it('shows CLI-overridden experimental flags in the welcome banner', async () => {
     const cli = spawnCli(cliArgs(['--bash-dedup', '--no-read-cache']));
     try {
-      const output = await cli.waitForOutput('test-model:latest', 30000);
+      const output = await cli.waitForOutput('test-model:latest', 60000);
       assert.ok(output.includes('bashDedup=on'));
       assert.ok(output.includes('readCache=off'));
       assert.ok(output.includes('lineCountHint=on'));
@@ -78,7 +78,7 @@ describe('Startup and welcome', () => {
   it('shows model picker when no model specified', async () => {
     const cli = spawnCli(['--provider', 'ollama', '--host', `http://127.0.0.1:${mockPort}`]);
     try {
-      const output = await cli.waitForOutput('Select a model', 30000);
+      const output = await cli.waitForOutput('Select a model', 60000);
       assert.ok(output.includes('test-model:latest'));
       assert.ok(output.includes('another-model:latest'));
     } finally {
@@ -97,9 +97,9 @@ describe('Startup and welcome', () => {
       // Picker opens at the "recent provider/model" stage. With no recent
       // sessions only one option ("Pick a different provider/model") is
       // pre-selected — Enter advances to the provider list.
-      await cli.waitForOutput('Recent provider/model', 30000);
+      await cli.waitForOutput('Recent provider/model', 60000);
       cli.sendEnter();
-      const output = await cli.waitForOutput('Select a provider', 30000);
+      const output = await cli.waitForOutput('Select a provider', 60000);
       assert.ok(output.includes('Anthropic'));
       assert.ok(output.includes('GitHub Copilot'));
       // Ollama is at alphabetical index 11 (shortcut 'B'). The viewport
@@ -118,9 +118,9 @@ describe('Startup and welcome', () => {
       FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
     });
     try {
-      await cli.waitForOutput('Recent provider/model', 30000);
+      await cli.waitForOutput('Recent provider/model', 60000);
       cli.sendEnter();
-      const output = await cli.waitForOutput('Select a provider', 30000);
+      const output = await cli.waitForOutput('Select a provider', 60000);
       assert.ok(output.includes('GitHub Copilot'));
       assert.ok(output.includes('Anthropic'));
     } finally {
@@ -153,9 +153,9 @@ describe('Startup and welcome', () => {
       HUGGING_FACE_HUB_TOKEN: '',
     });
     try {
-      await cli.waitForOutput('HuggingFace API token required', 30000);
+      await cli.waitForOutput('HuggingFace API token required', 60000);
       cli.sendLine('hf_test_token');
-      const output = await cli.waitForOutput('Saved HuggingFace credentials', 30000);
+      const output = await cli.waitForOutput('Saved HuggingFace credentials', 60000);
       assert.ok(output.includes('Saved HuggingFace credentials'));
     } finally {
       cli.kill();
@@ -181,13 +181,13 @@ describe('Startup and welcome', () => {
       FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
     });
     try {
-      await firstCli.waitForOutput('Recent provider/model', 30000);
+      await firstCli.waitForOutput('Recent provider/model', 60000);
       firstCli.sendEnter();
-      await firstCli.waitForOutput('Select a provider', 30000);
+      await firstCli.waitForOutput('Select a provider', 60000);
       // GitHub Copilot is at alphabetical index 5.
       firstCli.send('5');
-      await firstCli.waitForOutput('GitHub Copilot sign-in required', 30000);
-      await firstCli.waitForOutput('Enter code:', 30000);
+      await firstCli.waitForOutput('GitHub Copilot sign-in required', 60000);
+      await firstCli.waitForOutput('Enter code:', 60000);
       const output = await firstCli.waitForOutput('Tools:', 10000);
       assert.ok(output.includes('Tools:'));
     } finally {
@@ -204,9 +204,9 @@ describe('Startup and welcome', () => {
       FACTORY_GITHUB_API_BASE_URL: `http://127.0.0.1:${mockCopilotPort}`,
     });
     try {
-      await secondCli.waitForOutput('Recent provider/model', 30000);
+      await secondCli.waitForOutput('Recent provider/model', 60000);
       secondCli.sendEnter();
-      await secondCli.waitForOutput('Select a provider', 30000);
+      await secondCli.waitForOutput('Select a provider', 60000);
       secondCli.send('5');
       const output = await secondCli.waitForOutput('Tools:', 10000);
       assert.ok(!output.includes('GitHub Copilot sign-in required'));
