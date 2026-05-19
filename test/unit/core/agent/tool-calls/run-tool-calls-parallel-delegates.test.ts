@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { PermissionManager } from '../../../../../src/security/permissions.js';
 import { runToolCalls } from '../../../../../src/core/agent/tool-calls/run-tool-calls.js';
+import type { AgentEvent } from '../../../../../src/core/agent/types.js';
 import {
   callOf,
   collect,

@@ -159,6 +159,7 @@ export function makeFakeCM(overrides: Partial<ContextManager> = {}): ContextMana
     compact: async () => null,
     getUsagePercent: () => 0,
     getTokenEstimate: () => 0,
+    clearCompactionCancelled: () => {},
   };
   return { ...base, ...overrides } as unknown as ContextManager;
 }
