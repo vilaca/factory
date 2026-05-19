@@ -412,8 +412,8 @@ export function Session(props: SessionProps): React.ReactElement {
         activity={activity}
         providerName={providerName}
         model={model}
-        totalTokens={lastUsage?.totalTokens ?? estimatedTokens}
-        tokensAreEstimate={lastUsage?.totalTokens === undefined && estimatedTokens !== undefined}
+        totalTokens={lastUsage?.promptTokens ?? estimatedTokens}
+        tokensAreEstimate={lastUsage?.promptTokens === undefined && estimatedTokens !== undefined}
         contextWindow={capabilities.contextWindow}
         sessionTurns={sessionTurns}
         sessionToolCalls={sessionToolCalls}

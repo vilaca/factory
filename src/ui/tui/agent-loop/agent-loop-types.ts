@@ -199,7 +199,7 @@ export interface AgentLoopApi {
   model: string;
   sessionTurns: number;
   sessionToolCalls: number;
-  lastUsage: { totalTokens?: number } | undefined;
+  lastUsage: { totalTokens?: number; promptTokens?: number } | undefined;
   /** Approximate token count from ContextManager — used to show the status
    * bar's token figure before the first model response arrives. */
   estimatedTokens: number | undefined;
