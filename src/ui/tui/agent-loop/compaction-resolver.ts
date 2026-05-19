@@ -47,9 +47,7 @@ export function makeCompactionResolver(refs: {
     }
 
     // 3. Fallback for headless (no flag, no prompt wired): use primary.
-    if (!target) {
-      target = { providerName: r.provider.name, model: r.model };
-    }
+    target ??= { providerName: r.provider.name, model: r.model };
 
     // Reuse the active provider when the names match — avoids a fresh
     // createProvider() + credential read on every compaction.
