@@ -5,7 +5,7 @@ import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config/types.js';
 import { ConversationDisplay } from './components/conversation-display.js';
 import { Separator } from './components/separator.js';
-import { StatusBar } from './components/status-bar.js';
+import { StatusBar, selectDisplayTokens } from './components/status-bar.js';
 import { PermissionPanel } from './components/permission-panel.js';
 import { PlanApprovalPanel } from './components/plan-approval-panel.js';
 import {
@@ -412,8 +412,7 @@ export function Session(props: SessionProps): React.ReactElement {
         activity={activity}
         providerName={providerName}
         model={model}
-        totalTokens={lastUsage?.promptTokens ?? estimatedTokens}
-        tokensAreEstimate={lastUsage?.promptTokens === undefined && estimatedTokens !== undefined}
+        {...selectDisplayTokens(lastUsage, estimatedTokens)}
         contextWindow={capabilities.contextWindow}
         sessionTurns={sessionTurns}
         sessionToolCalls={sessionToolCalls}

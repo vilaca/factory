@@ -33,6 +33,45 @@ interface StatusBarProps {
   cwd?: string;
 }
 
+/** Render the "ctx N/M (P%)" segment. Pure so unit tests can pin the
+ *  prompt-tokens vs total-tokens semantics (fix 44aeb26) and the <1%
+ *  formatting without touching Ink. Returns the empty string when there's
+ *  nothing meaningful to render (no token count, or zero/missing window). */
+export function formatTokenSegment(
+  totalTokens: number | undefined,
+  contextWindow: number,
+  tokensAreEstimate: boolean,
+): string {
+  if (!totalTokens || !contextWindow) return '';
+  // Render percentage with one decimal place when it would otherwise round to
+  // 0% (i.e. <1% used) — a fresh session on a 200k-window model can sit at
+  // 0.3% for a long time, and a flat "0%" reads as broken. Above 1% we keep
+  // the integer form so the bar stays compact.
+  const rawPct = (totalTokens / contextWindow) * 100;
+  const tokenPct = rawPct < 1 ? rawPct.toFixed(1) : Math.round(rawPct).toString();
+  const suffix = tokensAreEstimate ? ' (est.)' : '';
+  return ` · ctx ${totalTokens.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}`;
+}
+
+/** Choose which token figure feeds the status bar. The model-reported
+ *  `promptTokens` is the right metric — it's "how full is the next prompt",
+ *  i.e. system prompt + running conversation since the last compaction.
+ *  `totalTokens` (= prompt + completion) caused the figure to jitter down
+ *  whenever the model gave a long reply, since completion tokens fold into
+ *  the next prompt as a (usually small) assistant message rather than
+ *  reappearing verbatim (see fix 44aeb26). The local `estimatedTokens` is
+ *  the pre-first-response fallback. Returns the count + whether it should
+ *  be marked as an estimate in the UI. */
+export function selectDisplayTokens(
+  lastUsage: { promptTokens?: number } | undefined,
+  estimatedTokens: number | undefined,
+): { totalTokens: number | undefined; tokensAreEstimate: boolean } {
+  return {
+    totalTokens: lastUsage?.promptTokens ?? estimatedTokens,
+    tokensAreEstimate: lastUsage?.promptTokens === undefined && estimatedTokens !== undefined,
+  };
+}
+
 function shortenCwd(cwd: string): string {
   const home = os.homedir();
   if (home && cwd === home) return '~';
@@ -64,15 +103,7 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
     gitDirty,
     cwd,
   } = props;
-  // Render percentage with one decimal place when it would otherwise round to
-  // 0% (i.e. <1% used) — a fresh session on a 200k-window model can sit at
-  // 0.3% for a long time, and a flat "0%" reads as broken. Above 1% we keep
-  // the integer form so the bar stays compact.
-  const rawPct =
-    totalTokens && contextWindow ? (totalTokens / contextWindow) * 100 : undefined;
-  const tokenPct =
-    rawPct === undefined ? undefined : rawPct < 1 ? rawPct.toFixed(1) : Math.round(rawPct).toString();
-  const suffix = tokensAreEstimate ? ' (est.)' : '';
+  const tokenSegment = formatTokenSegment(totalTokens, contextWindow, !!tokensAreEstimate);
 
   return (
     <Box paddingX={1}>
@@ -117,9 +148,7 @@ export function StatusBar(props: StatusBarProps): React.ReactElement {
             {gitDirty && <Text color="yellow">*</Text>}
           </>
         )}
-        {tokenPct !== undefined
-          ? ` · ctx ${totalTokens!.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}`
-          : ''}
+        {tokenSegment}
         {sessionTurns > 0 ? ` · ${sessionTurns} ${sessionTurns === 1 ? 'turn' : 'turns'}` : ''}
         {sessionToolCalls > 0
           ? ` · ${sessionToolCalls} ${sessionToolCalls === 1 ? 'tool' : 'tools'}`
