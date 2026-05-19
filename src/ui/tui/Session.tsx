@@ -356,8 +356,14 @@ export function Session(props: SessionProps): React.ReactElement {
             } else if (fallbackPickerResolver) {
               fallbackPickerResolver({ provider, model: chosenModel });
             } else {
-              setPickerOpen(false);
-              void agent.setProviderByName(provider, chosenModel, keyId);
+              // Hold the picker open until the swap resolves. Closing first
+              // un-gates TextInput (focus={!pickerOpen}), so a fast-typing
+              // user can submit a prompt before refs.current.{provider,model}
+              // are mutated by setProviderByName — sending the first post-pick
+              // turn against the old tuple.
+              void agent.setProviderByName(provider, chosenModel, keyId).finally(() => {
+                setPickerOpen(false);
+              });
             }
           }}
         />
