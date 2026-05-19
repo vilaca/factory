@@ -153,22 +153,27 @@ export async function swapProvider(
     return;
   }
 
-  let nextModel: string | undefined = requestedModel;
+  // Prime the new provider's model-info cache before any getCapabilities
+  // call (Anthropic's getCapabilities throws on a cache miss — see
+  // src/providers/anthropic.ts:68). Run unconditionally even when
+  // `requestedModel` is supplied: a fresh createProvider() instance has
+  // its own empty cache, and the picker's separate instance doesn't
+  // share state with the one we just minted.
+  let availableModels: string[];
+  try {
+    availableModels = await nextProvider.listModels();
+  } catch (err) {
+    ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${(err as Error).message}`);
+    return;
+  }
+
+  const nextModel: string | undefined = requestedModel ?? availableModels[0];
   if (!nextModel) {
-    try {
-      const list = await nextProvider.listModels();
-      nextModel = list[0];
-    } catch (err) {
-      ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${(err as Error).message}`);
-      return;
-    }
-    if (!nextModel) {
-      ctx.addNotice(
-        'warn',
-        `${trimmed} returned no models. Pass one explicitly: /provider ${trimmed} <model>`,
-      );
-      return;
-    }
+    ctx.addNotice(
+      'warn',
+      `${trimmed} returned no models. Pass one explicitly: /provider ${trimmed} <model>`,
+    );
+    return;
   }
 
   const validation = await validateModelToolSupport(nextProvider, nextModel);
