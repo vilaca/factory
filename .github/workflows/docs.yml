@@ -46,7 +46,16 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - name: Install dependencies
-        run: npm ci
+        # --legacy-peer-deps: VitePress transitively depends on
+        # @docsearch/react, whose peer declares react < 19. The main
+        # project pins react@19 (used by Ink), which npm 10 (the version
+        # shipped with the setup-node@v4 / Node 22 combo) treats as a
+        # hard conflict and refuses to install. The peer is bogus in
+        # practice — VitePress doesn't actually mount @docsearch/react
+        # at runtime when `search.provider: 'local'` is configured (see
+        # .vitepress/config.ts) — so the legacy resolver is both safe
+        # and necessary here.
+        run: npm ci --legacy-peer-deps
       - name: Build VitePress site
         run: npm run docs:build
       - name: Upload Pages artifact
