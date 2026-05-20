@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
 import { errorMessage } from '../../utils/errors.js';
+import { bearerAuth } from '../shared.js';
 
 type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
 
@@ -64,7 +65,7 @@ export class GoogleAiStudioAuthManager {
       if (!this.apiKey) {
         throw new Error('Google AI Studio API key required.');
       }
-      return { Authorization: `Bearer ${this.apiKey}` };
+      return bearerAuth(this.apiKey);
     }
 
     const headers = await this.getOAuthHeaders();

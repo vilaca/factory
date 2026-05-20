@@ -24,6 +24,7 @@ import {
   unsupportedOpenCodeZenRouteError,
 } from './models.js';
 import { filterChatModels } from '../list-models-filter.js';
+import { bearerAuth } from '../shared.js';
 import { chatAnthropicNoStream, chatAnthropicStream } from './anthropic.js';
 import { chatGoogleNoStream, chatGoogleStream } from './google.js';
 
@@ -200,7 +201,7 @@ export class OpenCodeZenProvider implements Provider {
   }
 
   private requireOpenAiAuthHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${this.requireApiKey()}` };
+    return bearerAuth(this.requireApiKey());
   }
 
   private getAnthropicClient(): Anthropic {
@@ -216,7 +217,7 @@ export class OpenCodeZenProvider implements Provider {
     if (this.modelsCache) return this.modelsCache;
 
     const res = await fetch(`${this.baseUrl}/models`, {
-      headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+      headers: this.apiKey ? bearerAuth(this.apiKey) : {},
     });
 
     if (!res.ok) {

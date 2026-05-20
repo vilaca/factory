@@ -11,6 +11,7 @@ import type {
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_API_ROOT = 'https://api.cloudflare.com/client/v4';
 const PROVIDER_NAME = 'Cloudflare Workers AI';
@@ -142,7 +143,7 @@ export class WorkersAiProvider implements Provider {
   }
 
   private authHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${this.apiKey}` };
+    return bearerAuth(this.apiKey);
   }
 
   private async getCatalog(): Promise<WorkersAiModel[]> {
@@ -199,7 +200,7 @@ function inferAccountIdFromHost(host?: string): string | undefined {
 
 function normalizeChatBaseUrl(host: string | undefined, accountId: string): string {
   if (!host) return `${DEFAULT_API_ROOT}/accounts/${accountId}/ai/v1`;
-  const normalized = host.replace(/\/+$/, '');
+  const normalized = normalizeBaseUrl(host);
   if (/\/ai\/v1$/.test(normalized)) return normalized;
   if (/\/accounts\/[^/]+\/ai$/.test(normalized)) return `${normalized}/v1`;
   if (/\/accounts\/[^/]+$/.test(normalized)) return `${normalized}/ai/v1`;
@@ -207,7 +208,7 @@ function normalizeChatBaseUrl(host: string | undefined, accountId: string): stri
 }
 
 function normalizeModelSearchUrl(host: string | undefined, accountId: string): string {
-  const base = host ? host.replace(/\/+$/, '') : `${DEFAULT_API_ROOT}/accounts/${accountId}/ai/v1`;
+  const base = host ? normalizeBaseUrl(host) : `${DEFAULT_API_ROOT}/accounts/${accountId}/ai/v1`;
   if (/\/ai\/v1$/.test(base)) return base.replace(/\/ai\/v1$/, '/ai/models/search');
   if (/\/accounts\/[^/]+\/ai$/.test(base)) return `${base}/models/search`;
   if (/\/accounts\/[^/]+$/.test(base)) return `${base}/ai/models/search`;
@@ -406,14 +407,3 @@ function estimateWorkersAiModelTier(
   return 'weak';
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
-  }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
-}

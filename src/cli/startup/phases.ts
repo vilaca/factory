@@ -330,16 +330,14 @@ export async function gatherGitState(cwd: string): Promise<GitState> {
   if (branchRes.status === 'fulfilled') {
     gitBranch = branchRes.value;
   } else {
-    const msg =
-      branchRes.reason instanceof Error ? branchRes.reason.message : String(branchRes.reason);
-    console.log(chalk.yellow(`  ⚠ Could not read git branch: ${msg}`));
+    console.log(chalk.yellow(`  ⚠ Could not read git branch: ${errorMessage(branchRes.reason)}`));
   }
   if (dirtyRes.status === 'fulfilled') {
     gitDirty = dirtyRes.value;
   } else {
-    const msg =
-      dirtyRes.reason instanceof Error ? dirtyRes.reason.message : String(dirtyRes.reason);
-    console.log(chalk.yellow(`  ⚠ Could not check git dirty state: ${msg}`));
+    console.log(
+      chalk.yellow(`  ⚠ Could not check git dirty state: ${errorMessage(dirtyRes.reason)}`),
+    );
   }
   return { ...(gitBranch !== undefined ? { gitBranch } : {}), gitDirty };
 }

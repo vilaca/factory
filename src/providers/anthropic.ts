@@ -10,6 +10,7 @@ import type {
   ModelPickerInfo,
   ChatOptions,
 } from './types.js';
+import { formatTokenCount } from './shared.js';
 
 type StreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
 type NonStreamingParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
@@ -93,7 +94,6 @@ export class AnthropicProvider implements Provider {
     };
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity, complexity -- TODO(complexity): split request build / stream parse / usage emit.
   async *chat(
     model: string,
     messages: ChatMessage[],
@@ -151,18 +151,7 @@ export class AnthropicProvider implements Provider {
       } else if (event.type === 'message_stop') {
         yield { done: true };
       } else if (event.type === 'message_delta') {
-        const u = event.usage;
-        const usage: TokenUsage = {
-          promptTokens: u.input_tokens ?? 0,
-          completionTokens: u.output_tokens ?? 0,
-          totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-          ...(typeof u.cache_read_input_tokens === 'number'
-            ? { cachedPromptTokens: u.cache_read_input_tokens }
-            : {}),
-          ...(typeof u.cache_creation_input_tokens === 'number'
-            ? { cacheCreationTokens: u.cache_creation_input_tokens }
-            : {}),
-        };
+        const usage = mapAnthropicUsage(event.usage);
         const doneReason = mapAnthropicStopReason(event.delta?.stop_reason);
         yield { done: true, usage, ...(doneReason ? { doneReason } : {}) };
       }
@@ -206,18 +195,7 @@ export class AnthropicProvider implements Provider {
       }
     }
 
-    const u = response.usage;
-    const usage: TokenUsage = {
-      promptTokens: u.input_tokens ?? 0,
-      completionTokens: u.output_tokens ?? 0,
-      totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-      ...(typeof u.cache_read_input_tokens === 'number'
-        ? { cachedPromptTokens: u.cache_read_input_tokens }
-        : {}),
-      ...(typeof u.cache_creation_input_tokens === 'number'
-        ? { cacheCreationTokens: u.cache_creation_input_tokens }
-        : {}),
-    };
+    const usage = mapAnthropicUsage(response.usage);
     const doneReason = mapAnthropicStopReason(response.stop_reason);
     return {
       content: content || undefined,
@@ -406,18 +384,6 @@ function buildModelWarning(modelId: string): string | undefined {
   return undefined;
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
-  }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
-}
-
 /** Map Anthropic's native `stop_reason` (`end_turn` | `max_tokens` |
  *  `stop_sequence` | `tool_use` | `pause_turn` | `refusal`) to the agent
  *  layer's wire-format `doneReason` set so cross-provider consumers in
@@ -433,4 +399,27 @@ function mapAnthropicStopReason(raw: string | null | undefined): string | undefi
   if (raw === 'max_tokens') return 'length';
   if (raw === 'refusal') return 'refusal';
   return undefined;
+}
+
+interface AnthropicUsageLike {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+}
+
+function mapAnthropicUsage(u: AnthropicUsageLike): TokenUsage {
+  const input = u.input_tokens ?? 0;
+  const output = u.output_tokens ?? 0;
+  return {
+    promptTokens: input,
+    completionTokens: output,
+    totalTokens: input + output,
+    ...(typeof u.cache_read_input_tokens === 'number'
+      ? { cachedPromptTokens: u.cache_read_input_tokens }
+      : {}),
+    ...(typeof u.cache_creation_input_tokens === 'number'
+      ? { cacheCreationTokens: u.cache_creation_input_tokens }
+      : {}),
+  };
 }
