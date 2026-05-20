@@ -11,6 +11,7 @@ import type {
 import { CopilotAuthManager, inferCopilotCredentialKind } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 import { filterChatModels } from '../list-models-filter.js';
+import { formatTokenCount } from '../shared.js';
 
 const PROVIDER_NAME = 'GitHub Copilot';
 const FALLBACK_MODELS = ['gpt-4.1', 'gpt-4o', 'claude-sonnet-4', 'gemini-2.5-pro', 'o4-mini'];
@@ -194,12 +195,3 @@ function estimateCopilotContextWindow(model: string): number {
   return 128000;
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
-  }
-  return String(value);
-}

@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
+import { bearerAuth, normalizeBaseUrl } from '../shared.js';
 
 function readPackageVersion(): string {
   // Walk up from this file until we find package.json (handles any outDir depth)
@@ -155,7 +156,7 @@ export class CopilotAuthManager {
 
   authHeaders(token: string): Record<string, string> {
     return {
-      Authorization: `Bearer ${token}`,
+      ...bearerAuth(token),
       'Copilot-Integration-Id': COPILOT_INTEGRATION_ID,
       'X-GitHub-Api-Version': COPILOT_API_VERSION,
       'Editor-Version': 'vscode/1.99.0',
@@ -261,10 +262,6 @@ function githubLoginBaseUrl(): string {
 
 function githubApiBaseUrl(): string {
   return normalizeBaseUrl(process.env.FACTORY_GITHUB_API_BASE_URL ?? DEFAULT_GITHUB_API_BASE_URL);
-}
-
-function normalizeBaseUrl(url: string): string {
-  return url.replace(/\/+$/, '');
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

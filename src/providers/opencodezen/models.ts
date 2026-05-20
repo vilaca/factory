@@ -3,6 +3,8 @@
 // shared between the route-specific adapters and the public catalog.
 
 import type { ModelTier } from '../types.js';
+import { formatTokenCount } from '../shared.js';
+export { normalizeBaseUrl } from '../shared.js';
 
 export type OpenCodeZenRoute =
   | 'chat-completions'
@@ -14,10 +16,6 @@ export interface OpenCodeZenModel {
   id: string;
   owned_by?: string;
   route: OpenCodeZenRoute;
-}
-
-export function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
 }
 
 export function detectOpenCodeZenRoute(model: string): OpenCodeZenRoute {
@@ -154,17 +152,6 @@ function isFreeModel(model: string): boolean {
   return model.includes('free') || model === 'big-pickle';
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
-  }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
-}
 
 export function parseToolArgs(raw?: string): Record<string, unknown> {
   if (!raw) return {};

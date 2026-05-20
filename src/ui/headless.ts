@@ -289,8 +289,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       // abort by default: the run can still produce useful stdout, and the
       // session log is observability, not a hard dependency. Strict-log
       // callers (--strict-log) escalate to a dedicated exit code instead.
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`factory: session log unavailable — ${msg}\n`);
+      process.stderr.write(`factory: session log unavailable — ${errorMessage(err)}\n`);
       if (options.strictLogging) process.exit(STRICT_LOG_EXIT);
       sessionLogger = undefined;
     }
