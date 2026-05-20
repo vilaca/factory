@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp } from 'ink';
 import { TextInput } from './components/text-input.js';
 import type { Provider } from '../../providers/types.js';
@@ -31,6 +31,14 @@ import { descriptorByAlias, DESCRIPTORS, DESCRIPTOR_LIST } from '../../providers
 import { useRotationFallback } from './hooks/use-rotation-fallback.js';
 import { useCompactionPicker } from './hooks/use-compaction-picker.js';
 import { useSessionInput } from './hooks/use-session-input.js';
+import { errorMessage } from '../../utils/errors.js';
+
+function buildProviderList(): ProviderEntry[] {
+  return listProviderNames().map(name => {
+    const desc = (DESCRIPTORS as Record<string, { label: string } | undefined>)[name];
+    return { name, label: desc?.label ?? name };
+  });
+}
 
 // Providers whose auth flow is `simple-prompt` are the ones the picker
 // drives multi-key selection for. Others (Copilot device flow, Google AI
@@ -208,10 +216,10 @@ export function Session(props: SessionProps): React.ReactElement {
     rotationPrompt,
   });
 
-  // Read capabilities from the live (per-tab) provider, not the launch-time
-  // prop, so the StatusBar context-window figure follows /provider switches.
-  const capabilities = (refs.current?.provider ?? props.provider).getCapabilities(model);
+  const activeProvider = refs.current?.provider ?? props.provider;
+  const capabilities = useMemo(() => activeProvider.getCapabilities(model), [activeProvider, model]);
   const inputAccentColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
+  const providerList = useMemo<ProviderEntry[]>(buildProviderList, []);
   const spinner =
     !permissionRequest && compacting
       ? {
@@ -247,10 +255,7 @@ export function Session(props: SessionProps): React.ReactElement {
 
       {pickerOpen && (
         <ProviderPicker
-          providers={listProviderNames().map((name): ProviderEntry => {
-            const desc = (DESCRIPTORS as Record<string, { label: string } | undefined>)[name];
-            return { name, label: desc?.label ?? name };
-          })}
+          providers={providerList}
           recents={pickerRecents}
           recentsLoading={pickerRecentsLoading}
           initialProvider={providerName}
@@ -314,7 +319,7 @@ export function Session(props: SessionProps): React.ReactElement {
               const models = await p.listModels();
               return { ok: true, models };
             } catch (err) {
-              return { ok: false, error: (err as Error).message };
+              return { ok: false, error: errorMessage(err) };
             }
           }}
           saveKey={async (name, token) => {

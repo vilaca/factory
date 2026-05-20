@@ -9,16 +9,17 @@ export function bearerAuth(token: string): { Authorization: string } {
   return { Authorization: `Bearer ${token}` };
 }
 
-/** Compact token-count rendering used by every provider's model-picker
- * detail string (e.g. 128_000 → "128k", 1_000_000 → "1M"). */
-export function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
+/** Parse a tool-call `arguments` string from a provider's wire format.
+ * Most providers send JSON, but a malformed payload should not crash the
+ * stream — fall back to a `{ _raw: <string> }` envelope so the agent layer
+ * can surface the original text to the corrector. */
+export function parseToolArgs(raw?: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { _raw: raw };
   }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
 }
+
+export { formatTokenCount } from '../utils/format-tokens.js';

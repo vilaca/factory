@@ -1,5 +1,7 @@
 import fs from 'fs/promises';
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
+import { errorMessage } from '../../../utils/errors.js';
+import { formatTokenCount } from '../../../utils/format-tokens.js';
 
 interface SessionStats {
   turns: number;
@@ -48,7 +50,7 @@ export async function dispatchStats(_arg: string, agent: AgentLoopApi): Promise<
   try {
     raw = await fs.readFile(logger.filePath, 'utf-8');
   } catch (err) {
-    agent.addNotice('warn', `Could not read session log: ${(err as Error).message}`);
+    agent.addNotice('warn', `Could not read session log: ${errorMessage(err)}`);
     return;
   }
 
@@ -127,12 +129,12 @@ function formatStats(
   lines.push({ level: 'info', text: `  Turns: ${s.turns}` });
   lines.push({
     level: 'info',
-    text: `  Input tokens: ${formatNum(totalInput)} total · ${formatNum(s.cachedInputTokens)} cached (${overallHit}%) · ${formatNum(s.uncachedInputTokens)} fresh`,
+    text: `  Input tokens: ${formatTokenCount(totalInput)} total · ${formatTokenCount(s.cachedInputTokens)} cached (${overallHit}%) · ${formatTokenCount(s.uncachedInputTokens)} fresh`,
   });
   if (s.cacheCreationTokens > 0) {
     lines.push({
       level: 'info',
-      text: `  Cache creation: ${formatNum(s.cacheCreationTokens)} tokens written this session`,
+      text: `  Cache creation: ${formatTokenCount(s.cacheCreationTokens)} tokens written this session`,
     });
   }
 
@@ -152,7 +154,7 @@ function formatStats(
     for (const r of s.largestToolResults) {
       lines.push({
         level: 'info',
-        text: `    ${r.tool.padEnd(10)} ~${formatNum(r.tokens)} tokens`,
+        text: `    ${r.tool.padEnd(10)} ~${formatTokenCount(r.tokens)} tokens`,
       });
     }
   }
@@ -167,12 +169,6 @@ function formatStats(
   }
 
   return lines;
-}
-
-function formatNum(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
 }
 
 const SPARK_BARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];

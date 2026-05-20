@@ -30,6 +30,16 @@ export function isError(err: unknown): err is Error {
   return err instanceof Error;
 }
 
+/** Construct an Error whose `.name` is `'AbortError'`. Some Node APIs
+ * (signal.throwIfAborted, AbortSignal-aware fetch) throw with this shape,
+ * and we mirror them so downstream catch blocks that detect aborts via
+ * `err.name === 'AbortError'` stay uniform regardless of who threw. */
+export function makeAbortError(message = 'aborted'): Error {
+  const err = new Error(message);
+  err.name = 'AbortError';
+  return err;
+}
+
 /** Read a `code` property if present (Node fs/child_process errors set
  *  `ENOENT`, `EACCES`, etc.). Returns undefined when the throw isn't a
  *  Node-style error or doesn't have one. */

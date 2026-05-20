@@ -2,6 +2,7 @@ import type { ToolDefinition, ToolHandler, ToolResult, ToolContext } from '../ty
 import { TOOL_NAMES } from '../types.js';
 import { fetchUrl, isHtmlType, isPlainTextType } from './fetch.js';
 import { htmlToMarkdown } from './html-to-markdown.js';
+import { errorMessage } from '../../utils/errors.js';
 
 /** Hard cap on the post-conversion text the model receives. The fetcher
  *  itself caps the raw body at 1 MiB; this cap protects the model's context
@@ -71,7 +72,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   try {
     result = await fetchUrl(raw, { validateHop });
   } catch (err) {
-    return { success: false, output: `WebFetch: ${(err as Error).message}` };
+    return { success: false, output: `WebFetch: ${errorMessage(err)}` };
   }
 
   let body: string;

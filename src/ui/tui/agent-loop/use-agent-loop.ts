@@ -13,6 +13,7 @@ import {
   historyUp as historyUpPure,
   historyDown as historyDownPure,
 } from './history.js';
+import { errorMessage } from '../../../utils/errors.js';
 import { mountSession } from './setup.js';
 import { swapModel, swapProvider } from './swap.js';
 import type {
@@ -143,7 +144,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       try {
         await processInput(next, deps);
       } catch (err) {
-        addNotice('danger', `Error: ${(err as Error).message}`);
+        addNotice('danger', `Error: ${errorMessage(err)}`);
       }
       next = refs.current.inputQueue.shift();
       setQueueLength(refs.current.inputQueue.length);
@@ -347,7 +348,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
         return;
       }
     } catch (err) {
-      addNotice('warn', `cwd: ${resolved} — ${(err as Error).message}`);
+      addNotice('warn', `cwd: ${resolved} — ${errorMessage(err)}`);
       return;
     }
     refs.current.cwd = resolved;

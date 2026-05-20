@@ -24,19 +24,8 @@ export function shouldInjectSkill(skill: Skill, ctx: MatchContext): boolean {
   if (!hasTriggers && !hasTools) return false;
 
   if (hasTriggers) {
-    let matched = false;
-    for (const pattern of skill.triggers) {
-      try {
-        const re = new RegExp(pattern, 'i');
-        if (re.test(ctx.userMessage)) {
-          matched = true;
-          break;
-        }
-      } catch {
-        // shouldn't happen — loader pre-validates patterns — but stay defensive
-      }
-    }
-    if (!matched) return false;
+    const regexes = skill.triggerRegexes ?? skill.triggers.map(t => new RegExp(t, 'i'));
+    if (!regexes.some(re => re.test(ctx.userMessage))) return false;
   }
 
   if (hasTools) {

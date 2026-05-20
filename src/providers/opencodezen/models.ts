@@ -4,7 +4,7 @@
 
 import type { ModelTier } from '../types.js';
 import { formatTokenCount } from '../shared.js';
-export { normalizeBaseUrl } from '../shared.js';
+export { normalizeBaseUrl, parseToolArgs } from '../shared.js';
 
 export type OpenCodeZenRoute =
   | 'chat-completions'
@@ -153,11 +153,3 @@ function isFreeModel(model: string): boolean {
 }
 
 
-export function parseToolArgs(raw?: string): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
-  }
-}

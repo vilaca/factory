@@ -11,7 +11,7 @@ import type { AgentEvent, RotationOptions } from '../types.js';
 import { resolveRetryPolicy } from './provider-retry.js';
 import { RepeatDetector } from './repeat-detector.js';
 import { applyCacheBoundaries } from '../cache/cache-boundaries.js';
-import { errorMessage, isError } from '../../../utils/errors.js';
+import { errorMessage, isError, makeAbortError } from '../../../utils/errors.js';
 import { tryRotation, type RotationState } from './call-model-rotation.js';
 import { tryRetry } from './call-model-retry.js';
 
@@ -29,11 +29,7 @@ async function* streamIntoState(
   signal: AbortSignal | undefined,
 ): AsyncGenerator<AgentEvent, void> {
   for await (const chunk of iter) {
-    if (signal?.aborted) {
-      const err = new Error('aborted');
-      err.name = 'AbortError';
-      throw err;
-    }
+    if (signal?.aborted) throw makeAbortError();
     if (chunk.content) {
       yield { type: 'text-chunk', content: chunk.content };
       state.fullContent += chunk.content;

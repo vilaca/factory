@@ -53,28 +53,52 @@ async function readTextFile(filePath: string): Promise<string | null> {
   }
 }
 
+// In-process cache so steady-state callers (every agent turn re-reads via
+// run-loop.ts) don't repeatedly stat/parse/validate the same file or
+// re-import migrateLegacyKeys. Keyed by resolved filePath so a mid-process
+// env change (XDG_CONFIG_HOME swap in tests) routes to a different entry.
+// Writes via saveGlobalConfig / updateGlobalConfig refresh the entry.
+const configCache = new Map<string, Promise<Config>>();
+
+function loadGlobalConfigUncached(filePath: string): Promise<Config> {
+  return (async () => {
+    const data = await readJsonFile(filePath);
+    if (data === null) return {};
+    const validated = validateConfig(data, filePath);
+    const { migrateLegacyKeys } = await import('../auth/credentials.js');
+    const { changed, next } = migrateLegacyKeys(validated);
+    if (changed) {
+      try {
+        await saveGlobalConfig({ keys: next.keys });
+      } catch {
+        // Best-effort: keep returning the migrated-in-memory config so the
+        // current session works even if the disk write fails (read-only fs,
+        // permission glitch). The next launch will retry the migration.
+      }
+      return next;
+    }
+    return validated;
+  })();
+}
+
 export async function loadGlobalConfig(): Promise<Config> {
   const filePath = getGlobalConfigFile();
-  const data = await readJsonFile(filePath);
-  if (data === null) return {};
-  const validated = validateConfig(data, filePath);
-  // Lift any legacy `<provider>Token` fields into the multi-key store on
-  // first load under the new schema. Legacy fields stay in place so older
-  // factory builds keep working if the user downgrades.
-  // Lazy import to break the config ↔ credentials ↔ descriptors cycle.
-  const { migrateLegacyKeys } = await import('../auth/credentials.js');
-  const { changed, next } = migrateLegacyKeys(validated);
-  if (changed) {
-    try {
-      await saveGlobalConfig({ keys: next.keys });
-    } catch {
-      // Best-effort: keep returning the migrated-in-memory config so the
-      // current session works even if the disk write fails (read-only fs,
-      // permission glitch). The next launch will retry the migration.
-    }
-    return next;
+  let pending = configCache.get(filePath);
+  if (!pending) {
+    pending = loadGlobalConfigUncached(filePath);
+    configCache.set(filePath, pending);
+    // If the load rejects, drop the entry so a retry can re-read.
+    pending.catch(() => {
+      if (configCache.get(filePath) === pending) configCache.delete(filePath);
+    });
   }
-  return validated;
+  return pending;
+}
+
+/** Test/debug hook — drops the in-process cache so the next
+ *  `loadGlobalConfig` re-reads from disk. */
+export function resetGlobalConfigCache(): void {
+  configCache.clear();
 }
 
 // In-process serialization for config writes. Without this, two concurrent
@@ -109,6 +133,10 @@ async function writeMergedConfig(
     await fs.chmod(filePath, 0o600).catch(() => {});
     await fs.chmod(dir, 0o700).catch(() => {});
   }
+  // Drop the cache instead of repopulating: writes don't run
+  // migrateLegacyKeys, so the next load needs to re-read and migrate
+  // if the persisted shape changed.
+  configCache.delete(filePath);
   return validated;
 }
 

@@ -2,6 +2,8 @@ import React from 'react';
 import os from 'os';
 import { Box, Text } from 'ink';
 
+const HOME_DIR = os.homedir();
+
 interface StatusBarProps {
   planMode: boolean;
   state: 'idle' | 'running' | 'awaiting-permission';
@@ -73,7 +75,7 @@ export function selectDisplayTokens(
 }
 
 function shortenCwd(cwd: string): string {
-  const home = os.homedir();
+  const home = HOME_DIR;
   if (home && cwd === home) return '~';
   if (home && cwd.startsWith(home + '/'))
     return (

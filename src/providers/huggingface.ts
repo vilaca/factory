@@ -8,7 +8,8 @@ import type {
   ChatOptions,
   ModelTier,
 } from './types.js';
-import { errorMessage } from '../utils/errors.js';
+import { errorMessage, makeAbortError } from '../utils/errors.js';
+import { parseToolArgs } from './shared.js';
 import {
   mergeStreamedToolCalls,
   finalizeToolCalls,
@@ -104,11 +105,7 @@ export class HuggingFaceProvider implements Provider {
     }));
 
     try {
-      if (options?.signal?.aborted) {
-        const err = new Error('The operation was aborted.');
-        err.name = 'AbortError';
-        throw err;
-      }
+      if (options?.signal?.aborted) throw makeAbortError('The operation was aborted.');
 
       const stream = this.client.chatCompletionStream({
         model,
@@ -191,7 +188,7 @@ export class HuggingFaceProvider implements Provider {
           name: tc.function.name,
           arguments:
             typeof tc.function.arguments === 'string'
-              ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+              ? parseToolArgs(tc.function.arguments)
               : tc.function.arguments,
         },
       }));

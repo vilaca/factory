@@ -10,7 +10,7 @@ import type {
   ModelTier,
   ModelInfo,
 } from './types.js';
-import { errorCode, errorMessage, isError } from '../utils/errors.js';
+import { errorCode, errorMessage, isError, makeAbortError } from '../utils/errors.js';
 
 export class OllamaProvider implements Provider {
   name = 'ollama';
@@ -199,12 +199,6 @@ export class OllamaProvider implements Provider {
     }
     return result;
   }
-}
-
-function makeAbortError(): Error {
-  const err = new Error('aborted');
-  err.name = 'AbortError';
-  return err;
 }
 
 /**
