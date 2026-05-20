@@ -6,7 +6,7 @@ import { correctToolCall, readFileForCorrector } from './tool-call-corrector.js'
 import { selectWeakTier } from '../call-model/weak-tier.js';
 import type { RecoveryState } from '../recovery-state.js';
 import { runHook } from '../../hooks/index.js';
-import { errorMessage } from '../../../utils/errors.js';
+import { errorMessage, makeAbortError } from '../../../utils/errors.js';
 import { tryReadCacheHit, maintainFileCache } from './run-tool-calls-cache.js';
 import { executeToolCall } from './run-tool-calls-execute.js';
 import { mergeAsyncGenerators } from './merge-async-generators.js';
@@ -56,11 +56,7 @@ export async function* runToolCalls(
   // `runDelegateBatch` below.
   let i = 0;
   while (i < toolCalls.length) {
-    if (ctx.signal?.aborted) {
-      const err = new Error('aborted');
-      err.name = 'AbortError';
-      throw err;
-    }
+    if (ctx.signal?.aborted) throw makeAbortError();
 
     const batchEnd = findDelegateBatchEnd(toolCalls, i);
     if (batchEnd > i + 1) {

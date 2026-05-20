@@ -1,4 +1,5 @@
 import { getGitBranch, isGitDirty } from '../../../utils/git.js';
+import { errorMessage } from '../../../utils/errors.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
 
 export async function refreshGitState(
@@ -26,7 +27,8 @@ export async function refreshGitState(
       { branch, dirty },
     );
   } catch (err) {
-    deps.addNotice('warn', `⚠ Could not refresh git state: ${(err as Error).message}`);
-    deps.refs.current.sessionLogger?.logWarning('git-refresh', (err as Error).message);
+    const msg = errorMessage(err);
+    deps.addNotice('warn', `⚠ Could not refresh git state: ${msg}`);
+    deps.refs.current.sessionLogger?.logWarning('git-refresh', msg);
   }
 }

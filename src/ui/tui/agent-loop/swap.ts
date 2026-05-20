@@ -13,6 +13,7 @@ import {
   descriptorByAlias as defaultDescriptorByAlias,
   createProvider as defaultCreateProvider,
 } from '../../../providers/registry.js';
+import { errorMessage } from '../../../utils/errors.js';
 import type { Provider } from '../../../providers/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 
@@ -177,7 +178,7 @@ export async function swapProvider(
   try {
     nextProvider = deps.createProvider(trimmed, createOpts);
   } catch (err) {
-    ctx.addNotice('danger', `Cannot switch to ${trimmed}: ${(err as Error).message}`);
+    ctx.addNotice('danger', `Cannot switch to ${trimmed}: ${errorMessage(err)}`);
     return;
   }
 
@@ -191,7 +192,7 @@ export async function swapProvider(
   try {
     availableModels = await nextProvider.listModels();
   } catch (err) {
-    ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${(err as Error).message}`);
+    ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${errorMessage(err)}`);
     return;
   }
 

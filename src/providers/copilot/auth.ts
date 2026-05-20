@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
 import { bearerAuth, normalizeBaseUrl } from '../shared.js';
+import { makeAbortError } from '../../utils/errors.js';
 
 function readPackageVersion(): string {
   // Walk up from this file until we find package.json (handles any outDir depth)
@@ -285,12 +286,6 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
       signal.addEventListener('abort', onAbort, { once: true });
     }
   });
-}
-
-function makeAbortError(): Error {
-  const err = new Error('aborted');
-  err.name = 'AbortError';
-  return err;
 }
 
 export function getCopilotAuthStorageNote(): string {

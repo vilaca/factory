@@ -3,6 +3,7 @@ import type { RotationEntry } from '../../../core/config/types.js';
 import { tupleKey } from '../../../core/config/types.js';
 import { updateGlobalConfig } from '../../../core/config/index.js';
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
+import { errorMessage } from '../../../utils/errors.js';
 
 export interface RotationPromptState {
   provider: string;
@@ -88,7 +89,7 @@ export function useRotationFallback(
           agent.refs.current.rotation.overrides[key] = [...existingRefs, entry];
         }
       } catch (err) {
-        agent.addNotice('warn', `⚠ couldn't persist fallback: ${(err as Error).message}`);
+        agent.addNotice('warn', `⚠ couldn't persist fallback: ${errorMessage(err)}`);
       }
       return entry;
     };

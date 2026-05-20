@@ -3,7 +3,7 @@ import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, buildDenyMatcher, PathDenied } from '../security/paths.js';
-import { errorMessage } from '../utils/errors.js';
+import { errorMessage, makeAbortError } from '../utils/errors.js';
 
 // Convenience filter to skip the heaviest dirs by default. Not exhaustive
 // (build outputs like dist/, .next/, coverage/ are not listed) and not a
@@ -84,11 +84,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       // fs.glob has no native AbortSignal hook, so check between matches.
       // On a multi-second walk over a large repo this catches Ctrl-C early
       // instead of waiting for the iterator to finish.
-      if (ctx?.signal?.aborted) {
-        const err = new Error('aborted');
-        err.name = 'AbortError';
-        throw err;
-      }
+      if (ctx?.signal?.aborted) throw makeAbortError();
       if (typeof dirent === 'string') continue; // belt-and-braces; withFileTypes should always yield Dirent
       if (!dirent.isFile()) continue;
       const fullPath = path.join(dirent.parentPath, dirent.name);

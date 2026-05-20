@@ -20,11 +20,11 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
 import crypto from 'crypto';
 import type { HooksConfig } from '../config/types.js';
 import type { McpServerConfig } from '../../mcp/types.js';
 import { writeFileAtomic } from '../../utils/atomic-write.js';
+import { factoryHomePath } from '../../utils/factory-paths.js';
 
 interface TrustEntry {
   fingerprint: string;
@@ -35,7 +35,7 @@ interface TrustDb {
 }
 
 function trustFile(): string {
-  return path.join(os.homedir(), '.factory', 'trusted-projects.json');
+  return factoryHomePath('trusted-projects.json');
 }
 
 /** Stable JSON fingerprint of the hook block. Sorted keys at every level so

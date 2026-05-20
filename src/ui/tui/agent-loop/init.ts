@@ -11,6 +11,7 @@ import {
   type SessionLogger,
 } from '../../../core/session/session-log.js';
 import { getBuildInfo } from '../../../utils/build-info.js';
+import { errorMessage } from '../../../utils/errors.js';
 import { buildEnvironmentMessage } from '../../../core/context/system-prompt.js';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
@@ -48,7 +49,7 @@ export function startSessionLogger(
     });
     return sessionLogger;
   } catch (err) {
-    const msg = (err as Error).message;
+    const msg = errorMessage(err);
     addNotice('warn', `(session logging disabled: ${msg})`);
     if (opts.strictLogging) {
       process.stderr.write(`factory: session log unavailable — ${msg}\n`);
@@ -189,7 +190,7 @@ export async function initSkillsRegistry(
     }
     return new SkillsRegistry(skills);
   } catch (err) {
-    addNotice('warn', `skills disabled: ${(err as Error).message}`);
+    addNotice('warn', `skills disabled: ${errorMessage(err)}`);
     return new SkillsRegistry([]);
   }
 }

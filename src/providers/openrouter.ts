@@ -16,7 +16,7 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
-import { bearerAuth, normalizeBaseUrl } from './shared.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 const PROVIDER_NAME = 'OpenRouter';
@@ -318,7 +318,7 @@ function buildModelDetail(model: OpenRouterModel): string {
 
   const maxOutputTokens = model.top_provider?.max_completion_tokens;
   if (typeof maxOutputTokens === 'number' && maxOutputTokens > 0) {
-    details.push(`max ${formatCount(maxOutputTokens)} out`);
+    details.push(`max ${formatTokenCount(maxOutputTokens)} out`);
   }
 
   const freeLimits = buildFreeLimitDetail(model);
@@ -365,13 +365,13 @@ function buildFreeLimitDetail(model: OpenRouterModel): string | undefined {
   ]);
 
   if (tokensPerMinute !== undefined) {
-    parts.push(`free ${formatCount(tokensPerMinute)} TPM`);
+    parts.push(`free ${formatTokenCount(tokensPerMinute)} TPM`);
   }
   if (requestsPerDay !== undefined) {
-    parts.push(`free ${formatCount(requestsPerDay)} RPD`);
+    parts.push(`free ${formatTokenCount(requestsPerDay)} RPD`);
   }
   if (requestsPerMinute !== undefined) {
-    parts.push(`free ${formatCount(requestsPerMinute)} RPM`);
+    parts.push(`free ${formatTokenCount(requestsPerMinute)} RPM`);
   }
 
   return parts.length > 0 ? parts.join(' · ') : undefined;
@@ -425,16 +425,6 @@ function hasVisionSupport(model: OpenRouterModel): boolean {
 
 function supportsParameter(model: OpenRouterModel, name: string): boolean {
   return model.supported_parameters?.includes(name) ?? false;
-}
-
-function formatCount(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
-  }
-  return String(value);
 }
 
 function estimateOpenRouterModelTier(model: string): ModelTier {

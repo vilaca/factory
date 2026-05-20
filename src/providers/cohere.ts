@@ -9,7 +9,7 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from './types.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl, parseToolArgs } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.cohere.com';
 const MISSING_TOKEN_ERROR =
@@ -334,15 +334,6 @@ interface CohereModelsResponse {
 
 function normalizeFinishReason(reason: unknown): string | undefined {
   return typeof reason === 'string' ? reason.toLowerCase() : undefined;
-}
-
-function parseToolArgs(raw?: string): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
-  }
 }
 
 function supportsToolsByName(model: string): boolean {
