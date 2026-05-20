@@ -1,4 +1,6 @@
 import fs from 'fs/promises';
+import { createReadStream } from 'fs';
+import readline from 'readline';
 import path from 'path';
 import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
@@ -38,6 +40,45 @@ const DISPLAY_PREVIEW_LINES = 5;
 
 function formatNumberedLine(lineNum: number, line: string, padWidth: number): string {
   return `${lineNum.toString().padStart(padWidth)} │ ${line}`;
+}
+
+interface SlicedRead {
+  sliced: string[];
+  moreAvailable: boolean;
+}
+
+async function readSliced(
+  resolved: string,
+  offset: number,
+  limit: number | undefined,
+  signal: AbortSignal | undefined,
+): Promise<SlicedRead> {
+  if (limit === undefined) {
+    const content = await fs.readFile(resolved, { encoding: 'utf-8', signal });
+    const lines = content.split('\n');
+    return { sliced: lines.slice(offset), moreAvailable: false };
+  }
+
+  const end = offset + limit;
+  const sliced: string[] = [];
+  let i = 0;
+  let moreAvailable = false;
+  const stream = createReadStream(resolved, { encoding: 'utf-8', signal });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    for await (const line of rl) {
+      if (i >= offset && i < end) sliced.push(line);
+      i++;
+      if (i > end) {
+        moreAvailable = true;
+        break;
+      }
+    }
+  } finally {
+    rl.close();
+    stream.destroy();
+  }
+  return { sliced, moreAvailable };
 }
 
 async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
@@ -89,10 +130,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   }
 
   try {
-    const content = await fs.readFile(resolved, { encoding: 'utf-8', signal: ctx?.signal });
-    const lines = content.split('\n');
-    const end = limit !== undefined ? offset + limit : lines.length;
-    const sliced = lines.slice(offset, end);
+    const { sliced, moreAvailable } = await readSliced(resolved, offset, limit, ctx?.signal);
 
     // The model gets the same line-number format Claude Code uses: 6-pad + tab.
     const numbered = sliced
@@ -102,10 +140,9 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       })
       .join('\n');
 
-    const total = lines.length;
     let output = numbered;
-    if (end < total) {
-      output += `\n\n... (${total - end} more lines)`;
+    if (moreAvailable) {
+      output += `\n\n... (more lines follow)`;
     }
 
     // Terminal preview uses a tighter format: dynamic-width pad + box-drawing

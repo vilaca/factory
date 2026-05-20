@@ -78,37 +78,7 @@ export async function* runToolCalls(
 
     const toolCall = toolCalls[i]!;
     i++;
-
-    // Read-cache short-circuit: if the same file was Read earlier in this
-    // session, the prior result is still in conversation (not compacted away),
-    // and the file's fingerprint matches, return a one-liner instead of
-    // re-sending the full content. Saves real tokens on repeat reads.
-    if (ctx.fileCache && toolCall.function?.name === TOOL_NAMES.Read) {
-      const synthetic = yield* tryReadCacheHit(toolCall, ctx);
-      if (synthetic) continue;
-    }
-
-    const { vetoed } = yield* runPreToolUseHook(toolCall, ctx);
-    if (vetoed) {
-      deniedCount++;
-      continue;
-    }
-
-    const tracking = yield* executeAndTrack(toolCall, ctx, recovery, callSignature);
-    deniedCount += tracking.deniedCount;
-    const { lastFailedResult, lastResultForPostHook } = tracking;
-
-    yield* runPostToolUseHook(toolCall, ctx, lastResultForPostHook);
-    yield* maybeBashDedupNudge(toolCall, ctx);
-
-    if (lastFailedResult) {
-      const { deniedDelta } = yield* runCorrectorIfNeeded(
-        { toolCall, lastFailedResult, callSignature },
-        ctx,
-        recovery,
-      );
-      deniedCount += deniedDelta;
-    }
+    deniedCount += yield* runSingleToolCall(toolCall, ctx, recovery, callSignature);
   }
 
   return { deniedCount };
@@ -152,26 +122,32 @@ async function* runDelegateBatch(
   // to this batch — no cross-batch contention.
   const batchCtx: ToolLoopContext = { ...ctx, permissionMutex: new AsyncMutex() };
   const pipelines = batch.map(toolCall =>
-    runSingleDelegatePipeline(toolCall, batchCtx, recovery, callSignature),
+    runSingleToolCall(toolCall, batchCtx, recovery, callSignature),
   );
   const perCallDenied = yield* mergeAsyncGenerators(pipelines);
   return { deniedCount: perCallDenied.reduce((a, b) => a + b, 0) };
 }
 
-/** One Delegate call's full pipeline. Mirrors the inline body of the
- *  sequential loop, returning the call's denial total so the batch driver
- *  can sum across siblings. */
-async function* runSingleDelegatePipeline(
+/** One tool call's full pipeline: optional read-cache short-circuit,
+ *  PreToolUse hook (may veto), execute, PostToolUse hook + bash-dedup
+ *  nudge, then the corrector on failure. Returns the call's contribution
+ *  to the running denial total — used by the sequential loop and by the
+ *  parallel Delegate batch driver. */
+async function* runSingleToolCall(
   toolCall: ToolCallMessage,
   ctx: ToolLoopContext,
   recovery: RecoveryState,
   callSignature: string,
 ): AsyncGenerator<AgentEvent, number> {
-  let deniedDelta = 0;
+  if (ctx.fileCache && toolCall.function?.name === TOOL_NAMES.Read) {
+    const synthetic = yield* tryReadCacheHit(toolCall, ctx);
+    if (synthetic) return 0;
+  }
 
   const { vetoed } = yield* runPreToolUseHook(toolCall, ctx);
-  if (vetoed) return deniedDelta + 1;
+  if (vetoed) return 1;
 
+  let deniedDelta = 0;
   const tracking = yield* executeAndTrack(toolCall, ctx, recovery, callSignature);
   deniedDelta += tracking.deniedCount;
 
