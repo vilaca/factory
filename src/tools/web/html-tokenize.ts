@@ -90,25 +90,38 @@ const VOID_TAGS = new Set([
 
 /** Remove <!-- comments -->, <!doctype>, <?xml?>, and CDATA. */
 export function stripCommentsAndDoctype(html: string): string {
-  return html
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
-    .replace(/<\?[\s\S]*?\?>/g, '')
-    .replace(/<!doctype[^>]*>/gi, '');
+  // Apply repeatedly until stable: removing one match can splice neighbours
+  // into a fresh match (e.g. `<<!-- -->!-- -->` → `<!-- -->`).
+  let out = html;
+  for (;;) {
+    const next = out
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
+      .replace(/<\?[\s\S]*?\?>/g, '')
+      .replace(/<!doctype[^>]*>/gi, '');
+    if (next === out) return next;
+    out = next;
+  }
 }
 
 /** Drop <tag>...</tag> for any of STRIP_TAGS, including self-closing forms. */
 export function stripUnwanted(html: string): string {
+  // Loop until stable: removing one match can splice neighbours into a fresh
+  // match (e.g. `<scr<script>…</script>ipt>…</script>` reveals a new tag).
   let out = html;
-  for (const tag of STRIP_TAGS) {
-    // Pair: <tag ...>...</tag> (non-greedy, case-insensitive, dotall via [\s\S]).
-    const pair = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?</${tag}\\s*>`, 'gi');
-    out = out.replace(pair, '');
-    // Self-closing or unmatched solo: <tag .../> or <tag>.
-    const solo = new RegExp(`<${tag}\\b[^>]*/?>`, 'gi');
-    out = out.replace(solo, '');
+  for (;;) {
+    let next = out;
+    for (const tag of STRIP_TAGS) {
+      // Pair: <tag ...>...</tag> (non-greedy, case-insensitive, dotall via [\s\S]).
+      const pair = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?</${tag}\\s*>`, 'gi');
+      next = next.replace(pair, '');
+      // Self-closing or unmatched solo: <tag .../> or <tag>.
+      const solo = new RegExp(`<${tag}\\b[^>]*/?>`, 'gi');
+      next = next.replace(solo, '');
+    }
+    if (next === out) return next;
+    out = next;
   }
-  return out;
 }
 
 /**
