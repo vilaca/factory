@@ -162,7 +162,7 @@ export function parseTextToolCalls(
     });
     if (shellCommands.length > 0 && stripped.trim().length === 0) {
       for (const cmd of shellCommands) {
-        toolCalls.push({ function: { name: 'Bash', arguments: { command: cmd } } });
+        toolCalls.push({ function: { name: TOOL_NAMES.Bash, arguments: { command: cmd } } });
         sources.push('shell-fence');
       }
       cleaned = '';

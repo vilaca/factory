@@ -184,13 +184,18 @@ export async function loadProjectConfig(cwd: string): Promise<Config> {
  * ~16KB; sources that don't fit are dropped with a truncation note.
  */
 export async function loadProjectInstructions(cwd: string): Promise<string | null> {
+  const contents = await Promise.all(
+    PROJECT_INSTRUCTION_SOURCES.map(rel => readTextFile(path.join(cwd, rel))),
+  );
+
   const parts: string[] = [];
   let totalBytes = 0;
   let truncated = false;
 
-  for (const rel of PROJECT_INSTRUCTION_SOURCES) {
-    const content = await readTextFile(path.join(cwd, rel));
-    if (content === null || content.length === 0) continue;
+  for (let i = 0; i < PROJECT_INSTRUCTION_SOURCES.length; i++) {
+    const rel = PROJECT_INSTRUCTION_SOURCES[i]!;
+    const content = contents[i];
+    if (content === null || content === undefined || content.length === 0) continue;
 
     const block = `## From ${rel}\n\n${content}\n\n`;
     const blockBytes = Buffer.byteLength(block, 'utf-8');
@@ -219,8 +224,7 @@ interface CliOverrides {
 }
 
 export async function loadConfig(cwd: string, cliOverrides?: CliOverrides): Promise<Config> {
-  const global = await loadGlobalConfig();
-  const project = await loadProjectConfig(cwd);
+  const [global, project] = await Promise.all([loadGlobalConfig(), loadProjectConfig(cwd)]);
 
   const cli: Config = {};
   if (cliOverrides?.provider) cli.provider = cliOverrides.provider;

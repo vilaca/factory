@@ -83,49 +83,31 @@ export function ConversationDisplay({
   emojiMode = false,
   userEmoji,
 }: ConversationDisplayProps): React.ReactElement {
+  const renderItem = (item: DisplayItem, index: number): React.ReactElement => {
+    const continuation = isToolCallContinuation(items, index);
+    const failed = isToolCallFailed(items, index);
+    return (
+      <React.Fragment key={item.id}>
+        {index > 0 && !continuation && <Separator />}
+        <PanelLine>
+          <DisplayItemView
+            item={item}
+            showFullOutput={showFullOutput}
+            emojiMode={emojiMode}
+            userEmoji={userEmoji}
+            continuation={continuation}
+            failed={failed}
+          />
+        </PanelLine>
+      </React.Fragment>
+    );
+  };
   return (
     <Box flexDirection="column">
       {useStatic ? (
-        <Static items={items}>
-          {(item, index) => {
-            const continuation = isToolCallContinuation(items, index);
-            const failed = isToolCallFailed(items, index);
-            return (
-              <React.Fragment key={item.id}>
-                {index > 0 && !continuation && <Separator />}
-                <PanelLine>
-                  <DisplayItemView
-                    item={item}
-                    showFullOutput={showFullOutput}
-                    emojiMode={emojiMode}
-                    userEmoji={userEmoji}
-                    continuation={continuation}
-                    failed={failed}
-                  />
-                </PanelLine>
-              </React.Fragment>
-            );
-          }}
-        </Static>
+        <Static items={items}>{(item, index) => renderItem(item, index)}</Static>
       ) : (
-        items.map((item, index) => {
-          const continuation = isToolCallContinuation(items, index);
-          const failed = isToolCallFailed(items, index);
-          return (
-            <React.Fragment key={item.id}>
-              {index > 0 && !continuation && <Separator />}
-              <PanelLine>
-                <DisplayItemView
-                  item={item}
-                  showFullOutput={showFullOutput}
-                  emojiMode={emojiMode}
-                  continuation={continuation}
-                  failed={failed}
-                />
-              </PanelLine>
-            </React.Fragment>
-          );
-        })
+        items.map((item, index) => renderItem(item, index))
       )}
       {streamingText && (
         <>

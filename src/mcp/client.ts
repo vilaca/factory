@@ -60,17 +60,17 @@ export class McpManager {
   }
 
   async connectAll(configs: McpServerConfig[]): Promise<ToolHandler[]> {
+    const results = await Promise.allSettled(configs.map(c => this.connectServer(c)));
     const allTools: ToolHandler[] = [];
-
-    for (const config of configs) {
-      try {
-        const tools = await this.connectServer(config);
-        allTools.push(...tools);
-      } catch (err: unknown) {
-        console.error(`Failed to connect MCP server "${config.name}": ${errorMessage(err)}`);
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        allTools.push(...result.value);
+      } else {
+        console.error(
+          `Failed to connect MCP server "${configs[i]!.name}": ${errorMessage(result.reason)}`,
+        );
       }
-    }
-
+    });
     return allTools;
   }
 

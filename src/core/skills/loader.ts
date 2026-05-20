@@ -40,8 +40,10 @@ export async function loadSkills(cwd: string): Promise<SkillLoadResult> {
   const globalDir = path.join(os.homedir(), SKILLS_SUBDIR);
   const projectDir = path.join(cwd, SKILLS_SUBDIR);
 
-  const globalSkills = await loadSkillsFromDir(globalDir, 'global', warnings);
-  const projectSkills = await loadSkillsFromDir(projectDir, 'project', warnings);
+  const [globalSkills, projectSkills] = await Promise.all([
+    loadSkillsFromDir(globalDir, 'global', warnings),
+    loadSkillsFromDir(projectDir, 'project', warnings),
+  ]);
 
   // Project overrides global by name. Build a map seeded from globals, then
   // overwrite with project entries.
@@ -63,21 +65,25 @@ async function loadSkillsFromDir(
   } catch {
     return [];
   }
+  const mdEntries = entries.filter(e => e.endsWith('.md'));
+  const reads = await Promise.all(
+    mdEntries.map(async entry => {
+      const filePath = path.join(dir, entry);
+      try {
+        return { filePath, raw: await fs.readFile(filePath, 'utf-8') };
+      } catch {
+        return null;
+      }
+    }),
+  );
   const out: Skill[] = [];
-  for (const entry of entries) {
-    if (!entry.endsWith('.md')) continue;
-    const filePath = path.join(dir, entry);
-    let raw: string;
+  for (const r of reads) {
+    if (!r) continue;
     try {
-      raw = await fs.readFile(filePath, 'utf-8');
-    } catch {
-      continue;
-    }
-    try {
-      const skill = parseSkillFile(raw, filePath, scope);
+      const skill = parseSkillFile(r.raw, r.filePath, scope);
       if (skill) out.push(skill);
     } catch (err: unknown) {
-      warnings.push(`${filePath}: ${errorMessage(err)}`);
+      warnings.push(`${r.filePath}: ${errorMessage(err)}`);
     }
   }
   return out;
