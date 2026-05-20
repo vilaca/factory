@@ -84,6 +84,10 @@
     "typescript": "^6.0.3",
     "vitepress": "^1.6.4"
   },
+  "//overrides": "Temporary: vitepress@1.6.4 pins vite ^5.4.14, but only vite 6.4.2+ patches GHSA path-traversal in optimized-deps .map handling. Drop this override when vitepress publishes a 1.x release on vite >=6.4.2 (or we move to vitepress 2.x).",
+  "overrides": {
+    "vite": "^6.4.2"
+  },
   "type": "module",
   "engines": {
     "node": ">=22",
