@@ -39,19 +39,15 @@ export async function buildSystemPrompt(
   modelTier: ModelTier = 'strong',
   context?: { provider?: string },
 ): Promise<string> {
-  const projectInstructions = await loadProjectInstructions(cwd);
+  const [projectInstructions, projectFacts] = await Promise.all([
+    loadProjectInstructions(cwd),
+    extractProjectFacts(cwd),
+  ]);
 
   const sections: string[] = [];
 
   sections.push(getBasePrompt(modelTier, context?.provider));
 
-  // ## Environment used to live here. Moved to buildEnvironmentMessage()
-  // (an initial user message) so the system prompt is byte-stable across
-  // turns and providers can cache it. cwd is still consumed below via
-  // extractProjectFacts / loadProjectInstructions, but those are file-based
-  // and yield identical bytes within a session.
-
-  const projectFacts = await extractProjectFacts(cwd);
   if (projectFacts) {
     sections.push(
       `## Project Facts (auto-detected)\n${projectFacts}\n\nWhen changing version-like or configuration values, treat the source-of-truth above as authoritative — do not guess.`,

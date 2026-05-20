@@ -16,11 +16,16 @@ export function Spinner({ label, color }: { label: string; color: string }): Rea
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef(Date.now());
   useEffect(() => {
-    const id = setInterval(() => {
+    const frameId = setInterval(() => {
       setFrame(f => (f + 1) % SPINNER_FRAMES.length);
-      setElapsed(Date.now() - startedAt.current);
     }, 80);
-    return () => clearInterval(id);
+    const elapsedId = setInterval(() => {
+      setElapsed(Date.now() - startedAt.current);
+    }, 1000);
+    return () => {
+      clearInterval(frameId);
+      clearInterval(elapsedId);
+    };
   }, []);
   return (
     <Box>
