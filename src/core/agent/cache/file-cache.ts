@@ -26,6 +26,8 @@ interface FileCacheEntry {
   compactionsAtRead: number;
 }
 
+const FILE_CACHE_MAX_ENTRIES = 256;
+
 export class FileCache {
   private entries = new Map<string, FileCacheEntry>();
   private compactions = 0;
@@ -67,6 +69,7 @@ export class FileCache {
 
   /** Record a Read of `path` with its current fingerprint. */
   record(path: string, fingerprint: { mtimeMs: number; size: number; hash: string }): void {
+    this.entries.delete(path);
     this.entries.set(path, {
       path,
       mtimeMs: fingerprint.mtimeMs,
@@ -74,6 +77,11 @@ export class FileCache {
       hash: fingerprint.hash,
       compactionsAtRead: this.compactions,
     });
+    while (this.entries.size > FILE_CACHE_MAX_ENTRIES) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      this.entries.delete(oldest);
+    }
   }
 
   /** Drop the entry for `path` — call after Edit/Write so the next Read re-hashes. */

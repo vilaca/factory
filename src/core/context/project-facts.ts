@@ -3,56 +3,33 @@ import path from 'path';
 import { globToRegex } from '../../utils/glob-match.js';
 
 export async function extractProjectFacts(cwd: string): Promise<string | null> {
-  const sections: string[] = [];
-
-  const pkgFacts = await readPackageJson(cwd);
-  if (pkgFacts) sections.push(pkgFacts);
-
-  const tscFacts = await readTsConfig(cwd);
-  if (tscFacts) sections.push(tscFacts);
-
-  const cargoFacts = await readCargoToml(cwd);
-  if (cargoFacts) sections.push(cargoFacts);
-
-  const goFacts = await readGoMod(cwd);
-  if (goFacts) sections.push(goFacts);
-
-  const pyFacts = await readMarkers(cwd, 'Python', [
-    'pyproject.toml',
-    'requirements.txt',
-    'setup.py',
-    'Pipfile',
-    'poetry.lock',
+  const results = await Promise.all([
+    readPackageJson(cwd),
+    readTsConfig(cwd),
+    readCargoToml(cwd),
+    readGoMod(cwd),
+    readMarkers(cwd, 'Python', [
+      'pyproject.toml',
+      'requirements.txt',
+      'setup.py',
+      'Pipfile',
+      'poetry.lock',
+    ]),
+    readMarkers(cwd, 'JVM (Java/Kotlin/Scala)', [
+      'pom.xml',
+      'build.gradle',
+      'build.gradle.kts',
+      'settings.gradle',
+      'settings.gradle.kts',
+      'build.sbt',
+    ]),
+    readMarkers(cwd, 'Ruby', ['Gemfile', 'Gemfile.lock', '*.gemspec']),
+    readMarkers(cwd, 'PHP', ['composer.json', 'composer.lock']),
+    readMarkers(cwd, 'Elixir', ['mix.exs', 'mix.lock']),
+    readMarkers(cwd, 'C/C++', ['CMakeLists.txt', 'Makefile', 'configure', 'meson.build']),
   ]);
-  if (pyFacts) sections.push(pyFacts);
 
-  const javaFacts = await readMarkers(cwd, 'JVM (Java/Kotlin/Scala)', [
-    'pom.xml',
-    'build.gradle',
-    'build.gradle.kts',
-    'settings.gradle',
-    'settings.gradle.kts',
-    'build.sbt',
-  ]);
-  if (javaFacts) sections.push(javaFacts);
-
-  const rubyFacts = await readMarkers(cwd, 'Ruby', ['Gemfile', 'Gemfile.lock', '*.gemspec']);
-  if (rubyFacts) sections.push(rubyFacts);
-
-  const phpFacts = await readMarkers(cwd, 'PHP', ['composer.json', 'composer.lock']);
-  if (phpFacts) sections.push(phpFacts);
-
-  const elixirFacts = await readMarkers(cwd, 'Elixir', ['mix.exs', 'mix.lock']);
-  if (elixirFacts) sections.push(elixirFacts);
-
-  const cppFacts = await readMarkers(cwd, 'C/C++', [
-    'CMakeLists.txt',
-    'Makefile',
-    'configure',
-    'meson.build',
-  ]);
-  if (cppFacts) sections.push(cppFacts);
-
+  const sections = results.filter((s): s is string => s !== null);
   if (sections.length === 0) return null;
   return sections.join('\n\n');
 }
@@ -98,21 +75,23 @@ async function readTsConfig(cwd: string): Promise<string | null> {
 }
 
 async function readMarkers(cwd: string, label: string, files: string[]): Promise<string | null> {
-  const markers: string[] = [];
-  for (const file of files) {
-    if (file.includes('*')) {
-      const dirEntries = await fs.readdir(cwd).catch(() => [] as string[]);
-      const re = globToRegex(file);
-      if (dirEntries.some(e => re.test(e))) markers.push(file);
-      continue;
-    }
-    try {
-      await fs.access(path.join(cwd, file));
-      markers.push(file);
-    } catch {
-      // ignore
-    }
-  }
+  const needsListing = files.some(f => f.includes('*'));
+  const dirEntries = needsListing ? await fs.readdir(cwd).catch(() => [] as string[]) : [];
+  const checks = await Promise.all(
+    files.map(async file => {
+      if (file.includes('*')) {
+        const re = globToRegex(file);
+        return dirEntries.some(e => re.test(e)) ? file : null;
+      }
+      try {
+        await fs.access(path.join(cwd, file));
+        return file;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const markers = checks.filter((f): f is string => f !== null);
   if (markers.length === 0) return null;
   return `### ${label}\n- markers present: ${markers.join(', ')}`;
 }
