@@ -21,6 +21,7 @@ import {
   ValidatingStage,
   ValidateFailedStage,
 } from './stages.js';
+import { errorMessage } from '../../../../utils/errors.js';
 import { useProviderPickerKeys } from './keys.js';
 import { prepareModels } from './prepare.js';
 
@@ -179,7 +180,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
               kind: 'key-validate-failed',
               provider: validatingProvider,
               token: validatingToken,
-              error: (err as Error).message,
+              error: errorMessage(err),
               choice: 0,
             });
           }

@@ -10,7 +10,7 @@ import type {
   ModelPickerInfo,
   ChatOptions,
 } from './types.js';
-import { formatTokenCount } from './shared.js';
+import { formatTokenCount, parseToolArgs } from './shared.js';
 
 type StreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
 type NonStreamingParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
@@ -132,12 +132,7 @@ export class AnthropicProvider implements Provider {
         }
       } else if (event.type === 'content_block_stop') {
         if (currentToolCall) {
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(currentToolCall.rawArgs);
-          } catch {
-            args = { _raw: currentToolCall.rawArgs };
-          }
+          const args = parseToolArgs(currentToolCall.rawArgs);
           yield {
             tool_calls: [
               {

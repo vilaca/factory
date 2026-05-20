@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import crypto from 'crypto';
 import type { AgentEvent } from '../agent/types.js';
 import { errorMessage } from '../../utils/errors.js';
+import { factoryHomePath } from '../../utils/factory-paths.js';
 
 interface SessionStartMeta {
   model: string;
@@ -81,7 +81,7 @@ interface SessionLoggerOpts {
 }
 
 export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
-  const dir = path.join(os.homedir(), '.factory', 'sessions');
+  const dir = factoryHomePath('sessions');
   fs.mkdirSync(dir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const id = crypto.randomBytes(3).toString('hex');
@@ -204,7 +204,7 @@ function serializeEvent(event: AgentEvent): Record<string, unknown> {
 }
 
 export function sessionsDir(): string {
-  return path.join(os.homedir(), '.factory', 'sessions');
+  return factoryHomePath('sessions');
 }
 
 async function listSessionLogs(): Promise<{ name: string; path: string; mtime: Date }[]> {
@@ -407,13 +407,18 @@ async function readRecentSession(filePath: string): Promise<RecentSession | null
  */
 export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
   const sessions = await listSessionLogs();
+  // Read up to 4x the requested limit concurrently — most files survive
+  // dedupe, but some collapse on provider/model. Capping the fan-out keeps
+  // long history directories from spawning hundreds of fs reads.
+  const fanout = Math.min(sessions.length, limit * 4);
+  const entries = await Promise.all(
+    sessions.slice(0, fanout).map(s => readRecentSession(s.path)),
+  );
   const seen = new Set<string>();
   const out: RecentSession[] = [];
-
-  for (const session of sessions) {
-    if (out.length >= limit) break;
-    const entry = await readRecentSession(session.path);
+  for (const entry of entries) {
     if (!entry) continue;
+    if (out.length >= limit) break;
     const dedupKey = `${entry.provider}/${entry.model}`;
     if (seen.has(dedupKey)) continue;
     seen.add(dedupKey);
@@ -430,10 +435,16 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
  */
 export async function loadHistoryFromSessions(limit = 500): Promise<string[]> {
   const sessions = await listSessionLogs();
+  // Reading ~16 sessions usually exceeds the 500-entry cap; cap the
+  // concurrent fan-out so absurdly long history directories don't open
+  // hundreds of file descriptors at once.
+  const FANOUT_CAP = 32;
+  const slice = sessions.slice(0, FANOUT_CAP);
+  const perSessionInputs = await Promise.all(
+    slice.map(s => extractUserInputs(s.path).catch(() => [] as string[])),
+  );
   const history: string[] = [];
-  for (const session of sessions) {
-    const inputs = await extractUserInputs(session.path).catch(() => []);
-    // Within a session, push newest-first (the file is oldest-first, so reverse).
+  for (const inputs of perSessionInputs) {
     for (let i = inputs.length - 1; i >= 0; i--) {
       const input = inputs[i]!;
       if (history[history.length - 1] === input) continue;

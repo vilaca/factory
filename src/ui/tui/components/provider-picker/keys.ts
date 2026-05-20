@@ -8,6 +8,7 @@ import {
 } from './types.js';
 import { indexForShortcut } from './stages.js';
 import { prepareModels } from './prepare.js';
+import { errorMessage } from '../../../../utils/errors.js';
 
 interface UseProviderPickerKeysArgs {
   stage: Stage;
@@ -96,7 +97,7 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
       setModelIndex(idx);
       setStage({ kind: 'model', provider: name, models, ...(keyId ? { keyId } : {}) });
     } catch (err) {
-      setStage({ kind: 'error', provider: name, message: (err as Error).message });
+      setStage({ kind: 'error', provider: name, message: errorMessage(err) });
     }
   }
 
@@ -121,7 +122,7 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
         setStage({ kind: 'key', provider: name, keys, selectedIdx: idx });
         return;
       } catch (err) {
-        setStage({ kind: 'error', provider: name, message: (err as Error).message });
+        setStage({ kind: 'error', provider: name, message: errorMessage(err) });
         return;
       }
     }

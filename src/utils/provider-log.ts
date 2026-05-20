@@ -1,6 +1,6 @@
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
+import { factoryHomePath } from './factory-paths.js';
 
 export interface ProviderLogEvent {
   provider: string;
@@ -11,7 +11,7 @@ export interface ProviderLogEvent {
 }
 
 function providerEventsLogPath(): string {
-  return path.join(os.homedir(), '.factory', 'provider-events.jsonl');
+  return factoryHomePath('provider-events.jsonl');
 }
 
 export function appendProviderLog(event: ProviderLogEvent): void {

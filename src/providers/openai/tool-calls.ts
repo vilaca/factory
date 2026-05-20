@@ -1,4 +1,6 @@
 import type { ToolCallMessage } from '../types.js';
+import { parseToolArgs } from '../shared.js';
+export { parseToolArgs };
 
 interface ToolCallAcc {
   id?: string;
@@ -58,11 +60,3 @@ export function finalizeToolCalls(toolCalls: StreamingToolCallAcc): ToolCallMess
   });
 }
 
-export function parseToolArgs(raw?: string): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { _raw: raw };
-  }
-}

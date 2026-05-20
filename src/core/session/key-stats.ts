@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import type { TokenUsage } from '../../providers/types.js';
 import { writeFileAtomic } from '../../utils/atomic-write.js';
+import { factoryHomePath } from '../../utils/factory-paths.js';
 
 /**
  * Per-key usage analytics. Stored separately from the credentials file so
@@ -35,7 +35,7 @@ interface AllKeyStats {
 }
 
 function statsFilePath(): string {
-  return path.join(os.homedir(), '.factory', 'key-stats.json');
+  return factoryHomePath('key-stats.json');
 }
 
 function emptyStat(): KeyStat {

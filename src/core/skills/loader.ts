@@ -11,8 +11,12 @@ export interface Skill {
   name: string;
   description: string;
   alwaysOn: boolean;
-  /** Compiled regex sources (the raw strings from frontmatter). */
+  /** Raw regex source strings from frontmatter (kept for diagnostics). */
   triggers: string[];
+  /** Pre-compiled triggers — built once at load time so matcher.ts doesn't
+   *  re-compile per turn per skill. Optional so test fixtures can omit it;
+   *  production loader always populates it. */
+  triggerRegexes?: RegExp[];
   /** Tool names; when set, only inject when one was used recently. */
   tools: string[];
   body: string;
@@ -125,11 +129,12 @@ export function parseSkillFile(
   if (!Array.isArray(triggers) || !triggers.every(t => typeof t === 'string')) {
     throw new Error('"triggers" must be an array of strings');
   }
-  // Validate regex compiles upfront so a bad pattern is caught at load time
-  // rather than every turn.
+  // Compile + validate triggers upfront so a bad pattern is caught at load
+  // time and the per-turn matcher.ts doesn't have to re-compile per skill.
+  const triggerRegexes: RegExp[] = [];
   for (const t of triggers as string[]) {
     try {
-      new RegExp(t, 'i');
+      triggerRegexes.push(new RegExp(t, 'i'));
     } catch (e: unknown) {
       throw new Error(`invalid regex in "triggers": ${t} (${errorMessage(e)})`);
     }
@@ -145,6 +150,7 @@ export function parseSkillFile(
     description,
     alwaysOn,
     triggers: triggers as string[],
+    triggerRegexes,
     tools: tools as string[],
     body: split.body.trim(),
     sourcePath,
