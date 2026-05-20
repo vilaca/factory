@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)
 
-**A coding agent that runs anywhere — local or cloud, frontier or 7B — with the resilience to make smaller models actually useful.**
+**A coding agent CLI engineered to make any LLM — local or cloud, frontier or 7B — actually useful.**
 
 ## Why factory
 

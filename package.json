@@ -1,7 +1,7 @@
 {
   "name": "factory-code",
   "version": "0.1.0",
-  "description": "Interactive terminal coding agent with tool use, plan mode, and pluggable LLM providers (local and cloud).",
+  "description": "Coding agent CLI engineered to make any LLM — local or cloud, frontier or 7B — actually useful. Multi-tab sessions, automatic key+model failover, plan mode, MCP, and recovery loops for models that misbehave.",
   "keywords": [
     "ai",
     "llm",
