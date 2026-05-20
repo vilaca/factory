@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import type { AgentEvent } from '../agent/types.js';
+import { errorMessage } from '../../utils/errors.js';
 
 interface SessionStartMeta {
   model: string;
@@ -101,8 +102,9 @@ export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
     // out of write(); strict-logging callers escalate via onWriteError.
     if (writeFailureNotified) return;
     writeFailureNotified = true;
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`factory: session log write failed (${filePath}) — ${msg}\n`);
+    process.stderr.write(
+      `factory: session log write failed (${filePath}) — ${errorMessage(err)}\n`,
+    );
     opts?.onWriteError?.(err);
   };
 

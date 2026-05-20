@@ -16,6 +16,7 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels, matchedPattern } from './list-models-filter.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const PROVIDER_NAME = 'Groq';
@@ -36,7 +37,7 @@ export class GroqProvider implements Provider {
     const key = options.token ?? process.env.GROQ_API_KEY;
     if (!key) throw new Error(MISSING_TOKEN_ERROR);
     this.apiKey = key;
-    this.baseUrl = (options.host ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = normalizeBaseUrl(options.host ?? DEFAULT_BASE_URL);
   }
 
   async listModels(): Promise<string[]> {
@@ -128,7 +129,7 @@ export class GroqProvider implements Provider {
   }
 
   private authHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${this.apiKey}` };
+    return bearerAuth(this.apiKey);
   }
 
   private async getCatalog(): Promise<GroqModel[]> {
@@ -269,14 +270,3 @@ function supportsReasoningByName(model: string): boolean {
   );
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
-  }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
-}

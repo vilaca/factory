@@ -15,6 +15,7 @@ import {
   sendOpenAiChat,
   streamOpenAiChat,
 } from './openai/index.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.cerebras.ai/v1';
 const MISSING_TOKEN_ERROR =
@@ -37,7 +38,7 @@ export class CerebrasProvider implements Provider {
       throw new Error(MISSING_TOKEN_ERROR);
     }
     this.apiKey = key;
-    this.baseUrl = (options.host ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = normalizeBaseUrl(options.host ?? DEFAULT_BASE_URL);
   }
 
   async listModels(): Promise<string[]> {
@@ -111,7 +112,7 @@ export class CerebrasProvider implements Provider {
   }
 
   private authHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${this.apiKey}` };
+    return bearerAuth(this.apiKey);
   }
 
   private async getCatalog(): Promise<CerebrasModel[]> {
@@ -195,14 +196,3 @@ function supportsReasoning(model: string): boolean {
   return model.includes('gpt-oss') || model.includes('zai-glm') || model.includes('qwen');
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
-  }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
-}

@@ -14,6 +14,7 @@ import { appendProviderLog } from '../../utils/provider-log.js';
 import { GoogleAiStudioAuthManager } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 import { filterChatModels } from '../list-models-filter.js';
+import { normalizeBaseUrl } from '../shared.js';
 
 const DEFAULT_OPENAI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const PROVIDER_NAME = 'Google AI Studio';
@@ -42,7 +43,7 @@ export class GoogleAiStudioProvider implements Provider {
       apiKey: key,
       authMode: options.authMode,
     });
-    this.openAiBaseUrl = (options.host ?? DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, '');
+    this.openAiBaseUrl = normalizeBaseUrl(options.host ?? DEFAULT_OPENAI_BASE_URL);
     this.modelsBaseUrl = this.openAiBaseUrl.replace(/\/openai\/?$/, '');
   }
 

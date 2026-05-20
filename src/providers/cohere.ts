@@ -9,6 +9,7 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from './types.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.cohere.com';
 const MISSING_TOKEN_ERROR =
@@ -155,7 +156,7 @@ export class CohereProvider implements Provider {
 
   private requestHeaders(): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.apiKey}`,
+      ...bearerAuth(this.apiKey),
       'Content-Type': 'application/json',
     };
   }
@@ -252,10 +253,6 @@ export class CohereProvider implements Provider {
     this.modelsCache = models;
     return models;
   }
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '');
 }
 
 function normalizeModel(item: unknown): CohereModel[] {
@@ -399,14 +396,3 @@ function buildModelWarning(model: string, cached?: CohereModel): string | undefi
   return undefined;
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    const millions = value / 1_000_000;
-    return `${millions.toFixed(millions % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}M`;
-  }
-  if (value >= 1_000) {
-    const thousands = value / 1_000;
-    return `${thousands.toFixed(thousands % 1 === 0 ? 0 : 1).replace(/\.0$/, '')}k`;
-  }
-  return String(value);
-}

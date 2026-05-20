@@ -16,6 +16,7 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels, matchedPattern } from './list-models-filter.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.mistral.ai/v1';
 const CODESTRAL_BASE_URL = 'https://codestral.mistral.ai/v1';
@@ -63,7 +64,7 @@ export class MistralProvider implements Provider {
       );
     }
     this.apiKey = key;
-    this.baseUrl = (options.host ?? options.defaultBaseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = normalizeBaseUrl(options.host ?? options.defaultBaseUrl ?? DEFAULT_BASE_URL);
   }
 
   async listModels(): Promise<string[]> {
@@ -168,7 +169,7 @@ export class MistralProvider implements Provider {
   }
 
   private authHeaders(): Record<string, string> {
-    return { Authorization: `Bearer ${this.apiKey}` };
+    return bearerAuth(this.apiKey);
   }
 
   private async getCatalog(): Promise<MistralModel[]> {
@@ -358,12 +359,3 @@ function supportsReasoningByName(model: string): boolean {
   return model.includes('magistral');
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
-  }
-  return String(value);
-}

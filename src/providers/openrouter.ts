@@ -16,6 +16,7 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
+import { bearerAuth, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 const PROVIDER_NAME = 'OpenRouter';
@@ -59,7 +60,7 @@ export class OpenRouterProvider implements Provider {
       );
     }
     this.apiKey = key;
-    this.baseUrl = (options.host ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = normalizeBaseUrl(options.host ?? DEFAULT_BASE_URL);
   }
 
   async listModels(): Promise<string[]> {
@@ -166,7 +167,7 @@ export class OpenRouterProvider implements Provider {
 
   private requestHeaders(): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.apiKey}`,
+      ...bearerAuth(this.apiKey),
       'HTTP-Referer': APP_REFERER,
       'X-OpenRouter-Title': APP_TITLE,
     };

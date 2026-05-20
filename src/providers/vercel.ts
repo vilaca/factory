@@ -16,6 +16,7 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
+import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
 const PROVIDER_NAME = 'Vercel AI Gateway';
@@ -41,7 +42,7 @@ export class VercelProvider implements Provider {
 
   constructor(options: { token?: string; host?: string } = {}) {
     this.apiKey = options.token ?? process.env.AI_GATEWAY_API_KEY ?? process.env.VERCEL_OIDC_TOKEN;
-    this.baseUrl = (options.host ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = normalizeBaseUrl(options.host ?? DEFAULT_BASE_URL);
   }
 
   async listModels(): Promise<string[]> {
@@ -143,7 +144,7 @@ export class VercelProvider implements Provider {
   }
 
   private authHeaders(): Record<string, string> {
-    return this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {};
+    return this.apiKey ? bearerAuth(this.apiKey) : {};
   }
 
   private async getCatalog(): Promise<VercelModel[]> {
@@ -265,8 +266,3 @@ function estimateMaxOutput(model: string): number {
   return 16384;
 }
 
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)}k`;
-  return String(value);
-}

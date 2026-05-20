@@ -4,6 +4,7 @@ import { TOOL_NAMES } from './types.js';
 import { runSubagent } from '../core/subagent/runner.js';
 import type { runAgent } from '../core/agent/run-agent.js';
 import type { SessionLogger } from '../core/session/session-log.js';
+import { errorMessage } from '../utils/errors.js';
 
 /*
  * Future improvements (not blocking this branch's merge):
@@ -153,8 +154,7 @@ export function createDelegateTool(ctx: DelegateContext): ToolHandler {
       }
       return { success: true, output: text };
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { success: false, output: `Delegate: subagent failed: ${msg}` };
+      return { success: false, output: `Delegate: subagent failed: ${errorMessage(err)}` };
     }
   }
 
