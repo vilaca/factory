@@ -35,7 +35,15 @@ function args(): string[] {
   ];
 }
 
-describe('Picker entry points (PTY)', () => {
+// TODO(ci-slow): node-pty on the GitHub Linux runner spawns the child
+// with stdout.isTTY=false, so factory takes the headless branch instead
+// of mounting Ink — every PTY assertion below then times out waiting for
+// a prompt that's never rendered. Same root cause as the existing skips
+// in test/e2e-mocks.test.ts. Re-enable once the runner exposes a real
+// PTY device or we move to a containerized terminal harness.
+const SKIP_PTY_ON_CI = process.env.CI === 'true';
+
+describe('Picker entry points (PTY)', { skip: SKIP_PTY_ON_CI }, () => {
   it('Ctrl+K from a running session opens the picker', async () => {
     const cli = spawnCli(args());
     try {

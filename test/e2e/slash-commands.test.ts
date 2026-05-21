@@ -38,7 +38,12 @@ async function settle(ms = 250): Promise<void> {
   await new Promise(r => setTimeout(r, ms));
 }
 
-describe('Slash commands (PTY)', () => {
+// TODO(ci-slow): see picker.test.ts — PTY isn't seen as a TTY on the
+// GitHub Linux runner, so factory falls back to headless and these
+// assertions can't observe the TUI.
+const SKIP_PTY_ON_CI = process.env.CI === 'true';
+
+describe('Slash commands (PTY)', { skip: SKIP_PTY_ON_CI }, () => {
   // Verifies the dispatcher consumes the input (the typed `/<cmd>` echoes
   // back into the prompt before being submitted). Deeper notice-block
   // rendering is best covered by unit tests over `dispatchSlashCommand`
