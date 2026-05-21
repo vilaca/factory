@@ -31,7 +31,12 @@ function args(): string[] {
   ];
 }
 
-describe('Tabs (PTY)', () => {
+// TODO(ci-slow): see picker.test.ts — PTY isn't seen as a TTY on the
+// GitHub Linux runner, so factory falls back to headless and these
+// assertions can't observe the TUI.
+const SKIP_PTY_ON_CI = process.env.CI === 'true';
+
+describe('Tabs (PTY)', { skip: SKIP_PTY_ON_CI }, () => {
   it('Ctrl+T opens a new tab; /tabs lists both', async () => {
     const cli = spawnCli(args());
     try {
