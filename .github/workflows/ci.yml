@@ -27,5 +27,4 @@ jobs:
       - run: npx -y npm@11.12.1 ci
       - run: npm run lint
       - run: npx tsc --noEmit
-      - run: npm run test:unit
-      - run: npm run test:e2e
+      - run: npm run test:release
