@@ -385,10 +385,11 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         }
       }
       return { provider: createProvider(target.providerName, createOpts), model: target.model };
-    } catch {
+    } catch (err: unknown) {
       // Same fallback shape as the TUI resolver — never block compaction
       // on auth/registry failures; the model call will trip the
       // mechanical-summary path.
+      sessionLogger?.logWarning('compaction-resolver', errorMessage(err));
       return { provider: options.provider, model: options.model };
     }
   };

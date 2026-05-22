@@ -73,9 +73,17 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   }
   function addNotice(level: NoticeLevel, text: string): void {
     addItem({ kind: 'notice', id: nextId(), text, level });
+    if (level === 'danger' || level === 'warn') {
+      refs.current?.sessionLogger?.logWarning(`notice:${level}`, text);
+    }
   }
   function addNoticeBlock(lines: { level: NoticeLevel; text: string; bold?: boolean }[]): void {
     addItem({ kind: 'notice-block', id: nextId(), lines });
+    for (const line of lines) {
+      if (line.level === 'danger' || line.level === 'warn') {
+        refs.current?.sessionLogger?.logWarning(`notice:${line.level}`, line.text);
+      }
+    }
   }
   function refreshTokenEstimate(): void {
     if (!refs.current) return;

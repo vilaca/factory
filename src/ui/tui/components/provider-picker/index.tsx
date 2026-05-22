@@ -58,6 +58,9 @@ interface ProviderPickerProps {
   initialKeyId?: string;
   onCommit: (provider: string, model: string, keyId?: string) => void;
   onCancel: () => void;
+  /** Invoked when an error stage is shown — lets the host log the failure
+   *  alongside the visible notice (the picker itself can't see sessionLogger). */
+  onError?: (source: string, message: string) => void;
   /**
    * Skip-to-model mode. When set to `'model'`, the picker mounts directly
    * on the model stage with the `models` prop — the recent and provider
@@ -99,6 +102,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     initialKeyId,
     onCommit,
     onCancel,
+    onError,
     startStage = 'recent',
     models: preloadedModels,
     bordered = true,
@@ -166,6 +170,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
               getModelInfo ? m => getModelInfo(validatingProvider, m) : undefined,
             );
             if (models.length === 0) {
+              onError?.(`picker:validate:${validatingProvider}`, 'no models returned');
               setStage({
                 kind: 'error',
                 provider: validatingProvider,
@@ -176,20 +181,24 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
             setModelIndex(0);
             setStage({ kind: 'model', provider: validatingProvider, models, keyId: newKeyId });
           } catch (err) {
+            const msg = errorMessage(err);
+            onError?.(`picker:validate:${validatingProvider}`, msg);
             setStage({
               kind: 'key-validate-failed',
               provider: validatingProvider,
               token: validatingToken,
-              error: errorMessage(err),
+              error: msg,
               choice: 0,
             });
           }
         } else {
+          const msg = result.error ?? 'unknown error';
+          onError?.(`picker:validate:${validatingProvider}`, msg);
           setStage({
             kind: 'key-validate-failed',
             provider: validatingProvider,
             token: validatingToken,
-            error: result.error ?? 'unknown error',
+            error: msg,
             choice: 0,
           });
         }
@@ -198,7 +207,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [validatingToken, validatingProvider, validateKey, saveKey, getModelInfo]);
+  }, [validatingToken, validatingProvider, validateKey, saveKey, getModelInfo, onError]);
 
   useProviderPickerKeys({
     stage,
@@ -224,6 +233,7 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     startsAtModel,
     onCommit,
     onCancel,
+    ...(onError ? { onError } : {}),
   });
 
   const body = renderBody();
