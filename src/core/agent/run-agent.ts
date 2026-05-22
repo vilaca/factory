@@ -8,9 +8,21 @@ import { maybeCompact } from './compaction.js';
 import { BashDedupTracker } from './tool-calls/bash-dedup.js';
 import { runHook } from '../hooks/index.js';
 import { errorMessage, isError } from '../../utils/errors.js';
+import { TOOL_NAMES } from '../../utils/tool-names.js';
+import { autoEnableForModel, logActivation } from './reliability-config.js';
+import { validateResponse } from './validator.js';
+import { StepEnforcer, collectPrereqs } from './step-enforcer.js';
+import { StepEnforcementError, PrerequisiteError, ToolExecutionError } from './errors.js';
 
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
+
+function hasAnyPrereqs(defs: import('../../utils/tool-definition.js').ToolDefinition[]): boolean {
+  for (const d of defs) {
+    if (d.prerequisites && d.prerequisites.length > 0) return true;
+  }
+  return false;
+}
 
 /** Fire the Stop or StopFailure hook before each turn-complete yield. Stop
  *  fires on `stopReason: 'completed'`; StopFailure fires on every other
@@ -84,6 +96,36 @@ export async function* runAgent(
   const bashDedup = options.experimental?.bashDedup ? new BashDedupTracker() : undefined;
   const fileCache = options.experimental?.readCache ? options.fileCache : undefined;
   const hooksEnabled = options.experimental?.hooks ?? false;
+  // Auto-enable per the reliability stack. `useRespondTool` flips on for
+  // weak-tier models (Ollama small, llamacpp small, cheap cloud) so they
+  // see the synthetic Respond tool. Frontier models route text naturally
+  // and don't need it on the wire. The activation may change across the
+  // turn if rotation swaps to a different (provider, model) tuple — read
+  // it again then, not cached here.
+  const initialActivation = autoEnableForModel(provider, model);
+  logActivation(provider, model, initialActivation);
+  // Track which required-step completions have already been surfaced
+  // as `step-completed` events so we don't repeat them after a counter
+  // reset.
+  const emittedStepCompletions = new Set<string>();
+
+  // Phase 5 step enforcer. Built once per agent run; lives outside the
+  // conversation so compaction can't invalidate which steps completed.
+  // Stays dormant for the general path — required/terminal sets are
+  // empty by default and the prereq map is empty unless tools declared
+  // any. The enforcer's checks short-circuit to "no nudge" when
+  // there's nothing to enforce, so the cost on the common path is a
+  // method call.
+  const stepEnforcer =
+    (options.requiredSteps && options.requiredSteps.length > 0) ||
+    (options.terminalTools && options.terminalTools.length > 0) ||
+    hasAnyPrereqs(toolRegistry.getDefinitions())
+      ? new StepEnforcer({
+          requiredSteps: options.requiredSteps ?? [],
+          terminalTools: options.terminalTools ?? [],
+          prereqs: collectPrereqs(toolRegistry.getDefinitions()),
+        })
+      : undefined;
 
   // UserPromptSubmit fires once per runAgent call, before the user message is
   // sent into the model loop. Return value is informational only — we log
@@ -139,7 +181,16 @@ export async function* runAgent(
     // Pre-flight: shrink the prompt before sending it. Doing this after the
     // model call wastes a model invocation on a bloated prompt and surfaces no
     // response when usage stays over the hard ceiling.
-    const toolDefinitions = useTextToolFallback ? undefined : toolRegistry.getDefinitions();
+    //
+    // Re-read activation per turn — rotation may have swapped to a model
+    // in a different tier mid-run.
+    const activation = autoEnableForModel(provider, model);
+    const wireExclude = activation.useRespondTool
+      ? undefined
+      : new Set<string>([TOOL_NAMES.Respond]);
+    const toolDefinitions = useTextToolFallback
+      ? undefined
+      : toolRegistry.getDefinitions(wireExclude ? { exclude: wireExclude } : undefined);
     let compaction;
     try {
       compaction = yield* maybeCompact(contextManager, provider, model, signal, fileCache, {
@@ -187,8 +238,32 @@ export async function* runAgent(
 
     turnsUsed++;
 
-    const messages = conversation.getMessages();
+    let messages = conversation.getMessages();
     const tools = toolDefinitions;
+
+    // Phase 7: context-pressure warning. Injected as a transient
+    // user-role message into THIS turn's outbound payload only — not
+    // persisted via `conversation.addUser`. Each configured threshold
+    // fires at most once per pressure cycle (the ContextManager
+    // tracks the latch); usage dropping back below the threshold
+    // re-arms it. Also emitted as an event so the TUI can surface
+    // the same warning to the user.
+    if (contextManager) {
+      const warning = contextManager.checkThresholds();
+      if (warning) {
+        const pct = contextManager.getUsagePercent();
+        yield {
+          type: 'context-warning',
+          thresholdPct: pct,
+          tokens: contextManager.getTokenEstimate(),
+          warning,
+        };
+        messages = [
+          ...messages,
+          { role: 'user' as const, content: warning },
+        ];
+      }
+    }
 
     let fullContent = '';
     let toolCalls: ToolCallMessage[] = [];
@@ -213,10 +288,21 @@ export async function* runAgent(
         : undefined;
 
     try {
+      // Phase 13/16: thread the activation's `forceToolCall` into the
+      // per-call ChatOptions. Anthropic honors this as `tool_choice:
+      // "any"`; other providers ignore. The auto-enable rule in
+      // reliability-config.ts only turns this on for weak-tier
+      // Anthropic models — frontier models keep their natural text
+      // path.
+      const baseChatOptions: Record<string, unknown> = {};
+      if (chainForCall) baseChatOptions.responsesChain = chainForCall;
+      if (activation.forceToolCall && tools && tools.length > 0) {
+        baseChatOptions.forceToolCall = true;
+      }
       const modelResult = yield* callModel(provider, model, messages, tools, {
         signal,
         ...(options.rotation ? { rotation: options.rotation } : {}),
-        ...(chainForCall ? { chatOptions: { responsesChain: chainForCall } } : {}),
+        ...(Object.keys(baseChatOptions).length > 0 ? { chatOptions: baseChatOptions } : {}),
       });
       if (modelResult.finalProvider) {
         provider = modelResult.finalProvider;
@@ -268,6 +354,54 @@ export async function* runAgent(
       const storedContent = parsed.storedContent;
       const recoveredFromText = parsed.recoveredFromText;
 
+      // Synthetic Respond short-circuit. A single Respond call is the
+      // model's structured way of saying "I'm done — here's the text."
+      // We treat it like a natural text-only turn: emit the message as
+      // `text-done`, store it as a plain assistant message (no
+      // tool_calls — keeping it out of history avoids next-turn
+      // confusion about an orphan tool_use), and stop. Mixed batches
+      // (Respond + other tools) fall through to the normal path; the
+      // Respond handler echoes the message and the loop continues so
+      // the other tool calls still execute.
+      //
+      // Step-enforcement carve-out: when a StepEnforcer is configured
+      // AND requiredSteps haven't completed yet, we skip the
+      // short-circuit so the enforcer's premature-terminal check can
+      // emit the 3-tier nudge. Without this carve-out, Respond would
+      // bypass the workflow gate the scripted caller set up.
+      const respondGated =
+        stepEnforcer !== undefined &&
+        stepEnforcer.getTracker().pending().length > 0 &&
+        (options.terminalTools?.includes(TOOL_NAMES.Respond) ?? false);
+      if (
+        activation.useRespondTool &&
+        !respondGated &&
+        toolCalls.length === 1 &&
+        toolCalls[0]!.function?.name === TOOL_NAMES.Respond
+      ) {
+        const respondMessage =
+          typeof toolCalls[0]!.function?.arguments?.message === 'string'
+            ? (toolCalls[0]!.function.arguments.message as string)
+            : '';
+        yield { type: 'respond-stripped', message: respondMessage };
+        if (respondMessage) {
+          yield { type: 'text-done', fullContent: respondMessage };
+        }
+        conversation.addAssistant(respondMessage);
+        if (modelResult.responseId && chainRef) {
+          chainRef.set({
+            lastResponseId: modelResult.responseId,
+            messageCount: conversation.getMessages().length,
+            provider: provider.name,
+            model,
+            ...(options.rotation?.activeKeyId ? { keyId: options.rotation.activeKeyId } : {}),
+          });
+        }
+        yield* fireStopHook(options, turnsUsed, 'completed');
+        yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
+        return;
+      }
+
       if (fullContent) {
         yield { type: 'text-done', fullContent };
       }
@@ -312,6 +446,34 @@ export async function* runAgent(
       }
 
       if (toolCalls.length === 0) {
+        // Reliability path (Phase 4 validator): when `useRespondTool` is
+        // on for this model and the response is text-only with content
+        // that *should have been* a Respond() call, inject a retry
+        // nudge and re-loop. Without this, small models fall through to
+        // turn-complete on their first text-only attempt and the user
+        // sees a partial answer instead of the structured Respond.
+        if (activation.useRespondTool && storedContent.trim().length > 0) {
+          const validation = validateResponse(toolCalls, storedContent, {
+            toolNames: new Set(toolRegistry.getNames()),
+            enforceToolCall: true,
+          });
+          if (
+            validation.needsRetry &&
+            validation.nudge &&
+            recovery.autoRetryBudget > 0
+          ) {
+            recovery.autoRetryBudget--;
+            conversation.addUser(validation.nudge.content, {
+              type: 'retry_nudge',
+            });
+            yield {
+              type: 'auto-retry-injected',
+              remainingBudget: recovery.autoRetryBudget,
+              reason: validation.nudge.kind,
+            };
+            continue;
+          }
+        }
         // Detect "silent" turns where the model burned a meaningful number
         // of completion tokens but produced no visible content and no tool
         // calls — typically reasoning-block runaway on small thinking-mode
@@ -365,6 +527,59 @@ export async function* runAgent(
         recovery.consecutiveSameFailures = 0;
       }
 
+      // Phase 5 enforcement: run BEFORE tool execution so a premature
+      // terminal or unmet prereq becomes a nudge rather than a
+      // wasted tool call. The model's attempted tool_call is already
+      // in conversation history (addAssistant above) — emitting the
+      // corrective user-role nudge alongside it is exactly the
+      // "skeleton + nudge" shape the spec prescribes (§7).
+      if (stepEnforcer) {
+        try {
+          const prereqCheck = stepEnforcer.checkPrerequisites(toolCalls);
+          if (prereqCheck.needsNudge && prereqCheck.nudge) {
+            conversation.addUser(prereqCheck.nudge.content, { type: 'prerequisite_nudge' });
+            // Surface to observability. Find the offending tool name +
+            // missing list by inspecting the nudge content shape isn't
+            // robust — pull from the first call in the batch that has
+            // prereqs declared.
+            const offendingCall = toolCalls.find(tc => {
+              const name = tc.function?.name;
+              return name !== undefined;
+            });
+            yield {
+              type: 'prerequisite-nudge',
+              tool: offendingCall?.function?.name ?? '<unknown>',
+              missing: prereqCheck.nudge.content.match(/first call: ([^.]+)/)?.[1]
+                ?.split(', ') ?? [],
+            };
+            continue;
+          }
+          const stepCheck = stepEnforcer.check(toolCalls);
+          if (stepCheck.needsNudge && stepCheck.nudge) {
+            conversation.addUser(stepCheck.nudge.content, { type: 'step_nudge' });
+            const attemptedTerminal = toolCalls.find(tc => {
+              const n = tc.function?.name;
+              return typeof n === 'string' && options.terminalTools?.includes(n);
+            });
+            yield {
+              type: 'step-nudge',
+              tier: stepCheck.nudge.tier,
+              attemptedTool: attemptedTerminal?.function?.name ?? '<unknown>',
+              pending: stepEnforcer.pending(),
+            };
+            continue;
+          }
+        } catch (err: unknown) {
+          if (err instanceof StepEnforcementError || err instanceof PrerequisiteError) {
+            yield { type: 'error', error: err };
+            yield* fireStopHook(options, turnsUsed, 'error');
+            yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
+            return;
+          }
+          throw err;
+        }
+      }
+
       const { deniedCount } = yield* runToolCalls(
         toolCalls,
         {
@@ -387,10 +602,50 @@ export async function* runAgent(
           hooksConfig: options.hooksConfig,
           onHookStderr: options.onHookStderr,
           onHookError: options.onHookError,
+          ...(stepEnforcer ? { stepEnforcer } : {}),
         },
         callSignature,
         recovery,
       );
+
+      // Phase 5: clean-batch reset. When the batch ran without any
+      // denials or tool failures, the step enforcer's per-batch
+      // counters reset so a single off-day call doesn't poison the
+      // rest of the run.
+      if (stepEnforcer && deniedCount === 0 && !recovery.lastFailureMessage) {
+        stepEnforcer.resetCounters();
+        // Phase 14: surface step completions. Emit one event per
+        // required-step name that's newly satisfied this batch.
+        const pending = new Set(stepEnforcer.pending());
+        for (const name of options.requiredSteps ?? []) {
+          if (!pending.has(name) && !emittedStepCompletions.has(name)) {
+            emittedStepCompletions.add(name);
+            yield { type: 'step-completed', tool: name };
+          }
+        }
+      }
+
+      // Phase 6: hard-error bailout. If the tool's callable raised
+      // non-ToolResolutionError exceptions on consecutive batches
+      // beyond the configured budget, the run can't recover — surface
+      // the failure as a typed error and turn-complete. The counter
+      // is reset by the next clean batch (see applyResultToRecovery),
+      // so a single bad call followed by a successful one keeps the
+      // run going.
+      if (
+        recovery.consecutiveHardToolErrors > recovery.maxHardToolErrors &&
+        recovery.lastHardToolName !== null &&
+        recovery.lastHardToolMessage !== null
+      ) {
+        const err = new ToolExecutionError(
+          recovery.lastHardToolName,
+          recovery.lastHardToolMessage,
+        );
+        yield { type: 'error', error: err };
+        yield* fireStopHook(options, turnsUsed, 'error');
+        yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
+        return;
+      }
 
       // All tool calls in this turn were denied. The user is rejecting the
       // direction; don't keep prompting the model — halt and let them speak.

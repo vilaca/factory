@@ -76,7 +76,28 @@ export async function* maybeCompact(
   let cumulativeOld: number | null = null;
   let cumulativeNew: number | null = null;
   let lastAggressive = false;
+  let phaseReached: 0 | 1 | 2 | 3 | 4 = 0;
 
+  // Tiered phases 1–3 are deterministic text manipulation, no LLM call,
+  // sub-millisecond. They preserve reasoning traces (interpretive
+  // context) while shedding nudges and raw tool data — the spec's
+  // measured +18-point lift vs sliding-window at moderate pressure.
+  if (contextManager.shouldCompact()) {
+    const tiered = contextManager.tieredCompact(toolDefinitions);
+    if (tiered.changed) {
+      cumulativeOld = tiered.oldCount;
+      cumulativeNew = tiered.newCount;
+      phaseReached = tiered.phase;
+      contextManager.setLastCompactionPhase(tiered.phase);
+    }
+  }
+
+  // Phase 4 (emergency): the LLM-summary path. Only if the tiered cuts
+  // didn't free enough — typically because the remaining tool_call
+  // skeletons + recent boundaries still exceed the budget. The summary
+  // call is the existing model-assisted compaction; the framework
+  // calls this an anti-pattern (next-steps.md §38) for normal use,
+  // but as a last-resort it's better than the request 500ing.
   if (contextManager.shouldCompact()) {
     yield { type: 'compaction-start', aggressive: false };
     const fingerprints = fileCache?.fingerprints();
@@ -87,8 +108,10 @@ export async function* maybeCompact(
       ...(precomputedSummary !== undefined ? { precomputedSummary } : {}),
     });
     if (result) {
-      cumulativeOld = result.oldCount;
+      cumulativeOld ??= result.oldCount;
       cumulativeNew = result.newCount;
+      phaseReached = 4;
+      contextManager.setLastCompactionPhase(0); // tiered phase is per-pass; 0 = summary path took over
     }
   }
 
@@ -105,6 +128,7 @@ export async function* maybeCompact(
     if (result) {
       cumulativeOld ??= result.oldCount;
       cumulativeNew = result.newCount;
+      phaseReached = 4;
       lastAggressive = true;
     }
   }
@@ -116,12 +140,14 @@ export async function* maybeCompact(
       oldMessages: cumulativeOld,
       newMessages: cumulativeNew,
       aggressive: lastAggressive,
+      phase: phaseReached,
     };
   }
 
   const compacted = cumulativeOld !== null && cumulativeNew !== null;
   return { halt: contextManager.getUsagePercent() > HARD_CEILING, compacted };
 }
+
 
 /**
  * Run the PreCompact hook (if enabled). The hook receives `{ aggressive }`

@@ -11,6 +11,7 @@ import type {
   ModelInfo,
 } from './types.js';
 import { errorCode, errorMessage, isError, makeAbortError } from '../utils/errors.js';
+import { resolveSampling } from './shared.js';
 
 export class OllamaProvider implements Provider {
   name = 'ollama';
@@ -90,7 +91,17 @@ export class OllamaProvider implements Provider {
    *  instead of the hardcoded estimate. Best-effort: failures (server down,
    *  model not pulled) leave the cache empty and `getCapabilities` falls
    *  through to `estimateContextWindow`. Mirrors the listModels priming
-   *  step in swap.ts. */
+   *  step in swap.ts.
+   *
+   *  Note: this supersedes the reliability stack's `discoverContextWindow`
+   *  for Ollama. Both probe `/api/show` and parse the same
+   *  `<arch>.context_length` key out of `model_info`; we keep a single
+   *  cache (`contextWindowCache`) and a single priming entry point so
+   *  callers don't duplicate the round-trip. The `Provider.discoverContextWindow`
+   *  interface (docs/reliability/next-steps.md §11) is still implemented
+   *  by `LlamaCppProvider` for the `/props` lookup; Ollama doesn't
+   *  implement it since `primeModelCache` already populates the cache
+   *  that `getCapabilities` reads. */
   async primeModelCache(model: string): Promise<void> {
     try {
       await this.getModelInfo(model);
@@ -128,6 +139,7 @@ export class OllamaProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
+    const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
     const request: ChatRequest & { stream: true } = {
       model,
       messages: messages as Message[],
@@ -136,8 +148,25 @@ export class OllamaProvider implements Provider {
       // num_predict caps output length so degenerate repetition loops can't
       // run forever. Ollama's default is -1 (no limit).
       options: {
+        // Use the cached real context window (populated by primeModelCache)
+        // instead of the hardcoded estimate — sending a num_ctx larger than
+        // the model's configured context overflows ollama server-side.
         num_ctx: this.resolveContextWindow(model),
         num_predict: options?.maxTokens ?? 4096,
+        // Reliability-stack sampling: per-call overrides + per-model
+        // defaults table. Each Ollama option key has a snake_case
+        // analog of the shared ResolvedSampling fields.
+        ...(samplingOpts.temperature !== undefined ? { temperature: samplingOpts.temperature } : {}),
+        ...(samplingOpts.top_p !== undefined ? { top_p: samplingOpts.top_p } : {}),
+        ...(samplingOpts.top_k !== undefined ? { top_k: samplingOpts.top_k } : {}),
+        ...(samplingOpts.min_p !== undefined ? { min_p: samplingOpts.min_p } : {}),
+        ...(samplingOpts.repeat_penalty !== undefined
+          ? { repeat_penalty: samplingOpts.repeat_penalty }
+          : {}),
+        ...(samplingOpts.presence_penalty !== undefined
+          ? { presence_penalty: samplingOpts.presence_penalty }
+          : {}),
+        ...(samplingOpts.seed !== undefined ? { seed: samplingOpts.seed } : {}),
       },
     };
 
@@ -209,6 +238,7 @@ export class OllamaProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
+    const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
     const request: ChatRequest & { stream: false } = {
       model,
       messages: messages as Message[],
@@ -217,6 +247,17 @@ export class OllamaProvider implements Provider {
       options: {
         num_ctx: this.resolveContextWindow(model),
         num_predict: options?.maxTokens ?? 4096,
+        ...(samplingOpts.temperature !== undefined ? { temperature: samplingOpts.temperature } : {}),
+        ...(samplingOpts.top_p !== undefined ? { top_p: samplingOpts.top_p } : {}),
+        ...(samplingOpts.top_k !== undefined ? { top_k: samplingOpts.top_k } : {}),
+        ...(samplingOpts.min_p !== undefined ? { min_p: samplingOpts.min_p } : {}),
+        ...(samplingOpts.repeat_penalty !== undefined
+          ? { repeat_penalty: samplingOpts.repeat_penalty }
+          : {}),
+        ...(samplingOpts.presence_penalty !== undefined
+          ? { presence_penalty: samplingOpts.presence_penalty }
+          : {}),
+        ...(samplingOpts.seed !== undefined ? { seed: samplingOpts.seed } : {}),
       },
     };
 

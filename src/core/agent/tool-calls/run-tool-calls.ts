@@ -223,9 +223,31 @@ function applyResultToRecovery(
     recovery.lastFailureMessage = null;
     recovery.lastFailureSignature = null;
     recovery.consecutiveSameFailures = 0;
+    // Clean batch (this call succeeded) — reset the hard-error counter
+    // so a transient throw earlier in the run doesn't bleed into the
+    // next batch's bailout decision (next-steps.md §9, "Counters reset
+    // on any fully clean batch").
+    recovery.consecutiveHardToolErrors = 0;
+    recovery.lastHardToolName = null;
+    recovery.lastHardToolMessage = null;
   } else {
     recovery.lastFailureMessage = `${event.toolName}: ${event.result.output}`;
     recovery.lastFailureSignature = callSignature;
+    // Phase 6: only bump the hard-error counter for *hard* failures.
+    // The executor sets `hardError: true` when the tool's callable
+    // threw an exception (the 5xx case). Tools that fail gracefully
+    // by returning `{ success: false }` (Read on missing file, Edit
+    // on non-matching string, etc.) stay on the soft path — the
+    // recovery comes via the LLM corrector / format-retry budget,
+    // not the hard-error bailout. The reliability spec explicitly
+    // wants this: `max_tool_errors=2` should catch real bugs while
+    // letting the model retry 8+ wrong-key lookups within the
+    // iteration budget.
+    if (event.result.hardError) {
+      recovery.consecutiveHardToolErrors++;
+      recovery.lastHardToolName = event.toolName;
+      recovery.lastHardToolMessage = event.result.output;
+    }
   }
 }
 

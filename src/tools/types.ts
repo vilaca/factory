@@ -35,6 +35,24 @@ export interface ToolResult {
    * char file slice. The agent loop checks this flag and skips the corrector
    * when true. */
   skipCorrector?: boolean;
+  /** Set when the tool's callable threw `ToolResolutionError` — the
+   *  reliability-stack analogue of an HTTP 404: valid request, no
+   *  matching data. The agent loop reads this to *suppress* the
+   *  consecutive-hard-error counter for this call: ToolResolutionError
+   *  doesn't count toward `maxHardToolErrors`. Always paired with
+   *  `success: false` and `skipCorrector: true` (the model already
+   *  has the resolution message; the LLM corrector would just burn a
+   *  call). See `src/tools/errors.ts`. */
+  softError?: boolean;
+  /** Set when the tool's callable threw an unexpected exception (a
+   *  non-`ToolResolutionError`). Distinguishes "the tool threw" from
+   *  "the tool returned `{ success: false }` gracefully." Only the
+   *  former bumps the consecutive-hard-error counter
+   *  (next-steps.md §9, "5xx-equivalent"). Existing tools that fail
+   *  by returning `{ success: false, output: 'No such file' }` —
+   *  Read, Edit, Bash exit codes, etc. — stay on the soft path and
+   *  recover via the LLM corrector / format-retry path. */
+  hardError?: boolean;
 }
 
 /** Per-call context that an agent loop passes when executing a tool.

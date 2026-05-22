@@ -49,6 +49,34 @@ export type AgentEvent =
       source: 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag';
     }
   | { type: 'tool-result-imitation-stripped'; count: number }
+  /** The model called the synthetic Respond tool as its terminal action.
+   *  The agent loop short-circuits — yields the message as `text-done`,
+   *  records a plain assistant message in history, and completes the
+   *  turn. This event tells observability that what looks like a normal
+   *  `text-done` was actually structured through the Respond pathway
+   *  (the small-model reliability trick: keep the model in tool-calling
+   *  grammar at all times, never let it choose between "emit text" and
+   *  "call a tool"). */
+  | { type: 'respond-stripped'; message: string }
+  /** Mid-conversation context-pressure signal (Phase 7). Emitted once
+   *  per threshold per pressure cycle when usage crosses a configured
+   *  fraction of the budget. The agent loop also injects the same
+   *  warning text as a transient `user` message into the outbound API
+   *  payload — UIs use this event to surface the warning to the human
+   *  alongside the model. */
+  | { type: 'context-warning'; thresholdPct: number; tokens: number; warning: string }
+  /** Phase 5/14: step enforcer flagged a premature-terminal attempt
+   *  and injected a tier-escalating nudge into history. Distinct
+   *  from the generic `auto-retry-injected` so observability can
+   *  count tier-3 events separately (alertable signal). */
+  | { type: 'step-nudge'; tier: 1 | 2 | 3; attemptedTool: string; pending: readonly string[] }
+  /** Phase 5/14: step enforcer flagged a missing prereq and
+   *  injected a corrective nudge into history. */
+  | { type: 'prerequisite-nudge'; tool: string; missing: readonly string[] }
+  /** Phase 5/14: a tool the StepEnforcer recognizes as a required
+   *  step just completed. Useful for "workflow progressing"
+   *  visualisations. */
+  | { type: 'step-completed'; tool: string }
   | { type: 'auto-retry-injected'; remainingBudget: number; reason: string }
   | { type: 'auto-retry-exhausted' }
   | { type: 'all-denied-halt'; count: number }
@@ -67,7 +95,23 @@ export type AgentEvent =
       respond: (decision: PermissionDecision) => void;
     }
   | { type: 'compaction-start'; aggressive: boolean }
-  | { type: 'compaction'; oldMessages: number; newMessages: number; aggressive: boolean }
+  /** Final compaction outcome for this turn. `aggressive` is kept for
+   *  back-compat with existing TUI surfaces (true iff the LLM-summary
+   *  emergency path tightened the recency window). `phase` is the
+   *  reliability-stack escalation level actually reached:
+   *    0 = no compaction performed (no event would fire)
+   *    1 = nudges dropped + tool_results truncated (deterministic)
+   *    2 = + tool_results dropped (deterministic)
+   *    3 = + reasoning/text_response dropped (deterministic, last resort)
+   *    4 = LLM-summary emergency fallback ran
+   *  Phases 1–3 don't call the model; only phase 4 does. */
+  | {
+      type: 'compaction';
+      oldMessages: number;
+      newMessages: number;
+      aggressive: boolean;
+      phase: 0 | 1 | 2 | 3 | 4;
+    }
   | { type: 'bash-dedup-nudge'; recentCommands: string[] }
   | { type: 'hook-veto'; event: string; toolName: string; errorMessage?: string }
   | { type: 'hook-error'; event: string; error: string }
@@ -173,6 +217,19 @@ export interface AgentOptions {
   /** Resolved hook config; absent or empty when no hooks are configured.
    *  Read from `config.agent.hooks` at session start. */
   hooksConfig?: HooksConfig;
+  /** Reliability-stack step enforcement (Phase 5). When `requiredSteps`
+   *  is non-empty, the agent loop installs a StepEnforcer that blocks
+   *  premature terminal calls with a 3-tier escalating nudge and
+   *  enforces declared `prerequisites` on registered tools. Default
+   *  `[]` keeps the feature dormant for the general TUI / headless
+   *  path; opted in by scripted callers (skills, future workflows) that
+   *  know the canonical ordering. */
+  requiredSteps?: readonly string[];
+  /** Reliability-stack terminal tool names. When the model attempts
+   *  one of these and not every `requiredSteps` entry has executed,
+   *  the enforcer emits a step nudge. Default `[]` (no terminals → no
+   *  premature-terminal check fires). */
+  terminalTools?: readonly string[];
 }
 
 export interface RotationOptions {

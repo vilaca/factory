@@ -10,7 +10,7 @@ import type {
   ModelPickerInfo,
   ChatOptions,
 } from './types.js';
-import { formatTokenCount, parseToolArgs } from './shared.js';
+import { formatTokenCount, parseToolArgs, resolveSampling } from './shared.js';
 
 type StreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
 type NonStreamingParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
@@ -102,6 +102,7 @@ export class AnthropicProvider implements Provider {
   ): AsyncGenerator<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
 
+    const sampling = resolveSampling(options, { model, providerName: 'anthropic' });
     const params: StreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? 8192,
@@ -110,6 +111,17 @@ export class AnthropicProvider implements Provider {
       ...(system !== null ? { system } : {}),
       ...(tools && tools.length > 0
         ? { tools: buildAnthropicTools(tools, options?.cacheTools) }
+        : {}),
+      // Anthropic supports temperature / top_p / top_k. Other sampling
+      // fields (min_p, repeat_penalty, presence_penalty) are silently
+      // dropped — they aren't part of the messages.create contract.
+      ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}),
+      ...(sampling.top_p !== undefined ? { top_p: sampling.top_p } : {}),
+      ...(sampling.top_k !== undefined ? { top_k: sampling.top_k } : {}),
+      // Phase 13: force-tool-call knob. Reliability spec Table I shows
+      // ~45-point lift on Haiku in bare mode from this alone.
+      ...(options?.forceToolCall && tools && tools.length > 0
+        ? { tool_choice: { type: 'any' as const } }
         : {}),
     };
 
@@ -161,6 +173,7 @@ export class AnthropicProvider implements Provider {
   ): Promise<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
 
+    const sampling = resolveSampling(options, { model, providerName: 'anthropic' });
     const params: NonStreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? 8192,
@@ -168,6 +181,12 @@ export class AnthropicProvider implements Provider {
       ...(system !== null ? { system } : {}),
       ...(tools && tools.length > 0
         ? { tools: buildAnthropicTools(tools, options?.cacheTools) }
+        : {}),
+      ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}),
+      ...(sampling.top_p !== undefined ? { top_p: sampling.top_p } : {}),
+      ...(sampling.top_k !== undefined ? { top_k: sampling.top_k } : {}),
+      ...(options?.forceToolCall && tools && tools.length > 0
+        ? { tool_choice: { type: 'any' as const } }
         : {}),
     };
 
@@ -256,6 +275,16 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
   let systemContent: string | null = null;
   let systemCacheBoundary = false;
   const msgs: MessageParam[] = [];
+  // Reliability stack (Phase 13): Anthropic rejects messages where
+  // any `tool_use` block from a preceding assistant turn doesn't have
+  // a matching `tool_result` before the next user message. This
+  // happens naturally when the framework emits a step or prereq
+  // nudge (`next-steps.md` §16): the assistant produced a `tool_use`
+  // that the framework refused to execute, then injected a corrective
+  // user message. We thread a `pendingToolUseIds` set through the
+  // walk and synthesize an `is_error: true` `tool_result` block for
+  // any leftover IDs at the next user-message boundary.
+  const pendingToolUseIds: string[] = [];
 
   for (const msg of messages) {
     if (msg.role === 'system') {
@@ -266,13 +295,11 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       if (msg.content) {
         content.push({ type: 'text', text: msg.content });
       }
+      const ids: string[] = [];
       for (const tc of msg.tool_calls) {
-        content.push({
-          type: 'tool_use',
-          id: tc.id ?? `toolu_${Math.random().toString(36).slice(2, 14)}`,
-          name: tc.function.name,
-          input: tc.function.arguments,
-        });
+        const id = tc.id ?? `toolu_${Math.random().toString(36).slice(2, 14)}`;
+        content.push({ type: 'tool_use', id, name: tc.function.name, input: tc.function.arguments });
+        ids.push(id);
       }
       if (msg.cacheBoundary && content.length > 0) {
         content[content.length - 1] = {
@@ -281,6 +308,7 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
         } as ContentBlockParam;
       }
       msgs.push({ role: 'assistant', content });
+      pendingToolUseIds.push(...ids);
     } else if (msg.role === 'tool') {
       // Bare 'unknown' used to be a silent fallback here, which let upstream
       // bugs (corrector running a substitute call without forwarding the
@@ -313,7 +341,25 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       } else {
         msgs.push({ role: 'user', content: [block] });
       }
+      // Mark this tool_use as resolved.
+      const idx = pendingToolUseIds.indexOf(msg.tool_call_id);
+      if (idx >= 0) pendingToolUseIds.splice(idx, 1);
     } else {
+      // Plain user / plain assistant text. Before pushing this user
+      // message, flush any pending tool_use IDs as synthetic
+      // is_error blocks — Anthropic rejects unpaired tool_use, and
+      // the framework's step/prereq nudge path produces exactly
+      // that shape (assistant proposed a call we refused to run).
+      if (msg.role === 'user' && pendingToolUseIds.length > 0) {
+        const errBlocks: ToolResultBlockParam[] = pendingToolUseIds.map(id => ({
+          type: 'tool_result',
+          tool_use_id: id,
+          content: 'Not executed.',
+          is_error: true,
+        }));
+        msgs.push({ role: 'user', content: errBlocks });
+        pendingToolUseIds.length = 0;
+      }
       // Plain user / plain assistant text. Convert to block array form when
       // we need to attach cache_control; pass through as a string otherwise
       // so existing snapshots / wire formats stay unchanged.

@@ -12,6 +12,7 @@ import {
   estimateToolDefinitionsTokens,
 } from '../../utils/tokens.js';
 import { isError } from '../../utils/errors.js';
+import { runTieredCompact, type CompactionPhase } from './tiered-compact.js';
 
 /** Caller-provided async hook that resolves the (provider, model) used
  *  for the summarization call inside compaction. Returning `null` means
@@ -33,6 +34,14 @@ interface ContextConfig {
   /** Tool results from turns older than this are eligible for aging via
    * `ageOldToolResults`. Default 6. */
   toolResultAgingTurns: number;
+  /** Mid-conversation pressure-signal thresholds. Each value is a
+   *  fraction of `contextWindow`; when crossed, `checkThresholds()`
+   *  returns a warning string that the agent loop injects into the
+   *  outbound API payload only — never persisted. Each threshold
+   *  fires *at most once per session* (tracked in `_firedThresholds`).
+   *  If usage drops below a threshold after compaction, that
+   *  threshold becomes re-fireable. Default `[0.65, 0.80]`. */
+  contextThresholds: readonly number[];
 }
 
 const DEFAULT_CONFIG: ContextConfig = {
@@ -40,6 +49,7 @@ const DEFAULT_CONFIG: ContextConfig = {
   recencyWindow: 6,
   recencyTokens: 4000,
   toolResultAgingTurns: 6,
+  contextThresholds: [0.65, 0.8],
 };
 
 // Aggressive mode used to drop the recency window entirely. That nuked the
@@ -102,8 +112,16 @@ export class ContextManager {
       recencyWindow: config?.recencyWindow ?? DEFAULT_CONFIG.recencyWindow,
       recencyTokens: config?.recencyTokens ?? DEFAULT_CONFIG.recencyTokens,
       toolResultAgingTurns: config?.toolResultAgingTurns ?? DEFAULT_CONFIG.toolResultAgingTurns,
+      contextThresholds: config?.contextThresholds ?? DEFAULT_CONFIG.contextThresholds,
     };
   }
+
+  /** Per-session record of which thresholds have already fired. The
+   *  reliability spec wants at-most-once-per-threshold to avoid
+   *  hammering the model with the same warning every turn. Cleared
+   *  in-place when usage drops below a threshold so the threshold
+   *  becomes re-fireable on the next pressure cycle. */
+  private firedThresholds = new Set<number>();
 
   /** Store prompt-token count from the last model response (floors heuristic). */
   recordPromptUsage(usage: TokenUsage | undefined): void {
@@ -130,6 +148,13 @@ export class ContextManager {
     const toolsTokens = estimateToolDefinitionsTokens(toolDefinitions);
     const heuristic = messagesTokens + toolsTokens;
     this.tokenEstimate = Math.max(heuristic, this.lastPromptTokensFromApi);
+    // Re-arm threshold latches whose fraction is now above current
+    // usage — necessary so a drop (e.g. after compaction) clears the
+    // latch even if `checkThresholds` isn't called at the low point.
+    const pct = this.getUsagePercent();
+    for (const t of [...this.firedThresholds]) {
+      if (pct < t) this.firedThresholds.delete(t);
+    }
   }
 
   /** @deprecated Prefer {@link refreshEstimate} with explicit tool
@@ -179,6 +204,54 @@ export class ContextManager {
     this.compactionCancelledThisTurn = false;
   }
 
+  /**
+   * Reliability stack (Phase 7): mid-conversation context-pressure
+   * warning. Returns the first not-yet-fired threshold's message
+   * when current usage is above that threshold; null when nothing to
+   * say. The caller injects the returned string as a transient
+   * `{ role: 'user', content: <warning> }` into the outbound API
+   * payload only — it must NOT call `conversation.addUser`.
+   *
+   * The template wording matches the reliability spec (§11): polite
+   * "context filling up" at 65%, terser "context nearly full" at
+   * 80%. Wording escalates so the model treats them as distinct
+   * pressure stages.
+   *
+   * `role` is `"user"` rather than `"system"` because the spec
+   * documents that Jinja chat templates on llama-server reject
+   * mid-conversation system messages — using `"user"` keeps the wire
+   * format valid across every backend.
+   *
+   * Threshold-firing has a one-shot latch per threshold. When usage
+   * drops back below a threshold (e.g. after compaction), the latch
+   * clears so the threshold becomes re-fireable on the next pressure
+   * cycle.
+   */
+  checkThresholds(): string | null {
+    const pct = this.getUsagePercent();
+    // Clear fired latches that are no longer above their threshold
+    // — usage dropped (likely from compaction); re-arm.
+    for (const t of [...this.firedThresholds]) {
+      if (pct < t) this.firedThresholds.delete(t);
+    }
+    // Walk highest-first so an 80% crossing wins over a 65% crossing
+    // when both are above. Skip ones already fired.
+    const sorted = [...this.config.contextThresholds].sort((a, b) => b - a);
+    for (const t of sorted) {
+      if (pct >= t && !this.firedThresholds.has(t)) {
+        this.firedThresholds.add(t);
+        return defaultWarningTemplate(t);
+      }
+    }
+    return null;
+  }
+
+  /** Test-only — clear the fired-threshold set so each test starts
+   *  clean. Production callers shouldn't need this. */
+  _resetThresholdsForTests(): void {
+    this.firedThresholds.clear();
+  }
+
   /** Age tool results from turns older than the configured threshold. Runs
    *  before compaction in the agent's pre-flight pass — cheaper than full
    *  compaction and cache-friendly because only old messages mutate, so
@@ -190,6 +263,71 @@ export class ContextManager {
       this.refreshEstimate(toolDefinitions);
     }
     return aged;
+  }
+
+  /**
+   * Run the tiered (deterministic) compaction strategy in place. Escalates
+   * through phases 1–3 until usage drops below the soft threshold (or
+   * Phase 3 has run and there is nothing more to cut). Skips the LLM
+   * summary call entirely; that path stays as the Phase 4 emergency
+   * fallback (`compact()`).
+   *
+   * Returns the phase that fired and the message-count delta. Phase 0
+   * means nothing changed (already under budget or nothing eligible);
+   * callers should treat that as "no event to emit."
+   */
+  tieredCompact(
+    toolDefinitions: ToolDefinition[],
+  ): { phase: 0 | 1 | 2 | 3; oldCount: number; newCount: number; changed: boolean } {
+    const stored = this.conversation.getStoredMessages();
+    const oldCount = stored.length;
+    const result = runTieredCompact({
+      messages: stored,
+      estimateFraction: msgs => this.estimateFractionFor(msgs, toolDefinitions),
+      stopBelow: this.config.compactionThreshold,
+    });
+    if (result.changed) {
+      this.conversation.replaceStoredMessages(result.messages);
+      this.lastPromptTokensFromApi = 0;
+      this.refreshEstimate(toolDefinitions);
+    }
+    return {
+      phase: result.phase,
+      oldCount,
+      newCount: result.messages.length,
+      changed: result.changed,
+    };
+  }
+
+  /** Token fraction (vs context window) the supplied message slice would
+   *  consume on the wire, including the tool-schema overhead. Used by
+   *  the tiered compaction loop to decide whether to escalate.
+   *
+   *  We intentionally pre-pend a system-shaped placeholder for parity
+   *  with the real wire layout — the system prompt's tokens aren't in
+   *  `stored`, but they ride on every request and matter for the
+   *  budgeting decision. */
+  private estimateFractionFor(messages: ChatMessage[], toolDefinitions: ToolDefinition[]): number {
+    if (this.contextWindow === 0) return 0;
+    const systemTokens = estimateSingleMessageTokens({
+      role: 'system',
+      content: this.conversation.getSystemPrompt(),
+    });
+    const bodyTokens = estimateMessagesTokens(messages);
+    const toolsTokens = estimateToolDefinitionsTokens(toolDefinitions);
+    return (systemTokens + bodyTokens + toolsTokens) / this.contextWindow;
+  }
+
+  /** Surface the latest phase value to consumers (currently the agent
+   *  loop's `compaction-phase` event). Returned from `tieredCompact()`
+   *  but also exposed via `getLastCompactionPhase()` so observability
+   *  surfaces that don't see the return value can still pick it up. */
+  private lastPhase: CompactionPhase = 0;
+  setLastCompactionPhase(phase: CompactionPhase): void {
+    this.lastPhase = phase;
+  }
+  getLastCompactionPhase(): CompactionPhase {
+    return this.lastPhase;
   }
 
   async compact(
@@ -440,4 +578,19 @@ function findLatestAssistantContent(messages: SummaryMessage[]): string | null {
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return `${s.slice(0, max)} …`;
+}
+
+/** Threshold-warning text. Wording escalates with the threshold: the
+ *  65% message is a gentle "we're filling up, be concise"; the 80%
+ *  message is more directive ("summarize critical findings now").
+ *  Verbatim from the reliability spec (§11). Falls back to a generic
+ *  message for any non-standard threshold consumers configure. */
+function defaultWarningTemplate(threshold: number): string {
+  if (threshold >= 0.8) {
+    return 'Context is nearly full. Older tool results and reasoning will be compacted soon — key information may be lost. Summarize critical findings now and prioritize completing the current task.';
+  }
+  if (threshold >= 0.65) {
+    return 'Context is filling up. When compaction triggers, older tool results and reasoning will be condensed. Be concise in your responses and front-load important information.';
+  }
+  return `Context usage has crossed ${Math.round(threshold * 100)}%. Be concise.`;
 }
