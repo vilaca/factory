@@ -76,11 +76,15 @@ export function makeCompactionResolver(refs: {
         }
       }
       provider = createProvider(target.providerName, createOpts);
-    } catch {
+    } catch (err) {
       // No auth / unknown provider — fall back to the primary instance.
       // The compaction call may still fail and trip the mechanical
       // summary path; that's a strictly better outcome than throwing
       // out of compact().
+      r.sessionLogger?.logWarning(
+        'compaction-resolver',
+        `${target.providerName}:${target.model} — ${err instanceof Error ? err.message : String(err)}`,
+      );
       return { provider: r.provider, model: r.model };
     }
     return { provider, model: target.model };

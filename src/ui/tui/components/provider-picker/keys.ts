@@ -34,6 +34,7 @@ interface UseProviderPickerKeysArgs {
   startsAtModel: boolean;
   onCommit: (provider: string, model: string, keyId?: string) => void;
   onCancel: () => void;
+  onError?: (source: string, message: string) => void;
 }
 
 /**
@@ -71,7 +72,12 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
     startsAtModel,
     onCommit,
     onCancel,
+    onError,
   } = args;
+
+  function reportError(source: string, message: string): void {
+    if (onError) onError(source, message);
+  }
 
   function isMultiKey(name: string): boolean {
     // Fallback-picker mode never enters the key stage — rotation entries
@@ -90,6 +96,7 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
       const raw = await loadModels(name, keyId);
       const models = prepareModels(raw, getModelInfo ? m => getModelInfo(name, m) : undefined);
       if (models.length === 0) {
+        reportError(`picker:loadModels:${name}`, 'no models returned');
         setStage({ kind: 'error', provider: name, message: 'no models returned' });
         return;
       }
@@ -97,7 +104,9 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
       setModelIndex(idx);
       setStage({ kind: 'model', provider: name, models, ...(keyId ? { keyId } : {}) });
     } catch (err) {
-      setStage({ kind: 'error', provider: name, message: errorMessage(err) });
+      const msg = errorMessage(err);
+      reportError(`picker:loadModels:${name}`, msg);
+      setStage({ kind: 'error', provider: name, message: msg });
     }
   }
 
@@ -122,7 +131,9 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
         setStage({ kind: 'key', provider: name, keys, selectedIdx: idx });
         return;
       } catch (err) {
-        setStage({ kind: 'error', provider: name, message: errorMessage(err) });
+        const msg = errorMessage(err);
+        reportError(`picker:loadKeys:${name}`, msg);
+        setStage({ kind: 'error', provider: name, message: msg });
         return;
       }
     }
