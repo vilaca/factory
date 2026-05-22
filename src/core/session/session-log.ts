@@ -33,6 +33,11 @@ export interface SessionLogger {
   logModelChange(from: string, to: string, keyId?: string, providerAfter?: string): void;
   logSystemPrompt(prompt: string): void;
   logSystemPromptChange(reason: string): void;
+  /** Capture every outgoing LLM call (chat + chatNoStream + tool-corrector +
+   *  compaction). `source` identifies which caller produced it
+   *  (`main` / `compaction` / `corrector` / `subagent` etc.). Messages are
+   *  logged verbatim so the JSONL can replay exactly what the model saw. */
+  logModelRequest(meta: ModelRequestMeta): void;
   logPermissionChange(action: string, toolName?: string): void;
   logStuckPattern(consecutiveCount: number): void;
   logWarning(source: string, message: string): void;
@@ -69,6 +74,23 @@ interface ProviderAuthMeta {
   action: string;
   outcome: 'started' | 'success' | 'error' | 'skipped';
   detail?: string;
+}
+
+export interface ModelRequestMeta {
+  provider: string;
+  model: string;
+  /** Which caller issued the request. */
+  source: 'main' | 'compaction' | 'corrector' | 'subagent';
+  /** Streaming (`chat`) vs. one-shot (`chatNoStream`). */
+  streaming: boolean;
+  /** Full outgoing message list — system prompt, user turns, tool results,
+   *  assistant turns — exactly as handed to the provider. */
+  messages: unknown[];
+  /** Tool definitions sent alongside, if any. */
+  tools?: unknown[];
+  /** Whitelisted ChatOptions fields useful for replay (temperature, maxTokens,
+   *  responsesChain, …). The shape is provider-shared so we widen to `unknown`. */
+  options?: Record<string, unknown>;
 }
 
 const STARTUP_MODEL_PLACEHOLDER = '<startup>';
@@ -154,6 +176,9 @@ export function createSessionLogger(opts?: SessionLoggerOpts): SessionLogger {
     },
     logSystemPrompt(prompt) {
       write({ type: 'system-prompt', content: prompt });
+    },
+    logModelRequest(meta) {
+      write({ type: 'model-request', ...meta });
     },
     logSystemPromptChange(reason) {
       write({ type: 'system-prompt-change', reason });
