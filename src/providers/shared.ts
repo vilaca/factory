@@ -50,6 +50,35 @@ export interface ResolvedSampling {
   seed?: number;
 }
 
+/** Camel-cased ChatOptions key → snake_case wire key. Single source of
+ *  truth so resolveSampling stays a thin merge over a data table
+ *  instead of a long ladder of conditional assigns. */
+const SAMPLING_FIELD_MAP: ReadonlyArray<[keyof ChatOptions, keyof ResolvedSampling]> = [
+  ['temperature', 'temperature'],
+  ['topP', 'top_p'],
+  ['topK', 'top_k'],
+  ['minP', 'min_p'],
+  ['repeatPenalty', 'repeat_penalty'],
+  ['presencePenalty', 'presence_penalty'],
+  ['seed', 'seed'],
+];
+
+function mergeDefaults(out: ResolvedSampling, defaults: ReturnType<typeof getSamplingDefaults>): void {
+  if (defaults.temperature !== undefined) out.temperature = defaults.temperature;
+  if (defaults.topP !== undefined) out.top_p = defaults.topP;
+  if (defaults.topK !== undefined) out.top_k = defaults.topK;
+  if (defaults.minP !== undefined) out.min_p = defaults.minP;
+  if (defaults.repeatPenalty !== undefined) out.repeat_penalty = defaults.repeatPenalty;
+  if (defaults.presencePenalty !== undefined) out.presence_penalty = defaults.presencePenalty;
+}
+
+function mergeOverrides(out: ResolvedSampling, opts: ChatOptions): void {
+  for (const [src, dst] of SAMPLING_FIELD_MAP) {
+    const v = opts[src];
+    if (typeof v === 'number') (out as Record<string, number>)[dst] = v;
+  }
+}
+
 export function resolveSampling(
   opts: ChatOptions | undefined,
   ctx: { model: string; providerName?: string; instanceDefaults?: ResolvedSampling } = {
@@ -57,28 +86,17 @@ export function resolveSampling(
   },
 ): ResolvedSampling {
   const out: ResolvedSampling = { ...(ctx.instanceDefaults ?? {}) };
-
   const hasEntry = Object.keys(getSamplingDefaults(ctx.model)).length > 0;
   if (opts?.recommendedSampling || hasEntry) {
-    const defaults = applySamplingDefaults(ctx.model, {
-      strict: false,
-      ...(ctx.providerName ? { providerName: ctx.providerName } : {}),
-    });
-    if (defaults.temperature !== undefined) out.temperature = defaults.temperature;
-    if (defaults.topP !== undefined) out.top_p = defaults.topP;
-    if (defaults.topK !== undefined) out.top_k = defaults.topK;
-    if (defaults.minP !== undefined) out.min_p = defaults.minP;
-    if (defaults.repeatPenalty !== undefined) out.repeat_penalty = defaults.repeatPenalty;
-    if (defaults.presencePenalty !== undefined) out.presence_penalty = defaults.presencePenalty;
+    mergeDefaults(
+      out,
+      applySamplingDefaults(ctx.model, {
+        strict: false,
+        ...(ctx.providerName ? { providerName: ctx.providerName } : {}),
+      }),
+    );
   }
-
-  if (opts?.temperature !== undefined) out.temperature = opts.temperature;
-  if (opts?.topP !== undefined) out.top_p = opts.topP;
-  if (opts?.topK !== undefined) out.top_k = opts.topK;
-  if (opts?.minP !== undefined) out.min_p = opts.minP;
-  if (opts?.repeatPenalty !== undefined) out.repeat_penalty = opts.repeatPenalty;
-  if (opts?.presencePenalty !== undefined) out.presence_penalty = opts.presencePenalty;
-  if (opts?.seed !== undefined) out.seed = opts.seed;
+  if (opts) mergeOverrides(out, opts);
   return out;
 }
 

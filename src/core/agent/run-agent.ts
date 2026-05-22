@@ -1,5 +1,9 @@
-import type { ToolCallMessage, TokenUsage } from '../../providers/types.js';
-import type { AgentEvent, AgentOptions } from './types.js';
+import type { ChatMessage, Provider, ToolCallMessage, TokenUsage } from '../../providers/types.js';
+import type { ToolDefinition } from '../../utils/tool-definition.js';
+import type { AgentEvent, AgentOptions, ResponsesChain } from './types.js';
+import type { Conversation } from '../context/conversation.js';
+import type { ContextManager } from '../context/context-manager.js';
+import type { ToolRegistry } from '../../tools/registry.js';
 import { RecoveryState } from './recovery-state.js';
 import { callModel } from './call-model/call-model.js';
 import { parseModelResponse } from './parse-response.js';
@@ -17,11 +21,305 @@ import { StepEnforcementError, PrerequisiteError, ToolExecutionError } from './e
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
 
-function hasAnyPrereqs(defs: import('../../utils/tool-definition.js').ToolDefinition[]): boolean {
+function hasAnyPrereqs(defs: ToolDefinition[]): boolean {
   for (const d of defs) {
     if (d.prerequisites && d.prerequisites.length > 0) return true;
   }
   return false;
+}
+
+/** Persist a Responses-API chain pointer onto the caller's mutable
+ *  ref. The `messageCount` is captured AFTER the assistant message
+ *  was appended so the next call slices off exactly what the server
+ *  has stored. No-op when `responseId` or `chainRef` is missing —
+ *  not every provider speaks the Responses API. */
+function captureChainPointer(
+  chainRef:
+    | { get(): ResponsesChain | undefined; set(value: ResponsesChain | undefined): void }
+    | undefined,
+  responseId: string | undefined,
+  conversation: Conversation,
+  provider: Provider,
+  model: string,
+  activeKeyId: string | undefined,
+): void {
+  if (!responseId || !chainRef) return;
+  chainRef.set({
+    lastResponseId: responseId,
+    messageCount: conversation.getMessages().length,
+    provider: provider.name,
+    model,
+    ...(activeKeyId ? { keyId: activeKeyId } : {}),
+  });
+}
+
+/** Phase 5 clean-batch reset + Phase 14 step-completion emission.
+ *  Called when the batch ran without denials or tool failures: resets
+ *  the step enforcer's per-batch counters and yields one
+ *  `step-completed` event per required-step name that's newly
+ *  satisfied. The `emittedStepCompletions` set tracks which names
+ *  we've already surfaced so a counter reset later in the run doesn't
+ *  re-emit them. */
+async function* settleCleanBatch(
+  stepEnforcer: StepEnforcer,
+  requiredSteps: readonly string[] | undefined,
+  emittedStepCompletions: Set<string>,
+): AsyncGenerator<AgentEvent> {
+  stepEnforcer.resetCounters();
+  const pending = new Set(stepEnforcer.pending());
+  for (const name of requiredSteps ?? []) {
+    if (!pending.has(name) && !emittedStepCompletions.has(name)) {
+      emittedStepCompletions.add(name);
+      yield { type: 'step-completed', tool: name };
+    }
+  }
+}
+
+/** True when the consecutive-hard-error budget is exhausted AND we
+ *  have a recorded tool name + message to raise with. Both conditions
+ *  matter — a counter trip without a recorded tool would only happen
+ *  on a logic bug, but we tolerate it by falling through. */
+function isHardErrorBudgetExhausted(recovery: RecoveryState): boolean {
+  return (
+    recovery.consecutiveHardToolErrors > recovery.maxHardToolErrors &&
+    recovery.lastHardToolName !== null &&
+    recovery.lastHardToolMessage !== null
+  );
+}
+
+interface RespondShortCircuitInput {
+  toolCalls: ToolCallMessage[];
+  activation: { useRespondTool: boolean };
+  stepEnforcer: StepEnforcer | undefined;
+  terminalTools: readonly string[] | undefined;
+}
+
+/** Returns the Respond message when the batch is a single Respond call
+ *  AND the step enforcer wouldn't gate it; otherwise null. Pure — no
+ *  side effects. The agent loop emits the events and turn-complete; we
+ *  just identify the case. */
+function detectRespondShortCircuit(input: RespondShortCircuitInput): string | null {
+  if (!input.activation.useRespondTool) return null;
+  if (input.toolCalls.length !== 1) return null;
+  const tc = input.toolCalls[0]!;
+  if (tc.function?.name !== TOOL_NAMES.Respond) return null;
+  // Step-enforcement carve-out: when an enforcer is configured AND
+  // requiredSteps haven't completed yet AND Respond is one of the
+  // terminal tools the scripted caller flagged, skip the short-circuit
+  // so the enforcer's premature-terminal check can emit a step nudge.
+  if (
+    input.stepEnforcer &&
+    input.stepEnforcer.getTracker().pending().length > 0 &&
+    (input.terminalTools?.includes(TOOL_NAMES.Respond) ?? false)
+  ) {
+    return null;
+  }
+  return typeof tc.function?.arguments?.message === 'string'
+    ? (tc.function.arguments.message as string)
+    : '';
+}
+
+interface NoToolCallsInput {
+  activation: { useRespondTool: boolean };
+  storedContent: string;
+  fullContent: string;
+  lastUsage: TokenUsage | undefined;
+  recovery: RecoveryState;
+  conversation: Conversation;
+  toolRegistry: ToolRegistry;
+}
+
+/** Handle the "model returned no tool calls" path. Three branches:
+ *    1. weak-tier text-only with budget → retry-nudge injected, return 'retry'
+ *    2. prior tool failure + budget → corrective user message, return 'retry'
+ *    3. natural completion → emit auto-retry-exhausted (if applicable) and
+ *       return 'complete'; caller fires the Stop hook + turn-complete.
+ *
+ *  Also yields the silent-turn warning when the model burned 100+
+ *  completion tokens with no visible content. Extracted from the
+ *  runAgent body to keep the outer generator under the per-function
+ *  line cap. */
+async function* handleNoToolCallsBranch(
+  input: NoToolCallsInput,
+): AsyncGenerator<AgentEvent, 'retry' | 'complete'> {
+  const { activation, storedContent, fullContent, lastUsage, recovery, conversation, toolRegistry } =
+    input;
+  // Reliability path (Phase 4 validator): weak-tier + text-only with
+  // any content → inject a retry-nudge and re-loop.
+  if (activation.useRespondTool && storedContent.trim().length > 0) {
+    const validation = validateResponse([], storedContent, {
+      toolNames: new Set(toolRegistry.getNames()),
+      enforceToolCall: true,
+    });
+    if (validation.needsRetry && validation.nudge && recovery.autoRetryBudget > 0) {
+      recovery.autoRetryBudget--;
+      conversation.addUser(validation.nudge.content, { type: 'retry_nudge' });
+      yield {
+        type: 'auto-retry-injected',
+        remainingBudget: recovery.autoRetryBudget,
+        reason: validation.nudge.kind,
+      };
+      return 'retry';
+    }
+  }
+  // Detect "silent" turns where the model burned tokens producing
+  // nothing — typical of reasoning-block runaway on thinking-mode
+  // models. Without this notice the spinner stops with no output.
+  if (!fullContent && lastUsage && lastUsage.completionTokens >= 100) {
+    yield { type: 'empty-turn-warning', completionTokens: lastUsage.completionTokens };
+  }
+  if (recovery.lastFailureMessage && recovery.autoRetryBudget > 0) {
+    recovery.autoRetryBudget--;
+    conversation.addUser(
+      `Your last tool call failed with: "${recovery.lastFailureMessage}". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.`,
+    );
+    yield {
+      type: 'auto-retry-injected',
+      remainingBudget: recovery.autoRetryBudget,
+      reason: recovery.lastFailureMessage,
+    };
+    return 'retry';
+  }
+  if (recovery.lastFailureMessage) {
+    yield { type: 'auto-retry-exhausted' };
+  }
+  return 'complete';
+}
+
+/** Emit the matching observability event (prereq / step) when the
+ *  StepEnforcer's pre-computed checks fired. Returns which kind fired
+ *  (or null) so the caller knows whether to `continue` the loop. Pure
+ *  side-effect on events — does NOT re-invoke the enforcer (the agent
+ *  loop already did so once to avoid double-counting the per-batch
+ *  violation budget). */
+async function* emitEnforcerObservability(
+  toolCalls: ToolCallMessage[],
+  prereqCheck: { nudge?: { content: string } },
+  stepCheck: { nudge?: { tier: 1 | 2 | 3 } } | null,
+  terminalTools: readonly string[] | undefined,
+  enforcer: StepEnforcer,
+): AsyncGenerator<AgentEvent, 'prereq' | 'step' | null> {
+  if (prereqCheck.nudge) {
+    const offendingCall = toolCalls.find(tc => tc.function?.name !== undefined);
+    yield {
+      type: 'prerequisite-nudge',
+      tool: offendingCall?.function?.name ?? '<unknown>',
+      missing: prereqCheck.nudge.content.match(/first call: ([^.]+)/)?.[1]?.split(', ') ?? [],
+    };
+    return 'prereq';
+  }
+  if (stepCheck?.nudge) {
+    const attemptedTerminal = toolCalls.find(tc => {
+      const n = tc.function?.name;
+      return typeof n === 'string' && terminalTools?.includes(n);
+    });
+    yield {
+      type: 'step-nudge',
+      tier: stepCheck.nudge.tier,
+      attemptedTool: attemptedTerminal?.function?.name ?? '<unknown>',
+      pending: enforcer.pending(),
+    };
+    return 'step';
+  }
+  return null;
+}
+
+/** Pull a usable Responses-API chain pointer off the ref if its
+ *  (provider, model, keyId, messageCount) tuple still matches the
+ *  live call shape. Returns undefined when the pointer is stale or
+ *  absent — caller falls back to a fresh request. Stale pointers are
+ *  silently dropped rather than retried. */
+function resolveChainPointer(
+  chainRef:
+    | { get(): ResponsesChain | undefined; set(value: ResponsesChain | undefined): void }
+    | undefined,
+  providerName: string,
+  model: string,
+  activeKeyId: string | undefined,
+  messagesLen: number,
+): { lastResponseId: string; messageCount: number } | undefined {
+  const candidate = chainRef?.get();
+  if (!candidate) return undefined;
+  if (candidate.provider !== providerName) return undefined;
+  if (candidate.model !== model) return undefined;
+  if (candidate.keyId !== activeKeyId) return undefined;
+  if (candidate.messageCount > messagesLen) return undefined;
+  return {
+    lastResponseId: candidate.lastResponseId,
+    messageCount: candidate.messageCount,
+  };
+}
+
+/** Phase 7 context-warning injection. Returns the message list as-is
+ *  when no warning fires, or appended with a transient user-role
+ *  warning otherwise. The warning is NOT persisted in conversation
+ *  history — it lives only in the outbound payload for this one
+ *  call. */
+async function* maybeInjectContextWarning(
+  messages: ChatMessage[],
+  contextManager: ContextManager | undefined,
+): AsyncGenerator<AgentEvent, ChatMessage[]> {
+  if (!contextManager) return messages;
+  const warning = contextManager.checkThresholds();
+  if (!warning) return messages;
+  yield {
+    type: 'context-warning',
+    thresholdPct: contextManager.getUsagePercent(),
+    tokens: contextManager.getTokenEstimate(),
+    warning,
+  };
+  return [...messages, { role: 'user' as const, content: warning }];
+}
+
+/** UserPromptSubmit fires once per runAgent call, before the user message
+ *  enters the model loop. Return value is informational only — we log
+ *  errors but don't act on `cancel` here (a vetoed user prompt would be
+ *  surprising; users can just press Esc). Extracted from the runAgent
+ *  generator body to keep that function under the per-function line cap. */
+async function* fireUserPromptSubmit(
+  userInput: string,
+  options: AgentOptions,
+  provider: Provider,
+  model: string,
+  conversation: Conversation,
+): AsyncGenerator<AgentEvent> {
+  try {
+    // UserPromptSubmit fires before any tools have run, so cwdRef.current
+    // (if supplied) still equals process.cwd() at this point. Fresh read
+    // anyway to keep the pattern uniform with PreToolUse/PostToolUse,
+    // which DO need it live (Bash `cd` may have updated cwdRef mid-turn).
+    const cwd = options.cwdRef?.current ?? process.cwd();
+    const result = await runHook(
+      'UserPromptSubmit',
+      { userInput, model, provider: provider.name },
+      {
+        cwd,
+        config: options.hooksConfig,
+        envPolicy: options.envPolicy,
+        onStderr: options.onHookStderr,
+      },
+    );
+    for (const e of result.errors) {
+      options.onHookError?.('UserPromptSubmit', e);
+      yield { type: 'hook-error', event: 'UserPromptSubmit', error: e };
+    }
+    for (const hookCommand of result.firedCommands) {
+      yield {
+        type: 'hook-fired',
+        event: 'UserPromptSubmit',
+        hookCommand,
+        ...(result.notice ? { notice: result.notice } : {}),
+      };
+    }
+    // Inject the hook's additionalContext as a follow-up user message so
+    // the model sees it before answering. Distinct from the original user
+    // input so a transcript still shows what the user actually typed.
+    if (result.additionalContext) {
+      conversation.addUser(result.additionalContext);
+    }
+  } catch (err: unknown) {
+    yield { type: 'hook-error', event: 'UserPromptSubmit', error: errorMessage(err) };
+  }
 }
 
 /** Fire the Stop or StopFailure hook before each turn-complete yield. Stop
@@ -127,48 +425,8 @@ export async function* runAgent(
         })
       : undefined;
 
-  // UserPromptSubmit fires once per runAgent call, before the user message is
-  // sent into the model loop. Return value is informational only — we log
-  // errors but don't act on `cancel` here (a vetoed user prompt would be
-  // surprising; users can just press Esc).
   if (hooksEnabled) {
-    try {
-      // UserPromptSubmit fires before any tools have run, so cwdRef.current
-      // (if supplied) still equals process.cwd() at this point. Fresh read
-      // anyway to keep the pattern uniform with PreToolUse/PostToolUse,
-      // which DO need it live (Bash `cd` may have updated cwdRef mid-turn).
-      const cwd = options.cwdRef?.current ?? process.cwd();
-      const result = await runHook(
-        'UserPromptSubmit',
-        { userInput, model, provider: provider.name },
-        {
-          cwd,
-          config: options.hooksConfig,
-          envPolicy: options.envPolicy,
-          onStderr: options.onHookStderr,
-        },
-      );
-      for (const e of result.errors) {
-        options.onHookError?.('UserPromptSubmit', e);
-        yield { type: 'hook-error', event: 'UserPromptSubmit', error: e };
-      }
-      for (const hookCommand of result.firedCommands) {
-        yield {
-          type: 'hook-fired',
-          event: 'UserPromptSubmit',
-          hookCommand,
-          ...(result.notice ? { notice: result.notice } : {}),
-        };
-      }
-      // Inject the hook's additionalContext as a follow-up user message so
-      // the model sees it before answering. Distinct from the original user
-      // input so a transcript still shows what the user actually typed.
-      if (result.additionalContext) {
-        conversation.addUser(result.additionalContext);
-      }
-    } catch (err: unknown) {
-      yield { type: 'hook-error', event: 'UserPromptSubmit', error: errorMessage(err) };
-    }
+    yield* fireUserPromptSubmit(userInput, options, provider, model, conversation);
   }
 
   while (true) {
@@ -240,52 +498,13 @@ export async function* runAgent(
 
     let messages = conversation.getMessages();
     const tools = toolDefinitions;
-
-    // Phase 7: context-pressure warning. Injected as a transient
-    // user-role message into THIS turn's outbound payload only — not
-    // persisted via `conversation.addUser`. Each configured threshold
-    // fires at most once per pressure cycle (the ContextManager
-    // tracks the latch); usage dropping back below the threshold
-    // re-arms it. Also emitted as an event so the TUI can surface
-    // the same warning to the user.
-    if (contextManager) {
-      const warning = contextManager.checkThresholds();
-      if (warning) {
-        const pct = contextManager.getUsagePercent();
-        yield {
-          type: 'context-warning',
-          thresholdPct: pct,
-          tokens: contextManager.getTokenEstimate(),
-          warning,
-        };
-        messages = [
-          ...messages,
-          { role: 'user' as const, content: warning },
-        ];
-      }
-    }
+    messages = yield* maybeInjectContextWarning(messages, contextManager);
 
     let fullContent = '';
     let toolCalls: ToolCallMessage[] = [];
 
-    // Validate the chain pointer against the live (provider, model, keyId)
-    // tuple. A stale pointer left over from an unhandled state change is
-    // silently dropped — we fall back to a fresh request, which costs
-    // input tokens but stays correct.
     const chainRef = options.responsesChainRef;
-    const candidate = chainRef?.get();
-    const activeKeyId = options.rotation?.activeKeyId;
-    const chainForCall =
-      candidate &&
-      candidate.provider === provider.name &&
-      candidate.model === model &&
-      candidate.keyId === activeKeyId &&
-      candidate.messageCount <= messages.length
-        ? {
-            lastResponseId: candidate.lastResponseId,
-            messageCount: candidate.messageCount,
-          }
-        : undefined;
+    const chainForCall = resolveChainPointer(chainRef, provider.name, model, options.rotation?.activeKeyId, messages.length);
 
     try {
       // Phase 13/16: thread the activation's `forceToolCall` into the
@@ -354,49 +573,20 @@ export async function* runAgent(
       const storedContent = parsed.storedContent;
       const recoveredFromText = parsed.recoveredFromText;
 
-      // Synthetic Respond short-circuit. A single Respond call is the
-      // model's structured way of saying "I'm done — here's the text."
-      // We treat it like a natural text-only turn: emit the message as
-      // `text-done`, store it as a plain assistant message (no
-      // tool_calls — keeping it out of history avoids next-turn
-      // confusion about an orphan tool_use), and stop. Mixed batches
-      // (Respond + other tools) fall through to the normal path; the
-      // Respond handler echoes the message and the loop continues so
-      // the other tool calls still execute.
-      //
-      // Step-enforcement carve-out: when a StepEnforcer is configured
-      // AND requiredSteps haven't completed yet, we skip the
-      // short-circuit so the enforcer's premature-terminal check can
-      // emit the 3-tier nudge. Without this carve-out, Respond would
-      // bypass the workflow gate the scripted caller set up.
-      const respondGated =
-        stepEnforcer !== undefined &&
-        stepEnforcer.getTracker().pending().length > 0 &&
-        (options.terminalTools?.includes(TOOL_NAMES.Respond) ?? false);
-      if (
-        activation.useRespondTool &&
-        !respondGated &&
-        toolCalls.length === 1 &&
-        toolCalls[0]!.function?.name === TOOL_NAMES.Respond
-      ) {
-        const respondMessage =
-          typeof toolCalls[0]!.function?.arguments?.message === 'string'
-            ? (toolCalls[0]!.function.arguments.message as string)
-            : '';
+      // Synthetic Respond short-circuit. See detectRespondShortCircuit
+      // for the predicate; when it returns a string the caller emits
+      // the events and turn-completes here.
+      const respondMessage = detectRespondShortCircuit({
+        toolCalls,
+        activation,
+        stepEnforcer,
+        terminalTools: options.terminalTools,
+      });
+      if (respondMessage !== null) {
         yield { type: 'respond-stripped', message: respondMessage };
-        if (respondMessage) {
-          yield { type: 'text-done', fullContent: respondMessage };
-        }
+        if (respondMessage) yield { type: 'text-done', fullContent: respondMessage };
         conversation.addAssistant(respondMessage);
-        if (modelResult.responseId && chainRef) {
-          chainRef.set({
-            lastResponseId: modelResult.responseId,
-            messageCount: conversation.getMessages().length,
-            provider: provider.name,
-            model,
-            ...(options.rotation?.activeKeyId ? { keyId: options.rotation.activeKeyId } : {}),
-          });
-        }
+        captureChainPointer(chainRef, modelResult.responseId, conversation, provider, model, options.rotation?.activeKeyId);
         yield* fireStopHook(options, turnsUsed, 'completed');
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
@@ -432,87 +622,19 @@ export async function* runAgent(
         !useUserResultFraming && toolCalls.length > 0 ? toolCalls : undefined,
       );
 
-      // Capture the chain pointer for the next turn. `messageCount` is
-      // taken AFTER the assistant append so the next call slices off
-      // exactly what the server has already stored.
-      if (modelResult.responseId && chainRef) {
-        chainRef.set({
-          lastResponseId: modelResult.responseId,
-          messageCount: conversation.getMessages().length,
-          provider: provider.name,
-          model,
-          ...(options.rotation?.activeKeyId ? { keyId: options.rotation.activeKeyId } : {}),
-        });
-      }
+      captureChainPointer(chainRef, modelResult.responseId, conversation, provider, model, options.rotation?.activeKeyId);
 
       if (toolCalls.length === 0) {
-        // Reliability path (Phase 4 validator): when `useRespondTool` is
-        // on for this model and the response is text-only with content
-        // that *should have been* a Respond() call, inject a retry
-        // nudge and re-loop. Without this, small models fall through to
-        // turn-complete on their first text-only attempt and the user
-        // sees a partial answer instead of the structured Respond.
-        if (activation.useRespondTool && storedContent.trim().length > 0) {
-          const validation = validateResponse(toolCalls, storedContent, {
-            toolNames: new Set(toolRegistry.getNames()),
-            enforceToolCall: true,
-          });
-          if (
-            validation.needsRetry &&
-            validation.nudge &&
-            recovery.autoRetryBudget > 0
-          ) {
-            recovery.autoRetryBudget--;
-            conversation.addUser(validation.nudge.content, {
-              type: 'retry_nudge',
-            });
-            yield {
-              type: 'auto-retry-injected',
-              remainingBudget: recovery.autoRetryBudget,
-              reason: validation.nudge.kind,
-            };
-            continue;
-          }
-        }
-        // Detect "silent" turns where the model burned a meaningful number
-        // of completion tokens but produced no visible content and no tool
-        // calls — typically reasoning-block runaway on small thinking-mode
-        // models. Without this notice the spinner just stops with no output.
-        if (!fullContent && lastUsage && lastUsage.completionTokens >= 100) {
-          yield { type: 'empty-turn-warning', completionTokens: lastUsage.completionTokens };
-        }
-        // Auto-retry only fires on real tool failures. Earlier we also retried
-        // when the model described an action without emitting a tool call, but
-        // that produced too many false positives (the model narrating after a
-        // successful run, answering questions, etc.). Removed.
-        // TODO: revisit narrated-action retry with a tighter trigger — e.g.
-        // text ends in a cliffhanger (": " then EOS, "let me…", "I'll…") AND
-        // zero tool calls AND the prior turn had at least one. Seen in the
-        // wild after aggressive compaction on small Ollama models.
-        const shouldRetry = !!recovery.lastFailureMessage && recovery.autoRetryBudget > 0;
-        if (shouldRetry && recovery.lastFailureMessage) {
-          recovery.autoRetryBudget--;
-          // TODO: before injecting the nudge, consider prompting the user to
-          // confirm they want the agent to retry. Silent auto-retry is convenient
-          // for transient errors (network blip, bad URL guess) but surprising when
-          // the failure is substantive (permission denied, wrong file, logic error)
-          // — the user may prefer to redirect rather than let the agent self-correct
-          // in an undesirable direction. A simple y/n prompt with the failure
-          // message shown would give them the escape hatch without blocking the
-          // common case (could default to auto-accept after a short timeout).
-          conversation.addUser(
-            `Your last tool call failed with: "${recovery.lastFailureMessage}". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.`,
-          );
-          yield {
-            type: 'auto-retry-injected',
-            remainingBudget: recovery.autoRetryBudget,
-            reason: recovery.lastFailureMessage,
-          };
-          continue;
-        }
-        if (recovery.lastFailureMessage) {
-          yield { type: 'auto-retry-exhausted' };
-        }
+        const outcome = yield* handleNoToolCallsBranch({
+          activation,
+          storedContent,
+          fullContent,
+          lastUsage,
+          recovery,
+          conversation,
+          toolRegistry,
+        });
+        if (outcome === 'retry') continue;
         yield* fireStopHook(options, turnsUsed, 'completed');
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
@@ -535,40 +657,25 @@ export async function* runAgent(
       // "skeleton + nudge" shape the spec prescribes (§7).
       if (stepEnforcer) {
         try {
+          // Compute the nudge content BEFORE yielding observability —
+          // checkPrerequisites/check mutate counters, so calling them
+          // inside the helper and again in the predicate would double-count.
           const prereqCheck = stepEnforcer.checkPrerequisites(toolCalls);
-          if (prereqCheck.needsNudge && prereqCheck.nudge) {
+          if (prereqCheck.nudge) {
             conversation.addUser(prereqCheck.nudge.content, { type: 'prerequisite_nudge' });
-            // Surface to observability. Find the offending tool name +
-            // missing list by inspecting the nudge content shape isn't
-            // robust — pull from the first call in the batch that has
-            // prereqs declared.
-            const offendingCall = toolCalls.find(tc => {
-              const name = tc.function?.name;
-              return name !== undefined;
-            });
-            yield {
-              type: 'prerequisite-nudge',
-              tool: offendingCall?.function?.name ?? '<unknown>',
-              missing: prereqCheck.nudge.content.match(/first call: ([^.]+)/)?.[1]
-                ?.split(', ') ?? [],
-            };
-            continue;
           }
-          const stepCheck = stepEnforcer.check(toolCalls);
-          if (stepCheck.needsNudge && stepCheck.nudge) {
+          const stepCheck = !prereqCheck.nudge ? stepEnforcer.check(toolCalls) : null;
+          if (stepCheck?.nudge) {
             conversation.addUser(stepCheck.nudge.content, { type: 'step_nudge' });
-            const attemptedTerminal = toolCalls.find(tc => {
-              const n = tc.function?.name;
-              return typeof n === 'string' && options.terminalTools?.includes(n);
-            });
-            yield {
-              type: 'step-nudge',
-              tier: stepCheck.nudge.tier,
-              attemptedTool: attemptedTerminal?.function?.name ?? '<unknown>',
-              pending: stepEnforcer.pending(),
-            };
-            continue;
           }
+          const which = yield* emitEnforcerObservability(
+            toolCalls,
+            prereqCheck,
+            stepCheck,
+            options.terminalTools,
+            stepEnforcer,
+          );
+          if (which !== null) continue;
         } catch (err: unknown) {
           if (err instanceof StepEnforcementError || err instanceof PrerequisiteError) {
             yield { type: 'error', error: err };
@@ -608,38 +715,15 @@ export async function* runAgent(
         recovery,
       );
 
-      // Phase 5: clean-batch reset. When the batch ran without any
-      // denials or tool failures, the step enforcer's per-batch
-      // counters reset so a single off-day call doesn't poison the
-      // rest of the run.
       if (stepEnforcer && deniedCount === 0 && !recovery.lastFailureMessage) {
-        stepEnforcer.resetCounters();
-        // Phase 14: surface step completions. Emit one event per
-        // required-step name that's newly satisfied this batch.
-        const pending = new Set(stepEnforcer.pending());
-        for (const name of options.requiredSteps ?? []) {
-          if (!pending.has(name) && !emittedStepCompletions.has(name)) {
-            emittedStepCompletions.add(name);
-            yield { type: 'step-completed', tool: name };
-          }
-        }
+        yield* settleCleanBatch(stepEnforcer, options.requiredSteps, emittedStepCompletions);
       }
 
-      // Phase 6: hard-error bailout. If the tool's callable raised
-      // non-ToolResolutionError exceptions on consecutive batches
-      // beyond the configured budget, the run can't recover — surface
-      // the failure as a typed error and turn-complete. The counter
-      // is reset by the next clean batch (see applyResultToRecovery),
-      // so a single bad call followed by a successful one keeps the
-      // run going.
-      if (
-        recovery.consecutiveHardToolErrors > recovery.maxHardToolErrors &&
-        recovery.lastHardToolName !== null &&
-        recovery.lastHardToolMessage !== null
-      ) {
+      // Phase 6: hard-error bailout — over the consecutive-throws budget.
+      if (isHardErrorBudgetExhausted(recovery)) {
         const err = new ToolExecutionError(
-          recovery.lastHardToolName,
-          recovery.lastHardToolMessage,
+          recovery.lastHardToolName!,
+          recovery.lastHardToolMessage!,
         );
         yield { type: 'error', error: err };
         yield* fireStopHook(options, turnsUsed, 'error');

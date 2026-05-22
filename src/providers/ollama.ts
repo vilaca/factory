@@ -11,7 +11,34 @@ import type {
   ModelInfo,
 } from './types.js';
 import { errorCode, errorMessage, isError, makeAbortError } from '../utils/errors.js';
-import { resolveSampling } from './shared.js';
+import { resolveSampling, type ResolvedSampling } from './shared.js';
+
+/** Build the per-request `options` object for Ollama's chat endpoint.
+ *  Pulled out of the chat/chatNoStream bodies so the per-call sampling
+ *  threading is a flat data transform (each key in `sampling` maps 1:1
+ *  to an Ollama option) instead of a long inline conditional ladder.
+ *  Ollama silently ignores undefined fields, but trimming them keeps
+ *  request shape stable across calls for log diffing. */
+function ollamaOptions(
+  numCtx: number,
+  maxTokens: number | undefined,
+  sampling: ResolvedSampling,
+): Record<string, unknown> {
+  const opts: Record<string, unknown> = {
+    // num_ctx comes from the caller so the per-model real value
+    // (populated by primeModelCache → contextWindowCache) wins over
+    // the hardcoded estimate; sending a num_ctx larger than the
+    // model's configured context overflows ollama server-side.
+    num_ctx: numCtx,
+    num_predict: maxTokens ?? 4096,
+  };
+  // Ollama's option names match the snake_case ResolvedSampling shape
+  // 1:1, so the merge is a plain copy of defined fields.
+  for (const [k, v] of Object.entries(sampling)) {
+    if (v !== undefined) opts[k] = v;
+  }
+  return opts;
+}
 
 export class OllamaProvider implements Provider {
   name = 'ollama';
@@ -147,27 +174,7 @@ export class OllamaProvider implements Provider {
       tools: tools as Tool[],
       // num_predict caps output length so degenerate repetition loops can't
       // run forever. Ollama's default is -1 (no limit).
-      options: {
-        // Use the cached real context window (populated by primeModelCache)
-        // instead of the hardcoded estimate — sending a num_ctx larger than
-        // the model's configured context overflows ollama server-side.
-        num_ctx: this.resolveContextWindow(model),
-        num_predict: options?.maxTokens ?? 4096,
-        // Reliability-stack sampling: per-call overrides + per-model
-        // defaults table. Each Ollama option key has a snake_case
-        // analog of the shared ResolvedSampling fields.
-        ...(samplingOpts.temperature !== undefined ? { temperature: samplingOpts.temperature } : {}),
-        ...(samplingOpts.top_p !== undefined ? { top_p: samplingOpts.top_p } : {}),
-        ...(samplingOpts.top_k !== undefined ? { top_k: samplingOpts.top_k } : {}),
-        ...(samplingOpts.min_p !== undefined ? { min_p: samplingOpts.min_p } : {}),
-        ...(samplingOpts.repeat_penalty !== undefined
-          ? { repeat_penalty: samplingOpts.repeat_penalty }
-          : {}),
-        ...(samplingOpts.presence_penalty !== undefined
-          ? { presence_penalty: samplingOpts.presence_penalty }
-          : {}),
-        ...(samplingOpts.seed !== undefined ? { seed: samplingOpts.seed } : {}),
-      },
+      options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
     };
 
     const stream = await this.client.chat(request);
@@ -244,21 +251,7 @@ export class OllamaProvider implements Provider {
       messages: messages as Message[],
       stream: false,
       tools: tools as Tool[],
-      options: {
-        num_ctx: this.resolveContextWindow(model),
-        num_predict: options?.maxTokens ?? 4096,
-        ...(samplingOpts.temperature !== undefined ? { temperature: samplingOpts.temperature } : {}),
-        ...(samplingOpts.top_p !== undefined ? { top_p: samplingOpts.top_p } : {}),
-        ...(samplingOpts.top_k !== undefined ? { top_k: samplingOpts.top_k } : {}),
-        ...(samplingOpts.min_p !== undefined ? { min_p: samplingOpts.min_p } : {}),
-        ...(samplingOpts.repeat_penalty !== undefined
-          ? { repeat_penalty: samplingOpts.repeat_penalty }
-          : {}),
-        ...(samplingOpts.presence_penalty !== undefined
-          ? { presence_penalty: samplingOpts.presence_penalty }
-          : {}),
-        ...(samplingOpts.seed !== undefined ? { seed: samplingOpts.seed } : {}),
-      },
+      options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
     };
 
     const signal = options?.signal;

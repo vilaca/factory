@@ -10,7 +10,25 @@ import type {
   ModelPickerInfo,
   ChatOptions,
 } from './types.js';
-import { formatTokenCount, parseToolArgs, resolveSampling } from './shared.js';
+import { formatTokenCount, parseToolArgs, resolveSampling, type ResolvedSampling } from './shared.js';
+
+/** Build the Anthropic-only subset of sampling + tool_choice extras for
+ *  a single call. Anthropic accepts `temperature`, `top_p`, `top_k`,
+ *  and a `tool_choice` object; min_p / repeat_penalty / presence_penalty
+ *  are silently dropped. Pulled out so the streaming + non-streaming
+ *  params builders stay under the per-method complexity cap. */
+function anthropicExtras(
+  sampling: ResolvedSampling,
+  forceToolCall: boolean,
+  hasTools: boolean,
+): Record<string, unknown> {
+  const extras: Record<string, unknown> = {};
+  if (sampling.temperature !== undefined) extras.temperature = sampling.temperature;
+  if (sampling.top_p !== undefined) extras.top_p = sampling.top_p;
+  if (sampling.top_k !== undefined) extras.top_k = sampling.top_k;
+  if (forceToolCall && hasTools) extras.tool_choice = { type: 'any' as const };
+  return extras;
+}
 
 type StreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
 type NonStreamingParams = Anthropic.Messages.MessageCreateParamsNonStreaming;
@@ -102,27 +120,17 @@ export class AnthropicProvider implements Provider {
   ): AsyncGenerator<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
 
+    const hasTools = !!tools && tools.length > 0;
     const sampling = resolveSampling(options, { model, providerName: 'anthropic' });
+    const extras = anthropicExtras(sampling, options?.forceToolCall ?? false, hasTools);
     const params: StreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? 8192,
       messages: msgs,
       stream: true,
       ...(system !== null ? { system } : {}),
-      ...(tools && tools.length > 0
-        ? { tools: buildAnthropicTools(tools, options?.cacheTools) }
-        : {}),
-      // Anthropic supports temperature / top_p / top_k. Other sampling
-      // fields (min_p, repeat_penalty, presence_penalty) are silently
-      // dropped — they aren't part of the messages.create contract.
-      ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}),
-      ...(sampling.top_p !== undefined ? { top_p: sampling.top_p } : {}),
-      ...(sampling.top_k !== undefined ? { top_k: sampling.top_k } : {}),
-      // Phase 13: force-tool-call knob. Reliability spec Table I shows
-      // ~45-point lift on Haiku in bare mode from this alone.
-      ...(options?.forceToolCall && tools && tools.length > 0
-        ? { tool_choice: { type: 'any' as const } }
-        : {}),
+      ...(hasTools ? { tools: buildAnthropicTools(tools!, options?.cacheTools) } : {}),
+      ...extras,
     };
 
     const stream = this.client.messages.stream(params, this.requestOptionsFor(model));
@@ -173,21 +181,16 @@ export class AnthropicProvider implements Provider {
   ): Promise<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
 
+    const hasTools = !!tools && tools.length > 0;
     const sampling = resolveSampling(options, { model, providerName: 'anthropic' });
+    const extras = anthropicExtras(sampling, options?.forceToolCall ?? false, hasTools);
     const params: NonStreamingParams = {
       model,
       max_tokens: options?.maxTokens ?? 8192,
       messages: msgs,
       ...(system !== null ? { system } : {}),
-      ...(tools && tools.length > 0
-        ? { tools: buildAnthropicTools(tools, options?.cacheTools) }
-        : {}),
-      ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}),
-      ...(sampling.top_p !== undefined ? { top_p: sampling.top_p } : {}),
-      ...(sampling.top_k !== undefined ? { top_k: sampling.top_k } : {}),
-      ...(options?.forceToolCall && tools && tools.length > 0
-        ? { tool_choice: { type: 'any' as const } }
-        : {}),
+      ...(hasTools ? { tools: buildAnthropicTools(tools!, options?.cacheTools) } : {}),
+      ...extras,
     };
 
     const response = await this.client.messages.create(params, this.requestOptionsFor(model));
