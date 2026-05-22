@@ -362,6 +362,9 @@ export function Session(props: SessionProps): React.ReactElement {
             setProviderByName: agent.setProviderByName,
             setPickerOpen,
           })}
+          onError={(source, message) => {
+            agent.addNotice('danger', `${source}: ${message}`);
+          }}
         />
       )}
 
