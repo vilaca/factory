@@ -1,15 +1,13 @@
 // Resolver that ContextManager.compact() calls to obtain the
 // (provider, model) used for the summarization model call.
 //
-// Behavior:
-//   1. If `refs.compactionTarget` is set (user picked via
-//      `/compaction-model`, or headless pre-seeded it via
-//      `--compaction-model`), use that tuple.
-//   2. Otherwise fall back to the primary (refs.provider, refs.model).
-//      The TUI used to auto-prompt the user on the first compaction;
-//      that surprised users into a picker for an operation that does
-//      not in itself imply a model change. `/compaction-model` is now
-//      the only way to opt into a non-primary target.
+// Behavior: if `refs.compactionTarget` is set (user picked via
+// `/compaction-model`, or headless pre-seeded it via `--compaction-model`),
+// use that tuple. Otherwise fall back to the primary (refs.provider,
+// refs.model). The TUI used to auto-prompt the user on the first
+// compaction; that surprised users into a picker for an operation that
+// does not in itself imply a model change. `/compaction-model` is now the
+// only way to opt into a non-primary target.
 //
 // Provider instantiation: when the chosen tuple's provider matches the
 // active session provider, reuse that instance — no auth re-resolution.

@@ -34,12 +34,17 @@ export function useCompactionPicker(
   const openCompactionPicker = useCallback(
     () =>
       new Promise<CompactionPick>(resolve => {
-        setCompactionPickerResolver((prev: ((pick: CompactionPick) => void) | null) => {
-          // A second /compaction-model arrived while the picker was still
-          // open on a prior invocation. Settle the in-flight promise with
-          // null (treat as cancel) so its await site can unwind — otherwise
-          // it leaks an unresolvable promise.
-          prev?.(null);
+        // Capture the previous resolver inside the updater (pure: just a
+        // read) and settle it *outside*, after we've installed the new
+        // resolver and opened the picker. Calling the old resolver inside
+        // the updater would nest its own setCompactionPickerResolver(null)
+        // / setPickerOpen(false) calls and clobber the new resolver we
+        // just returned — the picker would come up with no resolver bound
+        // and the awaiting `/compaction-model` would never resolve.
+        type Resolver = (pick: CompactionPick) => void;
+        const prevBox: { current: Resolver | null } = { current: null };
+        setCompactionPickerResolver((prev: Resolver | null) => {
+          prevBox.current = prev;
           return (chosen: CompactionPick) => {
             setCompactionPickerResolver(null);
             setPickerOpen(false);
@@ -47,6 +52,11 @@ export function useCompactionPicker(
           };
         });
         setPickerOpen(true);
+        // A second /compaction-model arrived while the picker was still
+        // open on a prior invocation. Settle the in-flight promise with
+        // null (treat as cancel) so its await site can unwind — otherwise
+        // it leaks an unresolvable promise.
+        prevBox.current?.(null);
       }),
     [setPickerOpen],
   );

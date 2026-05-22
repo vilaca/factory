@@ -287,10 +287,12 @@ function estimateContextWindow(model: string): number {
 /** Extract the model's native context length from ollama's `/api/show`
  *  `model_info` field. Ollama prefixes the key by architecture (e.g.
  *  `llama.context_length`, `qwen2.context_length`, `deepseek2.context_length`),
- *  so we match by suffix. Returns 0 when the field is absent or non-numeric
- *  — callers fall back to {@link estimateContextWindow}. Defensive against
- *  both a real `Map` and a plain-object payload (some test fakes use the
- *  latter even though the SDK types declare a Map). */
+ *  and we anchor on that exact shape so unrelated dotted keys don't slip
+ *  through and Map iteration order can't surface a less-specific match
+ *  when multiple keys are present. Returns 0 when the field is absent or
+ *  non-numeric — callers fall back to {@link estimateContextWindow}.
+ *  Defensive against both a real `Map` and a plain-object payload (some
+ *  test fakes use the latter even though the SDK types declare a Map). */
 function extractContextLength(modelInfo: unknown): number {
   if (!modelInfo) return 0;
   const entries: Iterable<[string, unknown]> =
@@ -299,8 +301,14 @@ function extractContextLength(modelInfo: unknown): number {
       : typeof modelInfo === 'object'
         ? Object.entries(modelInfo as Record<string, unknown>)
         : [];
+  const archContextLength = /^[^.]+\.context_length$/;
   for (const [key, value] of entries) {
-    if (key.endsWith('.context_length') && typeof value === 'number' && value > 0) {
+    if (
+      typeof key === 'string' &&
+      archContextLength.test(key) &&
+      typeof value === 'number' &&
+      value > 0
+    ) {
       return value;
     }
   }

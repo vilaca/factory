@@ -348,6 +348,9 @@ export function Session(props: SessionProps): React.ReactElement {
               : 'select-active'
           }
           onCancel={() => {
+            // At most one resolver is ever set; "compaction wins" if both
+            // somehow leak through, mirroring makePickerCommitHandler's
+            // ordering so commit/cancel route to the same target.
             if (compactionPickerResolver) {
               compactionPickerResolver(null);
             } else if (fallbackPickerResolver) {

@@ -304,7 +304,7 @@ function printHelp(agent: AgentLoopApi): void {
     ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
     [
       '/compaction-model [show|clear]',
-      'Pick a provider/model for context compaction (defaults to primary). `show` prints current; `clear` resets to primary.',
+      'Open the picker to choose a provider/model for context compaction (defaults to primary). `show` prints current; `clear` resets to primary.',
     ],
     ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
     ['/keys [<provider>]', 'Show saved keys with usage / rate-limit / cache-hit counters'],
