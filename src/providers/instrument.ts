@@ -1,11 +1,13 @@
-import type { ChatChunk, ChatMessage, ChatOptions, Provider, ToolDefinition } from './types.js';
+import type {
+  ChatChunk,
+  ChatMessage,
+  ChatOptions,
+  ModelRequestSource,
+  Provider,
+  ToolDefinition,
+} from './types.js';
 
-/**
- * Source label for an outgoing LLM call. Used by the session log to bucket
- * requests by which subsystem issued them (main agent turn, compaction
- * summary, tool-call corrector, subagent runner).
- */
-export type ModelRequestSource = 'main' | 'compaction' | 'corrector' | 'subagent';
+export type { ModelRequestSource } from './types.js';
 
 export interface ModelRequestInfo {
   source: ModelRequestSource;
@@ -36,6 +38,24 @@ export function instrumentProviderRequests(
   onRequest: OnModelRequest,
   defaultSource: ModelRequestSource = 'main',
 ): Provider {
+  // Best-effort: logging must never break an LLM call. If onRequest throws,
+  // surface to stderr once (mirrors the session-log fs-error surface) and
+  // continue with the delegated call.
+  let onRequestFailureNotified = false;
+  const safeFire = (info: ModelRequestInfo): void => {
+    try {
+      onRequest(info);
+    } catch (err) {
+      if (!onRequestFailureNotified) {
+        onRequestFailureNotified = true;
+        process.stderr.write(
+          `factory: model-request logger failed — ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
+    }
+  };
+  const resolveSource = (options?: ChatOptions): ModelRequestSource =>
+    options?._requestSource ?? defaultSource;
   const wrapped: Provider = {
     name: inner.name,
     listModels: inner.listModels.bind(inner),
@@ -46,8 +66,8 @@ export function instrumentProviderRequests(
       tools?: ToolDefinition[],
       options?: ChatOptions,
     ): AsyncGenerator<ChatChunk> {
-      onRequest({
-        source: defaultSource,
+      safeFire({
+        source: resolveSource(options),
         streaming: true,
         provider: inner.name,
         model,
@@ -63,8 +83,8 @@ export function instrumentProviderRequests(
       tools?: ToolDefinition[],
       options?: ChatOptions,
     ): Promise<ChatChunk> {
-      onRequest({
-        source: defaultSource,
+      safeFire({
+        source: resolveSource(options),
         streaming: false,
         provider: inner.name,
         model,

@@ -2,6 +2,10 @@ import { runAgent } from '../../../core/agent/run-agent.js';
 import type { AgentOptions, RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
 import { descriptorByAlias } from '../../../providers/registry.js';
+import { instrumentProviderRequests } from '../../../providers/instrument.js';
+import { logModelRequestTo } from '../../session-bridge.js';
+import type { Provider } from '../../../providers/types.js';
+import type { SessionLogger } from '../../../core/session/session-log.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { tupleKey } from '../../../core/config/types.js';
 import { listKeys } from '../../../core/auth/credentials.js';
@@ -47,6 +51,20 @@ function isSubstantivePrompt(s: string): boolean {
  * Reads the live config so newly-added keys (via /pick mid-session) take
  * effect on the next turn without a restart.
  */
+/**
+ * Wrap a rotation-spawned provider with the session-log instrumentation so
+ * mid-stream rotation (tier-1 key swap, tier-2 tuple advance) doesn't drop
+ * `model-request` rows. Returns the provider untouched when no session
+ * logger is attached. Exported so the unit test can assert that
+ * `withKey` / `withTuple` actually wrap their results.
+ */
+export function makeRotationWrap(
+  logger: SessionLogger | undefined,
+): (p: Provider) => Provider {
+  if (!logger) return p => p;
+  return p => instrumentProviderRequests(p, info => logModelRequestTo(logger, info));
+}
+
 async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOptions | undefined> {
   const refs = deps.refs.current;
   if (!refs) return undefined;
@@ -79,16 +97,19 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
   const promptPossible = Boolean(refs.requestFallback) && modelsEnabled;
   if (!tier1Possible && !tier2Possible && !promptPossible) return undefined;
 
+  const wrap = makeRotationWrap(refs.sessionLogger);
   return {
     keys,
     activeKeyId: refs.activeKeyId,
     withKey: key =>
-      createProvider(refs.provider.name, {
-        token: key.token,
-        ...(descriptor.needsAccountId && key.extras?.accountId
-          ? { accountId: key.extras.accountId }
-          : {}),
-      }),
+      wrap(
+        createProvider(refs.provider.name, {
+          token: key.token,
+          ...(descriptor.needsAccountId && key.extras?.accountId
+            ? { accountId: key.extras.accountId }
+            : {}),
+        }),
+      ),
     onActiveKeyChange: id => {
       if (!deps.refs.current) return;
       deps.refs.current.activeKeyId = id;
@@ -118,7 +139,7 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
       if (desc?.needsAccountId && key.extras?.accountId) {
         opts.accountId = key.extras.accountId;
       }
-      return createProvider(providerName, opts);
+      return wrap(createProvider(providerName, opts));
     },
     ...(refs.requestFallback ? { promptForFallback: refs.requestFallback } : {}),
   };

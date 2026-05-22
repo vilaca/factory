@@ -15,7 +15,7 @@ import {
 } from '../../../providers/registry.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
-import { logModelRequestFromInfo } from './instrument-bridge.js';
+import { logModelRequestTo } from '../../session-bridge.js';
 import type { Provider } from '../../../providers/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 
@@ -236,7 +236,7 @@ export async function swapProvider(
   // in init.ts so post-swap calls aren't invisible.
   const instrumented = refs.sessionLogger
     ? instrumentProviderRequests(nextProvider, info =>
-        logModelRequestFromInfo(refs.sessionLogger, info),
+        logModelRequestTo(refs.sessionLogger, info),
       )
     : nextProvider;
   refs.provider = instrumented;

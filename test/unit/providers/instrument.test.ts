@@ -125,6 +125,53 @@ describe('instrumentProviderRequests', () => {
     assert.equal(captured[0]?.source, 'compaction');
   });
 
+  it('honors `_requestSource` from ChatOptions as a per-call override', async () => {
+    const log = { calls: [] as string[] };
+    const inner = fakeProvider('inner', log);
+    const captured: ModelRequestInfo[] = [];
+    // wrap default = 'main'; corrector-style call overrides per-call.
+    const wrapped = instrumentProviderRequests(inner, info => {
+      captured.push(info);
+    });
+    await wrapped.chatNoStream(
+      'm1',
+      [{ role: 'user', content: 'x' }],
+      undefined,
+      { _requestSource: 'corrector' },
+    );
+    await wrapped.chatNoStream('m1', [{ role: 'user', content: 'y' }]);
+    assert.equal(captured[0]?.source, 'corrector');
+    assert.equal(captured[1]?.source, 'main');
+  });
+
+  it('does not break the LLM call when `onRequest` throws (best-effort logging)', async () => {
+    const log = { calls: [] as string[] };
+    const inner = fakeProvider('inner', log);
+    // Throwing onRequest must not propagate out of the wrapper.
+    const wrapped = instrumentProviderRequests(inner, () => {
+      throw new Error('logger crash');
+    });
+    // Capture stderr to verify the first failure goes there, then quiets.
+    const stderrCalls: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      const s = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8');
+      stderrCalls.push(s);
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const result = await wrapped.chatNoStream('m1', [{ role: 'user', content: 'x' }]);
+      assert.equal(result.content, 'done');
+      // Second call still completes; stderr is not spammed.
+      const result2 = await wrapped.chatNoStream('m1', [{ role: 'user', content: 'y' }]);
+      assert.equal(result2.content, 'done');
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+    assert.equal(stderrCalls.length, 1, `expected one stderr line, got: ${JSON.stringify(stderrCalls)}`);
+    assert.match(stderrCalls[0]!, /model-request logger failed/);
+  });
+
   it('forwards non-chat methods (listModels, getCapabilities, getModelInfo)', async () => {
     const log = { calls: [] as string[] };
     const inner = fakeProvider('inner', log);
