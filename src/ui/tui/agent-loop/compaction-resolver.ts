@@ -24,6 +24,8 @@
 import { createProvider, descriptorByAlias } from '../../../providers/registry.js';
 import { getKey } from '../../../core/auth/credentials.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
+import { instrumentProviderRequests } from '../../../providers/instrument.js';
+import { logModelRequestFromInfo } from './instrument-bridge.js';
 import type { Provider } from '../../../providers/types.js';
 import type { CompactionTargetResolver } from '../../../core/context/context-manager.js';
 import type { RunRefs } from './agent-loop-types.js';
@@ -75,7 +77,19 @@ export function makeCompactionResolver(refs: {
           }
         }
       }
-      provider = createProvider(target.providerName, createOpts);
+      const fresh = createProvider(target.providerName, createOpts);
+      // Tag this call path as 'compaction' so the session log can bucket
+      // mechanical-summary requests separately from main-turn traffic. The
+      // primary-fallback branch already runs on the instrumented refs.provider
+      // (which is tagged 'main') — that's fine: the source field is a hint,
+      // not a contract.
+      provider = r.sessionLogger
+        ? instrumentProviderRequests(
+            fresh,
+            info => logModelRequestFromInfo(r.sessionLogger, info),
+            'compaction',
+          )
+        : fresh;
     } catch (err) {
       // No auth / unknown provider — fall back to the primary instance.
       // The compaction call may still fail and trip the mechanical
