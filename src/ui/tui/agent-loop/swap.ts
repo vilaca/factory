@@ -45,6 +45,7 @@ export interface SwapContext {
   addNotice: (level: NoticeLevel, text: string) => void;
   setModel: (m: string) => void;
   setProviderName: (n: string) => void;
+  setContextWindow: (n: number) => void;
   refreshTokenEstimate: () => void;
   composeSystemPrompt: () => string;
 }
@@ -62,18 +63,25 @@ function rebuildContextManager(refs: NonNullable<RunRefs>, ctx: SwapContext): vo
     },
     makeCompactionResolver(ctx.refs),
   );
+  // Push the synchronous estimate into React state so the StatusBar
+  // denominator flips to the new model's window before the prime resolves.
+  ctx.setContextWindow(caps.contextWindow);
   // Best-effort async prime for providers (ollama) whose contextWindow is
   // only known after a /show call. Mirrors the mount-time priming in
   // setup.ts. The provider/model identity check guards against a second
   // swap landing while this is in flight — we only update the manager if
-  // refs still point at the same tuple we primed for.
+  // refs still point at the same tuple we primed for. The primed value is
+  // the model's actual context — trust it whether it's larger or smaller
+  // than the estimate.
   const provider = refs.provider;
   const activeModel = refs.model;
   if (provider.primeModelCache) {
     void provider.primeModelCache(activeModel).then(() => {
       const current = ctx.refs.current;
       if (!current || current.provider !== provider || current.model !== activeModel) return;
-      current.contextManager.setContextWindow(provider.getCapabilities(activeModel).contextWindow);
+      const updated = provider.getCapabilities(activeModel).contextWindow;
+      current.contextManager.setContextWindow(updated);
+      ctx.setContextWindow(updated);
     });
   }
 }

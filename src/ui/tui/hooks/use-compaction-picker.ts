@@ -34,10 +34,17 @@ export function useCompactionPicker(
   const openCompactionPicker = useCallback(
     () =>
       new Promise<CompactionPick>(resolve => {
-        setCompactionPickerResolver(() => (chosen: CompactionPick) => {
-          setCompactionPickerResolver(null);
-          setPickerOpen(false);
-          resolve(chosen);
+        setCompactionPickerResolver((prev: ((pick: CompactionPick) => void) | null) => {
+          // A second /compaction-model arrived while the picker was still
+          // open on a prior invocation. Settle the in-flight promise with
+          // null (treat as cancel) so its await site can unwind — otherwise
+          // it leaks an unresolvable promise.
+          prev?.(null);
+          return (chosen: CompactionPick) => {
+            setCompactionPickerResolver(null);
+            setPickerOpen(false);
+            resolve(chosen);
+          };
         });
         setPickerOpen(true);
       }),

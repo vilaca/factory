@@ -193,6 +193,7 @@ export function Session(props: SessionProps): React.ReactElement {
     sessionToolCalls,
     lastUsage,
     estimatedTokens,
+    contextWindow,
     queueLength,
     gitBranch,
     gitDirty,
@@ -217,8 +218,6 @@ export function Session(props: SessionProps): React.ReactElement {
     openCompactionPicker,
   });
 
-  const activeProvider = refs.current?.provider ?? props.provider;
-  const capabilities = useMemo(() => activeProvider.getCapabilities(model), [activeProvider, model]);
   const inputAccentColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
   const providerList = useMemo<ProviderEntry[]>(buildProviderList, []);
   const spinner =
@@ -413,7 +412,7 @@ export function Session(props: SessionProps): React.ReactElement {
         providerName={providerName}
         model={model}
         {...selectDisplayTokens(lastUsage, estimatedTokens)}
-        contextWindow={capabilities.contextWindow}
+        contextWindow={contextWindow}
         sessionTurns={sessionTurns}
         sessionToolCalls={sessionToolCalls}
         queueLength={queueLength}

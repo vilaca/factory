@@ -194,6 +194,10 @@ export interface AgentLoopApi {
   /** Approximate token count from ContextManager — used to show the status
    * bar's token figure before the first model response arrives. */
   estimatedTokens: number | undefined;
+  /** Active model's context-window budget, used by the StatusBar denominator.
+   * Mirrors ContextManager.contextWindow so async provider primes (ollama's
+   * /api/show) propagate into the UI after mount. */
+  contextWindow: number;
   queueLength: number;
   gitBranch: string | undefined;
   gitDirty: boolean | null;

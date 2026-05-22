@@ -20,6 +20,7 @@ export interface MountContext {
   refs: MutableRefObject<RunRefs | null>;
   addNotice: (level: NoticeLevel, text: string) => void;
   setEstimatedTokens: (n: number | undefined) => void;
+  setContextWindow: (n: number) => void;
   setCwdState: (s: string) => void;
   /** Snapshot the current refs into a system prompt. The hook owns this
    *  closure because it threads through the experimental-flags state. */
@@ -161,8 +162,10 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   // Some providers (ollama) need an async call to learn the model's real
   // context window. Fire-and-forget: when it settles, refresh the
   // ContextManager's contextWindow so compaction budgets against the right
-  // limit. The initial estimate is conservative, so this can only widen
-  // the window — never narrow it below what we already chose.
+  // limit, and push the value into React state so the StatusBar's
+  // denominator updates too. The initial value is a conservative estimate;
+  // the primed value is the model's actual context — trust it whether it's
+  // larger or smaller.
   const provider = ctx.refs.current.provider;
   const activeModel = ctx.refs.current.model;
   if (provider.primeModelCache) {
@@ -171,6 +174,7 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
       if (!refs || refs.provider !== provider || refs.model !== activeModel) return;
       const updated = provider.getCapabilities(activeModel).contextWindow;
       refs.contextManager.setContextWindow(updated);
+      ctx.setContextWindow(updated);
     });
   }
 
