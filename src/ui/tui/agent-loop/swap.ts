@@ -76,12 +76,15 @@ export async function swapModel(
   if (name.includes(':')) {
     const [providerPart, ...rest] = name.split(':');
     const modelPart = rest.join(':');
-    if (!providerPart || !modelPart) {
-      ctx.addNotice('warn', 'Usage: /model <name> or /model <provider>:<model>');
+    // Only treat `<a>:<b>` as provider:model when the prefix is actually a
+    // known provider alias. Otherwise `name` is a bare model whose tag
+    // happens to contain a colon (Ollama style — e.g.
+    // `deepseek-coder:33b-instruct`, `llama3.1:8b`) and belongs to the
+    // current provider.
+    if (providerPart && modelPart && deps.descriptorByAlias(providerPart)) {
+      await swapProvider(providerPart, modelPart, undefined, ctx, deps);
       return;
     }
-    await swapProvider(providerPart, modelPart, undefined, ctx, deps);
-    return;
   }
   const provider = refs.provider;
   const validation = await deps.validateModelToolSupport(provider, name);

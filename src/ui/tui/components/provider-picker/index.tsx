@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Text } from 'ink';
 import {
   type ModelDisplayInfo,
@@ -8,22 +8,10 @@ import {
   type ValidateResult,
   type KeySummary,
 } from './types.js';
-import {
-  ConfirmDeleteStage,
-  ErrorStage,
-  KeyAddStage,
-  KeyDeleteStage,
-  KeyStage,
-  LoadingStage,
-  ModelStage,
-  ProviderStage,
-  RecentStage,
-  ValidatingStage,
-  ValidateFailedStage,
-} from './stages.js';
-import { errorMessage } from '../../../../utils/errors.js';
 import { useProviderPickerKeys } from './keys.js';
 import { prepareModels } from './prepare.js';
+import { useValidateKeyEffect } from './validate.js';
+import { pickerEscLabel, pickerFooterText, renderPickerBody } from './render-body.js';
 
 // Re-export types so existing call sites that import from this module
 // (e.g. Session.tsx, headless callers) keep working without churn.
@@ -85,6 +73,7 @@ interface ProviderPickerProps {
   purpose?: 'select-active' | 'select-rotation-entry';
 }
 
+// eslint-disable-next-line sonarjs/cognitive-complexity -- TODO(complexity): split prop destructure + dual hook wiring (useValidateKeyEffect / useProviderPickerKeys) behind a single useProviderPickerState helper.
 export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   const {
     providers,
@@ -136,78 +125,15 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     return 0;
   });
 
-  // Drive the validation step. Run as a side effect when stage flips into
-  // `key-validating` so the actual user input → API call latency happens
-  // outside the synchronous Enter handler. Race against a 3 s timeout —
-  // no point making the user stare at "Validating…" if the provider is
-  // unreachable; they can choose "save anyway" if they want to persist
-  // without confirmation.
-  const validatingToken = stage.kind === 'key-validating' ? stage.token : null;
-  const validatingProvider = stage.kind === 'key-validating' ? stage.provider : null;
-  useEffect(() => {
-    if (!validatingToken || !validatingProvider) return;
-    if (!validateKey || !saveKey) return;
-    let cancelled = false;
-    const VALIDATE_TIMEOUT_MS = 3000;
-    const timeout = new Promise<ValidateResult>(resolve => {
-      setTimeout(
-        () =>
-          resolve({
-            ok: false,
-            error: `validation timed out after ${VALIDATE_TIMEOUT_MS / 1000}s`,
-          }),
-        VALIDATE_TIMEOUT_MS,
-      );
-    });
-    void Promise.race([validateKey(validatingProvider, validatingToken), timeout]).then(
-      async result => {
-        if (cancelled) return;
-        if (result.ok) {
-          try {
-            const newKeyId = await saveKey(validatingProvider, validatingToken);
-            const models = prepareModels(
-              result.models ?? [],
-              getModelInfo ? m => getModelInfo(validatingProvider, m) : undefined,
-            );
-            if (models.length === 0) {
-              onError?.(`picker:validate:${validatingProvider}`, 'no models returned');
-              setStage({
-                kind: 'error',
-                provider: validatingProvider,
-                message: 'no models returned',
-              });
-              return;
-            }
-            setModelIndex(0);
-            setStage({ kind: 'model', provider: validatingProvider, models, keyId: newKeyId });
-          } catch (err) {
-            const msg = errorMessage(err);
-            onError?.(`picker:validate:${validatingProvider}`, msg);
-            setStage({
-              kind: 'key-validate-failed',
-              provider: validatingProvider,
-              token: validatingToken,
-              error: msg,
-              choice: 0,
-            });
-          }
-        } else {
-          const msg = result.error ?? 'unknown error';
-          onError?.(`picker:validate:${validatingProvider}`, msg);
-          setStage({
-            kind: 'key-validate-failed',
-            provider: validatingProvider,
-            token: validatingToken,
-            error: msg,
-            choice: 0,
-          });
-        }
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [validatingToken, validatingProvider, validateKey, saveKey, getModelInfo, onError]);
+  useValidateKeyEffect({
+    stage,
+    setStage,
+    setModelIndex,
+    ...(validateKey ? { validateKey } : {}),
+    ...(saveKey ? { saveKey } : {}),
+    ...(getModelInfo ? { getModelInfo } : {}),
+    ...(onError ? { onError } : {}),
+  });
 
   useProviderPickerKeys({
     stage,
@@ -236,8 +162,24 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     ...(onError ? { onError } : {}),
   });
 
-  const body = renderBody();
-  const footer = <Text dimColor>{footerText()}</Text>;
+  const body = renderPickerBody({
+    stage,
+    setStage,
+    recents,
+    recentsLoading,
+    recentIdx,
+    providers,
+    providerIndex,
+    modelIndex,
+    startsAtModel,
+    hasDeleteKey: Boolean(deleteKey),
+    ...(getModelInfo ? { getModelInfo } : {}),
+  });
+  const footer = (
+    <Text dimColor>
+      {pickerFooterText(stage, pickerEscLabel(stage, recents.length > 0, startsAtModel))}
+    </Text>
+  );
   if (bordered) {
     return (
       <Box flexDirection="column" paddingX={1} borderStyle="round" borderColor="cyan">
@@ -253,59 +195,4 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
       {footer}
     </Box>
   );
-
-  function footerText(): string {
-    if (stage.kind === 'key-add') return 'type/paste token · Enter validate · Esc back';
-    if (stage.kind === 'key-validating') return 'validating…';
-    if (stage.kind === 'key-validate-failed')
-      return '↑/↓ choose · Enter confirm · Esc back to edit';
-    if (stage.kind === 'key-confirm-delete') return 'y/Enter confirm · n/Esc cancel';
-    return `↑/↓ navigate · 0–9/A–Z jump · Enter select · Esc ${escLabel()}`;
-  }
-
-  function escLabel(): string {
-    if (stage.kind === 'recent') return 'cancel';
-    if (stage.kind === 'provider') return recents.length > 0 ? 'back' : 'cancel';
-    if (startsAtModel) return 'cancel';
-    return 'back';
-  }
-
-  function renderBody(): React.ReactElement {
-    switch (stage.kind) {
-      case 'recent':
-        return (
-          <RecentStage recents={recents} recentsLoading={recentsLoading} recentIdx={recentIdx} />
-        );
-      case 'provider':
-        return <ProviderStage providers={providers} providerIndex={providerIndex} />;
-      case 'key':
-        return <KeyStage stage={stage} hasDelete={stage.keys.length >= 1 && Boolean(deleteKey)} />;
-      case 'key-delete':
-        return <KeyDeleteStage stage={stage} />;
-      case 'key-confirm-delete':
-        return <ConfirmDeleteStage stage={stage} />;
-      case 'key-add':
-        return (
-          <KeyAddStage
-            stage={stage}
-            onChange={next => setStage({ ...stage, tokenDraft: next })}
-            onSubmit={value => {
-              const trimmed = value.trim();
-              if (!trimmed) return;
-              setStage({ kind: 'key-validating', provider: stage.provider, token: trimmed });
-            }}
-          />
-        );
-      case 'key-validating':
-        return <ValidatingStage stage={stage} />;
-      case 'key-validate-failed':
-        return <ValidateFailedStage stage={stage} />;
-      case 'loading':
-        return <LoadingStage stage={stage} />;
-      case 'error':
-        return <ErrorStage stage={stage} startsAtModel={startsAtModel} />;
-      case 'model':
-        return <ModelStage stage={stage} modelIndex={modelIndex} getModelInfo={getModelInfo} />;
-    }
-  }
 }
