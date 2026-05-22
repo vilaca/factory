@@ -1,6 +1,10 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { swapProvider, type SwapProviderDeps } from '../../../../../src/ui/tui/agent-loop/swap.js';
+import {
+  swapModel,
+  swapProvider,
+  type SwapProviderDeps,
+} from '../../../../../src/ui/tui/agent-loop/swap.js';
 import type { RunRefs } from '../../../../../src/ui/tui/agent-loop/agent-loop-types.js';
 import type {
   Provider,
@@ -277,5 +281,62 @@ describe('swapProvider — short-circuit paths', () => {
     assert.ok(info);
     // No new-provider activity.
     assert.ok(!h.log.order.some(s => s.startsWith('createProvider:')));
+  });
+});
+
+// Regression tests for the `/model <name>` colon-handling bug. Before the
+// fix in swap.ts, any `name` containing a colon was split on the *first*
+// colon and the left side was treated as a provider alias. That broke
+// Ollama-style tagged model names like `deepseek-coder:33b-instruct` —
+// the harness called createProvider("deepseek-coder") and threw
+// "Unknown provider: deepseek-coder" even though the user just wanted to
+// swap models on the *current* (ollama) provider.
+describe('swapModel — colon-in-model handling', () => {
+  it('treats `<unknown>:<tag>` as a bare model on the current provider', async () => {
+    const h = makeHarness();
+    // No alias is a known provider — Ollama tag names fall in this bucket.
+    h.deps.descriptorByAlias = ((_: string) =>
+      undefined) as unknown as SwapProviderDeps['descriptorByAlias'];
+
+    await swapModel('deepseek-coder:33b-instruct', h.ctx, h.deps);
+
+    // No new provider was created — the colon-form did NOT trigger swapProvider.
+    assert.ok(
+      !h.log.order.some(s => s.startsWith('createProvider:')),
+      `createProvider must not run when prefix is not a known alias; order=${JSON.stringify(h.log.order)}`,
+    );
+    // The model was applied verbatim, colon-tag and all.
+    assert.equal(h.refs.model, 'deepseek-coder:33b-instruct');
+    // No danger notice — the swap succeeded.
+    assert.ok(!h.notices.some(n => n.level === 'danger'));
+  });
+
+  it('routes `<known-alias>:<model>` through swapProvider', async () => {
+    const h = makeHarness({ nextProviderName: 'ollama' });
+    h.deps.descriptorByAlias = ((alias: string) =>
+      alias === 'ollama'
+        ? fakeDescriptor('ollama')
+        : undefined) as unknown as SwapProviderDeps['descriptorByAlias'];
+
+    await swapModel('ollama:llama3.1:8b', h.ctx, h.deps);
+
+    // swapProvider path: createProvider must have run for the resolved provider.
+    assert.ok(
+      h.log.order.some(s => s === 'createProvider:ollama'),
+      `createProvider:ollama expected; order=${JSON.stringify(h.log.order)}`,
+    );
+    // The model carries the remaining colons intact (Ollama tag preserved).
+    assert.equal(h.refs.model, 'llama3.1:8b');
+  });
+
+  it('treats `:<tag>` (empty prefix) as a bare model on the current provider', async () => {
+    const h = makeHarness();
+    h.deps.descriptorByAlias = ((_: string) =>
+      undefined) as unknown as SwapProviderDeps['descriptorByAlias'];
+
+    await swapModel(':33b-instruct', h.ctx, h.deps);
+
+    assert.ok(!h.log.order.some(s => s.startsWith('createProvider:')));
+    assert.equal(h.refs.model, ':33b-instruct');
   });
 });
