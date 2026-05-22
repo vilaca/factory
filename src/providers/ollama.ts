@@ -23,6 +23,14 @@ export class OllamaProvider implements Provider {
   // would clobber A's slot before A's customFetch reads it. ALS gives each
   // async context its own store and propagates across awaits.
   private signalStore = new AsyncLocalStorage<AbortSignal | undefined>();
+  // Per-model context window pulled from `/api/show` (model_info's
+  // `<arch>.context_length` key). Populated by `primeModelCache` /
+  // `getModelInfo`; `getCapabilities` consults this before falling back to
+  // the hardcoded estimate. Ollama reports the model's native context here,
+  // which is what compaction should budget against — the previous hardcoded
+  // 16K for deepseek tripped compaction at ~12K tokens on a 128K-capable
+  // model.
+  private contextWindowCache = new Map<string, number>();
 
   constructor(host?: string) {
     const customFetch: typeof fetch = (input, init) => {
@@ -48,16 +56,34 @@ export class OllamaProvider implements Provider {
   async getModelInfo(model: string): Promise<ModelInfo> {
     const response = await this.client.show({ model });
     const capabilities = response.capabilities ?? [];
+    const ctx = extractContextLength(response.model_info);
+    if (ctx > 0) this.contextWindowCache.set(model, ctx);
     return {
       supportsTools: capabilities.includes('tools'),
       capabilities,
     };
   }
 
+  /** Populate per-model caches (currently just `contextWindowCache`) so the
+   *  synchronous `getCapabilities` reads the model's real context length
+   *  instead of the hardcoded estimate. Best-effort: failures (server down,
+   *  model not pulled) leave the cache empty and `getCapabilities` falls
+   *  through to `estimateContextWindow`. Mirrors the listModels priming
+   *  step in swap.ts. */
+  async primeModelCache(model: string): Promise<void> {
+    try {
+      await this.getModelInfo(model);
+    } catch {
+      // Intentionally silent — we don't want session start to fail if the
+      // user hasn't pulled the model yet, or the ollama server is briefly
+      // unreachable. The capability lookup will use the estimate instead.
+    }
+  }
+
   getCapabilities(model: string): ProviderCapabilities {
     const tier = estimateOllamaModelTier(model);
     return {
-      contextWindow: estimateContextWindow(model),
+      contextWindow: this.contextWindowCache.get(model) ?? estimateContextWindow(model),
       maxOutputTokens: 4096,
       toolSupport: tier === 'weak' ? 'basic' : 'native',
       parallelToolCalls: false,
@@ -65,6 +91,14 @@ export class OllamaProvider implements Provider {
       tokenCounting: 'estimated',
       modelTier: tier,
     };
+  }
+
+  /** Returns the context window to send as `num_ctx` on chat requests.
+   *  Falls back to the estimate when the cache miss path is hit (e.g.
+   *  primeModelCache failed). Sending a `num_ctx` larger than the model's
+   *  configured context overflows ollama server-side. */
+  private resolveContextWindow(model: string): number {
+    return this.contextWindowCache.get(model) ?? estimateContextWindow(model);
   }
 
   async *chat(
@@ -80,7 +114,7 @@ export class OllamaProvider implements Provider {
       tools: tools as Tool[],
       // num_predict caps output length so degenerate repetition loops can't
       // run forever. Ollama's default is -1 (no limit).
-      options: { num_ctx: estimateContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
+      options: { num_ctx: this.resolveContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
     };
 
     const stream = await this.client.chat(request);
@@ -156,7 +190,7 @@ export class OllamaProvider implements Provider {
       messages: messages as Message[],
       stream: false,
       tools: tools as Tool[],
-      options: { num_ctx: estimateContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
+      options: { num_ctx: this.resolveContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
     };
 
     const signal = options?.signal;
@@ -248,4 +282,27 @@ function estimateContextWindow(model: string): number {
   if (lower.includes('mixtral')) return 32768;
   if (lower.includes('deepseek')) return 16384;
   return 8192; // conservative default
+}
+
+/** Extract the model's native context length from ollama's `/api/show`
+ *  `model_info` field. Ollama prefixes the key by architecture (e.g.
+ *  `llama.context_length`, `qwen2.context_length`, `deepseek2.context_length`),
+ *  so we match by suffix. Returns 0 when the field is absent or non-numeric
+ *  — callers fall back to {@link estimateContextWindow}. Defensive against
+ *  both a real `Map` and a plain-object payload (some test fakes use the
+ *  latter even though the SDK types declare a Map). */
+function extractContextLength(modelInfo: unknown): number {
+  if (!modelInfo) return 0;
+  const entries: Iterable<[string, unknown]> =
+    modelInfo instanceof Map
+      ? modelInfo.entries()
+      : typeof modelInfo === 'object'
+        ? Object.entries(modelInfo as Record<string, unknown>)
+        : [];
+  for (const [key, value] of entries) {
+    if (key.endsWith('.context_length') && typeof value === 'number' && value > 0) {
+      return value;
+    }
+  }
+  return 0;
 }

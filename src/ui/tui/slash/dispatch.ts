@@ -13,6 +13,10 @@ interface SlashCommandContext {
   tabs?: TabsContextValue;
   openPicker?: () => void;
   toggleFullOutput?: () => boolean;
+  /** Opens the provider/model picker in compaction-target mode and resolves
+   *  with the chosen tuple (or null on cancel). Wired by the TUI; absent in
+   *  headless/test contexts that don't host the picker. */
+  openCompactionPicker?: () => Promise<{ providerName: string; model: string } | null>;
 }
 
 type SlashHandler = (arg: string, ctx: SlashCommandContext) => void | Promise<void>;
@@ -171,6 +175,42 @@ function handlePick(_arg: string, ctx: SlashCommandContext): void {
   else ctx.agent.addNotice('warn', 'Picker not available in this context.');
 }
 
+async function handleCompactionModel(arg: string, ctx: SlashCommandContext): Promise<void> {
+  const refs = ctx.agent.refs.current;
+  if (!refs) return;
+  const trimmed = arg.trim().toLowerCase();
+  if (trimmed === 'show' || trimmed === 'status') {
+    if (refs.compactionTarget) {
+      ctx.agent.addNotice(
+        'info',
+        `Compaction model: ${refs.compactionTarget.providerName} / ${refs.compactionTarget.model}`,
+      );
+    } else {
+      ctx.agent.addNotice(
+        'info',
+        `Compaction model: primary (${refs.provider.name} / ${refs.model})`,
+      );
+    }
+    return;
+  }
+  if (trimmed === 'clear' || trimmed === 'reset' || trimmed === 'default') {
+    refs.compactionTarget = undefined;
+    ctx.agent.addNotice(
+      'info',
+      `Compaction will use the primary model (${refs.provider.name} / ${refs.model}).`,
+    );
+    return;
+  }
+  if (!ctx.openCompactionPicker) {
+    ctx.agent.addNotice('warn', 'Compaction picker not available in this context.');
+    return;
+  }
+  const pick = await ctx.openCompactionPicker();
+  if (!pick) return;
+  refs.compactionTarget = pick;
+  ctx.agent.addNotice('info', `Compaction model set to ${pick.providerName} / ${pick.model}.`);
+}
+
 async function handleHooks(_arg: string, { agent }: SlashCommandContext): Promise<void> {
   const refs = agent.refs.current!;
   await dispatchHooks(agent, refs.hooksConfig);
@@ -219,6 +259,7 @@ const HANDLERS: Record<string, SlashHandler> = {
   '/cwd': (arg, { agent }) => agent.setCwd(arg),
   '/exp': (arg, { agent }) => handleExpCommand(agent, arg),
   '/pick': handlePick,
+  '/compaction-model': handleCompactionModel,
   '/rotate': (arg, { agent }) => dispatchRotate(arg, agent),
   '/keys': (arg, { agent }) => dispatchKeys(arg, agent),
   '/stats': (arg, { agent }) => dispatchStats(arg, agent),
@@ -261,6 +302,10 @@ function printHelp(agent: AgentLoopApi): void {
       'Show current provider/model, or switch model. Accepts <provider>:<model>.',
     ],
     ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
+    [
+      '/compaction-model [show|clear]',
+      'Pick a provider/model for context compaction (defaults to primary). `show` prints current; `clear` resets to primary.',
+    ],
     ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
     ['/keys [<provider>]', 'Show saved keys with usage / rate-limit / cache-hit counters'],
     ['/stats', 'Cache hit rate, compaction events, largest tool results for the current session'],

@@ -94,15 +94,6 @@ export interface RunRefs {
    *  (provider, model) for the summary call instead of routing through
    *  the weak-tier picker. */
   compactionTarget?: { providerName: string; model: string };
-  /** UI bridge for the compaction-model picker. Called by ContextManager
-   *  on the first compaction of a session when `compactionTarget` is
-   *  unset. Resolves to the user's pick, or null if they cancel — in
-   *  which case the current turn's compaction is skipped entirely (no
-   *  weak-tier fallback) and the prompt is re-shown next turn. Set by
-   *  Session.tsx on mount; left undefined for headless callers, which
-   *  must pre-seed `compactionTarget` via --compaction-model (or accept
-   *  the primary-tuple default seeded at init time). */
-  requestCompactionModel?: () => Promise<{ providerName: string; model: string } | null>;
   /** UI bridge for the rotation prompt + fallback picker dance. Called by
    *  the rotation runtime after both tiers exhaust; returns the chosen
    *  entry or `null` if the user declined / cancelled. Set by Session.tsx

@@ -100,7 +100,7 @@ export function Session(props: SessionProps): React.ReactElement {
   showFullOutputRef.current = showFullOutput;
   const agent = useAgentLoop(props);
   const { rotationPrompt, fallbackPickerResolver } = useRotationFallback(agent, setPickerOpen);
-  const { compactionPickerResolver } = useCompactionPicker(agent, setPickerOpen);
+  const { compactionPickerResolver, openCompactionPicker } = useCompactionPicker(setPickerOpen);
   // Cache picker-created Provider instances so getModelInfo can call their
   // pure picker-info methods (getModelPickerInfo, getDisplayModelName,
   // getCapabilities) without re-instantiating per render. Keyed by
@@ -214,6 +214,7 @@ export function Session(props: SessionProps): React.ReactElement {
     showFullOutputRef,
     setShowFullOutput,
     rotationPrompt,
+    openCompactionPicker,
   });
 
   const activeProvider = refs.current?.provider ?? props.provider;

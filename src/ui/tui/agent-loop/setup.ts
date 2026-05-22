@@ -158,6 +158,22 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
     }
   });
 
+  // Some providers (ollama) need an async call to learn the model's real
+  // context window. Fire-and-forget: when it settles, refresh the
+  // ContextManager's contextWindow so compaction budgets against the right
+  // limit. The initial estimate is conservative, so this can only widen
+  // the window — never narrow it below what we already chose.
+  const provider = ctx.refs.current.provider;
+  const activeModel = ctx.refs.current.model;
+  if (provider.primeModelCache) {
+    void provider.primeModelCache(activeModel).then(() => {
+      const refs = ctx.refs.current;
+      if (!refs || refs.provider !== provider || refs.model !== activeModel) return;
+      const updated = provider.getCapabilities(activeModel).contextWindow;
+      refs.contextManager.setContextWindow(updated);
+    });
+  }
+
   // Seed the token estimate so the status bar shows the system prompt's
   // baseline before the first model response. Pass `[]` when text-tool
   // fallback is on — refreshEstimate counts tools-schema overhead, and

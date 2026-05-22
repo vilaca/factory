@@ -7,6 +7,7 @@ import {
   stopMockServer,
   setNextResponse,
   setModelCapabilities,
+  setModelInfo,
 } from '../../mock-ollama-server.js';
 
 let server: http.Server;
@@ -24,6 +25,7 @@ after(async () => {
 
 beforeEach(() => {
   setModelCapabilities(['completion', 'tools']);
+  setModelInfo(undefined);
 });
 
 function host(): string {
@@ -99,6 +101,33 @@ describe('OllamaProvider.getCapabilities', () => {
     assert.strictEqual(provider().getCapabilities('deepseek-coder:6.7b').contextWindow, 16384);
     assert.strictEqual(provider().getCapabilities('llama3:8b').contextWindow, 8192);
     assert.strictEqual(provider().getCapabilities('mystery:latest').contextWindow, 8192);
+  });
+
+  it('uses the real <arch>.context_length from /api/show once primed', async () => {
+    setModelInfo({ 'deepseek2.context_length': 131072 });
+    const p = provider();
+    // Estimate fires first because the prime is async.
+    assert.strictEqual(p.getCapabilities('deepseek-coder:33b').contextWindow, 16384);
+    await p.primeModelCache!('deepseek-coder:33b');
+    // After prime, the real value wins.
+    assert.strictEqual(p.getCapabilities('deepseek-coder:33b').contextWindow, 131072);
+  });
+
+  it('falls back to the estimate when model_info lacks a context_length key', async () => {
+    setModelInfo({ 'deepseek2.parameter_count': 33_000_000_000 });
+    const p = provider();
+    await p.primeModelCache!('deepseek-coder:33b');
+    assert.strictEqual(p.getCapabilities('deepseek-coder:33b').contextWindow, 16384);
+  });
+
+  it('primeModelCache swallows transport failures', async () => {
+    const unreachable = new OllamaProvider('http://127.0.0.1:1');
+    await unreachable.primeModelCache!('whatever:latest');
+    // No throw; capability lookup still works via estimate.
+    assert.strictEqual(
+      unreachable.getCapabilities('llama3:8b').contextWindow,
+      8192,
+    );
   });
 });
 

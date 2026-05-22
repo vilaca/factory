@@ -62,6 +62,20 @@ function rebuildContextManager(refs: NonNullable<RunRefs>, ctx: SwapContext): vo
     },
     makeCompactionResolver(ctx.refs),
   );
+  // Best-effort async prime for providers (ollama) whose contextWindow is
+  // only known after a /show call. Mirrors the mount-time priming in
+  // setup.ts. The provider/model identity check guards against a second
+  // swap landing while this is in flight — we only update the manager if
+  // refs still point at the same tuple we primed for.
+  const provider = refs.provider;
+  const activeModel = refs.model;
+  if (provider.primeModelCache) {
+    void provider.primeModelCache(activeModel).then(() => {
+      const current = ctx.refs.current;
+      if (!current || current.provider !== provider || current.model !== activeModel) return;
+      current.contextManager.setContextWindow(provider.getCapabilities(activeModel).contextWindow);
+    });
+  }
 }
 
 /** Swap to another model on the *current* provider. Honors `provider:model`

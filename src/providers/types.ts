@@ -175,6 +175,11 @@ export interface Provider {
   getModelPickerInfo?(model: string): ModelPickerInfo;
   getCapabilities(model: string): ProviderCapabilities;
   getModelInfo?(model: string): Promise<ModelInfo>;
+  /** Best-effort warm-up for any per-model caches a provider relies on for
+   *  the synchronous `getCapabilities` path (e.g. ollama's `/api/show` →
+   *  context_length lookup). Implementations must swallow transient errors;
+   *  a failed prime should leave callers free to proceed with estimates. */
+  primeModelCache?(model: string): Promise<void>;
   chat(
     model: string,
     messages: ChatMessage[],

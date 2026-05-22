@@ -98,6 +98,7 @@ export function instrumentProviderRequests(
   if (inner.getDisplayModelName) wrapped.getDisplayModelName = inner.getDisplayModelName.bind(inner);
   if (inner.getModelPickerInfo) wrapped.getModelPickerInfo = inner.getModelPickerInfo.bind(inner);
   if (inner.getModelInfo) wrapped.getModelInfo = inner.getModelInfo.bind(inner);
+  if (inner.primeModelCache) wrapped.primeModelCache = inner.primeModelCache.bind(inner);
   if (inner.countTokens) wrapped.countTokens = inner.countTokens.bind(inner);
   return wrapped;
 }
