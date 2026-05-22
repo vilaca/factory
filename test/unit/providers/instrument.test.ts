@@ -42,11 +42,21 @@ function fakeProvider(
       log.calls.push(`${name}:getModelInfo`);
       return { supportsTools: true };
     },
-    chat(_model, _messages, _tools, _opts) {
+    chat(
+      _model: string,
+      _messages: ChatMessage[],
+      _tools?: ToolDefinition[],
+      _opts?: ChatOptions,
+    ) {
       log.calls.push(`${name}:chat`);
       return stream();
     },
-    async chatNoStream(_model, _messages, _tools, _opts) {
+    async chatNoStream(
+      _model: string,
+      _messages: ChatMessage[],
+      _tools?: ToolDefinition[],
+      _opts?: ChatOptions,
+    ) {
       log.calls.push(`${name}:chatNoStream`);
       return { content: 'done', done: true } as ChatChunk;
     },
