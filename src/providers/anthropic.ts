@@ -282,7 +282,7 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
   // any `tool_use` block from a preceding assistant turn doesn't have
   // a matching `tool_result` before the next user message. This
   // happens naturally when the framework emits a step or prereq
-  // nudge (`next-steps.md` §16): the assistant produced a `tool_use`
+  // nudge (`docs/reliability/next-steps.md` §16): the assistant produced a `tool_use`
   // that the framework refused to execute, then injected a corrective
   // user message. We thread a `pendingToolUseIds` set through the
   // walk and synthesize an `is_error: true` `tool_result` block for
@@ -348,12 +348,17 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       const idx = pendingToolUseIds.indexOf(msg.tool_call_id);
       if (idx >= 0) pendingToolUseIds.splice(idx, 1);
     } else {
-      // Plain user / plain assistant text. Before pushing this user
+      // Plain user / plain assistant text. Before pushing this
       // message, flush any pending tool_use IDs as synthetic
       // is_error blocks — Anthropic rejects unpaired tool_use, and
       // the framework's step/prereq nudge path produces exactly
       // that shape (assistant proposed a call we refused to run).
-      if (msg.role === 'user' && pendingToolUseIds.length > 0) {
+      // The conversation grammar today only emits nudges as user
+      // messages, but flushing on assistant boundaries too is a
+      // defensive guard against future regressions that could
+      // produce assistant-after-assistant runs (e.g. summary
+      // injection, mid-turn rewrites).
+      if (pendingToolUseIds.length > 0) {
         const errBlocks: ToolResultBlockParam[] = pendingToolUseIds.map(id => ({
           type: 'tool_result',
           tool_use_id: id,

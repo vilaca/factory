@@ -164,6 +164,7 @@ export class GoogleAiStudioProvider implements Provider {
       options,
       maxTokensField: 'max_tokens',
       extra: tools && tools.length > 0 ? { tool_choice: 'auto' } : undefined,
+      providerName: PROVIDER_NAME,
     });
   }
 

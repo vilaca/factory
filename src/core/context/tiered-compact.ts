@@ -7,7 +7,7 @@ import { inferDefaultMessageType } from '../../utils/chat-message.js';
  * message, leaving the model's interpretive context (reasoning,
  * tool_call skeletons) intact as long as possible.
  *
- * Cut order matches the reliability spec (next-steps.md §10):
+ * Cut order matches the reliability spec (docs/reliability/next-steps.md §10):
  *   1. Cut first: ephemeral nudges (no long-term value).
  *   2. Cut second: raw tool data (recoverable — model can re-call).
  *   3. Cut third: text response (failed attempt, already corrected).
@@ -236,21 +236,27 @@ export function runTieredCompact(opts: {
   const p1 = applyPhase1(eligible);
   let workingMessages = [...head, ...p1.out, ...tailKept];
   let phaseReached: CompactionPhase = p1.changed ? 1 : 0;
+  let cumulativeChanged = p1.changed;
   if (opts.estimateFraction(workingMessages) < stopBelow) {
-    return { phase: phaseReached, messages: workingMessages, changed: p1.changed };
+    return { phase: phaseReached, messages: workingMessages, changed: cumulativeChanged };
   }
 
-  // Phase 2
+  // Phase 2 (supersets P1 internally — see applyPhase2). `changed` reflects
+  // the phase's own delta vs. its input; we OR with the running flag so the
+  // returned `changed` is the cumulative result vs. the original eligible
+  // slice, not just the final phase's delta.
   const p2 = applyPhase2(eligible);
   workingMessages = [...head, ...p2.out, ...tailKept];
   phaseReached = p2.changed ? 2 : phaseReached;
+  cumulativeChanged = cumulativeChanged || p2.changed;
   if (opts.estimateFraction(workingMessages) < stopBelow) {
-    return { phase: phaseReached, messages: workingMessages, changed: p2.changed };
+    return { phase: phaseReached, messages: workingMessages, changed: cumulativeChanged };
   }
 
   // Phase 3
   const p3 = applyPhase3(eligible);
   workingMessages = [...head, ...p3.out, ...tailKept];
   phaseReached = p3.changed ? 3 : phaseReached;
-  return { phase: phaseReached, messages: workingMessages, changed: p3.changed };
+  cumulativeChanged = cumulativeChanged || p3.changed;
+  return { phase: phaseReached, messages: workingMessages, changed: cumulativeChanged };
 }

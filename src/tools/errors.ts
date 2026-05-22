@@ -18,7 +18,7 @@
  *     budget, not the hard-error counter.
  *
  * Inherits from `Error` directly, NOT from the framework's
- * ReliabilityError hierarchy. The reasoning (next-steps.md §9): this
+ * ReliabilityError hierarchy. The reasoning (docs/reliability/next-steps.md §9): this
  * is a tool-author signal, not a framework failure. Sitting under the
  * framework hierarchy would conflate "the loop is unwinding" with
  * "the tool's data store said no."

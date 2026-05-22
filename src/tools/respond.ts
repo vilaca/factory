@@ -5,7 +5,7 @@ const definition: ToolDefinition = {
   type: 'function',
   function: {
     name: TOOL_NAMES.Respond,
-    // Description lifted verbatim from the reliability spec (next-steps.md §13).
+    // Description lifted verbatim from the reliability spec (docs/reliability/next-steps.md §13).
     // Wording is load-bearing: the model is supposed to read this and treat
     // `Respond` as the structured terminal action when no other tool action
     // is needed, instead of guessing between "emit text" and "call a tool".

@@ -2,7 +2,7 @@
  * Tracks which required steps have been completed and what arguments
  * every tool call ran with. Lives on the agent run, *outside* the
  * message history — compaction can rewrite the chat log, the
- * step-completion record stays intact (next-steps.md §3, "Control flow
+ * step-completion record stays intact (docs/reliability/next-steps.md §3, "Control flow
  * is not memory").
  *
  * StepTracker is intentionally narrow: it answers two questions for

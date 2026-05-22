@@ -139,7 +139,7 @@ export class WorkersAiProvider implements Provider {
   ): Record<string, unknown> {
     // Workers AI rejects temperature=0 with a 400 — substitute a tiny epsilon.
     const adjusted = options?.temperature === 0 ? { ...options, temperature: 1e-8 } : options;
-    return buildChatBody({ model, messages, tools, stream, options: adjusted });
+    return buildChatBody({ model, messages, tools, stream, options: adjusted, providerName: PROVIDER_NAME });
   }
 
   private authHeaders(): Record<string, string> {

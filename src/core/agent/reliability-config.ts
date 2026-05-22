@@ -17,7 +17,7 @@ import { getSamplingDefaults } from '../../providers/sampling-defaults.js';
  * (model).modelTier`. The picker already classifies models into
  * strong/medium/weak; weak is the small-model cohort that benefits from
  * every guardrail. As Phase 9's sampling-defaults map and the
- * conditional surfacing rules from `next-steps.md` land, this helper
+ * conditional surfacing rules from `docs/reliability/next-steps.md` land, this helper
  * grows to consult those signals too.
  */
 export interface ReliabilityActivation {

@@ -1,5 +1,5 @@
 /**
- * Tool prerequisite declaration (next-steps.md §8). Either:
+ * Tool prerequisite declaration (docs/reliability/next-steps.md §8). Either:
  *   - A bare tool name — the prereq is satisfied if that tool has been
  *     called successfully at least once this run, regardless of args.
  *   - `{ tool, matchArg }` — the prereq is satisfied if that tool was

@@ -14,7 +14,7 @@ export interface ToolCallMessage {
  * The tag lives only in-process; it's stripped before serialization to
  * any provider, so adding it is wire-invisible.
  *
- * Tag taxonomy follows the reliability spec (next-steps.md §3):
+ * Tag taxonomy follows the reliability spec (docs/reliability/next-steps.md §3):
  *  - `system_prompt`  — never cut by compaction.
  *  - `user_input`     — original user turn; never cut.
  *  - `tool_call`      — assistant message carrying tool_calls; preserved.

@@ -225,7 +225,7 @@ function applyResultToRecovery(
     recovery.consecutiveSameFailures = 0;
     // Clean batch (this call succeeded) — reset the hard-error counter
     // so a transient throw earlier in the run doesn't bleed into the
-    // next batch's bailout decision (next-steps.md §9, "Counters reset
+    // next batch's bailout decision (docs/reliability/next-steps.md §9, "Counters reset
     // on any fully clean batch").
     recovery.consecutiveHardToolErrors = 0;
     recovery.lastHardToolName = null;

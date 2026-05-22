@@ -1,7 +1,7 @@
 import { appendProviderLog } from '../utils/provider-log.js';
 
 /**
- * Per-model sampling defaults map (next-steps.md §17).
+ * Per-model sampling defaults map (docs/reliability/next-steps.md §17).
  *
  * Each model family that the reliability spec verified gets its
  * recommended sampling parameters here, sourced from the HF model

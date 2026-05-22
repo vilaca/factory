@@ -28,7 +28,7 @@ export interface StepCheck {
 }
 
 /**
- * Step enforcer (next-steps.md §7). Stateful — lives for one agent run.
+ * Step enforcer (docs/reliability/next-steps.md §7). Stateful — lives for one agent run.
  *
  * Two checks both consume a batch of tool calls and return either a
  * nudge or "go ahead":
@@ -40,7 +40,7 @@ export interface StepCheck {
  *
  *   - `checkPrerequisites(toolCalls)` flags calls whose tool declared
  *     prerequisites that haven't been met yet. Whole-batch blocking —
- *     a single violator nudges the whole batch (next-steps.md §7).
+ *     a single violator nudges the whole batch (docs/reliability/next-steps.md §7).
  *
  * Both consult the same `StepTracker` so they agree on what has run.
  * Counter resets are handled by `recordCleanBatch()` and `record()`,

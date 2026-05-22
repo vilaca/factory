@@ -1,5 +1,5 @@
 /**
- * Think-tag extraction and reasoning-fold utilities (next-steps.md §14, §15).
+ * Think-tag extraction and reasoning-fold utilities (docs/reliability/next-steps.md §14, §15).
  *
  * Three thinking-tag formats are in the wild:
  *   - `[THINK]...[/THINK]` — Mistral Ministral Reasoning
@@ -71,7 +71,7 @@ export function extractThinkTags(content: string): ThinkExtractResult {
  * in-process for compaction, but bundled on the wire to satisfy Jinja
  * template parity checks on llama-server / other strict backends.
  *
- * The fold rule (from next-steps.md §14):
+ * The fold rule (from docs/reliability/next-steps.md §14):
  *   - When a REASONING message immediately precedes a message with
  *     `tool_calls`, set the following message's `content` to the
  *     reasoning text and drop the orphan.

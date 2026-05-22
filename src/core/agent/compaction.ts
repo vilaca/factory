@@ -96,7 +96,7 @@ export async function* maybeCompact(
   // didn't free enough — typically because the remaining tool_call
   // skeletons + recent boundaries still exceed the budget. The summary
   // call is the existing model-assisted compaction; the framework
-  // calls this an anti-pattern (next-steps.md §38) for normal use,
+  // calls this an anti-pattern (docs/reliability/next-steps.md §38) for normal use,
   // but as a last-resort it's better than the request 500ing.
   if (contextManager.shouldCompact()) {
     yield { type: 'compaction-start', aggressive: false };

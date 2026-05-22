@@ -14,7 +14,7 @@ import { retryNudge, unknownToolNudge } from './nudges.js';
  * extraction, future BFCL-style harnesses) without inheriting the
  * counter semantics.
  *
- * Per next-steps.md §4:
+ * Per docs/reliability/next-steps.md §4:
  *   - Input: `LLMResponse` (tool calls + text content + any rescued
  *     tool calls from text parsing).
  *   - Output: `ValidationResult` carrying either tool calls (execute)

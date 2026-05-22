@@ -9,7 +9,7 @@
  * Deliberately *not* `ToolResolutionError`'s ancestor — that exception
  * lives at `src/tools/errors.ts` and inherits from `Error` directly
  * because it's a tool-author signal, not a framework failure
- * (next-steps.md §9).
+ * (docs/reliability/next-steps.md §9).
  */
 export class ReliabilityError extends Error {
   constructor(message: string) {

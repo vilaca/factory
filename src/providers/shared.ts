@@ -30,7 +30,7 @@ export { formatTokenCount } from '../utils/format-tokens.js';
 /**
  * Reliability stack (Phase 10): resolve final sampling values for one
  * request. Blends three sources with priority (later overrides earlier):
- *   1. Per-model defaults table (next-steps.md §17). Applied when
+ *   1. Per-model defaults table (docs/reliability/next-steps.md §17). Applied when
  *      `opts.recommendedSampling` is true OR an entry exists for the
  *      model (auto-enable for known small-model deployments).
  *   2. Provider-instance defaults (passed in via `instanceDefaults`).

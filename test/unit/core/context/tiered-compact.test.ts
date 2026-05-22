@@ -202,4 +202,76 @@ describe('runTieredCompact — phase escalation', () => {
     assert.equal(step4.length, 2, 'step 4 untouched');
     assert.equal(step5.length, 2, 'step 5 untouched');
   });
+
+  it('cumulative changed flag: P1 mutates, P2 is no-op but still over → changed=true', () => {
+    // Build a conversation where P1 (drops nudges, truncates) clearly
+    // mutates, but everything stays large enough that P2 also runs.
+    // We assert changed=true *after* P2 — historically this returned
+    // p2.changed only, masking P1's mutation.
+    const msgs = buildLongConversation();
+    // Two probes: initial (over), post-P1 (still over), post-P2 (under).
+    const probes = [0.95, 0.85, 0.5];
+    let i = 0;
+    const result = runTieredCompact({
+      messages: msgs,
+      estimateFraction: () => probes[i++] ?? 0.5,
+      stopBelow: 0.75,
+      keepRecent: 2,
+    });
+    assert.equal(result.phase, 2);
+    assert.equal(result.changed, true, 'changed must be cumulative across phases');
+  });
+
+  it('tool_call ↔ tool_result pairing: Phase 2 drops results but tool_calls survive', () => {
+    // After P2, tool_call entries are still in the conversation so the
+    // dialogue arc is preserved. Anthropic-side splitMessages then
+    // emits is_error tool_results for any unpaired tool_use IDs at the
+    // next user boundary (verified in providers/anthropic.ts). The
+    // contract here: P2 must not orphan tool_calls *and* drop them in
+    // the same pass.
+    const msgs = buildLongConversation();
+    const probes = [0.95, 0.85, 0.5];
+    let i = 0;
+    const result = runTieredCompact({
+      messages: msgs,
+      estimateFraction: () => probes[i++] ?? 0.5,
+      stopBelow: 0.75,
+      keepRecent: 2,
+    });
+    const eligibleToolCalls = result.messages
+      .slice(2)
+      .filter(
+        m =>
+          m.metadata?.type === 'tool_call' &&
+          m.metadata.stepIndex !== undefined &&
+          m.metadata.stepIndex < 4,
+      );
+    assert.ok(
+      eligibleToolCalls.length > 0,
+      'tool_call skeletons must outlive their tool_results at P2',
+    );
+  });
+
+  it('preserves metadata (type, stepIndex) on surviving messages across phases', () => {
+    const msgs = buildLongConversation();
+    const result = runTieredCompact({
+      messages: msgs,
+      estimateFraction: () => 0.99,
+      stopBelow: 0.75,
+      keepRecent: 2,
+    });
+    // Every surviving non-system message keeps its metadata block.
+    // The compaction pipeline downstream (findEligibleEnd on the next
+    // turn, conversation-tagging in tests) depends on this.
+    for (const m of result.messages) {
+      assert.ok(m.metadata, `message "${m.role}" lost metadata: ${JSON.stringify(m)}`);
+      assert.ok(m.metadata.type, 'metadata.type must persist through phases');
+    }
+    // Recent messages keep their stepIndex.
+    const step5 = result.messages.filter(m => m.metadata?.stepIndex === 5);
+    assert.ok(step5.length > 0, 'step 5 (recent) should still be present');
+    for (const m of step5) {
+      assert.equal(m.metadata?.stepIndex, 5);
+    }
+  });
 });

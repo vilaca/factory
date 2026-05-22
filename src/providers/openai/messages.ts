@@ -75,6 +75,11 @@ interface BuildChatBodyOptions {
    *  Default off — only safe when the upstream is Anthropic (e.g.
    *  OpenRouter routing to `anthropic/claude-*`). */
   cacheControl?: boolean;
+  /** Caller-side label routed to `resolveSampling` so the
+   *  per-model sampling-defaults diagnostic log fires with the
+   *  correct provider attribution. Optional; omitting it suppresses
+   *  the log (defaults still apply). */
+  providerName?: string;
 }
 
 export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknown> {
@@ -112,7 +117,10 @@ export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknow
   // change. `temperature` is included in ResolvedSampling, so the
   // legacy `body.temperature = options.temperature` write is now
   // subsumed.
-  const resolved = resolveSampling(opts.options, { model: opts.model });
+  const resolved = resolveSampling(opts.options, {
+    model: opts.model,
+    providerName: opts.providerName,
+  });
   applySamplingToBody(body, resolved);
   // TODO(provider-capabilities/openai-options): buildChatBody is reused by
   // multiple "OpenAI-compatible" providers, some of which reject unknown
