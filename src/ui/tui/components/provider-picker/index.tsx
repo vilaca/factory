@@ -73,7 +73,7 @@ interface ProviderPickerProps {
   purpose?: 'select-active' | 'select-rotation-entry';
 }
 
-// eslint-disable-next-line sonarjs/cognitive-complexity -- TODO(complexity): split prop destructure + dual hook wiring (useValidateKeyEffect / useProviderPickerKeys) behind a single useProviderPickerState helper.
+// eslint-disable-next-line sonarjs/cognitive-complexity -- complexity-ok: prop destructure + conditional spreads into two hooks (useValidateKeyEffect / useProviderPickerKeys); the body is mechanical wiring.
 export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   const {
     providers,

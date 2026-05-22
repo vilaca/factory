@@ -16,6 +16,7 @@ import { Conversation } from '../core/context/conversation.js';
 import { ContextManager } from '../core/context/context-manager.js';
 import { createProvider, descriptorByAlias } from '../providers/registry.js';
 import { instrumentProviderRequests } from '../providers/instrument.js';
+import { logModelRequestTo } from './session-bridge.js';
 import { getKey } from '../core/auth/credentials.js';
 import { loadGlobalConfig } from '../core/config/index.js';
 import { PermissionManager } from '../security/permissions.js';
@@ -362,17 +363,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   // log via logModelRequest. Mirrors the TUI's createInitialRefs wiring so the
   // headless and TUI modes produce comparable JSONL streams.
   const provider: Provider = sessionLogger
-    ? instrumentProviderRequests(options.provider, info =>
-        sessionLogger?.logModelRequest({
-          provider: info.provider,
-          model: info.model,
-          source: info.source,
-          streaming: info.streaming,
-          messages: info.messages as unknown[],
-          ...(info.tools ? { tools: info.tools as unknown[] } : {}),
-          ...(info.options ? { options: info.options as unknown as Record<string, unknown> } : {}),
-        }),
-      )
+    ? instrumentProviderRequests(options.provider, info => logModelRequestTo(sessionLogger, info))
     : options.provider;
   const capabilities = provider.getCapabilities(options.model);
   // Headless never prompts — the resolver returns a fixed tuple every
@@ -405,18 +396,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       const wrapped = sessionLogger
         ? instrumentProviderRequests(
             fresh,
-            info =>
-              sessionLogger?.logModelRequest({
-                provider: info.provider,
-                model: info.model,
-                source: info.source,
-                streaming: info.streaming,
-                messages: info.messages as unknown[],
-                ...(info.tools ? { tools: info.tools as unknown[] } : {}),
-                ...(info.options
-                  ? { options: info.options as unknown as Record<string, unknown> }
-                  : {}),
-              }),
+            info => logModelRequestTo(sessionLogger, info),
             'compaction',
           )
         : fresh;

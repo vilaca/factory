@@ -58,7 +58,7 @@ export async function correctToolCall(
         { role: 'user', content: userMessage },
       ],
       undefined,
-      { signal, temperature: 0 },
+      { signal, temperature: 0, _requestSource: 'corrector' },
     );
 
     const text = (response.content ?? '').trim();

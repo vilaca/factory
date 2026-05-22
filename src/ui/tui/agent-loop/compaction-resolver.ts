@@ -25,7 +25,7 @@ import { createProvider, descriptorByAlias } from '../../../providers/registry.j
 import { getKey } from '../../../core/auth/credentials.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
-import { logModelRequestFromInfo } from './instrument-bridge.js';
+import { logModelRequestTo } from '../../session-bridge.js';
 import type { Provider } from '../../../providers/types.js';
 import type { CompactionTargetResolver } from '../../../core/context/context-manager.js';
 import type { RunRefs } from './agent-loop-types.js';
@@ -86,7 +86,7 @@ export function makeCompactionResolver(refs: {
       provider = r.sessionLogger
         ? instrumentProviderRequests(
             fresh,
-            info => logModelRequestFromInfo(r.sessionLogger, info),
+            info => logModelRequestTo(r.sessionLogger, info),
             'compaction',
           )
         : fresh;

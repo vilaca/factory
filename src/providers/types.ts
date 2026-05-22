@@ -81,10 +81,26 @@ export interface ModelPickerInfo {
   warning?: string;
 }
 
+/**
+ * Source label for an outgoing LLM call. Used by `instrumentProviderRequests`
+ * (and the session log via `logModelRequest`) to bucket requests by which
+ * subsystem issued them. Defined here so the per-call override hook on
+ * `ChatOptions._requestSource` doesn't pull in a cycle from instrument.ts.
+ */
+export type ModelRequestSource = 'main' | 'compaction' | 'corrector' | 'subagent';
+
 export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /** Per-call override for the request-source tag read by the
+   *  `instrumentProviderRequests` wrapper. The same wrapped Provider instance
+   *  is reused by the main agent loop, the tool-call corrector
+   *  (`tool-call-corrector.ts`), and the compaction summary
+   *  (`context-manager.ts`), so the wrap-time `defaultSource` would mis-bucket
+   *  those callers as `main`. Providers strip unknown options — this field
+   *  exists only for the logging wrapper and is invisible to network code. */
+  _requestSource?: ModelRequestSource;
   /** Hint to providers that support explicit cache markers (Anthropic,
    * OpenRouter→Anthropic) to cache the tool definitions. Vendor-neutral:
    * other providers ignore. Pairs with `cacheBoundary` on ChatMessage so

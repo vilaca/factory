@@ -11,7 +11,7 @@ import {
   type SessionLogger,
 } from '../../../core/session/session-log.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
-import { logModelRequestFromInfo } from './instrument-bridge.js';
+import { logModelRequestTo } from '../../session-bridge.js';
 import { getBuildInfo } from '../../../utils/build-info.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { buildEnvironmentMessage } from '../../../core/context/system-prompt.js';
@@ -116,7 +116,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   );
 
   const instrumentedProvider = sessionLogger
-    ? instrumentProviderRequests(opts.provider, info => logModelRequestFromInfo(sessionLogger, info))
+    ? instrumentProviderRequests(opts.provider, info => logModelRequestTo(sessionLogger, info))
     : opts.provider;
 
   return {

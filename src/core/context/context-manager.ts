@@ -331,6 +331,7 @@ export class ContextManager {
       const response = await provider.chatNoStream(model, summaryPrompt, undefined, {
         maxTokens: 512,
         signal,
+        _requestSource: 'compaction',
       });
       return response.content ?? null;
     } catch (err: unknown) {

@@ -32,8 +32,9 @@ export function useValidateKeyEffect(args: UseValidateKeyEffectArgs): void {
     if (!validatingToken || !validatingProvider) return;
     if (!validateKey || !saveKey) return;
     let cancelled = false;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<ValidateResult>(resolve => {
-      setTimeout(
+      timeoutHandle = setTimeout(
         () => resolve({ ok: false, error: `validation timed out after ${VALIDATE_TIMEOUT_MS / 1000}s` }),
         VALIDATE_TIMEOUT_MS,
       );
@@ -78,6 +79,7 @@ export function useValidateKeyEffect(args: UseValidateKeyEffectArgs): void {
     );
     return () => {
       cancelled = true;
+      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     };
   }, [
     validatingToken,
