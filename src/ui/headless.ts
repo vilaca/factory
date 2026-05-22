@@ -15,6 +15,7 @@ import type { EnvPolicy } from '../security/env.js';
 import { Conversation } from '../core/context/conversation.js';
 import { ContextManager } from '../core/context/context-manager.js';
 import { createProvider, descriptorByAlias } from '../providers/registry.js';
+import { instrumentProviderRequests } from '../providers/instrument.js';
 import { getKey } from '../core/auth/credentials.js';
 import { loadGlobalConfig } from '../core/config/index.js';
 import { PermissionManager } from '../security/permissions.js';
@@ -357,7 +358,23 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     permissions.setBashRules(options.bashRules);
   }
 
-  const capabilities = options.provider.getCapabilities(options.model);
+  // Wrap the provider so every chat / chatNoStream call lands in the session
+  // log via logModelRequest. Mirrors the TUI's createInitialRefs wiring so the
+  // headless and TUI modes produce comparable JSONL streams.
+  const provider: Provider = sessionLogger
+    ? instrumentProviderRequests(options.provider, info =>
+        sessionLogger?.logModelRequest({
+          provider: info.provider,
+          model: info.model,
+          source: info.source,
+          streaming: info.streaming,
+          messages: info.messages as unknown[],
+          ...(info.tools ? { tools: info.tools as unknown[] } : {}),
+          ...(info.options ? { options: info.options as unknown as Record<string, unknown> } : {}),
+        }),
+      )
+    : options.provider;
+  const capabilities = provider.getCapabilities(options.model);
   // Headless never prompts — the resolver returns a fixed tuple every
   // call. Honors --compaction-model when supplied (possibly
   // cross-provider, in which case we instantiate the target provider on
@@ -368,8 +385,8 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     model: string;
   } | null> => {
     const target = options.compactionModel;
-    if (!target || target.providerName === options.provider.name) {
-      return { provider: options.provider, model: target?.model ?? options.model };
+    if (!target || target.providerName === provider.name) {
+      return { provider, model: target?.model ?? options.model };
     }
     try {
       const descriptor = descriptorByAlias(target.providerName);
@@ -384,13 +401,32 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           }
         }
       }
-      return { provider: createProvider(target.providerName, createOpts), model: target.model };
+      const fresh = createProvider(target.providerName, createOpts);
+      const wrapped = sessionLogger
+        ? instrumentProviderRequests(
+            fresh,
+            info =>
+              sessionLogger?.logModelRequest({
+                provider: info.provider,
+                model: info.model,
+                source: info.source,
+                streaming: info.streaming,
+                messages: info.messages as unknown[],
+                ...(info.tools ? { tools: info.tools as unknown[] } : {}),
+                ...(info.options
+                  ? { options: info.options as unknown as Record<string, unknown> }
+                  : {}),
+              }),
+            'compaction',
+          )
+        : fresh;
+      return { provider: wrapped, model: target.model };
     } catch (err: unknown) {
       // Same fallback shape as the TUI resolver — never block compaction
       // on auth/registry failures; the model call will trip the
       // mechanical-summary path.
       sessionLogger?.logWarning('compaction-resolver', errorMessage(err));
-      return { provider: options.provider, model: options.model };
+      return { provider, model: options.model };
     }
   };
   const contextManager = new ContextManager(
@@ -424,7 +460,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
 
   try {
     for await (const event of runAgent(userInput, {
-      provider: options.provider,
+      provider,
       model: options.model,
       conversation,
       permissions,

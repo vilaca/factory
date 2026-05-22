@@ -14,6 +14,8 @@ import {
   createProvider as defaultCreateProvider,
 } from '../../../providers/registry.js';
 import { errorMessage } from '../../../utils/errors.js';
+import { instrumentProviderRequests } from '../../../providers/instrument.js';
+import { logModelRequestFromInfo } from './instrument-bridge.js';
 import type { Provider } from '../../../providers/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 
@@ -229,9 +231,17 @@ export async function swapProvider(
   if (refs.compactionTarget && refs.compactionTarget.providerName === refs.provider.name) {
     refs.compactionTarget = undefined;
   }
-  refs.provider = nextProvider;
+  // Wrap the new provider so every chat / chatNoStream call lands in the
+  // session log via logModelRequest. Mirrors the createInitialRefs wiring
+  // in init.ts so post-swap calls aren't invisible.
+  const instrumented = refs.sessionLogger
+    ? instrumentProviderRequests(nextProvider, info =>
+        logModelRequestFromInfo(refs.sessionLogger, info),
+      )
+    : nextProvider;
+  refs.provider = instrumented;
   refs.model = nextModel;
-  refs.primary = { provider: nextProvider.name, model: nextModel };
+  refs.primary = { provider: instrumented.name, model: nextModel };
   refs.activeKeyId = resolvedKeyId;
   refs.useTextToolFallback = validation.mode === 'fallback';
   refs.nativeToolSupport = validation.mode === 'native';

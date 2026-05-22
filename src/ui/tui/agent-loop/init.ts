@@ -10,6 +10,8 @@ import {
   loadHistoryFromSessions,
   type SessionLogger,
 } from '../../../core/session/session-log.js';
+import { instrumentProviderRequests } from '../../../providers/instrument.js';
+import { logModelRequestFromInfo } from './instrument-bridge.js';
 import { getBuildInfo } from '../../../utils/build-info.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { buildEnvironmentMessage } from '../../../core/context/system-prompt.js';
@@ -113,6 +115,10 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     makeCompactionResolver(input.refsHolder),
   );
 
+  const instrumentedProvider = sessionLogger
+    ? instrumentProviderRequests(opts.provider, info => logModelRequestFromInfo(sessionLogger, info))
+    : opts.provider;
+
   return {
     sessionLogger,
     conversation,
@@ -121,9 +127,9 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     fileCache: new FileCache(),
     baseSystemPrompt: input.baseSystemPrompt,
     pastHistory: [],
-    provider: opts.provider,
+    provider: instrumentedProvider,
     model: opts.model,
-    primary: { provider: opts.provider.name, model: opts.model },
+    primary: { provider: instrumentedProvider.name, model: opts.model },
     ...(opts.keyId ? { activeKeyId: opts.keyId } : {}),
     useTextToolFallback: input.useTextToolFallback,
     nativeToolSupport: opts.nativeToolSupport ?? true,

@@ -138,6 +138,7 @@ describe('architecture: module boundaries', () => {
           'src/providers/types.ts',
           'src/providers/registry.ts',
           'src/providers/descriptors.ts',
+          'src/providers/instrument.ts',
         ],
       });
     await expectNoViolations(rule, 'ui → concrete provider impls');
