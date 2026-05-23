@@ -54,10 +54,7 @@ describe('parseModelSpec', () => {
     // as provider=deepseek-coder, model=33b-instruct. With no alias matching
     // `deepseek-coder`, the whole string is a bare model on the current
     // provider.
-    const spec = parseModelSpec(
-      'deepseek-coder:33b-instruct',
-      resolverFor(['ollama', 'openai']),
-    );
+    const spec = parseModelSpec('deepseek-coder:33b-instruct', resolverFor(['ollama', 'openai']));
     assert.deepEqual(spec, {
       kind: 'bare-model',
       model: 'deepseek-coder:33b-instruct',
