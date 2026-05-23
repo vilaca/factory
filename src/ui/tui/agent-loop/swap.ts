@@ -6,6 +6,7 @@
 import type { MutableRefObject } from 'react';
 import { ContextManager } from '../../../core/context/context-manager.js';
 import { makeCompactionResolver } from './compaction-resolver.js';
+import { primeContextWindowFromActiveProvider } from './prime-context-window.js';
 import { validateModelToolSupport as defaultValidateModelToolSupport } from '../../../core/auth/model-validation.js';
 import { loadGlobalConfig as defaultLoadGlobalConfig } from '../../../core/config/index.js';
 import { getKey as defaultGetKey } from '../../../core/auth/credentials.js';
@@ -45,6 +46,7 @@ export interface SwapContext {
   addNotice: (level: NoticeLevel, text: string) => void;
   setModel: (m: string) => void;
   setProviderName: (n: string) => void;
+  setContextWindow: (n: number) => void;
   refreshTokenEstimate: () => void;
   composeSystemPrompt: () => string;
 }
@@ -62,6 +64,12 @@ function rebuildContextManager(refs: NonNullable<RunRefs>, ctx: SwapContext): vo
     },
     makeCompactionResolver(ctx.refs),
   );
+  // Push the synchronous estimate into React state so the StatusBar
+  // denominator flips to the new model's window before the prime resolves.
+  ctx.setContextWindow(caps.contextWindow);
+  // Best-effort async prime for providers (ollama) whose contextWindow is
+  // only known after a /show call. Mirrors the mount-time prime in setup.ts.
+  primeContextWindowFromActiveProvider(ctx.refs, ctx.setContextWindow);
 }
 
 /** Swap to another model on the *current* provider. Honors `provider:model`

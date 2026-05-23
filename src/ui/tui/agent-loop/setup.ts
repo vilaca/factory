@@ -8,6 +8,7 @@ import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
 import { defaultRegistry } from '../../../tools/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
+import { primeContextWindowFromActiveProvider } from './prime-context-window.js';
 import {
   createInitialRefs,
   initSkillsRegistry,
@@ -20,6 +21,7 @@ export interface MountContext {
   refs: MutableRefObject<RunRefs | null>;
   addNotice: (level: NoticeLevel, text: string) => void;
   setEstimatedTokens: (n: number | undefined) => void;
+  setContextWindow: (n: number) => void;
   setCwdState: (s: string) => void;
   /** Snapshot the current refs into a system prompt. The hook owns this
    *  closure because it threads through the experimental-flags state. */
@@ -157,6 +159,12 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
       sessionLogger?.logSystemPrompt(sp);
     }
   });
+
+  // Some providers (ollama) need an async call to learn the model's real
+  // context window. Fire-and-forget: when it settles, refresh
+  // ContextManager + React state so compaction budgets against the right
+  // limit and the StatusBar denominator updates.
+  primeContextWindowFromActiveProvider(ctx.refs, ctx.setContextWindow);
 
   // Seed the token estimate so the status bar shows the system prompt's
   // baseline before the first model response. Pass `[]` when text-tool

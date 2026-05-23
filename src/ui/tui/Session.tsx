@@ -100,7 +100,7 @@ export function Session(props: SessionProps): React.ReactElement {
   showFullOutputRef.current = showFullOutput;
   const agent = useAgentLoop(props);
   const { rotationPrompt, fallbackPickerResolver } = useRotationFallback(agent, setPickerOpen);
-  const { compactionPickerResolver } = useCompactionPicker(agent, setPickerOpen);
+  const { compactionPickerResolver, openCompactionPicker } = useCompactionPicker(setPickerOpen);
   // Cache picker-created Provider instances so getModelInfo can call their
   // pure picker-info methods (getModelPickerInfo, getDisplayModelName,
   // getCapabilities) without re-instantiating per render. Keyed by
@@ -193,6 +193,7 @@ export function Session(props: SessionProps): React.ReactElement {
     sessionToolCalls,
     lastUsage,
     estimatedTokens,
+    contextWindow,
     queueLength,
     gitBranch,
     gitDirty,
@@ -214,10 +215,9 @@ export function Session(props: SessionProps): React.ReactElement {
     showFullOutputRef,
     setShowFullOutput,
     rotationPrompt,
+    openCompactionPicker,
   });
 
-  const activeProvider = refs.current?.provider ?? props.provider;
-  const capabilities = useMemo(() => activeProvider.getCapabilities(model), [activeProvider, model]);
   const inputAccentColor = permissionRequest ? 'yellow' : state === 'running' ? 'cyan' : 'green';
   const providerList = useMemo<ProviderEntry[]>(buildProviderList, []);
   const spinner =
@@ -348,6 +348,9 @@ export function Session(props: SessionProps): React.ReactElement {
               : 'select-active'
           }
           onCancel={() => {
+            // At most one resolver is ever set; "compaction wins" if both
+            // somehow leak through, mirroring makePickerCommitHandler's
+            // ordering so commit/cancel route to the same target.
             if (compactionPickerResolver) {
               compactionPickerResolver(null);
             } else if (fallbackPickerResolver) {
@@ -412,7 +415,7 @@ export function Session(props: SessionProps): React.ReactElement {
         providerName={providerName}
         model={model}
         {...selectDisplayTokens(lastUsage, estimatedTokens)}
-        contextWindow={capabilities.contextWindow}
+        contextWindow={contextWindow}
         sessionTurns={sessionTurns}
         sessionToolCalls={sessionToolCalls}
         queueLength={queueLength}

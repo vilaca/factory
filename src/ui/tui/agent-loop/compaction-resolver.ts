@@ -1,17 +1,13 @@
 // Resolver that ContextManager.compact() calls to obtain the
 // (provider, model) used for the summarization model call.
 //
-// Behavior:
-//   1. If `refs.compactionTarget` is already set (user picked earlier
-//      this session, or headless pre-seeded it), use that.
-//   2. Otherwise, if `refs.requestCompactionModel` is wired (TUI), call
-//      it to prompt the user. On cancel → null bubbles up and compact()
-//      aborts this turn; on commit → cache on refs.compactionTarget and
-//      use it.
-//   3. If neither is available (headless without --compaction-model and
-//      no pre-seed), fall back to the primary (refs.provider,
-//      refs.model). This preserves the no-fallback rule for TUI (where
-//      the prompt path exists) while keeping headless functional.
+// Behavior: if `refs.compactionTarget` is set (user picked via
+// `/compaction-model`, or headless pre-seeded it via `--compaction-model`),
+// use that tuple. Otherwise fall back to the primary (refs.provider,
+// refs.model). The TUI used to auto-prompt the user on the first
+// compaction; that surprised users into a picker for an operation that
+// does not in itself imply a model change. `/compaction-model` is now the
+// only way to opt into a non-primary target.
 //
 // Provider instantiation: when the chosen tuple's provider matches the
 // active session provider, reuse that instance — no auth re-resolution.
@@ -37,19 +33,9 @@ export function makeCompactionResolver(refs: {
     const r = refs.current;
     if (!r) return null;
 
-    // 1. Already chosen this session?
-    let target = r.compactionTarget;
-
-    // 2. Prompt the user (TUI path).
-    if (!target && r.requestCompactionModel) {
-      const picked = await r.requestCompactionModel();
-      if (picked === null) return null;
-      target = picked;
-      r.compactionTarget = picked;
-    }
-
-    // 3. Fallback for headless (no flag, no prompt wired): use primary.
-    target ??= { providerName: r.provider.name, model: r.model };
+    // No target set → use the active provider+model. This is the default
+    // for every TUI session and for headless without `--compaction-model`.
+    const target = r.compactionTarget ?? { providerName: r.provider.name, model: r.model };
 
     // Reuse the active provider when the names match — avoids a fresh
     // createProvider() + credential read on every compaction.

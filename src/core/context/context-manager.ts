@@ -152,6 +152,22 @@ export class ContextManager {
     return this.tokenEstimate / this.contextWindow;
   }
 
+  /** Replace the context window. Providers like ollama can only learn the
+   *  model's real `num_ctx` asynchronously (via `/api/show`); the first
+   *  ContextManager is constructed with the synchronous estimate, then
+   *  `primeModelCache` settles and we call this to install the real value.
+   *  The primed value is the model's actual context, so we trust it whether
+   *  it's larger or smaller than the estimate (e.g. the user pulled a
+   *  smaller-context variant). No-op when `n <= 0` so a failed prime can't
+   *  zero out the window. */
+  setContextWindow(n: number): void {
+    if (n > 0) this.contextWindow = n;
+  }
+
+  getContextWindow(): number {
+    return this.contextWindow;
+  }
+
   shouldCompact(): boolean {
     return this.getUsagePercent() > this.config.compactionThreshold;
   }
