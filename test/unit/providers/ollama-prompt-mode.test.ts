@@ -21,7 +21,10 @@ const TOOLS: ToolDefinition[] = [
     function: {
       name: 'Write',
       description: 'Write a file',
-      parameters: { type: 'object', properties: { path: { type: 'string' }, body: { type: 'string' } } },
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string' }, body: { type: 'string' } },
+      },
     },
   },
 ];
@@ -36,12 +39,18 @@ describe('buildPromptModeToolPreamble', () => {
 
   it('teaches the <tool_call> protocol with an inline example', () => {
     const out = buildPromptModeToolPreamble(TOOLS);
-    assert.match(out, /<tool_call>\{"name": "ToolName", "arguments": \{"arg": "value"\}\}<\/tool_call>/);
+    assert.match(
+      out,
+      /<tool_call>\{"name": "ToolName", "arguments": \{"arg": "value"\}\}<\/tool_call>/,
+    );
   });
 
   it('emits a stable parameters: line per tool', () => {
     const out = buildPromptModeToolPreamble(TOOLS);
-    assert.match(out, /parameters: \{"type":"object","properties":\{"path":\{"type":"string"\}\}\}/);
+    assert.match(
+      out,
+      /parameters: \{"type":"object","properties":\{"path":\{"type":"string"\}\}\}/,
+    );
   });
 });
 
@@ -136,10 +145,7 @@ describe('withPromptModeSystem', () => {
   });
 
   it('prepends a new system message when none exists', () => {
-    const out = withPromptModeSystem(
-      [{ role: 'user', content: 'hi' }],
-      'use tools',
-    );
+    const out = withPromptModeSystem([{ role: 'user', content: 'hi' }], 'use tools');
     assert.equal(out.length, 2);
     assert.equal(out[0]!.role, 'system');
     assert.equal(out[0]!.content, 'use tools');

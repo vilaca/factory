@@ -49,7 +49,7 @@ const TABLE: Record<string, SamplingDefaults> = {
   // Qwen3 (thinking-mode default) — https://huggingface.co/Qwen/Qwen3-8B
   'qwen3-thinking': { temperature: 0.6, topP: 0.95, topK: 20, minP: 0 },
   // Qwen3 non-thinking — https://huggingface.co/Qwen/Qwen3-8B (Inference Parameters)
-  'qwen3': { temperature: 0.7, topP: 0.8, topK: 20, minP: 0 },
+  qwen3: { temperature: 0.7, topP: 0.8, topK: 20, minP: 0 },
 
   // IBM Granite 4.0 — https://huggingface.co/ibm-granite/granite-4.0-8b-instruct
   'granite-4.0': { temperature: 0.0 },
@@ -79,7 +79,10 @@ export function getSamplingDefaults(model: string): SamplingDefaults {
     return b.length - a.length;
   });
   for (const k of keys) {
-    const tokens = k.toLowerCase().split('-').filter(t => t.length > 0);
+    const tokens = k
+      .toLowerCase()
+      .split('-')
+      .filter(t => t.length > 0);
     if (tokens.every(t => m.includes(t))) {
       return { ...TABLE[k] };
     }

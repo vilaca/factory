@@ -3,7 +3,7 @@
 > **Status.** These are research notes captured from the upstream Python
 > framework described in the IEEE preprint (see `paper-findings.md` for the
 > empirical numbers). They were used as the spec to drive the TypeScript port
-> in this repo; they are *not* the implementation. The §N anchors below are
+> in this repo; they are _not_ the implementation. The §N anchors below are
 > referenced from `src/` doc-comments — when you see "(docs/reliability/next-steps.md §7)"
 > in the codebase, the actual implementation is the surrounding TS file. The
 > Python signatures (`Pydantic`, `asyncio`, `dataclass`, `def`) describe the
@@ -13,19 +13,19 @@
 > **Quick map to the TS implementation** — when reading a section here, the
 > corresponding code is:
 >
-> | This doc                                 | TS code                                                     |
-> | ---------------------------------------- | ----------------------------------------------------------- |
-> | §3 Message tagging / control flow        | `src/utils/chat-message.ts`, `src/core/agent/step-tracker.ts` |
-> | §4 Response validator                    | `src/core/agent/validator.ts`                                |
-> | §7 Step enforcer / nudges                | `src/core/agent/step-enforcer.ts`, `src/core/agent/nudges.ts` |
-> | §8 Tool prerequisites                    | `src/utils/tool-definition.ts`, `src/tools/registry.ts`      |
-> | §9 ReliabilityError hierarchy            | `src/core/agent/errors.ts`, `src/tools/errors.ts`            |
-> | §10 Tiered compaction                    | `src/core/context/tiered-compact.ts`                         |
-> | §13 Respond tool                         | `src/tools/respond.ts`                                       |
-> | §14–15 Reasoning fold / think tags       | `src/core/agent/reasoning.ts`, `src/utils/think-tags.ts`     |
-> | §16 Ollama prompt-mode + Anthropic shim  | `src/providers/ollama-prompt-mode.ts`, `src/providers/anthropic.ts` |
-> | §17 Per-model sampling defaults          | `src/providers/sampling-defaults.ts`, `src/providers/shared.ts` |
-> | §38 Context manager / LLM-summary path   | `src/core/context/context-manager.ts`, `src/core/agent/compaction.ts` |
+> | This doc                                | TS code                                                               |
+> | --------------------------------------- | --------------------------------------------------------------------- |
+> | §3 Message tagging / control flow       | `src/utils/chat-message.ts`, `src/core/agent/step-tracker.ts`         |
+> | §4 Response validator                   | `src/core/agent/validator.ts`                                         |
+> | §7 Step enforcer / nudges               | `src/core/agent/step-enforcer.ts`, `src/core/agent/nudges.ts`         |
+> | §8 Tool prerequisites                   | `src/utils/tool-definition.ts`, `src/tools/registry.ts`               |
+> | §9 ReliabilityError hierarchy           | `src/core/agent/errors.ts`, `src/tools/errors.ts`                     |
+> | §10 Tiered compaction                   | `src/core/context/tiered-compact.ts`                                  |
+> | §13 Respond tool                        | `src/tools/respond.ts`                                                |
+> | §14–15 Reasoning fold / think tags      | `src/core/agent/reasoning.ts`, `src/utils/think-tags.ts`              |
+> | §16 Ollama prompt-mode + Anthropic shim | `src/providers/ollama-prompt-mode.ts`, `src/providers/anthropic.ts`   |
+> | §17 Per-model sampling defaults         | `src/providers/sampling-defaults.ts`, `src/providers/shared.ts`       |
+> | §38 Context manager / LLM-summary path  | `src/core/context/context-manager.ts`, `src/core/agent/compaction.ts` |
 
 A deep dive into a Python framework that takes an 8B local model from ~38% to ~99% on multi-step tool-calling workflows. This document captures every feature, the algorithm behind it, and the small-model failure mode it removes.
 
@@ -47,10 +47,10 @@ The framework targets self-hosted models in the 8B–14B class on consumer GPUs 
 
 The agentic loop is intentionally split. Both the in-process runner and the OpenAI-compatible proxy reuse the same front half:
 
-| Half | Owns | Reused by |
-|---|---|---|
-| **Front** (`run_inference`) | compaction → reasoning fold → serialize → send → validate → retry-with-nudge | Runner + Proxy |
-| **Back** (`WorkflowRunner.run`) | step enforcement → prerequisite check → tool execution → terminal detection → bookkeeping | Runner only |
+| Half                            | Owns                                                                                      | Reused by      |
+| ------------------------------- | ----------------------------------------------------------------------------------------- | -------------- |
+| **Front** (`run_inference`)     | compaction → reasoning fold → serialize → send → validate → retry-with-nudge              | Runner + Proxy |
+| **Back** (`WorkflowRunner.run`) | step enforcement → prerequisite check → tool execution → terminal detection → bookkeeping | Runner only    |
 
 `run_inference` is a self-contained async function that takes mutable `messages: list[Message]`, a client, a `ContextManager`, a `ResponseValidator`, an `ErrorTracker`, and a `tool_specs` list. It loops up to `max_retries + 1` times. Each iteration:
 
@@ -99,8 +99,9 @@ raise MaxIterationsError(...)
 ```
 
 Concrete invariants:
+
 - A retry inside `run_inference` consumes one iteration. The runner passes `max_attempts = max_iterations - iteration` so a runaway retry loop can't exceed the global cap.
-- Reasoning from `tool_calls[0].reasoning` is emitted as a separate `REASONING` message *before* the `TOOL_CALL`. The internal list keeps them separate (cheap compaction); only on the wire are they folded into one assistant message.
+- Reasoning from `tool_calls[0].reasoning` is emitted as a separate `REASONING` message _before_ the `TOOL_CALL`. The internal list keeps them separate (cheap compaction); only on the wire are they folded into one assistant message.
 - Tool call IDs are generated as `call_{counter:09d}` and shared across the batch, threading through `TOOL_CALL` → `TOOL_RESULT` pairing.
 - Step nudges and prereq nudges emit `tool_call (empty result)` + nudge — the assistant sees its own attempted call back in history alongside the corrective message, which empirically corrects faster than just the nudge alone.
 
@@ -111,6 +112,7 @@ Concrete invariants:
 Every message carries `MessageMeta` with a `MessageType` tag. The runner never serializes the metadata; `to_api_dict(format=...)` strips it at the wire boundary. Compaction strategies key off the tag.
 
 `MessageType` enum:
+
 - `SYSTEM_PROMPT` — never cut
 - `USER_INPUT` — never cut
 - `TOOL_CALL` — preserved across all phases
@@ -123,12 +125,12 @@ Every message carries `MessageMeta` with a `MessageType` tag. The runner never s
 
 `Message` is a dataclass with `role`, `content`, `metadata`, `tool_name`, `tool_call_id`, `tool_calls: list[ToolCallInfo] | None`. The wire format diverges by client:
 
-| Field | `ollama` format | `openai` format |
-|---|---|---|
-| `tool_calls[i].arguments` | dict | JSON-encoded string |
-| `tool_calls[i].type` | omitted | `"function"` |
-| `tool_calls[i].id` | omitted | call_id required |
-| Tool result key | `tool_name` | `name` + `tool_call_id` |
+| Field                     | `ollama` format | `openai` format         |
+| ------------------------- | --------------- | ----------------------- |
+| `tool_calls[i].arguments` | dict            | JSON-encoded string     |
+| `tool_calls[i].type`      | omitted         | `"function"`            |
+| `tool_calls[i].id`        | omitted         | call_id required        |
+| Tool result key           | `tool_name`     | `name` + `tool_call_id` |
 
 **Replication note.** Tag every message with semantic type, not just role. Compaction only works if you can drop "the nudge from step 2" without dropping the actual reasoning. Plain role-only message dicts are an API-compatibility bomb the moment you try to compact.
 
@@ -139,6 +141,7 @@ Every message carries `MessageMeta` with a `MessageType` tag. The runner never s
 `ResponseValidator` is stateless. Input: `LLMResponse`. Output: `ValidationResult(tool_calls, nudge, needs_retry)`.
 
 Algorithm:
+
 ```python
 def validate(response):
     if isinstance(response, TextResponse):
@@ -162,20 +165,22 @@ def validate(response):
 
 `rescue_tool_call(text, available_tools)` returns `list[ToolCall]`. Tries strategies in order, returns first non-empty:
 
-**Strategy 1 — JSON extraction.** Strips ```` ``` ```` code fences, then walks the cleaned text looking for `{`, tracks brace depth, attempts `json.loads` on each balanced substring. Accepts both `{"tool": "...", "args": {...}}` (the prompt-injected format) and `{"name": "...", "arguments": {...}}` (OpenAI format that Granite 4.0 emits inside `<tool_call>` tags). Only returns calls where the tool name is in `available_tools`.
+**Strategy 1 — JSON extraction.** Strips ` ``` ` code fences, then walks the cleaned text looking for `{`, tracks brace depth, attempts `json.loads` on each balanced substring. Accepts both `{"tool": "...", "args": {...}}` (the prompt-injected format) and `{"name": "...", "arguments": {...}}` (OpenAI format that Granite 4.0 emits inside `<tool_call>` tags). Only returns calls where the tool name is in `available_tools`.
 
 **Strategy 2 — Rehearsal syntax.** Reasoning models sometimes "rehearse" tool calls inside their thinking blocks using `tool_name[ARGS]{...json...}`. Regex `(\w+)\[ARGS\](\{.*\})` with `DOTALL`.
 
 **Strategy 3 — Qwen Coder XML.** Pattern adapted from Qwen3-Coder's reference parser:
+
 ```
 <function=name>
   <parameter=key>value</parameter>
   ...
 </function>
 ```
+
 Whitespace handling matches the upstream parser exactly: one leading and one trailing newline stripped per parameter value. Type coercion is deferred to Pydantic at `ToolCall(args=...)` construction.
 
-Before any strategy runs, think tags (`[THINK]...[/THINK]` for Mistral Reasoning, `<think>...</think>` for Qwen3/DeepSeek) are stripped — the tool call may appear *after* the thinking block, and feeding raw think tokens into a JSON extractor produces noise.
+Before any strategy runs, think tags (`[THINK]...[/THINK]` for Mistral Reasoning, `<think>...</think>` for Qwen3/DeepSeek) are stripped — the tool call may appear _after_ the thinking block, and feeding raw think tokens into a JSON extractor produces noise.
 
 **Replication note.** Rescue parsing is the single highest-leverage feature for sub-12B models. Build it as a plain text pipeline — three lossy regex/state-machine passes, no LLM in the loop — and gate it behind `rescue_enabled` so ablation can measure its lift.
 
@@ -185,9 +190,9 @@ Before any strategy runs, think tags (`[THINK]...[/THINK]` for Mistral Reasoning
 
 All nudges are short, declarative strings with named callables so consumers can override them:
 
-- `retry_nudge(raw)` — *"Your previous response was not a valid tool call. You must respond with a tool call, not free text. Please try again with a valid tool call."*
-- `unknown_tool_nudge(tool_name, available)` — *"Tool 'X' does not exist. Available tools: A, B, C. Call one of them."*
-- `prerequisite_nudge(tool, missing)` — *"You cannot call X yet. You must first call: read_file. Call the prerequisite tool now."*
+- `retry_nudge(raw)` — _"Your previous response was not a valid tool call. You must respond with a tool call, not free text. Please try again with a valid tool call."_
+- `unknown_tool_nudge(tool_name, available)` — _"Tool 'X' does not exist. Available tools: A, B, C. Call one of them."_
+- `prerequisite_nudge(tool, missing)` — _"You cannot call X yet. You must first call: read_file. Call the prerequisite tool now."_
 - `step_nudge(terminal, pending, tier)` — three-tier escalation:
   - **Tier 1 (polite):** "You cannot call X yet. You must first complete these required steps: A, B. Call one of them now."
   - **Tier 2 (direct):** "You must call one of these tools now: A, B. Pick one."
@@ -202,6 +207,7 @@ All nudges are short, declarative strings with named callables so consumers can 
 ## 7. Step Enforcer — Premature Terminal + Prerequisites
 
 `StepEnforcer` is stateful, lives for one workflow run. Constructor:
+
 ```python
 StepEnforcer(
     required_steps: list[str],
@@ -215,6 +221,7 @@ StepEnforcer(
 Two checks both consume `list[ToolCall]` and return `StepCheck(nudge, needs_nudge)`:
 
 **`check(tool_calls)`** — Premature terminal:
+
 ```python
 has_terminal = any(tc.tool in terminal_tools for tc in tool_calls)
 if has_terminal and not tracker.is_satisfied():
@@ -225,6 +232,7 @@ return StepCheck(needs_nudge=False)
 ```
 
 **`check_prerequisites(tool_calls)`** — For each tool with prereqs:
+
 - **Name-only** (`"read_file"`): satisfied if any prior successful call to `read_file` exists in `executed_tools`.
 - **Arg-matched** (`{"tool": "read_file", "match_arg": "path"}`): satisfied if any prior call to `read_file` had `args["path"] == this_call.args["path"]`.
 
@@ -234,22 +242,24 @@ Evaluated against pre-batch state. Any violation in a parallel batch blocks the 
 
 **Reliability mechanism.** Small models guess at the terminal tool early because it's the most "natural-sounding" name. The premature-terminal nudge is the highest-impact step-related guardrail — disabling it (`no_steps` ablation) drops completion by 30+ points on small models.
 
-**Replication note.** Track step completion *outside* the message history. The model may lose track of what it called; the framework must not.
+**Replication note.** Track step completion _outside_ the message history. The model may lose track of what it called; the framework must not.
 
 ---
 
 ## 8. Tool Prerequisites — Conditional Dependencies
 
 Declared on `ToolDef`:
+
 ```python
 ToolDef(spec=..., callable=edit_file, prerequisites=["read_file"])
 ToolDef(spec=..., callable=edit_file, prerequisites=[{"tool": "read_file", "match_arg": "path"}])
 ToolDef(spec=..., callable=edit_file, prerequisites=["authenticate", {"tool": "read_file", "match_arg": "path"}])
 ```
 
-`Workflow.__post_init__` validates that every prerequisite tool name exists in the workflow. Prerequisites are *not* surfaced in the tool schema sent to the LLM — the model discovers them via nudge-on-violation, same as required steps. Rationale: adding them to the prompt is noise the model often ignores; nudge-on-violation is loud and corrective.
+`Workflow.__post_init__` validates that every prerequisite tool name exists in the workflow. Prerequisites are _not_ surfaced in the tool schema sent to the LLM — the model discovers them via nudge-on-violation, same as required steps. Rationale: adding them to the prompt is noise the model often ignores; nudge-on-violation is loud and corrective.
 
 When violated:
+
 1. Emit the model's `TOOL_CALL` (the attempt happened) + a `PREREQUISITE_NUDGE` (the call was blocked, not executed). Compaction can drop the pair as a unit.
 2. After `max_prereq_violations` (default 2) consecutive violations, raise `PrerequisiteError`.
 3. Counter resets on any fully clean batch.
@@ -262,15 +272,16 @@ When violated:
 
 `ErrorTracker` separates two failure modes that look the same to a naive loop:
 
-| Failure | Counter | Recovery |
-|---|---|---|
-| **Hard error** (`Exception` from tool callable) | `consecutive_tool_errors++` | Fed back as `[ToolError] TypeName: msg`. After `max_tool_errors` (default 2), raise `ToolExecutionError`. |
-| **Resolution error** (`ToolResolutionError` raised by tool author) | Not counted | Fed back as `[ToolResolutionError] msg`. No counter increment, no step recorded. Bounded only by `max_iterations`. |
-| **Formatting failure** (text response, unknown tool name) | `consecutive_retries++` | Fed back as nudge. After `max_retries` (default 3), raise `ToolCallError`. |
+| Failure                                                            | Counter                     | Recovery                                                                                                           |
+| ------------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Hard error** (`Exception` from tool callable)                    | `consecutive_tool_errors++` | Fed back as `[ToolError] TypeName: msg`. After `max_tool_errors` (default 2), raise `ToolExecutionError`.          |
+| **Resolution error** (`ToolResolutionError` raised by tool author) | Not counted                 | Fed back as `[ToolResolutionError] msg`. No counter increment, no step recorded. Bounded only by `max_iterations`. |
+| **Formatting failure** (text response, unknown tool name)          | `consecutive_retries++`     | Fed back as nudge. After `max_retries` (default 3), raise `ToolCallError`.                                         |
 
-`ToolResolutionError` is the framework's idiom for "valid call, bad data — try again." Wrong key, empty result set, unknown ID. Mental model: HTTP 4xx (request was valid, resource doesn't exist) versus 5xx (server broken). It inherits from `Exception`, not the framework error hierarchy — it's a *tool-author* exception, the caller raises it from their callable, the runner catches it explicitly *before* the generic `except Exception` branch.
+`ToolResolutionError` is the framework's idiom for "valid call, bad data — try again." Wrong key, empty result set, unknown ID. Mental model: HTTP 4xx (request was valid, resource doesn't exist) versus 5xx (server broken). It inherits from `Exception`, not the framework error hierarchy — it's a _tool-author_ exception, the caller raises it from their callable, the runner catches it explicitly _before_ the generic `except Exception` branch.
 
 Counters reset on clean progress:
+
 - `reset_retries()` on any valid `ToolCall` (known tool name)
 - `reset_errors()` after a fully clean batch (zero tool errors across all calls)
 - `reset_premature()` and `reset_prereq_violations()` after a clean batch too
@@ -279,11 +290,12 @@ Counters reset on clean progress:
 
 ### The `_resolve_service` cautionary tale
 
-Before `ToolResolutionError` existed, the framework's stateful eval scenarios shipped a workaround the author later called out as an anti-pattern. The bug: a user message saying *"payments service"* would lead the model to extract `"payments"` and pass it to every tool. The backend keyed lookups by `"payments-service"` (hyphenated), so every call returned `"No alert found for service 'payments'"` as a normal 200-style string. The runner marked `get_alert` as completed and the model barreled ahead with no data — silent bad-data cascade across the rest of the workflow.
+Before `ToolResolutionError` existed, the framework's stateful eval scenarios shipped a workaround the author later called out as an anti-pattern. The bug: a user message saying _"payments service"_ would lead the model to extract `"payments"` and pass it to every tool. The backend keyed lookups by `"payments-service"` (hyphenated), so every call returned `"No alert found for service 'payments'"` as a normal 200-style string. The runner marked `get_alert` as completed and the model barreled ahead with no data — silent bad-data cascade across the rest of the workflow.
 
 The patch was `_resolve_service()` — a per-backend fuzzy matcher that tries appending `-service`, stripping `"the "`, etc. It worked, but it pushed the responsibility onto every scenario author to implement their own fuzzy matching just to avoid silent cascades.
 
 `ToolResolutionError` is the generic fix:
+
 ```python
 def get_alert(self, service: str) -> str:
     if service not in self.alerts:
@@ -299,12 +311,12 @@ Now the backend stays strict, the runner catches the exception, sends the messag
 
 LLMs need a different error taxonomy from deterministic clients. HTTP error codes were designed for clients that fail fast on 4xx/5xx; LLM tool-calling loops need:
 
-| HTTP analog | LLM equivalent | Recovery |
-|---|---|---|
-| 200 OK | Normal return | Step complete |
-| 4xx (valid request, no resource) | `ToolResolutionError` | Step uncompleted, model retries with different args |
-| 5xx (server error) | Hard `Exception` | `consecutive_tool_errors++`, eventually `ToolExecutionError` |
-| 400 (bad request) | Schema validation / unknown tool | `consecutive_retries++`, nudge, eventually `ToolCallError` |
+| HTTP analog                      | LLM equivalent                   | Recovery                                                     |
+| -------------------------------- | -------------------------------- | ------------------------------------------------------------ |
+| 200 OK                           | Normal return                    | Step complete                                                |
+| 4xx (valid request, no resource) | `ToolResolutionError`            | Step uncompleted, model retries with different args          |
+| 5xx (server error)               | Hard `Exception`                 | `consecutive_tool_errors++`, eventually `ToolExecutionError` |
+| 400 (bad request)                | Schema validation / unknown tool | `consecutive_retries++`, nudge, eventually `ToolCallError`   |
 
 The fourth row (the `400` analog) is handled by the validator, not the error tracker — different counter, different nudge. The mental shortcut: "valid request, no resource" is the missing primitive most tool-calling frameworks lack.
 
@@ -315,19 +327,22 @@ The fourth row (the `400` analog) is handled by the validator, not the error tra
 The `ContextManager` doesn't compact; it owns the budget and delegates to a `CompactStrategy`. Strategies own their own thresholds, so you can plug a custom one.
 
 ### Threshold mechanics
+
 - `budget_tokens` — the hard ceiling
 - `compact_threshold` (default 0.75) — fraction of budget at which compaction fires
 - `phase_thresholds: (p1, p2, p3)` — optional per-phase fractions (e.g. `(0.60, 0.75, 0.90)`). Phase N fires only if estimated tokens exceed `budget * p_N`.
 
 Token estimation:
+
 - If the backend reported `usage.total_tokens` for the last call (via `client.last_usage[slot_id]`), use that.
 - Otherwise fall back to `sum(len(m.content) for m in messages) // 4` (~20% error).
 
 ### `TieredCompact` — 3 phases
 
-`keep_recent: int = 2` — number of *iteration* boundaries to preserve fully. Iterations are identified by `step_index` on message metadata, so a parallel batch with one `TOOL_CALL` + N `TOOL_RESULT` messages counts as one iteration. Critical for not splitting batches mid-compaction.
+`keep_recent: int = 2` — number of _iteration_ boundaries to preserve fully. Iterations are identified by `step_index` on message metadata, so a parallel batch with one `TOOL_CALL` + N `TOOL_RESULT` messages counts as one iteration. Critical for not splitting batches mid-compaction.
 
 `_find_eligible_end(messages, keep_recent)`:
+
 1. Collect distinct `step_index` values from `messages[2:]` (skip system + user)
 2. If `len(seen_steps) <= keep_recent`, return 2 (nothing eligible)
 3. Otherwise `cutoff_step = seen_steps[-keep_recent]`; return the first index `i` with `messages[i].step_index >= cutoff_step`
@@ -335,6 +350,7 @@ Token estimation:
 `messages[0:2]` (system + first user) are never cut. Indices `[2, eligible_end)` are eligible.
 
 **Phase 1.** For each eligible message:
+
 - If type ∈ {step_nudge, prereq_nudge, retry_nudge}: drop entirely.
 - If type == tool_result and `len(content) > 200` (`TRUNCATE_CHARS`): replace content with `content[:200] + "\n[Truncated — N chars removed]"`.
 - Else: keep.
@@ -346,6 +362,7 @@ Token estimation:
 After each phase, re-estimate tokens. If below the next phase's trigger, stop. Return `(compacted_messages, phase_reached)`. Phase 0 = no compaction.
 
 **Compaction priority intent:**
+
 1. Cut first: ephemeral nudges (no long-term value)
 2. Cut second: raw tool data (recoverable — model can re-call)
 3. Cut third: text response (failed attempt, already corrected)
@@ -370,14 +387,16 @@ Passthrough. For workflows that won't hit the budget anyway, or for ablation run
 ## 11. Context Threshold Warnings — Mid-Conversation Pressure Signal
 
 Separate from compaction triggers. `ContextManager` accepts:
+
 - `context_thresholds: list[float]` — e.g. `[0.5, 0.65, 0.8]`
 - `on_context_threshold: Callable[(tokens, budget, pct), str | None]`
 
-Each threshold fires *at most once per session* (tracked in `_fired_thresholds: set[float]`). If usage drops below a threshold after compaction, that threshold becomes re-fireable.
+Each threshold fires _at most once per session_ (tracked in `_fired_thresholds: set[float]`). If usage drops below a threshold after compaction, that threshold becomes re-fireable.
 
-When a threshold crosses, `check_thresholds(messages)` returns a string. `run_inference` appends it as a `{"role": "user", "content": warning}` to the outbound API payload *only* — it doesn't persist in `messages`, so it doesn't pollute future requests. It is also emitted as a `CONTEXT_WARNING` Message to the `on_message` callback so UIs can surface it.
+When a threshold crosses, `check_thresholds(messages)` returns a string. `run_inference` appends it as a `{"role": "user", "content": warning}` to the outbound API payload _only_ — it doesn't persist in `messages`, so it doesn't pollute future requests. It is also emitted as a `CONTEXT_WARNING` Message to the `on_message` callback so UIs can surface it.
 
 The default warning template escalates:
+
 - ≥65%: "Context is filling up. When compaction triggers, older tool results and reasoning will be condensed. Be concise in your responses and front-load important information."
 - ≥80%: "Context is nearly full. Older tool results and reasoning will be compacted soon — key information may be lost. Summarize critical findings now and prioritize completing the current task."
 
@@ -390,11 +409,13 @@ Uses `"user"` role rather than `"system"` mid-conversation because Jinja chat te
 ## 12. Token Accounting — Trust Backend, Fall Back to Char/4
 
 `_sync_token_count(client, context_manager)` after every send:
+
 - Reads `client.last_usage[slot_id]` (TokenUsage dataclass with `prompt_tokens`, `completion_tokens`, `total_tokens`)
 - Calls `context_manager.update_token_count(total_tokens)`
 - Subsequent `estimate_tokens()` returns this exact value until next update
 
 Each client reports usage differently:
+
 - **Ollama** — `prompt_eval_count` + `eval_count` from `/api/chat` response
 - **llama-server / Llamafile** — top-level `usage` field on the OpenAI-style response, including SSE `stream_options: {include_usage: true}` chunks
 - **Anthropic** — `response.usage.input_tokens` + `output_tokens` from the SDK
@@ -412,11 +433,13 @@ The single most important small-model trick. When tools are present in a request
 **Solution.** Inject a synthetic tool `respond(message: str)`. The model calls it instead of producing bare text. From the framework's perspective, every response is now a valid tool call — no retries wasted on conversational turns, no completion drops on tool-calling turns.
 
 Three injection paths:
+
 - **Runner mode** — caller sets `respond_tool()` as the terminal tool and includes it in `tools`. Callable just returns the message string.
 - **Proxy mode** — auto-injected when the inbound request has `tools` set and doesn't already include `respond`. The proxy strips outbound respond calls, converting them to a plain text response with `finish_reason: "stop"`. The downstream client never sees the tool.
 - **Middleware mode** — caller includes `"respond"` in `tool_names` and handles the tool call in their own execution code.
 
 The tool's description is carefully worded to give the model a structured choice:
+
 > "Respond to the user with a message. Use this when the user is chatting, asking a question, when you need to ask a clarifying question before proceeding, or when no other tool action is needed. Also use this after completing the user's request to report the result."
 
 **Why this works for small models.** Small models struggle with open-ended decisions ("should I use tools or chat?") but are good at structured choices ("which tool should I call?"). The respond tool converts an open-ended decision into a structured one. The model stays in tool-calling grammar/template at all times.
@@ -430,6 +453,7 @@ The tool's description is carefully worded to give the model a structured choice
 Internally, the framework keeps `REASONING` messages as separate `Message` objects so compaction can drop them independently. On the wire, this is wrong — OpenAI/llama-server expect one assistant message per turn with both `content` (reasoning) and `tool_calls`.
 
 `fold_and_serialize(messages, api_format)`:
+
 ```python
 pending_reasoning = None
 for m in messages:
@@ -453,6 +477,7 @@ if pending_reasoning is not None: emit standalone trailing assistant msg
 ## 15. Thinking-Tag Handling
 
 Three formats supported:
+
 - `[THINK]...[/THINK]` — Mistral Ministral Reasoning
 - `<think>...</think>` — Qwen3, DeepSeek
 - Server-side `reasoning_content` field — llama-server with `--reasoning-format auto`
@@ -460,14 +485,16 @@ Three formats supported:
 `_extract_think_tags(text) -> (reasoning, remaining)` uses a single combined regex with `re.DOTALL` and two capture groups (one per format), returning all reasoning blocks joined with `\n\n` plus the rest of the content with tags stripped.
 
 `_resolve_reasoning(accumulated_reasoning, accumulated_content)` priority:
+
 1. If `_think` flag is False → return `None` (discard everything)
 2. Server-parsed `reasoning_content` wins
 3. Otherwise extract `[THINK]`/`<think>` tags from content
 4. Otherwise fall back to raw content (instruct model narrating before tool call)
 
 The `_think` flag has tri-state handling:
+
 - `True` — always send `think=True` to backend; raise `ThinkingNotSupportedError` if backend rejects
-- `False` — never request thinking; *also discard* any thinking that leaks through `<think>` tags in content
+- `False` — never request thinking; _also discard_ any thinking that leaks through `<think>` tags in content
 - `None` (auto) — heuristic: enable for models whose name contains "reason" or "think"; on first 400 error from backend, set `_think=False` and retry
 
 **Why the discard path matters.** Qwen3 emits `<think>` tags inside `content` even when `think=False` is requested — server can't always suppress them. Without the gate, the eval verbose printer shows `[thinking]` lines for users who explicitly opted out.
@@ -477,6 +504,7 @@ The `_think` flag has tri-state handling:
 ## 16. Client Adapters — Three Failure-Tolerant Wire Formats
 
 ### `OllamaClient`
+
 - `api_format = "ollama"` (args as dict, no `type`/`id` fields)
 - `/api/chat` with `tools` parameter
 - Tri-state `think` (above)
@@ -484,10 +512,11 @@ The `_think` flag has tri-state handling:
 - Catches `httpx.ReadTimeout` → re-raises as `BackendError(408, ...)`; eval runner handles that gracefully
 
 ### `LlamafileClient`
+
 - `api_format = "openai"`
 - `mode ∈ {"native", "prompt", "auto"}`. Auto resolves on first send with tools:
   - Try `_send_native()`; if backend returns `HTTPStatusError` or `BackendError`, set `resolved_mode = "prompt"` and retry through `_send_prompt()`.
-  - A *TextResponse* in native mode is NOT a fallback signal — it means native FC is supported but the model chose not to call a tool. Retry logic handles that.
+  - A _TextResponse_ in native mode is NOT a fallback signal — it means native FC is supported but the model chose not to call a tool. Retry logic handles that.
   - `resolved_mode` is inspectable by callers.
 - `slot_id` — routes requests to a specific llama-server slot (for multi-agent)
 - `cache_prompt: bool = True` — sets llama-server prompt-cache flag
@@ -495,12 +524,13 @@ The `_think` flag has tri-state handling:
   - `role="tool"` → `role="user"`
   - Structured `tool_calls` on assistant → flattened to JSON string matching the prompt format (history becomes a few-shot example)
 - `_merge_consecutive(messages)` — strict alternation for Jinja template parity:
-  - Walk messages; for each plain user/assistant (no tool_calls), find the previous *visible* (plain user/assistant) message
+  - Walk messages; for each plain user/assistant (no tool*calls), find the previous \_visible* (plain user/assistant) message
   - If same role at consecutive visible positions, merge contents with `"\n\n"`
   - Messages with `tool_calls` or `role="tool"` are "invisible" — they don't trigger merging but they don't break a same-role chain either
 - `get_context_length()` queries `/props` (strips `/v1` suffix from base_url) and reads `default_generation_settings.n_ctx`
 
 ### `AnthropicClient`
+
 - `api_format = "openai"` (runner serializes OpenAI-style; client converts)
 - `_convert_messages(messages)` does the heavy lifting:
   - System messages → separate `system=` kwarg
@@ -519,15 +549,16 @@ The `_think` flag has tri-state handling:
 `MODEL_SAMPLING_DEFAULTS` is a flat dict of `model_name -> {temperature, top_p, top_k, min_p, repeat_penalty, presence_penalty}`. Each entry has an inline URL comment to the HuggingFace model card it was pulled from, verified one model at a time.
 
 Two functions separate lookup from policy:
+
 - `get_sampling_defaults(model)` — pure lookup, returns `{}` for unknown. No logging, no raising.
 - `apply_sampling_defaults(model, *, strict)` — policy layer used by client constructors:
 
-| `strict` | model in map | behavior |
-|---|---|---|
-| True | yes | return dict copy |
-| True | no | raise `UnsupportedModelError` |
-| False | yes | one-shot INFO log: "Recommended sampling params exist for X; pass recommended_sampling=True to use them." |
-| False | no | silent `{}` |
+| `strict` | model in map | behavior                                                                                                  |
+| -------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| True     | yes          | return dict copy                                                                                          |
+| True     | no           | raise `UnsupportedModelError`                                                                             |
+| False    | yes          | one-shot INFO log: "Recommended sampling params exist for X; pass recommended_sampling=True to use them." |
+| False    | no           | silent `{}`                                                                                               |
 
 Clients accept `recommended_sampling: bool = False`. Strict mode is opt-in by design — most consumers want backend defaults, and silent application would change behavior on upgrade. Strict + unknown raises because falling through silently would defeat the intent.
 
@@ -536,6 +567,7 @@ Per-call sampling overrides (added later) flow through `send(messages, tools, sa
 **Why this exists.** A previous version hardcoded `temperature=0.7`. The 0.6.x release found that this was a real ~3-8 point handicap on most 8B-class models in eval — different families want different temperatures (Ministral Instruct: 0.05; Qwen3 thinking: 0.6; Granite 4.0: 0.0 greedy; Gemma 4: 1.0). The single-default era was hiding real model capability.
 
 **Notably absent:**
+
 - `llama3.1:*` — Meta's HF card / llama.com / llama-recipes are all silent on recommended sampling
 - `mistral:7b-instruct-v0.3` — card has no recommended-settings section; demo code uses `T=0`
 
@@ -545,22 +577,25 @@ Unknown rows fall through to backend defaults. No values are made up.
 
 ## 18. Hardware Detection + Budget Resolution
 
-`detect_hardware()` shells out to `nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits` with a 10s timeout. Returns `HardwareProfile(gpu_name, vram_total_mb)` or `None` if anything fails. Uses *total* VRAM only — a stable number that doesn't change with allocations.
+`detect_hardware()` shells out to `nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits` with a 10s timeout. Returns `HardwareProfile(gpu_name, vram_total_mb)` or `None` if anything fails. Uses _total_ VRAM only — a stable number that doesn't change with allocations.
 
 `BudgetMode` enum:
+
 - `BACKEND` — trust the backend's default. No `-c` override sent.
 - `MANUAL` — caller supplies `manual_tokens`.
 - `FULL` — max safe context. For Ollama, VRAM-tier lookup. For llama-server, the auto-tuned `n_ctx` read from `/props`.
 - `FAST` — half of full. Trades context for faster attention (quadratic).
 
 **Ollama VRAM tier** (matches Ollama's own internal defaults):
+
 - `< 24 GB` → 4,096 tokens
 - `24–48 GB` → 32,768 tokens
 - `≥ 48 GB` → 262,144 tokens
 
-**llama-server / Llamafile** — `/props` endpoint returns `default_generation_settings.n_ctx`. Without `--kv-unified`, this is *per-slot* context (`total / n_parallel`). With `--kv-unified`, it's the full pool (each slot can use all of it).
+**llama-server / Llamafile** — `/props` endpoint returns `default_generation_settings.n_ctx`. Without `--kv-unified`, this is _per-slot_ context (`total / n_parallel`). With `--kv-unified`, it's the full pool (each slot can use all of it).
 
 `FAST` is a two-phase dance:
+
 1. Start backend with no `-c` to discover its auto-tuned max from `/props`
 2. Compute `half_total` (accounting for `n_slots` × per-slot or unified)
 3. Restart backend with `-c half_total`
@@ -570,6 +605,7 @@ Unknown rows fall through to backend defaults. No values are made up.
 Health polling uses `/props` rather than `/health` because `/health` is gated behind the same `is_ready` middleware as `/props` — polling `/props` directly confirms the model is fully loaded and serving.
 
 `setup_backend()` is the one-call setup that wires `ServerManager` + `ContextManager`:
+
 - Returns `(ServerManager, ContextManager)` ready to plug into `WorkflowRunner`
 - Ollama path: also calls `client.set_num_ctx(budget)` so the resolved budget appears in every request
 
@@ -589,6 +625,7 @@ llama-server -m model.gguf --jinja -ngl 999 --port 8080 \
 **For our replication.** If we run Gemma 4 / Qwen 3.5 / Ministral Reasoning on a recent llama.cpp build, pass `--reasoning-budget 0` via `ServerManager`'s `extra_flags`. Without it, eval runs hang at the 300s wall-clock timeout (see §30) and look like model failures when they're actually backend bugs. Catch this once or it eats a whole batch run.
 
 Other operational gotchas worth knowing:
+
 - **`/props` over `/health`** (covered above) — `/health` returns 200 before the model is fully loaded.
 - **Null-byte JSONL corruption** — interrupted writes to the eval results file can leave null bytes mid-line. Read-side: skip lines that don't parse as JSON rather than failing the whole report.
 - **Backend process death** — `ServerManager` does not auto-restart on crash. The eval runner records the failed iteration and the next scenario start would re-invoke `start()`, but mid-run crashes manifest as `BackendError(502)` with no recovery.
@@ -625,13 +662,16 @@ Measured: on Ministral 8B Q4, Q8 KV cache lifted usable context from 36,864 → 
 Priority is an `int` — lower runs first. No semantics imposed; consumer defines what the levels mean. Default 0 = pure FIFO.
 
 **Auto-preemption.** On submit:
+
 ```python
 if current_priority is not None and priority < current_priority and cancel_event is not None:
     cancel_event.set()
 ```
+
 The running task receives the cancel signal at the start of its next iteration → raises `WorkflowCancelledError` → its future receives that exception. The higher-priority task takes over.
 
 Worker loop:
+
 - Pulls from queue, sets `_current_priority`, builds a fresh `cancel_event`, calls `runner.run(workflow, user_message, cancel_event=...)`.
 - On any exception, the future receives the exception (still completes).
 - `cancel_current()` lets the consumer manually cancel.
@@ -643,9 +683,11 @@ Use case: shared specialist slot in a multi-agent architecture. Routine workflow
 ## 22. WorkflowRunner — Cancellation, Multi-Turn, Observability
 
 ### Cancellation
+
 `run(workflow, user_message, cancel_event=asyncio.Event())`. The event is checked once per iteration, before the inference call. Cooperative — if a model is mid-inference, the runner waits. On set, raises `WorkflowCancelledError(messages, completed_steps, iteration)` — the full conversation state for the caller to resume, discard, or log.
 
 ### Multi-turn via `initial_messages`
+
 ```python
 turn_messages = []
 runner = WorkflowRunner(..., on_message=turn_messages.append)
@@ -656,19 +698,24 @@ conversation_history.extend(turn_messages)
 The runner doesn't rebuild the system prompt when `initial_messages` is provided — caller is responsible for including it. `on_message` fires only for NEW messages created during this turn, not the replayed history. `StepEnforcer` and `tool_call_counter` reset per `run()` call.
 
 ### Filter transient messages on persist
+
 Long-running sessions accumulate retry/step nudges and failed text responses. The model sees its own past failures every turn — degrades coherence, especially on 8-14B. The framework provides the message tagging; the consumer filters:
+
 ```python
 TRANSIENT = {RETRY_NUDGE, STEP_NUDGE, PREREQUISITE_NUDGE, TEXT_RESPONSE}
 def on_message(msg):
     if msg.metadata.type not in TRANSIENT:
         self.messages.append(msg)
 ```
+
 Not done in the framework because the within-turn behavior wants those nudges visible (model needs to see them to correct).
 
 ### Async `on_chunk`
+
 Streaming callback is `Callable[[StreamChunk], Awaitable[None]]` — awaited per chunk inside the SSE loop. Sync callbacks block the stream; async lets a websocket consumer push tokens out as they arrive.
 
 ### Sync `on_message`
+
 One callback per message-append, fires outside the hot SSE loop. Stays sync because blocking cost is negligible. Used by the eval harness for `_verbose_printer` and history collection.
 
 ### Production observability wiring
@@ -752,6 +799,7 @@ def on_compact(event):
 ```
 
 **What to alert on.** From running the eval many times:
+
 - `retry_nudges > 0` on a successful run — model needed correction. Not an alert, but useful for trend analysis.
 - `step_nudges` reaching tier 3 — model is fighting the workflow. Alert if rate spikes.
 - `compaction_phase >= 3` — emergency cutoff fired. Should be very rare; alert if regular.
@@ -770,14 +818,16 @@ The on-callback story is small but load-bearing. Without it, every production fa
 ## 23. Streaming Semantics
 
 `StreamChunk` has four types:
+
 - `TEXT_DELTA` — partial text (reasoning, refusal, etc.)
 - `TOOL_CALL_DELTA` — partial tool call (name or args building up)
 - `FINAL` — stream complete, `response: LLMResponse` set
 - `RETRY` — previous stream was malformed; client is retrying
 
-The runner only acts on `FINAL`. Streaming is a *side channel* for UI/logging, not a control-flow change. If a stream ends without a `FINAL`, the runner raises `StreamError`.
+The runner only acts on `FINAL`. Streaming is a _side channel_ for UI/logging, not a control-flow change. If a stream ends without a `FINAL`, the runner raises `StreamError`.
 
 Per-client streaming bookkeeping:
+
 - **Ollama** — NDJSON stream. Tracks `done` flag. `pending_tool_calls` carries tool calls that arrived in the same chunk as `done: true`.
 - **Llamafile/llama-server** — SSE. Tracks `tool_call_parts: dict[int, {name, args}]` keyed by `delta.tool_calls[N].index` so it can reassemble parallel tool calls from streaming deltas. Bad JSON args at end → `TextResponse(content=accumulated_content)`.
 - **Anthropic** — SDK events (`content_block_start`, `content_block_delta`, `content_block_stop`, `message_stop`). Tracks `_current_tool_idx` for `input_json_delta` accumulation.
@@ -791,6 +841,7 @@ The eval harness retries on `StreamError` (default 2 retries) — a malformed st
 All three clients now return `list[ToolCall]` (single tool calls are just a 1-element list). `LLMResponse = list[ToolCall] | TextResponse`.
 
 Runner batch semantics:
+
 1. Validate every tool name; any unknown → nudge for the first unknown
 2. If any terminal tool in batch and steps unsatisfied → step nudge (escalates as usual)
 3. If any prereq violated → prerequisite nudge, whole batch blocked
@@ -802,7 +853,7 @@ Runner batch semantics:
 
 `TieredCompact` treats a parallel batch as one iteration via `step_index` boundary detection. Compaction never splits the `TOOL_CALL` from its `TOOL_RESULT`s.
 
-**Design choice — no enforcement guardrails on parallelism.** The framework's philosophy is *structural correctness*, not *intent validation*. It validates that the call is well-formed and the tool exists; it does not validate "did you call this tool the right number of times" or "in the right order." If a model batches three calls, three calls execute. The "model forgot the second call" failure mode is a model quality problem solved by `required_steps`, not by counting calls.
+**Design choice — no enforcement guardrails on parallelism.** The framework's philosophy is _structural correctness_, not _intent validation_. It validates that the call is well-formed and the tool exists; it does not validate "did you call this tool the right number of times" or "in the right order." If a model batches three calls, three calls execute. The "model forgot the second call" failure mode is a model quality problem solved by `required_steps`, not by counting calls.
 
 ---
 
@@ -811,6 +862,7 @@ Runner batch semantics:
 `ToolSpec` holds `name`, `description`, `parameters: type[BaseModel]`. `get_json_schema()` returns `parameters.model_json_schema()` for the wire format.
 
 `ToolSpec.from_json_schema(name, description, schema)` builds a Pydantic model dynamically from a raw JSON Schema. `_json_schema_to_type(prop, field_name, model_name_prefix)` recursively maps:
+
 - `enum` → `Literal[*values]` (takes priority)
 - `string` → `str`, `integer` → `int`, `number` → `float`, `boolean` → `bool`
 - `object` with `properties` → recursive sub-model via `_build_model`
@@ -818,6 +870,7 @@ Runner batch semantics:
 - Otherwise → `Any`
 
 `_build_model(properties, required, model_name)`:
+
 - Required + has description: `(type, Field(description=...))`
 - Required + no description: `(type, ...)` (ellipsis = required)
 - Optional + has default: `(type | None, Field(default=..., description=...))`
@@ -826,6 +879,7 @@ Runner batch semantics:
 Critical for the proxy and BFCL integration — both receive raw OpenAI-style JSON schemas from external callers and need to materialize them as Pydantic models on the fly.
 
 `Workflow.__post_init__` validates everything at construction:
+
 - `tools` keys match `tool_def.name`
 - Every `required_steps` entry is in `tools`
 - Every terminal tool is in `tools` and NOT in `required_steps`
@@ -857,6 +911,7 @@ if result.action == "execute":
 Internally composes `ResponseValidator + StepEnforcer + ErrorTracker`. Granular API (the components directly) is also exported for full control.
 
 The facade returns a minimal `Nudge` dataclass with `role`/`content`/`kind` and no dependency on the internal `Message` type. Consumers map it to their own framework's message format:
+
 ```python
 # OpenAI-style:
 messages.append({"role": nudge.role, "content": nudge.content})
@@ -873,6 +928,7 @@ msg_cls = HumanMessage if nudge.role == "user" else SystemMessage
 A standalone proxy entrypoint (`--backend-url ... --port 8081` external mode, or `--backend llamaserver --gguf ...` managed mode) drops in between any OpenAI-compatible client and a local model server.
 
 Architecture:
+
 - **Raw `asyncio.start_server`** — no FastAPI, no Uvicorn. Reads request line, headers (`Content-Length` check, 16MB max), body. Routes:
   - `GET /health` → `{"status": "ok"}`
   - `GET /v1/models` → minimal model list
@@ -882,9 +938,10 @@ Architecture:
 - **SSE header sent immediately** when `stream=true` — client knows the proxy is alive while waiting in the queue.
 - **Client disconnect detection** — `_await_with_disconnect` polls `writer.is_closing()` every 1s with `asyncio.shield(future)` so a disconnect cancels the queued request. The worker still processes the request if already in flight (no mid-LLM-call interruption), but the result is discarded and the inference lock is released.
 - **Per-call sampling** — request body's `temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`, `presence_penalty`, `seed` are extracted and threaded as a `sampling` dict through `client.send()` for this call only.
-- **Buffer-then-stream** — proxy fully buffers the backend response, runs validation/rescue/retry, *then* streams the (clean) result back to the client. From the client's view, the proxy is just a slow LLM. Real token-by-token streaming during inference is incompatible with rescue parsing (which needs the full response).
+- **Buffer-then-stream** — proxy fully buffers the backend response, runs validation/rescue/retry, _then_ streams the (clean) result back to the client. From the client's view, the proxy is just a slow LLM. Real token-by-token streaming during inference is incompatible with rescue parsing (which needs the full response).
 
 `handle_chat_completions`:
+
 1. Convert inbound OpenAI messages → internal `Message` list
 2. Extract tool specs via `ToolSpec.from_json_schema`
 3. Auto-inject `respond` tool if tools present and `respond` not already there
@@ -896,14 +953,14 @@ Architecture:
 
 What the proxy applies vs not:
 
-| Applies | Skips |
-|---|---|
-| Rescue parsing | Step enforcement (no workflow knowledge) |
-| Retry nudges | Tool prerequisites |
+| Applies             | Skips                                                                      |
+| ------------------- | -------------------------------------------------------------------------- |
+| Rescue parsing      | Step enforcement (no workflow knowledge)                                   |
+| Retry nudges        | Tool prerequisites                                                         |
 | Unknown tool nudges | Max iterations (one `run_inference` per request, bounded by `max_retries`) |
-| Context compaction | Context threshold warnings (stateless per-request) |
-| Reasoning folding | Real per-token streaming |
-| Message merging | Cancellation on disconnect mid-LLM call |
+| Context compaction  | Context threshold warnings (stateless per-request)                         |
+| Reasoning folding   | Real per-token streaming                                                   |
+| Message merging     | Cancellation on disconnect mid-LLM call                                    |
 
 ---
 
@@ -916,8 +973,9 @@ Two `ProxyServer` modes mirror the eval/runner story:
 **External** — caller manages the backend; proxy is just an HTTP layer.
 
 Identity rules in `setup_backend()`:
+
 - `backend="ollama"` requires `model`, rejects `gguf_path` (Ollama runtime keyed by name)
-- `backend in ("llamaserver", "llamafile")` requires `gguf_path`, rejects `model` (GGUF *is* the identity — used for filesystem path equality, sampling lookup, JSONL eval rows)
+- `backend in ("llamaserver", "llamafile")` requires `gguf_path`, rejects `model` (GGUF _is_ the identity — used for filesystem path equality, sampling lookup, JSONL eval rows)
 
 `ServerManager` for Llamafile uses `_find_llamafile_runtime(directory)` to locate the `llamafile-*` binary alongside the GGUF (highest version wins).
 
@@ -951,6 +1009,7 @@ ABLATION_PRESETS = {
 `no_steps` is implemented by setting `required_steps=[]` on the per-run workflow — the step enforcer becomes a no-op rather than being absent. `no_recovery` sets `max_tool_errors=0` so the first tool error raises. `no_compact` forces `NoCompact` strategy; compaction-only scenarios are skipped entirely for ablations that disable compaction (they'd fail by definition).
 
 **Headline numbers** from the reference paper / eval dashboard:
+
 - Haiku bare: 100% → 43% (completeness); recovers to 100% with full guardrails. The frontier model needs the framework too.
 - Sonnet bare: drops to 89%.
 - Mistral 8B bare: ~38%; full: ~99%.
@@ -960,19 +1019,19 @@ ABLATION_PRESETS = {
 
 From the author's own HN-thread commentary on the ablation runs:
 
-| Guardrail | Drop when disabled | Notes |
-|---|---|---|
-| **Retry nudges** | 24–49 pt | Highest-impact single layer. Without retry-on-text-response, the model never gets a chance to self-correct after a malformed call. |
-| **Error recovery** | ~10 pt | Universal — every model, local and frontier, drops to 0% on the error-recovery scenario without it. |
-| **Step enforcement** | Situational | Only fires for models with weak sequencing. Strong models satisfy required steps naturally and never trigger the nudge. |
-| **Rescue parsing** | No significance in eval | But author keeps it on production-experience grounds — surfaces models that emit JSON-as-text instead of structured calls. |
-| **Context compaction** | No significance in eval | Same — eval workflows are too short to exercise compaction; production multi-day sessions need it. |
+| Guardrail              | Drop when disabled      | Notes                                                                                                                              |
+| ---------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Retry nudges**       | 24–49 pt                | Highest-impact single layer. Without retry-on-text-response, the model never gets a chance to self-correct after a malformed call. |
+| **Error recovery**     | ~10 pt                  | Universal — every model, local and frontier, drops to 0% on the error-recovery scenario without it.                                |
+| **Step enforcement**   | Situational             | Only fires for models with weak sequencing. Strong models satisfy required steps naturally and never trigger the nudge.            |
+| **Rescue parsing**     | No significance in eval | But author keeps it on production-experience grounds — surfaces models that emit JSON-as-text instead of structured calls.         |
+| **Context compaction** | No significance in eval | Same — eval workflows are too short to exercise compaction; production multi-day sessions need it.                                 |
 
 ### The eval-vs-production caveat
 
 **Rescue parsing and context compaction show no statistical significance in the ablation harness.** The author keeps them anyway. Why: the eval scenarios are deliberately bounded (≤15 iterations, ≤8K tokens) — too small to exercise compaction under real pressure, too short to surface the occasional "model emits a JSON code fence instead of a tool call" failure that rescue catches.
 
-The eval harness is a *necessary but not sufficient* validation surface. Layers that protect against rare-but-catastrophic failures don't show up in 50-run McNemar tests; they show up in production over weeks. This is worth noting for our own replication: don't strip a guardrail just because the ablation can't measure its contribution.
+The eval harness is a _necessary but not sufficient_ validation surface. Layers that protect against rare-but-catastrophic failures don't show up in 50-run McNemar tests; they show up in production over weeks. This is worth noting for our own replication: don't strip a guardrail just because the ablation can't measure its contribution.
 
 **Replication implication.** Our ablation will likely under-value the same two guardrails for the same reason. Keep them. Validate them by running the framework against a real multi-week workload, not just the bench.
 
@@ -981,6 +1040,7 @@ The eval harness is a *necessary but not sufficient* validation surface. Layers 
 ## 30. Eval Harness — Scenarios + Metrics
 
 `EvalScenario` dataclass:
+
 - `name`, `description`, `user_message`
 - `workflow: Workflow` OR `build_workflow: Callable[[], (Workflow, validate_state_fn)]` (stateful scenarios get a fresh backend per run)
 - `budget_tokens` (default 8192) — compaction scenarios use tight values (925, 2048) to force compaction
@@ -1003,6 +1063,7 @@ Scenarios split into 30 cases:
 **Stateful variants** (13): one per non-compaction scenario. Same intent, but tools route through a backend class where arguments mutate state. Wrong arguments cascade — pass `entity_id="999"` instead of `"42"` and the next call breaks instead of returning a generic "not found" string. Validation checks backend end state.
 
 `RunResult` captures:
+
 - `completeness` (reached terminal), `accuracy` (validator passed), `iterations_used`
 - `compaction_events: list[CompactEvent]`, `messages: list[Message]` (for history analysis)
 - `elapsed_seconds`, `stream_retries`, `input_tokens`, `output_tokens`, `cost_usd`
@@ -1010,6 +1071,7 @@ Scenarios split into 30 cases:
 `CountingClientWrapper` wraps the underlying `LLMClient` to count `send()` calls and accumulate `last_usage` for token tallies — `iterations_used` is the wrapper's `call_count`.
 
 `compute_metrics(scenario, results)`:
+
 - Score = `correct / total` (primary sort key — blended success including incorrect-but-completed)
 - Accuracy = `correct / validated`
 - Completion rate = `completed / total`
@@ -1026,49 +1088,49 @@ Every batch run appends one JSON line per `(config × scenario × ablation × ru
 ```jsonc
 {
   // Identity — composite key for resume + grouping
-  "model":          "ministral-3:8b-instruct-2512-q4_K_M",
-  "backend":        "llamaserver",       // "ollama" | "llamaserver" | "llamafile" | "anthropic"
-  "mode":           "native",            // "native" | "prompt"
-  "ablation":       "baseline",          // preset name; "baseline" = all guardrails on
-  "tool_choice":    "auto",              // Anthropic-only; "any" forces tool call
-  "scenario":       "data_gap_recovery_extended",
-  "run":            42,                  // 1-indexed within this (config, ablation, scenario)
+  "model": "ministral-3:8b-instruct-2512-q4_K_M",
+  "backend": "llamaserver", // "ollama" | "llamaserver" | "llamafile" | "anthropic"
+  "mode": "native", // "native" | "prompt"
+  "ablation": "baseline", // preset name; "baseline" = all guardrails on
+  "tool_choice": "auto", // Anthropic-only; "any" forces tool call
+  "scenario": "data_gap_recovery_extended",
+  "run": 42, // 1-indexed within this (config, ablation, scenario)
 
   // Outcome
-  "completeness":   true,                // reached terminal tool
-  "accuracy":       true,                // terminal args / backend state passed validate()
-  "validate_error": null,                // exception type if validator threw
+  "completeness": true, // reached terminal tool
+  "accuracy": true, // terminal args / backend state passed validate()
+  "validate_error": null, // exception type if validator threw
 
   // Mechanics
-  "iterations":     7,                   // total LLM calls (retries consume iterations)
-  "ideal_iterations": 5,                 // workflow's minimum-call count
-  "wasted_calls":   2,                   // max(0, iterations - ideal); null if !completeness
-  "elapsed_s":      4.73,
-  "error_type":     null,                // framework-error subclass name on failure
-  "error_message":  null,
-  "stream_retries": 0,                   // omitted if zero; capped by EvalConfig.stream_retries (default 2)
+  "iterations": 7, // total LLM calls (retries consume iterations)
+  "ideal_iterations": 5, // workflow's minimum-call count
+  "wasted_calls": 2, // max(0, iterations - ideal); null if !completeness
+  "elapsed_s": 4.73,
+  "error_type": null, // framework-error subclass name on failure
+  "error_message": null,
+  "stream_retries": 0, // omitted if zero; capped by EvalConfig.stream_retries (default 2)
   "compaction_events": 0,
-  "budget_tokens":  8192,                // resolved budget for this scenario
+  "budget_tokens": 8192, // resolved budget for this scenario
 
   // History-derived stats (null when keep_message_history=False)
-  "retry_nudges":   0,                   // count of RETRY_NUDGE messages
-  "step_nudges":    0,                   // count of STEP_NUDGE messages
-  "tool_errors":    0,                   // count of TOOL_RESULT messages with [ToolError]
-  "reasoning_msgs": 3,                   // count of REASONING messages
+  "retry_nudges": 0, // count of RETRY_NUDGE messages
+  "step_nudges": 0, // count of STEP_NUDGE messages
+  "tool_errors": 0, // count of TOOL_RESULT messages with [ToolError]
+  "reasoning_msgs": 3, // count of REASONING messages
 
   // Cost — Anthropic only; local backends omit these fields
-  "input_tokens":   1240,
-  "output_tokens":  186,
-  "cost_usd":       0.0023,
+  "input_tokens": 1240,
+  "output_tokens": 186,
+  "cost_usd": 0.0023,
 
   // Hardware provenance (multi-rig consolidated datasets)
-  "rig":            "rig-02"             // optional; arbitrary string label
+  "rig": "rig-02", // optional; arbitrary string label
 }
 ```
 
 **Resume semantics.** `batch_eval` opens the JSONL on startup, scans every line, and builds `completed_counts: dict[(model, backend, mode, ablation, scenario), int]`. For each requested cell, it skips `existing_count` runs and starts at index `existing + 1`. This means a crashed batch resumes cleanly — no duplicate runs, no lost progress. Interrupted writes get truncated to the last complete `\n`; the read side skips lines that don't parse as JSON.
 
-**Why one row per run, not one per config.** Per-run rows let you compute per-scenario accuracy *and* aggregate scores from the same file. Aggregating in the writer would lock you out of the per-scenario view. McNemar (§33) needs the (scenario, run) granularity to pair runs across ablations.
+**Why one row per run, not one per config.** Per-run rows let you compute per-scenario accuracy _and_ aggregate scores from the same file. Aggregating in the writer would lock you out of the per-scenario view. McNemar (§33) needs the (scenario, run) granularity to pair runs across ablations.
 
 **Hardware provenance.** The optional `rig` field lets multi-rig consolidated datasets stay attributable. The published v0.6.0 dataset is 119,600 rows across 46 configs × 26 scenarios × 2 ablations × 50 runs, consolidated from 4 rigs (rig-00..rig-03) — a `eval_rigs.json` at the repo root records the hardware topology. We'd want the same field if we run our own eval across multiple machines.
 
@@ -1078,15 +1140,15 @@ Every batch run appends one JSON line per `(config × scenario × ablation × ru
 
 ## 31. Five-Tier Diagnostic Eval Framework
 
-The eval suite is organized as five concentric tiers, each isolating a different failure mode. Running the same model through all five tiers tells you *which* layer is leaking, not just that something is leaking.
+The eval suite is organized as five concentric tiers, each isolating a different failure mode. Running the same model through all five tiers tells you _which_ layer is leaking, not just that something is leaking.
 
-| Tier | What it isolates | How |
-|---|---|---|
-| **1. Lambda** | Framework plumbing — does the loop work at all? | Hardcoded echo tools; args don't affect the result; only mechanical reliability is tested |
-| **2. Ablated lambda** | Per-guardrail contribution | Same lambda scenarios, with one guardrail disabled at a time (`no_rescue`, `no_nudge`, `no_steps`, `no_recovery`, `no_compact`, `bare`) |
-| **3. Stateful** | Model reasoning quality | Backend classes where args mutate state; wrong arguments produce wrong results that cascade downstream; validation checks backend end state |
-| **4. Ablated stateful** | Guardrails × reasoning interaction | Stateful scenarios under each ablation preset — measures whether guardrail value depends on reasoning load |
-| **5. Stateful + strict** (future) | `ToolResolutionError` recovery | Strict backends that raise on key-miss instead of fuzzy matching; tests how much retry-on-miss recovers vs hand-tuned fuzzy backends |
+| Tier                              | What it isolates                                | How                                                                                                                                         |
+| --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Lambda**                     | Framework plumbing — does the loop work at all? | Hardcoded echo tools; args don't affect the result; only mechanical reliability is tested                                                   |
+| **2. Ablated lambda**             | Per-guardrail contribution                      | Same lambda scenarios, with one guardrail disabled at a time (`no_rescue`, `no_nudge`, `no_steps`, `no_recovery`, `no_compact`, `bare`)     |
+| **3. Stateful**                   | Model reasoning quality                         | Backend classes where args mutate state; wrong arguments produce wrong results that cascade downstream; validation checks backend end state |
+| **4. Ablated stateful**           | Guardrails × reasoning interaction              | Stateful scenarios under each ablation preset — measures whether guardrail value depends on reasoning load                                  |
+| **5. Stateful + strict** (future) | `ToolResolutionError` recovery                  | Strict backends that raise on key-miss instead of fuzzy matching; tests how much retry-on-miss recovers vs hand-tuned fuzzy backends        |
 
 **The lambda-vs-stateful delta is the most useful single number.** Same scenario, same model, same guardrails — only the tool implementation changes. A model that scores 100% on lambda and 60% on stateful has good framework integration but weak reasoning. A model that scores 60% on both has framework issues — guardrails aren't kicking in. Decomposing the gap is the diagnostic.
 
@@ -1111,17 +1173,19 @@ These principles also apply to production tools, not just eval scenarios. If a r
 Not in shipped code. Captures a failure mode none of the existing scenarios touch: the backend confirms success even when the model wrote garbage.
 
 **Concept.** A simple schema-aware DB with five tools:
+
 - `get_schema()` → returns table structure (columns, types, constraints)
 - `read_record(table, id)` → returns current row
 - `write_record(table, id, data)` → **always returns "Row updated successfully"** — even if data has wrong types, missing fields, or bad column names. Silently coerces or drops.
-- `compute(query)` → runs calculation against *actual stored state*
+- `compute(query)` → runs calculation against _actual stored state_
 - `submit(result)` → terminal
 
-User message: *"Update employee E-1001's salary to 75000 and compute their new monthly take-home after 22% tax."*
+User message: _"Update employee E-1001's salary to 75000 and compute their new monthly take-home after 22% tax."_
 
 **What makes this hard:**
+
 - `write_record` never complains. Wrong column name silently ignored. String where int expected silently stored as-is.
-- `compute` operates on actual stored state, not what the model *thinks* it wrote. If the write was malformed, compute returns wrong results downstream.
+- `compute` operates on actual stored state, not what the model _thinks_ it wrote. If the write was malformed, compute returns wrong results downstream.
 - A smart model would `read_record` after writing to verify state matches intent (read-after-write self-verification).
 
 **What it tests that nothing else does:** self-verification behavior. The gap between "tool returned success" and "tool did what I wanted." Validation: strict — check final stored state AND compute result. Models that don't self-verify can still pass if they got the write right on the first try.
@@ -1134,17 +1198,17 @@ User message: *"Update employee E-1001's salary to 75000 and compute their new m
 
 Berkeley Function Calling Leaderboard (BFCL) v4 is the de facto industry standard for LLM function-calling evaluation (UC Berkeley Gorilla project, ICML 2025). The framework runs BFCL test cases through its own production path — every test case becomes a real `Workflow` + `WorkflowRunner` execution, guardrails active throughout. No bypass, no thin wrapper.
 
-**Key design choice — bypass the BFCL framework, keep the BFCL data.** BFCL's `BaseHandler` loop is marked `@final` (Python's "do not override") and manages turns itself. Using the same test data and scoring criteria but running through the reliability path means results are *comparable but not identical* to leaderboard runs. The tradeoff: not directly leaderboard-comparable, but every guardrail participates in the eval.
+**Key design choice — bypass the BFCL framework, keep the BFCL data.** BFCL's `BaseHandler` loop is marked `@final` (Python's "do not override") and manages turns itself. Using the same test data and scoring criteria but running through the reliability path means results are _comparable but not identical_ to leaderboard runs. The tradeoff: not directly leaderboard-comparable, but every guardrail participates in the eval.
 
 ### Architecture (7 modules)
 
 - **`schema_adapter.py`** — Translates BFCL's OpenAI-style function JSON schemas into `ToolDef` objects on the fly, per test case. Builds a `Workflow` with those tools. This is where `ToolSpec.from_json_schema()` earns its keep — every BFCL category has differently-shaped tools.
 - **`runner.py`** — Single-turn and multi-turn BFCL runner.
-  - *Single-turn:* the BFCL function is the terminal tool. One `runner.run()` call.
-  - *Multi-turn:* BFCL functions are regular tools, a synthetic `done` tool is the terminal, and multiple `runner.run()` calls chain history forward via `initial_messages`.
+  - _Single-turn:_ the BFCL function is the terminal tool. One `runner.run()` call.
+  - _Multi-turn:_ BFCL functions are regular tools, a synthetic `done` tool is the terminal, and multiple `runner.run()` calls chain history forward via `initial_messages`.
 - **`scorer.py`** — Pass/fail scoring against ground truth.
-  - *Single-turn:* AST comparison of tool calls (BFCL's standard metric).
-  - *Multi-turn:* end-state comparison on backend instances — attribute-level deep equality, not per-turn sequence matching.
+  - _Single-turn:_ AST comparison of tool calls (BFCL's standard metric).
+  - _Multi-turn:_ end-state comparison on backend instances — attribute-level deep equality, not per-turn sequence matching.
 - **`executors.py`** — BFCL backend execution wrappers. Stateful backend instances where tool calls mutate state. Direct analog of the stateful eval scenarios pattern.
 - **`backend_wiring.py`** — BFCL → client/server/budget setup. One adapter per backend type.
 - **`batch_runner.py`** — Batch runner across all configs, JSONL output, automatic resume. Mirrors the main eval `batch_eval.py`.
@@ -1154,16 +1218,16 @@ Berkeley Function Calling Leaderboard (BFCL) v4 is the de facto industry standar
 
 11 BFCL categories (~2,183 entries):
 
-| Type | Categories |
-|---|---|
+| Type            | Categories                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------- |
 | Single-turn (7) | `simple_python`, `simple_java`, `simple_javascript`, `multiple`, `parallel`, `parallel_multiple`, `irrelevance` |
-| Multi-turn (4) | `base`, `miss_func`, `miss_param`, `long_context` |
+| Multi-turn (4)  | `base`, `miss_func`, `miss_param`, `long_context`                                                               |
 
-The `parallel` category works naturally because parallel tool calling is a first-class feature (§24). `irrelevance` exercises the model's ability to *not* call a tool — same pattern as the relevance_detection scenario.
+The `parallel` category works naturally because parallel tool calling is a first-class feature (§24). `irrelevance` exercises the model's ability to _not_ call a tool — same pattern as the relevance_detection scenario.
 
 ### Multi-turn design
 
-Each turn is a separate `WorkflowRunner.run()` call. Conversation history flows forward via `initial_messages`. Guardrails (nudges, retries, compaction) are active on *every* turn. After all turns complete, scoring compares the final backend state against BFCL ground truth — end state, not per-turn sequence matching.
+Each turn is a separate `WorkflowRunner.run()` call. Conversation history flows forward via `initial_messages`. Guardrails (nudges, retries, compaction) are active on _every_ turn. After all turns complete, scoring compares the final backend state against BFCL ground truth — end state, not per-turn sequence matching.
 
 This is the same `initial_messages` pattern documented for normal multi-turn consumers (§22) — the BFCL integration is a real-world stress test of the multi-turn API.
 
@@ -1182,10 +1246,12 @@ The framework's own eval scenarios measure guardrails on its own ground. BFCL is
 **Pairing.** Baseline run `i` on scenario `S` vs ablation run `i` on scenario `S`. Because ablation runs reuse the same `(scenario, run)` index space, each trial has a matched pair — McNemar's test is exactly the right tool.
 
 **McNemar p-value.** `b` = pairs where baseline correct + ablation wrong; `c` = the opposite. Under H₀, each discordant pair is a fair coin flip. The implementation picks:
+
 - **Exact binomial tail** when `b + c ≤ 25` — computes via log-sum-exp to avoid underflow
 - **Continuity-corrected χ²** otherwise: `χ² = (|b-c| - 1)² / (b+c)`, then `p = erfc(sqrt(χ²/2))`
 
 **Wilson 95% CI** (better than naive ± for small `n`):
+
 ```
 center = (p + z²/2n) / (1 + z²/n)
 half  = z·sqrt(p(1-p)/n + z²/(4n²)) / (1 + z²/n)
@@ -1193,6 +1259,7 @@ CI = (center - half, center + half)
 ```
 
 Reports configs as a table per `(model, backend, mode)`:
+
 ```
 ablation       score    95% CI            delta    disc(b/c)    p   sig
 baseline       86.50%   [83.45,89.55]
@@ -1209,6 +1276,7 @@ no_rescue      78.40%   [74.83,81.97]    -8.10pt   55/30     1.45e-03  **
 `report.py` generates ASCII tables, phone-friendly list views, HTML dashboards, and Markdown views from a JSONL results file. Markdown snapshots (`all.md`, `ollama.md`, `by-family.md`, `ablation.md`, `native-vs-prompt.md`, etc.) are pre-filtered persistent slices.
 
 HTML dashboard is a single self-contained file:
+
 - Pico CSS (~10KB, classless — semantic HTML looks good automatically)
 - ~100-150 lines of vanilla JS for filter dropdowns (backend, mode, model family, quant, ablation, scenario multi-select)
 - Filters compose with AND
@@ -1228,6 +1296,7 @@ Key design choice: **`WorkflowRunner` stays single-client.** No multi-client reg
 Per-model budgets resolve independently (Ollama tier, llama-server `/props`, Anthropic hardcoded 200K). Multi-model VRAM partitioning is not automatic — consumer manages loading order or sets explicit budgets via `MANUAL` mode.
 
 Deferred features:
+
 - Mid-workflow model switching (chain `runner.run()` calls instead)
 - VRAM-aware auto-partitioning (backends auto-tune; consumer manages order)
 - Eviction policies (LRU, priority-based — consumer-level orchestration)
@@ -1238,22 +1307,22 @@ Deferred features:
 
 865 unit tests, deterministic, no LLM/backend required. Coverage by component:
 
-| Component | Key cases |
-|---|---|
-| `Message` serialization | Metadata never in API dict; both wire formats; tool_calls list with 1+ entries |
-| `StepTracker` | Empty/partial/satisfied; duplicate records; arg-matched prereqs |
-| `CompactStrategy` | System always preserved; nudges dropped first; tool_results truncated then dropped; reasoning preserved through P2 then dropped P3; `keep_recent` boundary |
-| `CompactEvent` / `on_compact` | Fires when compaction triggers; not when under budget; before/after counts correct |
+| Component                        | Key cases                                                                                                                                                                                                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Message` serialization          | Metadata never in API dict; both wire formats; tool_calls list with 1+ entries                                                                                                                                                                                                   |
+| `StepTracker`                    | Empty/partial/satisfied; duplicate records; arg-matched prereqs                                                                                                                                                                                                                  |
+| `CompactStrategy`                | System always preserved; nudges dropped first; tool_results truncated then dropped; reasoning preserved through P2 then dropped P3; `keep_recent` boundary                                                                                                                       |
+| `CompactEvent` / `on_compact`    | Fires when compaction triggers; not when under budget; before/after counts correct                                                                                                                                                                                               |
 | `WorkflowRunner` (mocked client) | Escalating nudge tiers 1/2/3 → StepEnforcementError; rescue salvages TextResponse; counter resets on progress; max iterations → exception; tool raises → ToolExecutionError; `rescue_enabled=False`; async `on_chunk` awaited; parallel batches emit 1 TOOL_CALL + N TOOL_RESULT |
-| `OllamaClient` | Mocked HTTP send/stream; reasoning gated by `_think`; think auto-detect/fallback; `set_num_ctx`; `BackendError`/`ThinkingNotSupportedError`; `httpx.ReadTimeout` → `BackendError(408)` |
-| `LlamafileClient` | Native/prompt/auto mode resolution; `_downgrade_messages` format; `_merge_consecutive` alternation; think tag extraction; `/props` context discovery |
-| `AnthropicClient` | OpenAI → Anthropic conversion; system extraction; unpaired tool_use → synthetic error; consecutive same-role merging; `tool_choice` wiring |
-| `ServerManager` | VRAM tier lookup; FULL/FAST/MANUAL/BACKEND modes; `n_slots` math with/without `kv_unified` |
-| `Templates` | Prompt format; JSON extraction from code fences; rehearsal `tool[ARGS]{...}`; Qwen XML |
-| `Nudges` | Tier 1/2/3 content; available tools listed; prerequisite missing-list |
-| `ResponseValidator` | Rescue + retry + unknown tool paths |
-| `StepEnforcer` | Premature terminal escalation; reset on clean batch; prereq arg-matched |
-| `ErrorTracker` | Retry budget vs tool error budget; soft-error pass-through |
+| `OllamaClient`                   | Mocked HTTP send/stream; reasoning gated by `_think`; think auto-detect/fallback; `set_num_ctx`; `BackendError`/`ThinkingNotSupportedError`; `httpx.ReadTimeout` → `BackendError(408)`                                                                                           |
+| `LlamafileClient`                | Native/prompt/auto mode resolution; `_downgrade_messages` format; `_merge_consecutive` alternation; think tag extraction; `/props` context discovery                                                                                                                             |
+| `AnthropicClient`                | OpenAI → Anthropic conversion; system extraction; unpaired tool_use → synthetic error; consecutive same-role merging; `tool_choice` wiring                                                                                                                                       |
+| `ServerManager`                  | VRAM tier lookup; FULL/FAST/MANUAL/BACKEND modes; `n_slots` math with/without `kv_unified`                                                                                                                                                                                       |
+| `Templates`                      | Prompt format; JSON extraction from code fences; rehearsal `tool[ARGS]{...}`; Qwen XML                                                                                                                                                                                           |
+| `Nudges`                         | Tier 1/2/3 content; available tools listed; prerequisite missing-list                                                                                                                                                                                                            |
+| `ResponseValidator`              | Rescue + retry + unknown tool paths                                                                                                                                                                                                                                              |
+| `StepEnforcer`                   | Premature terminal escalation; reset on clean batch; prereq arg-matched                                                                                                                                                                                                          |
+| `ErrorTracker`                   | Retry budget vs tool error budget; soft-error pass-through                                                                                                                                                                                                                       |
 
 Tests use mocked HTTP responses (httpx mocks, async iterators for streaming) so the entire stack runs in CI without any model server.
 
@@ -1289,7 +1358,7 @@ Each layer is independently toggleable so the ablation harness can isolate its c
 - **Model-assisted compaction.** Tempting but adds latency + token cost + a new failure mode. Heuristic three-phase tiered compaction is "good enough" on real workloads.
 - **Trusting `finish_reason` from small models.** Empirically catastrophic — 100% → 4% on hard scenarios. The synthetic `respond` tool sidesteps the question.
 - **Defensive `try/except` wrapping.** Silent failures in agentic loops corrupt every subsequent step. Every retry path raises a typed exception with full context.
-- **Tool-author exceptions in the framework error hierarchy.** `ToolResolutionError` deliberately inherits from `Exception`, not the framework's base error, because it's a *tool-author* signal, not a framework failure.
+- **Tool-author exceptions in the framework error hierarchy.** `ToolResolutionError` deliberately inherits from `Exception`, not the framework's base error, because it's a _tool-author_ signal, not a framework failure.
 - **Validating tool argument types/values against the schema.** Schema validation is deferred to Pydantic at `ToolCall(args=...)` construction. The framework doesn't add a second validation layer — tool callables can validate further if needed.
 - **Routing logic in the runner.** The runner takes one client. Multi-model routing is consumer code (a pool plus consumer-defined routing rules).
 - **Auto-applying recommended sampling.** Opt-in only, with a one-shot INFO log if the consumer is missing free wins. Silent application would change behavior on upgrade.
@@ -1326,17 +1395,17 @@ From the published eval and ablation runs:
 
 A few related libraries get raised when discussing reliability for tool-calling LLMs. They solve overlapping problems but at different layers:
 
-| Library | What it does | Why it's not a substitute |
-|---|---|---|
-| **Instructor** (Pydantic + retry loops for structured output) | Validates LLM JSON output against a Pydantic schema. Retries on validation failure with structured error feedback. | Operates one layer below tool-calling orchestration. Solves "did the model produce valid JSON?" — not "did the model call the right tool in the right order with the right prereqs satisfied." Compatible: a reliability stack could use Instructor as the JSON validator inside its `ResponseValidator`, then layer step enforcement / prereqs / error recovery on top. |
-| **LangChain / LangGraph** | Agent orchestration framework with graph-based workflow definitions. | Heavyweight, opinionated about graph structure, owns the loop. The middleware-mode pattern described in §26 is the right comparison — guardrails can plug into LangChain rather than replace it. |
-| **DSPy** | Programming-by-example for LLM pipelines; optimizes prompts via teacher/student loops. | Optimization framework, not a reliability layer. Different axis — DSPy improves the prompt; the reliability stack catches what the prompt couldn't fix. |
-| **Outlines** (constrained decoding via FSMs / regex / grammars) | Constrains the model's sampling at generation time to enforce structural correctness. | Lower-level: constrains output *during* generation, not after. Eliminates malformed-JSON failures entirely on backends that support it (llama.cpp grammars), but doesn't address step ordering, prerequisite satisfaction, or error recovery. Best used *together* with the reliability stack — Outlines for the JSON shape, the stack for the workflow shape. |
-| **Anthropic `tool_choice="any"`** | Forces the model to call *some* tool rather than respond with text. | Helps — Haiku bare recovers from 43.8% to 88.9% with `tool_choice="any"`. But doesn't replace structural guardrails: the remaining 11-point gap to 100% is what step enforcement, error recovery, and rescue parsing provide. Use both. |
+| Library                                                         | What it does                                                                                                       | Why it's not a substitute                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Instructor** (Pydantic + retry loops for structured output)   | Validates LLM JSON output against a Pydantic schema. Retries on validation failure with structured error feedback. | Operates one layer below tool-calling orchestration. Solves "did the model produce valid JSON?" — not "did the model call the right tool in the right order with the right prereqs satisfied." Compatible: a reliability stack could use Instructor as the JSON validator inside its `ResponseValidator`, then layer step enforcement / prereqs / error recovery on top. |
+| **LangChain / LangGraph**                                       | Agent orchestration framework with graph-based workflow definitions.                                               | Heavyweight, opinionated about graph structure, owns the loop. The middleware-mode pattern described in §26 is the right comparison — guardrails can plug into LangChain rather than replace it.                                                                                                                                                                         |
+| **DSPy**                                                        | Programming-by-example for LLM pipelines; optimizes prompts via teacher/student loops.                             | Optimization framework, not a reliability layer. Different axis — DSPy improves the prompt; the reliability stack catches what the prompt couldn't fix.                                                                                                                                                                                                                  |
+| **Outlines** (constrained decoding via FSMs / regex / grammars) | Constrains the model's sampling at generation time to enforce structural correctness.                              | Lower-level: constrains output _during_ generation, not after. Eliminates malformed-JSON failures entirely on backends that support it (llama.cpp grammars), but doesn't address step ordering, prerequisite satisfaction, or error recovery. Best used _together_ with the reliability stack — Outlines for the JSON shape, the stack for the workflow shape.           |
+| **Anthropic `tool_choice="any"`**                               | Forces the model to call _some_ tool rather than respond with text.                                                | Helps — Haiku bare recovers from 43.8% to 88.9% with `tool_choice="any"`. But doesn't replace structural guardrails: the remaining 11-point gap to 100% is what step enforcement, error recovery, and rescue parsing provide. Use both.                                                                                                                                  |
 
-**The differentiator** in plain terms: structured-output libraries (Instructor, Outlines) make the model's response well-shaped. The reliability stack makes the model's *behavior* well-shaped across a multi-step workflow. They're orthogonal — and stacking them is the right move, not picking one.
+**The differentiator** in plain terms: structured-output libraries (Instructor, Outlines) make the model's response well-shaped. The reliability stack makes the model's _behavior_ well-shaped across a multi-step workflow. They're orthogonal — and stacking them is the right move, not picking one.
 
-If we replicate, we should consider using Outlines or llama.cpp's GBNF grammars as a layer beneath our `ResponseValidator` to eliminate the malformed-JSON case entirely on backends that support it. The retry nudge and rescue parsing would still catch the cases where the model produces *valid* JSON for the *wrong* tool — which Outlines/Instructor can't detect, because they don't know what the right tool is.
+If we replicate, we should consider using Outlines or llama.cpp's GBNF grammars as a layer beneath our `ResponseValidator` to eliminate the malformed-JSON case entirely on backends that support it. The retry nudge and rescue parsing would still catch the cases where the model produces _valid_ JSON for the _wrong_ tool — which Outlines/Instructor can't detect, because they don't know what the right tool is.
 
 ---
 

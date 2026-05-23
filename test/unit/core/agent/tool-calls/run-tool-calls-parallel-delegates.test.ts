@@ -470,10 +470,7 @@ describe('runToolCalls — parallel Delegate batches', () => {
 
       await collect(
         runToolCalls(
-          [
-            callOf('Delegate', { task: 'A' }, 'a'),
-            callOf('Delegate', { task: 'B' }, 'b'),
-          ],
+          [callOf('Delegate', { task: 'A' }, 'a'), callOf('Delegate', { task: 'B' }, 'b')],
           ctx,
           'sig',
           makeRecovery(),
@@ -483,9 +480,7 @@ describe('runToolCalls — parallel Delegate batches', () => {
       // requiredSteps satisfaction and prereq pass are both downstream of
       // the same `tracker.record` calls from the parallel pipelines.
       assert.strictEqual(stepEnforcer.getTracker().isSatisfied(), true);
-      const prereqCheck = stepEnforcer.checkPrerequisites([
-        callOf('Finish', {}, 'f'),
-      ]);
+      const prereqCheck = stepEnforcer.checkPrerequisites([callOf('Finish', {}, 'f')]);
       assert.strictEqual(prereqCheck.needsNudge, false);
     });
   });

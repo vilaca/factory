@@ -20,9 +20,7 @@ test('weak-tier text-only response triggers retry_nudge (validator path)', async
     createMockProvider([
       { content: 'I would help with that.' },
       {
-        tool_calls: [
-          { function: { name: TOOL_NAMES.Respond, arguments: { message: 'done' } } },
-        ],
+        tool_calls: [{ function: { name: TOOL_NAMES.Respond, arguments: { message: 'done' } } }],
       },
     ]),
     'weak',

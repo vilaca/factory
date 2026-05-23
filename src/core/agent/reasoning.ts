@@ -27,11 +27,7 @@ import type { ChatMessage } from './../../utils/chat-message.js';
 // adapters can use them without crossing the providers → core boundary
 // the modularity arch test enforces. Re-exported here as the
 // spec-aligned API surface for the core agent layer.
-export {
-  extractThinkTags,
-  discardThinkTags,
-  type ThinkExtractResult,
-} from '../../utils/think-tags.js';
+export { extractThinkTags, discardThinkTags } from '../../utils/think-tags.js';
 
 /**
  * Wire-boundary serialization helper: fold orphan `reasoning`-tagged

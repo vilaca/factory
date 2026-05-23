@@ -50,7 +50,11 @@ export class RecoveryState {
    *  clone shares no mutable references with the source — `correctedSignatures`
    *  is a fresh Set seeded from the parent's entries. */
   clone(): RecoveryState {
-    const out = new RecoveryState(this.autoRetryBudget, this.maxCorrections, this.maxHardToolErrors);
+    const out = new RecoveryState(
+      this.autoRetryBudget,
+      this.maxCorrections,
+      this.maxHardToolErrors,
+    );
     out.lastFailureMessage = this.lastFailureMessage;
     out.lastFailureSignature = this.lastFailureSignature;
     out.consecutiveSameFailures = this.consecutiveSameFailures;

@@ -63,7 +63,10 @@ const SAMPLING_FIELD_MAP: ReadonlyArray<[keyof ChatOptions, keyof ResolvedSampli
   ['seed', 'seed'],
 ];
 
-function mergeDefaults(out: ResolvedSampling, defaults: ReturnType<typeof getSamplingDefaults>): void {
+function mergeDefaults(
+  out: ResolvedSampling,
+  defaults: ReturnType<typeof getSamplingDefaults>,
+): void {
   if (defaults.temperature !== undefined) out.temperature = defaults.temperature;
   if (defaults.topP !== undefined) out.top_p = defaults.topP;
   if (defaults.topK !== undefined) out.top_k = defaults.topK;
@@ -130,7 +133,10 @@ export function applySamplingToBody(
  *  rejects the flag. Providers should set the `model` field so the agent
  *  layer can surface an actionable message. */
 export class ThinkingNotSupportedError extends Error {
-  constructor(public readonly model: string, cause?: string) {
+  constructor(
+    public readonly model: string,
+    cause?: string,
+  ) {
     super(
       `Model '${model}' does not support inline thinking, but the caller passed thinking: true. ` +
         (cause ? `Backend reported: ${cause}` : 'Set thinking to false or "auto" to continue.'),
@@ -158,10 +164,7 @@ export function autoDetectThinking(model: string): boolean {
  *    - the caller's explicit `true`/`false` verbatim
  *    - `autoDetectThinking(model)` for `'auto'` and `undefined`
  */
-export function resolveThinking(
-  model: string,
-  thinking: boolean | 'auto' | undefined,
-): boolean {
+export function resolveThinking(model: string, thinking: boolean | 'auto' | undefined): boolean {
   if (thinking === true || thinking === false) return thinking;
   return autoDetectThinking(model);
 }

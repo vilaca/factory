@@ -37,7 +37,7 @@ export const TRUNCATE_CHARS = 200;
  *  compaction. A boundary is a parallel batch (one TOOL_CALL + N
  *  TOOL_RESULT messages sharing one stepIndex), so keeping 2 means the
  *  last two turns survive in full even at Phase 3. */
-export const DEFAULT_KEEP_RECENT = 2;
+const DEFAULT_KEEP_RECENT = 2;
 
 export type CompactionPhase = 0 | 1 | 2 | 3;
 

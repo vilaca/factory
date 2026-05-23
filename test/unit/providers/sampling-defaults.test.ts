@@ -103,10 +103,7 @@ describe('resolveSampling — three-tier merge chain', () => {
 
   it('per-call overrides beat per-model defaults', () => {
     _resetSamplingLogForTests();
-    const out = resolveSampling(
-      { temperature: 0.01 },
-      { model: 'ministral-3-reasoning-q4' },
-    );
+    const out = resolveSampling({ temperature: 0.01 }, { model: 'ministral-3-reasoning-q4' });
     assert.equal(out.temperature, 0.01, 'per-call override wins over per-model');
     // Other per-model fields survive when the override doesn't touch them.
     assert.equal(out.top_p, 0.95);
@@ -123,10 +120,7 @@ describe('resolveSampling — three-tier merge chain', () => {
 
   it('recommendedSampling=true on an unknown model is a no-op (no entry to apply)', () => {
     _resetSamplingLogForTests();
-    const out = resolveSampling(
-      { recommendedSampling: true },
-      { model: 'unknown-model' },
-    );
+    const out = resolveSampling({ recommendedSampling: true }, { model: 'unknown-model' });
     assert.deepEqual(out, {});
   });
 
@@ -159,14 +153,20 @@ describe('resolveSampling — three-tier merge chain', () => {
     const snapshot = structuredClone(instanceDefaults);
     // Repeatedly resolve against per-model + per-call overrides — none of
     // these paths should write back to the caller's object.
-    resolveSampling({ temperature: 0.9 }, {
-      model: 'ministral-3-reasoning-q4',
-      instanceDefaults: { ...instanceDefaults },
-    });
-    resolveSampling({ topK: 99, seed: 42 }, {
-      model: 'unknown-model',
-      instanceDefaults: { ...instanceDefaults },
-    });
+    resolveSampling(
+      { temperature: 0.9 },
+      {
+        model: 'ministral-3-reasoning-q4',
+        instanceDefaults: { ...instanceDefaults },
+      },
+    );
+    resolveSampling(
+      { topK: 99, seed: 42 },
+      {
+        model: 'unknown-model',
+        instanceDefaults: { ...instanceDefaults },
+      },
+    );
     assert.deepEqual(instanceDefaults, snapshot, 'instanceDefaults must survive untouched');
   });
 

@@ -83,16 +83,10 @@ export function downgradeMessagesForPromptMode(messages: readonly ChatMessage[])
  *  If the history already has a leading system message, the preamble
  *  is appended after a blank line. Otherwise a fresh system message
  *  is prepended. */
-export function withPromptModeSystem(
-  messages: Message[],
-  preamble: string,
-): Message[] {
+export function withPromptModeSystem(messages: Message[], preamble: string): Message[] {
   if (messages.length === 0 || messages[0]!.role !== 'system') {
     return [{ role: 'system', content: preamble }, ...messages];
   }
   const [sys, ...rest] = messages;
-  return [
-    { ...sys!, content: `${sys!.content}\n\n${preamble}` },
-    ...rest,
-  ];
+  return [{ ...sys!, content: `${sys!.content}\n\n${preamble}` }, ...rest];
 }

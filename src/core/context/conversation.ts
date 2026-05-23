@@ -87,12 +87,7 @@ export class Conversation {
     this.messages.push(msg);
   }
 
-  addToolResult(
-    content: string,
-    toolCallId?: string,
-    toolName?: string,
-    meta?: AppendMeta,
-  ): void {
+  addToolResult(content: string, toolCallId?: string, toolName?: string, meta?: AppendMeta): void {
     const cap = this.maxToolResultTokens * CHARS_PER_TOKEN;
     const finalContent =
       content.length > cap ? elisionStub(toolName ?? '<tool>', content.length) : content;

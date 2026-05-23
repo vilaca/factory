@@ -60,7 +60,10 @@ test('weak-tier: Respond is exposed on the wire (toolDefinitions includes it)', 
   await collectEvents('hi', provider);
 
   const names = (observedToolDefs ?? []).map(t => t.name);
-  assert.ok(names.includes(TOOL_NAMES.Respond), `Respond expected in tool defs, got: ${names.join(',')}`);
+  assert.ok(
+    names.includes(TOOL_NAMES.Respond),
+    `Respond expected in tool defs, got: ${names.join(',')}`,
+  );
 });
 
 test('strong-tier: Respond is excluded from the wire', async () => {

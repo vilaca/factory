@@ -11,7 +11,7 @@
 // per-format tuning).
 const THINK_RE = /(?:\[THINK\]([\s\S]*?)\[\/THINK\]|<think>([\s\S]*?)<\/think>)/g;
 
-export interface ThinkExtractResult {
+interface ThinkExtractResult {
   /** All reasoning blocks joined with double newline. Empty string
    *  when no tags were found. */
   reasoning: string;
@@ -32,12 +32,15 @@ export function extractThinkTags(content: string): ThinkExtractResult {
   if (!content) return { reasoning: '', remaining: content };
   const blocks: string[] = [];
   let saw = false;
-  const remaining = content.replace(THINK_RE, (_match, a: string | undefined, b: string | undefined) => {
-    saw = true;
-    const text = (a ?? b ?? '').trim();
-    if (text) blocks.push(text);
-    return '';
-  });
+  const remaining = content.replace(
+    THINK_RE,
+    (_match, a: string | undefined, b: string | undefined) => {
+      saw = true;
+      const text = (a ?? b ?? '').trim();
+      if (text) blocks.push(text);
+      return '';
+    },
+  );
   if (!saw) return { reasoning: '', remaining: content };
   return {
     reasoning: blocks.join('\n\n'),

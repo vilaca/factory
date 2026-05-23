@@ -10,7 +10,12 @@ import type {
   ModelPickerInfo,
   ChatOptions,
 } from './types.js';
-import { formatTokenCount, parseToolArgs, resolveSampling, type ResolvedSampling } from './shared.js';
+import {
+  formatTokenCount,
+  parseToolArgs,
+  resolveSampling,
+  type ResolvedSampling,
+} from './shared.js';
 import { appendProviderLog } from '../utils/provider-log.js';
 
 /** Build the Anthropic-only subset of sampling + tool_choice extras for
@@ -302,7 +307,12 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       const ids: string[] = [];
       for (const tc of msg.tool_calls) {
         const id = tc.id ?? `toolu_${Math.random().toString(36).slice(2, 14)}`;
-        content.push({ type: 'tool_use', id, name: tc.function.name, input: tc.function.arguments });
+        content.push({
+          type: 'tool_use',
+          id,
+          name: tc.function.name,
+          input: tc.function.arguments,
+        });
         ids.push(id);
       }
       if (msg.cacheBoundary && content.length > 0) {

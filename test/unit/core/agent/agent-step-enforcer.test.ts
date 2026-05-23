@@ -45,7 +45,7 @@ test('agent loop: premature terminal triggers step nudge', async () => {
   assert.equal(nudges.length, 1, 'one step nudge injected');
 });
 
-test('agent loop: prerequisite_nudge fires when Edit declared a Read prereq it didn\'t honor', async () => {
+test("agent loop: prerequisite_nudge fires when Edit declared a Read prereq it didn't honor", async () => {
   _resetActivationLogForTests();
   // We don't permanently mutate defaultRegistry — declare a temp tool
   // with prerequisites and register/unregister around the run.

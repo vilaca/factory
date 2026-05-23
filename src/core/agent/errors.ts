@@ -11,7 +11,7 @@
  * because it's a tool-author signal, not a framework failure
  * (docs/reliability/next-steps.md §9).
  */
-export class ReliabilityError extends Error {
+class ReliabilityError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ReliabilityError';
@@ -60,9 +60,7 @@ export class ToolExecutionError extends ReliabilityError {
   readonly toolName: string;
   readonly lastMessage: string;
   constructor(toolName: string, lastMessage: string) {
-    super(
-      `ToolExecutionError: tool '${toolName}' raised repeatedly; last error: ${lastMessage}`,
-    );
+    super(`ToolExecutionError: tool '${toolName}' raised repeatedly; last error: ${lastMessage}`);
     this.name = 'ToolExecutionError';
     this.toolName = toolName;
     this.lastMessage = lastMessage;

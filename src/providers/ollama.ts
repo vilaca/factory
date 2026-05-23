@@ -211,7 +211,10 @@ export class OllamaProvider implements Provider {
     const toolMode = await this.resolveToolMode(model, hasTools);
     const messagesForWire =
       toolMode === 'prompt'
-        ? withPromptModeSystem(downgradeMessagesForPromptMode(messages), buildPromptModeToolPreamble(tools!))
+        ? withPromptModeSystem(
+            downgradeMessagesForPromptMode(messages),
+            buildPromptModeToolPreamble(tools!),
+          )
         : (messages as Message[]);
     const base: Omit<ChatRequest, 'stream'> = {
       model,

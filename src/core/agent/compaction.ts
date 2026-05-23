@@ -148,7 +148,6 @@ export async function* maybeCompact(
   return { halt: contextManager.getUsagePercent() > HARD_CEILING, compacted };
 }
 
-
 /**
  * Run the PreCompact hook (if enabled). The hook receives `{ aggressive }`
  * on stdin and may return `{ additionalContext: "..." }` to override the

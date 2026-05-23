@@ -276,9 +276,12 @@ export class ContextManager {
    * means nothing changed (already under budget or nothing eligible);
    * callers should treat that as "no event to emit."
    */
-  tieredCompact(
-    toolDefinitions: ToolDefinition[],
-  ): { phase: 0 | 1 | 2 | 3; oldCount: number; newCount: number; changed: boolean } {
+  tieredCompact(toolDefinitions: ToolDefinition[]): {
+    phase: 0 | 1 | 2 | 3;
+    oldCount: number;
+    newCount: number;
+    changed: boolean;
+  } {
     const stored = this.conversation.getStoredMessages();
     const oldCount = stored.length;
     const result = runTieredCompact({

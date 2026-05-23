@@ -1,10 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { StepEnforcer, collectPrereqs, validatePrereqReferences } from '../../../../src/core/agent/step-enforcer.js';
 import {
-  StepEnforcementError,
-  PrerequisiteError,
-} from '../../../../src/core/agent/errors.js';
+  StepEnforcer,
+  collectPrereqs,
+  validatePrereqReferences,
+} from '../../../../src/core/agent/step-enforcer.js';
+import { StepEnforcementError, PrerequisiteError } from '../../../../src/core/agent/errors.js';
 import type { ToolDefinition } from '../../../../src/utils/tool-definition.js';
 
 function call(name: string, args: Record<string, unknown> = {}) {

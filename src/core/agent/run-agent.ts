@@ -142,8 +142,15 @@ interface NoToolCallsInput {
 async function* handleNoToolCallsBranch(
   input: NoToolCallsInput,
 ): AsyncGenerator<AgentEvent, 'retry' | 'complete'> {
-  const { activation, storedContent, fullContent, lastUsage, recovery, conversation, toolRegistry } =
-    input;
+  const {
+    activation,
+    storedContent,
+    fullContent,
+    lastUsage,
+    recovery,
+    conversation,
+    toolRegistry,
+  } = input;
   // Reliability path (Phase 4 validator): weak-tier + text-only with
   // any content → inject a retry-nudge and re-loop.
   if (activation.useRespondTool && storedContent.trim().length > 0) {
@@ -366,6 +373,25 @@ async function* fireStopHook(
   }
 }
 
+/** Build the StepEnforcer for a run if the AgentOptions opted in to any of:
+ *  requiredSteps, terminalTools, or tool-declared prerequisites. Returns
+ *  undefined for the common case so the agent loop's checks short-circuit. */
+function buildStepEnforcer(
+  options: AgentOptions,
+  toolRegistry: AgentOptions['toolRegistry'],
+): StepEnforcer | undefined {
+  const hasRequired = !!options.requiredSteps && options.requiredSteps.length > 0;
+  const hasTerminal = !!options.terminalTools && options.terminalTools.length > 0;
+  if (!hasRequired && !hasTerminal && !hasAnyPrereqs(toolRegistry.getDefinitions())) {
+    return undefined;
+  }
+  return new StepEnforcer({
+    requiredSteps: options.requiredSteps ?? [],
+    terminalTools: options.terminalTools ?? [],
+    prereqs: collectPrereqs(toolRegistry.getDefinitions()),
+  });
+}
+
 // eslint-disable-next-line max-statements, complexity, sonarjs/cognitive-complexity -- TODO(complexity): extract step phases (plan / tool / model / hook).
 export async function* runAgent(
   userInput: string,
@@ -415,16 +441,7 @@ export async function* runAgent(
   // any. The enforcer's checks short-circuit to "no nudge" when
   // there's nothing to enforce, so the cost on the common path is a
   // method call.
-  const stepEnforcer =
-    (options.requiredSteps && options.requiredSteps.length > 0) ||
-    (options.terminalTools && options.terminalTools.length > 0) ||
-    hasAnyPrereqs(toolRegistry.getDefinitions())
-      ? new StepEnforcer({
-          requiredSteps: options.requiredSteps ?? [],
-          terminalTools: options.terminalTools ?? [],
-          prereqs: collectPrereqs(toolRegistry.getDefinitions()),
-        })
-      : undefined;
+  const stepEnforcer = buildStepEnforcer(options, toolRegistry);
 
   if (hooksEnabled) {
     yield* fireUserPromptSubmit(userInput, options, provider, model, conversation);
@@ -505,7 +522,13 @@ export async function* runAgent(
     let toolCalls: ToolCallMessage[] = [];
 
     const chainRef = options.responsesChainRef;
-    const chainForCall = resolveChainPointer(chainRef, provider.name, model, options.rotation?.activeKeyId, messages.length);
+    const chainForCall = resolveChainPointer(
+      chainRef,
+      provider.name,
+      model,
+      options.rotation?.activeKeyId,
+      messages.length,
+    );
 
     try {
       // Phase 13/16: thread the activation's `forceToolCall` into the
@@ -587,7 +610,14 @@ export async function* runAgent(
         yield { type: 'respond-stripped', message: respondMessage };
         if (respondMessage) yield { type: 'text-done', fullContent: respondMessage };
         conversation.addAssistant(respondMessage);
-        captureChainPointer(chainRef, modelResult.responseId, conversation, provider, model, options.rotation?.activeKeyId);
+        captureChainPointer(
+          chainRef,
+          modelResult.responseId,
+          conversation,
+          provider,
+          model,
+          options.rotation?.activeKeyId,
+        );
         yield* fireStopHook(options, turnsUsed, 'completed');
         yield { type: 'turn-complete', stopReason: 'completed', turnsUsed, usage: lastUsage };
         return;
@@ -623,7 +653,14 @@ export async function* runAgent(
         !useUserResultFraming && toolCalls.length > 0 ? toolCalls : undefined,
       );
 
-      captureChainPointer(chainRef, modelResult.responseId, conversation, provider, model, options.rotation?.activeKeyId);
+      captureChainPointer(
+        chainRef,
+        modelResult.responseId,
+        conversation,
+        provider,
+        model,
+        options.rotation?.activeKeyId,
+      );
 
       if (toolCalls.length === 0) {
         const outcome = yield* handleNoToolCallsBranch({

@@ -65,11 +65,10 @@ describe('validateResponse', () => {
   });
 
   it('emits unknown_tool nudge when a tool name is not registered', () => {
-    const result = validateResponse(
-      [{ function: { name: 'FooBar', arguments: {} } }],
-      '',
-      { toolNames, enforceToolCall: true },
-    );
+    const result = validateResponse([{ function: { name: 'FooBar', arguments: {} } }], '', {
+      toolNames,
+      enforceToolCall: true,
+    });
     assert.equal(result.needsRetry, true);
     assert.equal(result.nudge?.kind, 'unknown_tool');
     assert.ok(result.nudge?.content.includes('FooBar'));
@@ -105,10 +104,7 @@ describe('validateResponse', () => {
 
   it('returns first unknown name when multiple are unknown', () => {
     const result = validateResponse(
-      [
-        { function: { name: 'X', arguments: {} } },
-        { function: { name: 'Y', arguments: {} } },
-      ],
+      [{ function: { name: 'X', arguments: {} } }, { function: { name: 'Y', arguments: {} } }],
       '',
       { toolNames, enforceToolCall: true },
     );

@@ -20,7 +20,7 @@
  * `tier` is only meaningful for `step` (1=polite, 2=direct, 3=ALL CAPS).
  * For other kinds it stays at 1; readers should ignore.
  */
-export type NudgeKind = 'retry' | 'unknown_tool' | 'step' | 'prerequisite';
+type NudgeKind = 'retry' | 'unknown_tool' | 'step' | 'prerequisite';
 
 /** Structured payload captured alongside the rendered `content` so
  *  downstream consumers (observability events, UI surfaces) don't have
@@ -28,7 +28,7 @@ export type NudgeKind = 'retry' | 'unknown_tool' | 'step' | 'prerequisite';
  *  kinds where it's meaningful: `prerequisite` and `step` carry the
  *  attempted tool plus the list the user/model needs to act on; other
  *  kinds leave it undefined. */
-export interface NudgeMeta {
+interface NudgeMeta {
   /** The tool the model attempted to call when the nudge fired. */
   readonly attemptedTool?: string;
   /** For `prerequisite`: the missing prerequisite tool names. For
@@ -127,4 +127,3 @@ export function stepNudge(
     meta: Object.freeze({ attemptedTool: attemptedTerminal, missing: Object.freeze([...pending]) }),
   });
 }
-

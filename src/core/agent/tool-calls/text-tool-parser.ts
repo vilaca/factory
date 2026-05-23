@@ -82,9 +82,7 @@ export function parseTextToolCalls(
   const toolCalls: ToolCallMessage[] = [];
   const sources: ParseSource[] = [];
   let malformedCount = 0;
-  const knownToolNamesLower = knownToolNames
-    ? buildLowerNameMap(knownToolNames)
-    : undefined;
+  const knownToolNamesLower = knownToolNames ? buildLowerNameMap(knownToolNames) : undefined;
 
   let cleaned = content.replace(TOOL_CALL_TAG_PATTERN, (_match, body: string) => {
     const call = tryParseToolCall(body, knownToolNames, knownToolNamesLower);

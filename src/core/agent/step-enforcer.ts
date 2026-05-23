@@ -77,10 +77,7 @@ export class StepEnforcer {
 
     this.prematureAttempts++;
     if (this.prematureAttempts > this.maxPrematureAttempts) {
-      throw new StepEnforcementError(
-        attemptedTerminal.function!.name,
-        this.tracker.pending(),
-      );
+      throw new StepEnforcementError(attemptedTerminal.function!.name, this.tracker.pending());
     }
     const tier = Math.min(this.prematureAttempts, 3) as 1 | 2 | 3;
     return {

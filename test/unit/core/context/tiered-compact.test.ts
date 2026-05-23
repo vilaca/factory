@@ -132,15 +132,13 @@ describe('runTieredCompact — phase escalation', () => {
       keepRecent: 2,
     });
     assert.equal(result.phase, 2);
-    const eligibleToolResults = result.messages
-      .slice(2)
-      .filter(
-        m =>
-          m.metadata?.type === 'tool_result' &&
-          // recent (step 4/5) survives
-          m.metadata.stepIndex !== undefined &&
-          m.metadata.stepIndex < 4,
-      );
+    const eligibleToolResults = result.messages.slice(2).filter(
+      m =>
+        m.metadata?.type === 'tool_result' &&
+        // recent (step 4/5) survives
+        m.metadata.stepIndex !== undefined &&
+        m.metadata.stepIndex < 4,
+    );
     assert.equal(eligibleToolResults.length, 0, 'eligible tool_results dropped at P2');
   });
 
