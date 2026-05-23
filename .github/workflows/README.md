@@ -7,8 +7,8 @@ Validations (run on push to `main` and on PR):
 
 - `lint.yml` — `eslint`.
 - `typecheck.yml` — `tsc --noEmit`.
-- `format-check.yml` — `prettier --check` (advisory; does not fail the build).
-- `knip.yml` — unused-export / dependency check (advisory; does not fail the build).
+- `format-check.yml` — `prettier --check` (advisory; the workflow reports failure on drift but should not be marked required in branch protection).
+- `knip.yml` — unused-export / dependency check (advisory; the workflow reports failure on issues but should not be marked required in branch protection).
 
 Tests (run on push to `main` and on PR):
 

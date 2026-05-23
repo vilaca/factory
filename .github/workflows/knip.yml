@@ -20,6 +20,7 @@ jobs:
           cache: 'npm'
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
-      # Advisory only: surface unused exports/deps without blocking merges.
+      # Advisory: this workflow reports failure when knip finds issues, but
+      # it isn't marked as a required check in branch protection so it
+      # surfaces drift without blocking merges.
       - run: npm run knip
-        continue-on-error: true
