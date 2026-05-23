@@ -85,6 +85,81 @@ describe('ContextManager.checkThresholds', () => {
   });
 });
 
+test('threshold re-fires on a later turn after compaction drops usage (integration)', async () => {
+  // Two turns: tool call → text reply. The fake CM models the real
+  // latch+re-arm cycle: HIGH on turn 1, LOW after the "compaction"
+  // settles (we just toggle internal state), HIGH again on turn 2.
+  // The test proves the agent loop wiring honours checkThresholds()
+  // across turns — i.e. the latch isn't squashed once-per-session.
+  const provider = createMockProvider([
+    {
+      tool_calls: [
+        {
+          function: {
+            name: 'Bash',
+            arguments: { command: 'true', description: 'noop' },
+          },
+        },
+      ],
+    },
+    { content: 'all done' },
+  ]);
+
+  let turn = 0;
+  let usagePct = 0.85;
+  const cm = makeFakeCM({
+    shouldCompact: () => false,
+    getUsagePercent: () => usagePct,
+    getTokenEstimate: () => Math.round(usagePct * 1000),
+    checkThresholds: () => {
+      // Mirrors ContextManager: fires on the first observation above
+      // threshold, returns null when re-asked at the same usage, and
+      // re-arms after usage drops below and crosses again.
+      turn++;
+      if (turn === 1) {
+        // Simulate post-turn drop (compaction freed space).
+        usagePct = 0.3;
+        return 'Context is nearly full. Be concise.';
+      }
+      if (turn === 2) {
+        // Simulate pressure climbing back up on turn 2.
+        usagePct = 0.85;
+        return 'Context is nearly full. Be concise.';
+      }
+      return null;
+    },
+  });
+
+  const conversation = new Conversation('sys');
+  const permissions = new PermissionManager();
+  permissions.allowAll('Bash');
+  const events: AgentEvent[] = [];
+  const agent = runAgent('go', {
+    provider,
+    model: 'mock-model',
+    conversation,
+    permissions,
+    toolRegistry: defaultRegistry,
+    contextManager: cm,
+    enableCorrector: false,
+  });
+  for await (const ev of agent) {
+    events.push(ev);
+    if (ev.type === 'permission-request') ev.respond('allow');
+  }
+
+  const warnings = events.filter(e => e.type === 'context-warning');
+  assert.equal(
+    warnings.length,
+    2,
+    'threshold must fire once per turn when the latch re-arms after a drop',
+  );
+  // Neither warning leaks into persisted history — both turns stay transient.
+  const tagged = conversation.getMessagesWithMeta();
+  const persistedWarnings = tagged.filter(m => m.content.includes('nearly full'));
+  assert.equal(persistedWarnings.length, 0, 'transient across turns, not persisted');
+});
+
 test('agent loop emits context-warning event and injects warning into outbound payload', async () => {
   let observedMessages: Array<{ role: string; content: string }> = [];
   const base = createMockProvider([{ content: 'ok' }]);

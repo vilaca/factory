@@ -190,6 +190,25 @@ export interface ChatOptions {
    *  enforcement isn't applicable. Default off. Providers without
    *  the concept ignore it. */
   forceToolCall?: boolean;
+  /** Reliability stack (docs/reliability/next-steps.md §15): tri-state
+   *  control over inline-reasoning emission.
+   *
+   *    - `true`  — always request thinking; provider raises
+   *                ThinkingNotSupportedError if the backend rejects.
+   *    - `false` — never request thinking, *and* discard any
+   *                `[THINK]...[/THINK]` / `<think>...</think>` blocks
+   *                that leak through in streamed content. Qwen3
+   *                emits them inline even when the request says
+   *                think=false on some serving stacks, so the parser
+   *                drop is load-bearing.
+   *    - `'auto'` / undefined — heuristic: enable for models whose
+   *                name matches /reason|think/i (Ministral Reasoning,
+   *                Qwen3-thinking, etc.). Providers downgrade to
+   *                false on the first backend rejection and cache the
+   *                resolved decision.
+   *
+   *  Providers without any concept of inline thinking ignore the field. */
+  thinking?: boolean | 'auto';
 }
 
 /** Narrow surface returned by `createProvider`. A freshly-minted

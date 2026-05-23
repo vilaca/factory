@@ -43,4 +43,67 @@ export class RecoveryState {
     this.maxCorrections = maxCorrections;
     this.maxHardToolErrors = maxHardToolErrors;
   }
+
+  /** Shallow snapshot for parallel Delegate batches: each pipeline gets
+   *  its own RecoveryState so applyResultToRecovery / runCorrectorIfNeeded
+   *  don't fight over the same fields under interleaved execution. The
+   *  clone shares no mutable references with the source — `correctedSignatures`
+   *  is a fresh Set seeded from the parent's entries. */
+  clone(): RecoveryState {
+    const out = new RecoveryState(this.autoRetryBudget, this.maxCorrections, this.maxHardToolErrors);
+    out.lastFailureMessage = this.lastFailureMessage;
+    out.lastFailureSignature = this.lastFailureSignature;
+    out.consecutiveSameFailures = this.consecutiveSameFailures;
+    out.correctionsUsedThisRun = this.correctionsUsedThisRun;
+    for (const s of this.correctedSignatures) out.correctedSignatures.add(s);
+    out.consecutiveHardToolErrors = this.consecutiveHardToolErrors;
+    out.lastHardToolName = this.lastHardToolName;
+    out.lastHardToolMessage = this.lastHardToolMessage;
+    return out;
+  }
+}
+
+/** Merge per-pipeline RecoveryState clones from a parallel batch back
+ *  into the shared one. The merge is deterministic and worst-case:
+ *
+ *  - Hard-error counter, consecutive-same-failures: max across siblings
+ *    (a single misbehaving pipeline shouldn't get amnestied by a
+ *    parallel sibling's success).
+ *  - last* fields: take from the first sibling that recorded a failure
+ *    so the surfaced "what went wrong" stays stable in batch order.
+ *    Cleared if every sibling ended clean.
+ *  - correctionsUsedThisRun: sum of deltas (each pipeline burns from
+ *    the shared budget; under parallel execution we count them all).
+ *  - correctedSignatures: union (a signature corrected once anywhere
+ *    in the batch should be considered "tried" by everyone).
+ *
+ *  Caller is expected to pass `clones` in deterministic batch order. */
+export function mergeRecoveryClones(parent: RecoveryState, clones: readonly RecoveryState[]): void {
+  if (clones.length === 0) return;
+  const parentCorrectionsBefore = parent.correctionsUsedThisRun;
+  let firstFailure: RecoveryState | null = null;
+  let maxHard = 0;
+  let maxSame = 0;
+  let extraCorrections = 0;
+  for (const c of clones) {
+    if (c.lastFailureMessage && firstFailure === null) firstFailure = c;
+    if (c.consecutiveHardToolErrors > maxHard) maxHard = c.consecutiveHardToolErrors;
+    if (c.consecutiveSameFailures > maxSame) maxSame = c.consecutiveSameFailures;
+    extraCorrections += Math.max(0, c.correctionsUsedThisRun - parentCorrectionsBefore);
+    for (const s of c.correctedSignatures) parent.correctedSignatures.add(s);
+  }
+  parent.consecutiveHardToolErrors = maxHard;
+  parent.consecutiveSameFailures = maxSame;
+  parent.correctionsUsedThisRun = parentCorrectionsBefore + extraCorrections;
+  if (firstFailure) {
+    parent.lastFailureMessage = firstFailure.lastFailureMessage;
+    parent.lastFailureSignature = firstFailure.lastFailureSignature;
+    parent.lastHardToolName = firstFailure.lastHardToolName;
+    parent.lastHardToolMessage = firstFailure.lastHardToolMessage;
+  } else {
+    parent.lastFailureMessage = null;
+    parent.lastFailureSignature = null;
+    parent.lastHardToolName = null;
+    parent.lastHardToolMessage = null;
+  }
 }

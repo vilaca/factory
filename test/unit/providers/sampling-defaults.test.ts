@@ -6,7 +6,13 @@ import {
   UnsupportedModelError,
   _resetSamplingLogForTests,
 } from '../../../src/providers/sampling-defaults.js';
-import { resolveSampling } from '../../../src/providers/shared.js';
+import {
+  resolveSampling,
+  applySamplingToBody,
+  resolveThinking,
+  autoDetectThinking,
+  ThinkingNotSupportedError,
+} from '../../../src/providers/shared.js';
 
 describe('getSamplingDefaults', () => {
   it('returns {} for unknown model', () => {
@@ -147,18 +153,116 @@ describe('resolveSampling — three-tier merge chain', () => {
     assert.equal(out.seed, 42);
   });
 
+  it('does not mutate instanceDefaults across calls', () => {
+    _resetSamplingLogForTests();
+    const instanceDefaults = { temperature: 0.1, top_k: 50 } as const;
+    const snapshot = structuredClone(instanceDefaults);
+    // Repeatedly resolve against per-model + per-call overrides — none of
+    // these paths should write back to the caller's object.
+    resolveSampling({ temperature: 0.9 }, {
+      model: 'ministral-3-reasoning-q4',
+      instanceDefaults: { ...instanceDefaults },
+    });
+    resolveSampling({ topK: 99, seed: 42 }, {
+      model: 'unknown-model',
+      instanceDefaults: { ...instanceDefaults },
+    });
+    assert.deepEqual(instanceDefaults, snapshot, 'instanceDefaults must survive untouched');
+  });
+
+  it('applySamplingToBody does not mutate the resolved sampling object', () => {
+    _resetSamplingLogForTests();
+    const sampling = resolveSampling(
+      { temperature: 0.3, topP: 0.8, seed: 5 },
+      { model: 'unknown' },
+    );
+    const samplingSnapshot = structuredClone(sampling);
+    const body = { model: 'x', messages: [] } as Record<string, unknown>;
+    applySamplingToBody(body, sampling);
+    assert.deepEqual(sampling, samplingSnapshot, 'resolved sampling must not be mutated');
+    assert.equal(body.temperature, 0.3);
+    assert.equal(body.seed, 5);
+  });
+
   it('three-tier composition: instance defaults + per-model + per-call overrides', () => {
     _resetSamplingLogForTests();
     const out = resolveSampling(
-      { topK: 99 }, // per-call override
+      { topK: 99, seed: 7 }, // per-call overrides (seed is per-call only)
       {
         model: 'ministral-3-reasoning-q4', // per-model: temp=0.6, top_p=0.95
-        instanceDefaults: { seed: 7, top_k: 1 }, // instance only sets fields per-model doesn't touch
+        instanceDefaults: { top_k: 1 }, // instance only sets fields per-model doesn't touch
       },
     );
-    assert.equal(out.seed, 7, 'instance default survives');
+    assert.equal(out.seed, 7, 'per-call seed survives');
     assert.equal(out.temperature, 0.6, 'per-model default applied');
     assert.equal(out.top_p, 0.95, 'per-model default applied');
     assert.equal(out.top_k, 99, 'per-call override beats instance');
+  });
+
+  it('rejects instance-level seed (per-call only, per spec §17)', () => {
+    _resetSamplingLogForTests();
+    assert.throws(
+      () =>
+        resolveSampling(undefined, {
+          model: 'unknown',
+          instanceDefaults: { seed: 7 },
+        }),
+      /seed is per-call only/,
+    );
+  });
+});
+
+describe('autoDetectThinking', () => {
+  it('returns true for names containing "reason"', () => {
+    assert.equal(autoDetectThinking('ministral-3-8b-reasoning-Q4_K_M'), true);
+  });
+
+  it('returns true for names containing "think"', () => {
+    assert.equal(autoDetectThinking('qwen3-thinking-14b'), true);
+  });
+
+  it('is case-insensitive', () => {
+    assert.equal(autoDetectThinking('MyModel-REASON-final'), true);
+  });
+
+  it('returns false for plain instruct/chat names', () => {
+    assert.equal(autoDetectThinking('llama-3.1-8b-instruct'), false);
+    assert.equal(autoDetectThinking('mistral-7b-instruct'), false);
+  });
+});
+
+describe('resolveThinking (tri-state)', () => {
+  it('returns true verbatim when caller explicitly sets true', () => {
+    assert.equal(resolveThinking('llama-3.1-8b-instruct', true), true);
+  });
+
+  it('returns false verbatim when caller explicitly sets false', () => {
+    // Even on a reasoning model — explicit false must beat the heuristic.
+    assert.equal(resolveThinking('ministral-3-reasoning-q4', false), false);
+  });
+
+  it("falls back to auto-detect for 'auto'", () => {
+    assert.equal(resolveThinking('ministral-3-reasoning-q4', 'auto'), true);
+    assert.equal(resolveThinking('llama-3.1-8b-instruct', 'auto'), false);
+  });
+
+  it('treats undefined the same as auto', () => {
+    assert.equal(resolveThinking('qwen3-thinking-14b', undefined), true);
+    assert.equal(resolveThinking('llama-3.1-8b', undefined), false);
+  });
+});
+
+describe('ThinkingNotSupportedError', () => {
+  it('captures the model and is an Error subclass', () => {
+    const err = new ThinkingNotSupportedError('mystery-model');
+    assert.equal(err.name, 'ThinkingNotSupportedError');
+    assert.equal(err.model, 'mystery-model');
+    assert.ok(err instanceof Error);
+    assert.match(err.message, /mystery-model/);
+  });
+
+  it('includes the backend cause in the message when provided', () => {
+    const err = new ThinkingNotSupportedError('m', 'no such field');
+    assert.match(err.message, /no such field/);
   });
 });

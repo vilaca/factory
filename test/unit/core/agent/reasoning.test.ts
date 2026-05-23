@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   extractThinkTags,
   foldAndSerialize,
+  discardThinkTags,
 } from '../../../../src/core/agent/reasoning.js';
 import type { ChatMessage } from '../../../../src/utils/chat-message.js';
 
@@ -83,5 +84,23 @@ describe('foldAndSerialize', () => {
     for (const m of out) {
       assert.equal((m as unknown as Record<string, unknown>).metadata, undefined);
     }
+  });
+});
+
+describe('discardThinkTags', () => {
+  it('strips <think> blocks and returns the cleaned remainder', () => {
+    assert.equal(discardThinkTags('<think>plan</think>do it'), 'do it');
+  });
+
+  it('strips [THINK] blocks the same way', () => {
+    assert.equal(discardThinkTags('[THINK]plan[/THINK]do it'), 'do it');
+  });
+
+  it('returns the input unchanged when no tags are present', () => {
+    assert.equal(discardThinkTags('plain text'), 'plain text');
+  });
+
+  it('handles empty input', () => {
+    assert.equal(discardThinkTags(''), '');
   });
 });

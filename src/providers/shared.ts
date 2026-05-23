@@ -85,6 +85,17 @@ export function resolveSampling(
     model: '',
   },
 ): ResolvedSampling {
+  // `seed` is per-call only by design (docs/reliability/next-steps.md §17):
+  // a sticky instance-level seed would silently make every request
+  // deterministic-on-the-same-prompt, which is almost never what the
+  // caller intends. Reject loudly so the footgun shows up at startup
+  // instead of as a mysterious lack of variation in production.
+  if (ctx.instanceDefaults && 'seed' in ctx.instanceDefaults) {
+    throw new TypeError(
+      'resolveSampling: instanceDefaults.seed is not allowed — seed is per-call only. ' +
+        'Pass `seed` on the per-call ChatOptions instead.',
+    );
+  }
   const out: ResolvedSampling = { ...(ctx.instanceDefaults ?? {}) };
   const hasEntry = Object.keys(getSamplingDefaults(ctx.model)).length > 0;
   if (opts?.recommendedSampling || hasEntry) {
@@ -113,4 +124,44 @@ export function applySamplingToBody(
     if (v !== undefined) body[k] = v;
   }
   return body;
+}
+
+/** Raised when a caller passes `thinking: true` to a model whose backend
+ *  rejects the flag. Providers should set the `model` field so the agent
+ *  layer can surface an actionable message. */
+export class ThinkingNotSupportedError extends Error {
+  constructor(public readonly model: string, cause?: string) {
+    super(
+      `Model '${model}' does not support inline thinking, but the caller passed thinking: true. ` +
+        (cause ? `Backend reported: ${cause}` : 'Set thinking to false or "auto" to continue.'),
+    );
+    this.name = 'ThinkingNotSupportedError';
+  }
+}
+
+/** Heuristic for the `'auto'` branch of ChatOptions.thinking. Returns
+ *  true for models whose name advertises a reasoning / thinking fine-tune
+ *  (Ministral Reasoning, Qwen3-thinking, DeepSeek-R, etc.). Cheap
+ *  case-insensitive substring match — same shape the sampling-defaults
+ *  table uses for `reason|think` keys. */
+export function autoDetectThinking(model: string): boolean {
+  return /reason|think/i.test(model);
+}
+
+/** Resolve the tri-state `thinking` per-call option (next-steps.md §15)
+ *  into a concrete boolean for the wire request. Pure — providers wrap
+ *  this with their own resolved-mode cache so a backend that rejected
+ *  the `true` request once gets downgraded to false for subsequent
+ *  calls without re-asking the heuristic.
+ *
+ *  Returns:
+ *    - the caller's explicit `true`/`false` verbatim
+ *    - `autoDetectThinking(model)` for `'auto'` and `undefined`
+ */
+export function resolveThinking(
+  model: string,
+  thinking: boolean | 'auto' | undefined,
+): boolean {
+  if (thinking === true || thinking === false) return thinking;
+  return autoDetectThinking(model);
 }

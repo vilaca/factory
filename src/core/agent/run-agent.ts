@@ -194,17 +194,18 @@ async function* handleNoToolCallsBranch(
  *  violation budget). */
 async function* emitEnforcerObservability(
   toolCalls: ToolCallMessage[],
-  prereqCheck: { nudge?: { content: string } },
+  prereqCheck: { nudge?: { meta?: { attemptedTool?: string; missing?: readonly string[] } } },
   stepCheck: { nudge?: { tier: 1 | 2 | 3 } } | null,
   terminalTools: readonly string[] | undefined,
   enforcer: StepEnforcer,
 ): AsyncGenerator<AgentEvent, 'prereq' | 'step' | null> {
   if (prereqCheck.nudge) {
-    const offendingCall = toolCalls.find(tc => tc.function?.name !== undefined);
+    const meta = prereqCheck.nudge.meta;
+    const fallbackOffender = toolCalls.find(tc => tc.function?.name !== undefined);
     yield {
       type: 'prerequisite-nudge',
-      tool: offendingCall?.function?.name ?? '<unknown>',
-      missing: prereqCheck.nudge.content.match(/first call: ([^.]+)/)?.[1]?.split(', ') ?? [],
+      tool: meta?.attemptedTool ?? fallbackOffender?.function?.name ?? '<unknown>',
+      missing: meta?.missing ? [...meta.missing] : [],
     };
     return 'prereq';
   }

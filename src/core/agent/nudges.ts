@@ -24,11 +24,27 @@ import { TOOL_NAMES } from '../../utils/tool-names.js';
  */
 export type NudgeKind = 'retry' | 'unknown_tool' | 'step' | 'prerequisite';
 
+/** Structured payload captured alongside the rendered `content` so
+ *  downstream consumers (observability events, UI surfaces) don't have
+ *  to regex-parse the template back into fields. Populated only for
+ *  kinds where it's meaningful: `prerequisite` and `step` carry the
+ *  attempted tool plus the list the user/model needs to act on; other
+ *  kinds leave it undefined. */
+export interface NudgeMeta {
+  /** The tool the model attempted to call when the nudge fired. */
+  readonly attemptedTool?: string;
+  /** For `prerequisite`: the missing prerequisite tool names. For
+   *  `step`: the pending required steps. Same shape, different
+   *  semantic — both are "what the model needs to call next". */
+  readonly missing?: readonly string[];
+}
+
 export interface Nudge {
   readonly role: 'user';
   readonly content: string;
   readonly kind: NudgeKind;
   readonly tier: 1 | 2 | 3;
+  readonly meta?: NudgeMeta;
 }
 
 function freezeNudge(n: Omit<Nudge, 'role'>): Nudge {
@@ -73,6 +89,7 @@ export function prerequisiteNudge(attemptedTool: string, missing: readonly strin
     content: `You cannot call ${attemptedTool} yet. You must first call: ${list}. Call the prerequisite tool now.`,
     kind: 'prerequisite',
     tier: 1,
+    meta: Object.freeze({ attemptedTool, missing: Object.freeze([...missing]) }),
   });
 }
 
@@ -105,7 +122,12 @@ export function stepNudge(
       content = `STOP. You MUST call one of: ${list}. Do NOT call ${attemptedTerminal}. Your next response MUST be a tool call to one of: ${list}.`;
       break;
   }
-  return freezeNudge({ content, kind: 'step', tier });
+  return freezeNudge({
+    content,
+    kind: 'step',
+    tier,
+    meta: Object.freeze({ attemptedTool: attemptedTerminal, missing: Object.freeze([...pending]) }),
+  });
 }
 
 /** Re-export the canonical tool name so consumers in this file's

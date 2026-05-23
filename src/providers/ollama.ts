@@ -11,7 +11,15 @@ import type {
   ModelInfo,
 } from './types.js';
 import { errorCode, errorMessage, isError, makeAbortError } from '../utils/errors.js';
-import { resolveSampling, type ResolvedSampling } from './shared.js';
+import { resolveSampling, resolveThinking, type ResolvedSampling } from './shared.js';
+import { discardThinkTags } from '../utils/think-tags.js';
+import {
+  buildPromptModeToolPreamble,
+  downgradeMessagesForPromptMode,
+  withPromptModeSystem,
+} from './ollama-prompt-mode.js';
+
+type ToolMode = 'native' | 'prompt';
 
 /** Build the per-request `options` object for Ollama's chat endpoint.
  *  Pulled out of the chat/chatNoStream bodies so the per-call sampling
@@ -113,6 +121,31 @@ export class OllamaProvider implements Provider {
     };
   }
 
+  /** Reliability stack §16: per-model tool-mode cache. `getModelInfo`
+   *  reports whether Ollama considers the model tool-capable; if not,
+   *  we transparently downgrade to prompt-mode (system-injected tool
+   *  schema + text round-trip). Cached so we don't pay the /api/show
+   *  cost on every chat call. */
+  private toolModeCache = new Map<string, ToolMode>();
+  private async resolveToolMode(model: string, hasTools: boolean): Promise<ToolMode> {
+    // No tools → mode is irrelevant; don't probe and don't cache.
+    if (!hasTools) return 'native';
+    const cached = this.toolModeCache.get(model);
+    if (cached) return cached;
+    try {
+      const info = await this.getModelInfo(model);
+      const mode: ToolMode = info.supportsTools ? 'native' : 'prompt';
+      this.toolModeCache.set(model, mode);
+      return mode;
+    } catch {
+      // Probe failed (model not pulled, server unreachable). Default to
+      // native — the underlying chat call will surface the real error
+      // via translateOllamaError. Don't cache so a subsequent successful
+      // probe wins.
+      return 'native';
+    }
+  }
+
   /** Populate per-model caches (currently just `contextWindowCache`) so the
    *  synchronous `getCapabilities` reads the model's real context length
    *  instead of the hardcoded estimate. Best-effort: failures (server down,
@@ -167,14 +200,25 @@ export class OllamaProvider implements Provider {
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
     const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
+    const think = resolveThinking(model, options?.thinking);
+    const hasTools = !!tools && tools.length > 0;
+    const toolMode = await this.resolveToolMode(model, hasTools);
+    const messagesForWire =
+      toolMode === 'prompt'
+        ? withPromptModeSystem(downgradeMessagesForPromptMode(messages), buildPromptModeToolPreamble(tools!))
+        : (messages as Message[]);
     const request: ChatRequest & { stream: true } = {
       model,
-      messages: messages as Message[],
+      messages: messagesForWire,
       stream: true,
-      tools: tools as Tool[],
+      // Prompt-mode strips `tools` from the wire payload — the model
+      // discovers them via the injected system preamble and emits its
+      // call as text the agent layer's <tool_call> parser picks up.
+      ...(toolMode === 'native' && hasTools ? { tools: tools as Tool[] } : {}),
       // num_predict caps output length so degenerate repetition loops can't
       // run forever. Ollama's default is -1 (no limit).
       options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
+      think,
     };
 
     const stream = await this.client.chat(request);
@@ -204,7 +248,12 @@ export class OllamaProvider implements Provider {
       for await (const chunk of stream) {
         const result: ChatChunk = {};
         if (chunk.message?.content) {
-          result.content = chunk.message.content;
+          // Reliability stack §15: when the caller said thinking=false but
+          // the model leaks <think>...</think> tags inline anyway (Qwen3 on
+          // some serving stacks), drop them before yielding. The
+          // structured `chunk.message.thinking` field is also ignored on
+          // this path since the caller explicitly opted out.
+          result.content = think ? chunk.message.content : discardThinkTags(chunk.message.content);
         }
         if (chunk.message?.tool_calls) {
           result.tool_calls = chunk.message.tool_calls.map(tc => ({
@@ -246,12 +295,20 @@ export class OllamaProvider implements Provider {
     options?: ChatOptions,
   ): Promise<ChatChunk> {
     const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
+    const think = resolveThinking(model, options?.thinking);
+    const hasTools = !!tools && tools.length > 0;
+    const toolMode = await this.resolveToolMode(model, hasTools);
+    const messagesForWire =
+      toolMode === 'prompt'
+        ? withPromptModeSystem(downgradeMessagesForPromptMode(messages), buildPromptModeToolPreamble(tools!))
+        : (messages as Message[]);
     const request: ChatRequest & { stream: false } = {
       model,
-      messages: messages as Message[],
+      messages: messagesForWire,
       stream: false,
-      tools: tools as Tool[],
+      ...(toolMode === 'native' && hasTools ? { tools: tools as Tool[] } : {}),
       options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
+      think,
     };
 
     const signal = options?.signal;
@@ -272,8 +329,10 @@ export class OllamaProvider implements Provider {
       throw translateOllamaError(err);
     }
 
+    // §15: same think-discard semantics on the non-streaming path.
+    const rawContent = response.message?.content;
     const result: ChatChunk = {
-      content: response.message?.content,
+      content: think || !rawContent ? rawContent : discardThinkTags(rawContent),
       done: true,
     };
     if (typeof response.done_reason === 'string') result.doneReason = response.done_reason;

@@ -23,45 +23,15 @@
  */
 import type { ChatMessage } from './../../utils/chat-message.js';
 
-// Combined pattern: matches either [THINK]...[/THINK] or
-// <think>...</think>. Two capture groups so the caller can tell which
-// dialect produced the match (currently unused — both flow through
-// the same handling, but kept distinct for future per-format tuning).
-const THINK_RE = /(?:\[THINK\]([\s\S]*?)\[\/THINK\]|<think>([\s\S]*?)<\/think>)/g;
-
-export interface ThinkExtractResult {
-  /** All reasoning blocks joined with double newline. Empty string
-   *  when no tags were found. */
-  reasoning: string;
-  /** Original content with every recognized think block removed. */
-  remaining: string;
-}
-
-/**
- * Split content into reasoning text + remaining content. Recognizes
- * the two non-server formats — Mistral `[THINK]...[/THINK]` and
- * Qwen/DeepSeek `<think>...</think>` — and strips both. The result's
- * `remaining` is trimmed of excess blank lines left behind.
- *
- * Returns `reasoning: ''` and the input unchanged when no tags are
- * found, so callers can use this unconditionally without a pre-check.
- */
-export function extractThinkTags(content: string): ThinkExtractResult {
-  if (!content) return { reasoning: '', remaining: content };
-  const blocks: string[] = [];
-  let saw = false;
-  const remaining = content.replace(THINK_RE, (_match, a: string | undefined, b: string | undefined) => {
-    saw = true;
-    const text = (a ?? b ?? '').trim();
-    if (text) blocks.push(text);
-    return '';
-  });
-  if (!saw) return { reasoning: '', remaining: content };
-  return {
-    reasoning: blocks.join('\n\n'),
-    remaining: remaining.replace(/\n{3,}/g, '\n\n').trim(),
-  };
-}
+// Tag-parsing utilities live in `src/utils/think-tags.ts` so provider
+// adapters can use them without crossing the providers → core boundary
+// the modularity arch test enforces. Re-exported here as the
+// spec-aligned API surface for the core agent layer.
+export {
+  extractThinkTags,
+  discardThinkTags,
+  type ThinkExtractResult,
+} from '../../utils/think-tags.js';
 
 /**
  * Wire-boundary serialization helper: fold orphan `reasoning`-tagged
