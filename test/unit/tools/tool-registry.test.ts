@@ -106,4 +106,34 @@ describe('Tool registry', () => {
       );
     }
   });
+
+  // Schema-validity invariant for the boundary validator in
+  // src/core/agent/tool-calls/run-tool-calls-execute.ts. Built-in tools
+  // must declare a meaningful JSON Schema so the validator can actually
+  // protect them — an empty `properties: {}` would pass through every
+  // call and defeat the point. MCP-supplied tools are forgiving by design
+  // (they can carry arbitrary shapes), but the in-tree defaults are
+  // contract.
+  it('every built-in tool has a non-empty parameter schema', () => {
+    for (const tool of defaultRegistry.getAll()) {
+      const params = tool.definition.function.parameters as {
+        type?: unknown;
+        properties?: Record<string, unknown>;
+        required?: unknown;
+      };
+      assert.strictEqual(params.type, 'object', `${tool.name}: parameters.type must be 'object'`);
+      assert.ok(
+        params.properties && Object.keys(params.properties).length > 0,
+        `${tool.name}: parameters.properties must be non-empty`,
+      );
+      if (Array.isArray(params.required)) {
+        for (const r of params.required as string[]) {
+          assert.ok(
+            r in params.properties!,
+            `${tool.name}: required field "${r}" missing from properties`,
+          );
+        }
+      }
+    }
+  });
 });
