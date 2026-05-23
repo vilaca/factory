@@ -142,6 +142,10 @@ describe('architecture: module boundaries', () => {
           'src/providers/registry.ts',
           'src/providers/descriptors.ts',
           'src/providers/instrument.ts',
+          // prime.ts is the canonical bridge from UnprimedProvider
+          // (returned by createProvider) to Provider. UI call sites
+          // that mint a provider must route through prime().
+          'src/providers/prime.ts',
         ],
       });
     await expectNoViolations(rule, 'ui → concrete provider impls');
@@ -210,20 +214,23 @@ describe('architecture: module boundaries', () => {
   // Background: cf880ed fixed a bug where swap.ts called
   // `getCapabilities()` on a freshly-minted provider whose model-info
   // cache was empty — Anthropic's getCapabilities throws on a cache
-  // miss. The fix was to call `listModels()` (or `primeModelCache()`)
-  // first. The same shape exists at several other call sites that
-  // construct providers (`compaction-resolver.ts`, `run-loop.ts`,
-  // `headless.ts`, `Session.tsx`).
+  // miss. The same shape existed at several other call sites
+  // (`compaction-resolver.ts`, `run-loop.ts`, `headless.ts`,
+  // `Session.tsx`, `cli/startup/phases.ts`).
   //
-  // We can't fully verify ordering statically without parsing the AST,
-  // but we can enforce the necessary condition: any file that BOTH
-  // mints a provider via `createProvider(` AND reads capabilities via
-  // `getCapabilities(` on the local scope must also call `listModels(`
-  // or `primeModelCache(` somewhere in the same file. This catches
-  // "minted but never primed" — the bug class — while allowing
-  // unrelated `getCapabilities` consumers (which receive an already-
-  // primed provider via refs) to coexist.
-  it('files that mint a provider AND read capabilities must also prime via listModels / primeModelCache', async () => {
+  // The primary gate is now structural: `createProvider` returns
+  // `UnprimedProvider` (see src/providers/types.ts and
+  // src/providers/prime.ts), so calling `getCapabilities` /
+  // `chat` / `chatNoStream` on a freshly-minted provider is a
+  // compile error. This arch test is a belt-and-braces grep check
+  // for the same shape: any file that BOTH mints a provider via
+  // `createProvider(` AND reads capabilities via `getCapabilities(`
+  // on the local scope must also call `prime(`, `listModels(`, or
+  // `primeModelCache(` somewhere in the same file. `prime(` covers
+  // the canonical post-split priming call; the other two are
+  // grandfathered for files that call those methods directly
+  // (e.g. priming via a separate explicit listModels).
+  it('files that mint a provider AND read capabilities must also prime via prime / listModels / primeModelCache', async () => {
     const rule = projectFiles()
       .inFolder('src/**')
       .should()
@@ -232,9 +239,9 @@ describe('architecture: module boundaries', () => {
         const mints = /\bcreateProvider\s*\(/.test(src);
         const reads = /\bgetCapabilities\s*\(/.test(src);
         if (!(mints && reads)) return true;
-        const primes = /\b(listModels|primeModelCache)\s*\(/.test(src);
+        const primes = /\b(prime|listModels|primeModelCache)\s*\(/.test(src);
         return primes;
-      }, 'Provider mint + capability read without listModels/primeModelCache priming (cf880ed contract)');
+      }, 'Provider mint + capability read without prime/listModels/primeModelCache priming (cf880ed contract)');
     await expectNoViolations(rule, 'prime-before-use on minted providers');
   });
 

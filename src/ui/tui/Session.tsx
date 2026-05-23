@@ -19,6 +19,7 @@ import { RotationPromptPanel } from './components/rotation-prompt-panel.js';
 import { useAgentLoop, type AgentLoopApi } from './agent-loop/use-agent-loop.js';
 import { TabsContext } from './tabs/TabsContext.js';
 import { listProviderNames, createProvider } from '../../providers/registry.js';
+import { prime } from '../../providers/prime.js';
 import { getRecentSessions } from '../../core/session/session-log.js';
 import { loadGlobalConfig } from '../../core/config/index.js';
 import {
@@ -279,9 +280,15 @@ export function Session(props: SessionProps): React.ReactElement {
                 }
               }
             }
-            const p = createProvider(name, opts);
+            const unprimed = createProvider(name, opts);
+            // Prime before caching so anything reading from the picker
+            // cache (buildPickerInfo → getCapabilities) sees a primed
+            // instance. The model list returned here is exactly what
+            // listModels() would have returned, served from the priming
+            // call.
+            const { provider: p, models } = await prime(unprimed);
             pickerProviderCache.current.set(`${name}\0${keyId ?? ''}`, p);
-            return p.listModels();
+            return models;
           }}
           loadKeysForProvider={async name => {
             const cfg = await loadGlobalConfig();

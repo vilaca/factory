@@ -76,7 +76,7 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys,
       activeKeyId: 'a',
-      withKey: k => {
+      withKey: async k => {
         withKeyCalledFor = k.id;
         return replacement;
       },
@@ -107,7 +107,7 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a'), key('b', 'tok-b')],
       activeKeyId: 'a',
-      withKey: () => replacement,
+      withKey: async () => replacement,
     };
 
     let caught: unknown;
@@ -139,7 +139,7 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a'), key('b', 'tok-b')],
       activeKeyId: 'a',
-      withKey: () => replacement,
+      withKey: async () => replacement,
     };
 
     // 'socket hang up' is matched as "isStreamish" and falls back to
@@ -161,7 +161,7 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a'), key('b', 'tok-b')],
       activeKeyId: undefined, // <-- unknown
-      withKey: () => initial,
+      withKey: async () => initial,
     };
     let caught: unknown;
     try {
@@ -191,14 +191,14 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')], // single key, no tier-1 alternative
       activeKeyId: 'a',
-      withKey: () => initial, // tier-1 has no fallback
+      withKey: async () => initial, // tier-1 has no fallback
       modelsEnabled: true,
       chain: [{ provider: 'groq', model: 'llama-3.3-70b' }],
       loadKeysForProvider: async p => {
         loadKeysCalledFor = p;
         return [key('g', 'tok-g')];
       },
-      withTuple: (p, _k) => {
+      withTuple: async (p, _k) => {
         withTupleCalledFor = p;
         return fallback;
       },
@@ -239,14 +239,14 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
-      withKey: () => initial,
+      withKey: async () => initial,
       modelsEnabled: true,
       chain: [
         { provider: 'groq', model: 'llama-3.3-70b' },
         { provider: 'cerebras', model: 'gpt-oss-120b' },
       ],
       loadKeysForProvider: async () => [key('x', 'tok-x')],
-      withTuple: p => tupleProviders[p]!,
+      withTuple: async p => tupleProviders[p]!,
     };
 
     let caught: unknown;
@@ -276,14 +276,14 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
-      withKey: () => initial,
+      withKey: async () => initial,
       modelsEnabled: true,
       chain: [
         { provider: 'groq', model: 'llama-3.3-70b' }, // empty keys, skipped
         { provider: 'cerebras', model: 'gpt-oss-120b' }, // valid
       ],
       loadKeysForProvider: async p => (p === 'groq' ? [] : [key('x', 'tok-x')]),
-      withTuple: p => (p === 'cerebras' ? fallback : initial),
+      withTuple: async p => (p === 'cerebras' ? fallback : initial),
     };
 
     const { events, result } = await collect(
@@ -301,11 +301,11 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
-      withKey: () => initial,
+      withKey: async () => initial,
       modelsEnabled: false, // <-- disabled
       chain: [{ provider: 'groq', model: 'llama-3.3-70b' }],
       loadKeysForProvider: async () => [key('x', 'tok-x')],
-      withTuple: () => initial,
+      withTuple: async () => initial,
     };
     let caught: unknown;
     try {
@@ -336,11 +336,11 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
-      withKey: () => initial,
+      withKey: async () => initial,
       modelsEnabled: true,
       chain: [],
       loadKeysForProvider: async () => [key('g', 'tok-g')],
-      withTuple: () => replacement,
+      withTuple: async () => replacement,
       promptForFallback: async ctx => {
         captured.value = ctx;
         return { provider: 'groq', model: 'llama-3.3-70b' };
@@ -367,11 +367,11 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a')],
       activeKeyId: 'a',
-      withKey: () => initial,
+      withKey: async () => initial,
       modelsEnabled: true,
       chain: [],
       loadKeysForProvider: async () => [],
-      withTuple: () => initial,
+      withTuple: async () => initial,
       promptForFallback: async () => null,
     };
     let caught: unknown;
@@ -399,7 +399,7 @@ describe('callModel rotation (tier 1)', () => {
     const rotation: RotationOptions = {
       keys: [key('a', 'tok-a'), key('b', 'tok-b')],
       activeKeyId: 'a',
-      withKey: () => replacement,
+      withKey: async () => replacement,
       failureLog,
     };
     await collect(callModel(initial, 'm', messages, tools, { rotation }));

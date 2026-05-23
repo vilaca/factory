@@ -18,6 +18,7 @@
 // add a per-refs Map<providerName, Provider> cache.
 
 import { createProvider, descriptorByAlias } from '../../../providers/registry.js';
+import { prime } from '../../../providers/prime.js';
 import { getKey } from '../../../core/auth/credentials.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
@@ -63,7 +64,12 @@ export function makeCompactionResolver(refs: {
           }
         }
       }
-      const fresh = createProvider(target.providerName, createOpts);
+      const unprimed = createProvider(target.providerName, createOpts);
+      // Prime before use — the compaction call hits chat/chatNoStream
+      // (and may consult getCapabilities), so the same cf880ed contract
+      // applies as in swap.ts. Without this, an Anthropic compaction
+      // target would throw on its first getCapabilities() lookup.
+      const { provider: fresh } = await prime(unprimed, target.model);
       // Tag this call path as 'compaction' so the session log can bucket
       // mechanical-summary requests separately from main-turn traffic. The
       // primary-fallback branch already runs on the instrumented refs.provider

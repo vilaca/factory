@@ -1,6 +1,6 @@
 import type { Config } from '../core/config/types.js';
 import type { GoogleAiStudioAuthMode } from './auth-modes.js';
-import type { Provider } from './types.js';
+import type { Provider, UnprimedProvider } from './types.js';
 import { OllamaProvider } from './ollama.js';
 import { HuggingFaceProvider } from './huggingface.js';
 import { LlamaCppProvider } from './llamacpp.js';
@@ -350,7 +350,17 @@ export function listProviderNames(): string[] {
   return [...(Object.keys(DESCRIPTORS) as StartupProviderName[])].sort();
 }
 
-export function createProvider(name: string, options: CreateProviderOptions = {}): Provider {
+/** Construct a provider instance.
+ *
+ *  Returns `UnprimedProvider`, not `Provider` — see the type docstring
+ *  in ./types.ts. Callers must route the result through `prime()` from
+ *  ./prime.ts before using the full surface (`getCapabilities`, `chat`,
+ *  `chatNoStream`). This is the type-level enforcement of the cf880ed
+ *  contract: mint → prime → use. */
+export function createProvider(
+  name: string,
+  options: CreateProviderOptions = {},
+): UnprimedProvider {
   const descriptor = descriptorByAlias(name) ?? DESCRIPTORS[name as StartupProviderName];
   if (!descriptor) {
     const known = listProviderNames()
@@ -358,6 +368,9 @@ export function createProvider(name: string, options: CreateProviderOptions = {}
       .join(', ');
     throw new Error(`Unknown provider: ${name}. Use one of: ${known}.`);
   }
+  // The factory returns the concrete class which structurally satisfies
+  // both Provider and UnprimedProvider; narrowing here is the gate that
+  // forces callers through prime().
   return descriptor.factory(options);
 }
 

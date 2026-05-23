@@ -3,6 +3,7 @@ import type { Provider } from '../../providers/types.js';
 import type { ProviderDescriptor, StartupProviderName } from '../../providers/registry.js';
 import { DESCRIPTORS, descriptorByAlias } from '../../providers/registry.js';
 import { createProvider } from '../../providers/registry.js';
+import { prime } from '../../providers/prime.js';
 import type { Config, HookEntry } from '../../core/config/types.js';
 import type { McpServerConfig } from '../../mcp/types.js';
 import type { McpManager } from '../../mcp/client.js';
@@ -156,7 +157,7 @@ export async function authenticateAndConnect(
       : { shouldSave: false };
     dbg(`ensureAuth ok shouldSave=${auth.shouldSave}`);
 
-    provider = createProvider(providerName, {
+    const unprimed = createProvider(providerName, {
       host: config.host,
       token: auth.token,
       githubToken: auth.githubToken,
@@ -165,10 +166,18 @@ export async function authenticateAndConnect(
     });
     dbg(`createProvider ok`);
 
-    if (!availableModels || provider.getDisplayModelName || provider.getModelPickerInfo) {
-      dbg(`listModels (probe ${availableModels ? 'present but re-listing' : 'missing'})`);
-      availableModels = await provider.listModels();
-    }
+    // Prime the provider before any getCapabilities/chat consumer
+    // touches it. `prime()` always calls listModels (authoritative cache
+    // populator) and returns the resulting model list — the earlier
+    // probe's `probedModels` may be stale or missing, so we trust the
+    // priming call. This costs one extra HTTP call relative to the
+    // pre-prime() code path that skipped re-listing when probedModels
+    // was populated, but it eliminates the cf880ed bug class at this
+    // call site by construction.
+    dbg(`prime (listModels + optional primeModelCache)`);
+    const primed = await prime(unprimed);
+    provider = primed.provider;
+    availableModels = primed.models;
     dbg(`availableModels.length=${availableModels?.length ?? 0}`);
 
     activeKeyId = auth.keyId;

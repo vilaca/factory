@@ -182,8 +182,13 @@ export interface RotationOptions {
    *  swaps keys. Pre-populated from RunRefs.activeKeyId. */
   activeKeyId?: string;
   /** Construct a Provider instance bound to the given key's token (and
-   *  any per-key extras like Workers AI's accountId). */
-  withKey: (key: ProviderKey) => Provider;
+   *  any per-key extras like Workers AI's accountId). Async because the
+   *  host primes the provider before returning it — the rotated
+   *  provider is consumed by `chat()` / `chatNoStream()` and (via the
+   *  host's `onProviderChange`) becomes the next turn's
+   *  `RunRefs.provider`, so it must be primed for the same reasons
+   *  swap.ts primes a swapped provider (cf880ed). */
+  withKey: (key: ProviderKey) => Promise<Provider>;
   /** Called whenever rotation swaps keys so the host can keep RunRefs
    *  in sync. Optional — tests may omit it. */
   onActiveKeyChange?: (keyId: string) => void;
@@ -216,8 +221,9 @@ export interface RotationOptions {
   loadKeysForProvider?: (provider: string) => Promise<ProviderKey[]>;
   /** Build a Provider instance for an arbitrary `(provider, key)` pair —
    *  used when tier 2 hops between providers. Required when `chain` is
-   *  non-empty. */
-  withTuple?: (provider: string, key: ProviderKey) => Provider;
+   *  non-empty. Async because the host primes the provider before
+   *  returning it (same rationale as `withKey`). */
+  withTuple?: (provider: string, key: ProviderKey) => Promise<Provider>;
 
   /**
    * Last-chance hook called after both tiers exhaust (or when the chain is
