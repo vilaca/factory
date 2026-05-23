@@ -12,12 +12,11 @@ Validations (run on push to `main` and on PR):
 
 Tests (run on push to `main` and on PR):
 
-- `test-unit.yml` — `npm run test:unit`.
+- `test-unit.yml` — `npm run coverage` (runs unit suite under c8 and enforces thresholds).
 - `test-e2e-mocks.yml` — `npm run test:e2e:mocks`.
 - `test-e2e-no-mocks.yml` — `npm run test:e2e:no-mocks`.
 - `test-e2e-headless.yml` — `npm run test:e2e:headless` (headless CLI/tools/hooks/mcp/etc.).
 - `test-e2e-pty.yml` — `npm run test:e2e:pty` (slash-commands/tabs/picker/plan-mode).
-- `coverage.yml` — `npm run coverage` (c8 thresholds on unit suite).
 
 Docs:
 
