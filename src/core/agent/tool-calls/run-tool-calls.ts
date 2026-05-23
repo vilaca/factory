@@ -4,7 +4,7 @@ import { TOOL_NAMES } from '../../../tools/types.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import { correctToolCall, readFileForCorrector } from './tool-call-corrector.js';
 import { selectWeakTier } from '../call-model/weak-tier.js';
-import type { RecoveryState } from '../recovery-state.js';
+import { mergeRecoveryClones, type RecoveryState } from '../recovery-state.js';
 import { runHook } from '../../hooks/index.js';
 import { errorMessage, makeAbortError } from '../../../utils/errors.js';
 import { tryReadCacheHit, maintainFileCache } from './run-tool-calls-cache.js';
@@ -99,12 +99,13 @@ function findDelegateBatchEnd(toolCalls: ToolCallMessage[], start: number): numb
  *  each independently — there's no shared prompt slot, only the renderer's
  *  policy on how to display concurrent prompts.
  *
- *  Recovery state is touched by every call's `executeAndTrack`. Under
- *  parallel execution "the last failure wins" is no longer well-defined,
- *  but recovery only feeds the corrector and the consecutive-same-failure
- *  detector — neither cares about strict ordering across siblings in the
- *  same turn, since they only fire on cross-turn repetition. Per-call
- *  corrector still runs at the end of each pipeline as before. */
+ *  Recovery state is per-pipeline-cloned so applyResultToRecovery and the
+ *  corrector never read-modify-write the same fields across interleaved
+ *  siblings. After every pipeline drains we deterministically merge the
+ *  clones back into the parent (`mergeRecoveryClones`): max counters,
+ *  union of corrected signatures, first-failure wins for last* fields.
+ *  This keeps the "consecutive cross-turn repetition" semantics intact
+ *  while removing the in-batch race the reviewer flagged. */
 async function* runDelegateBatch(
   batch: ToolCallMessage[],
   ctx: ToolLoopContext,
@@ -117,11 +118,16 @@ async function* runDelegateBatch(
   // each pipeline's execute() can run concurrently. The mutex stays local
   // to this batch — no cross-batch contention.
   const batchCtx: ToolLoopContext = { ...ctx, permissionMutex: new AsyncMutex() };
-  const pipelines = batch.map(toolCall =>
-    runSingleToolCall(toolCall, batchCtx, recovery, callSignature),
+  const clones: RecoveryState[] = batch.map(() => recovery.clone());
+  const pipelines = batch.map((toolCall, i) =>
+    runSingleToolCall(toolCall, batchCtx, clones[i]!, callSignature),
   );
-  const perCallDenied = yield* mergeAsyncGenerators(pipelines);
-  return { deniedCount: perCallDenied.reduce((a, b) => a + b, 0) };
+  try {
+    const perCallDenied = yield* mergeAsyncGenerators(pipelines);
+    return { deniedCount: perCallDenied.reduce((a, b) => a + b, 0) };
+  } finally {
+    mergeRecoveryClones(recovery, clones);
+  }
 }
 
 /** One tool call's full pipeline: optional read-cache short-circuit,
@@ -223,9 +229,35 @@ function applyResultToRecovery(
     recovery.lastFailureMessage = null;
     recovery.lastFailureSignature = null;
     recovery.consecutiveSameFailures = 0;
+    // Per-call reset: any successful call clears the hard-error counter.
+    // Net effect on a multi-call batch: the trailing counter ends at the
+    // run of hard errors after the *last* success in the batch, so a
+    // fully-clean batch leaves it at 0 (matching the spec wording in
+    // docs/reliability/next-steps.md §9, "Counters reset on any fully
+    // clean batch") while mixed batches converge on the same final state
+    // a strict batch-level reset would produce, just with intermediate
+    // values during the iteration.
+    recovery.consecutiveHardToolErrors = 0;
+    recovery.lastHardToolName = null;
+    recovery.lastHardToolMessage = null;
   } else {
     recovery.lastFailureMessage = `${event.toolName}: ${event.result.output}`;
     recovery.lastFailureSignature = callSignature;
+    // Phase 6: only bump the hard-error counter for *hard* failures.
+    // The executor sets `hardError: true` when the tool's callable
+    // threw an exception (the 5xx case). Tools that fail gracefully
+    // by returning `{ success: false }` (Read on missing file, Edit
+    // on non-matching string, etc.) stay on the soft path — the
+    // recovery comes via the LLM corrector / format-retry budget,
+    // not the hard-error bailout. The reliability spec explicitly
+    // wants this: `max_tool_errors=2` should catch real bugs while
+    // letting the model retry 8+ wrong-key lookups within the
+    // iteration budget.
+    if (event.result.hardError) {
+      recovery.consecutiveHardToolErrors++;
+      recovery.lastHardToolName = event.toolName;
+      recovery.lastHardToolMessage = event.result.output;
+    }
   }
 }
 

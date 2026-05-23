@@ -196,4 +196,58 @@ Now I will run another:
     assert.strictEqual(result.toolCalls[0].function.name, 'Bash');
     assert.strictEqual(result.toolCalls[0].function.arguments.command, 'ls -la');
   });
+
+  // Case-insensitive matching. Small models routinely lowercase tool names
+  // ("read" instead of "Read"). The registry's get() is case-insensitive and
+  // the validator's unknown-tool check is too — the parser was previously
+  // stricter than both and silently dropped lowercase calls before either
+  // could see them. These tests pin the canonicalization contract.
+  describe('case-insensitive tool name matching', () => {
+    it('accepts a lowercase name in a <tool_call> tag and canonicalizes to the registered name', () => {
+      const result = parseTextToolCalls(
+        '<tool_call>{"name":"read","arguments":{"file_path":"/x"}}</tool_call>',
+        new Set(['Read']),
+      );
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Read');
+      assert.strictEqual(result.malformedCount, 0);
+    });
+
+    it('accepts an UPPERCASE name and canonicalizes', () => {
+      const result = parseTextToolCalls(
+        '<tool_call>{"name":"BASH","arguments":{"command":"ls"}}</tool_call>',
+        new Set(['Bash']),
+      );
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Bash');
+    });
+
+    it('accepts a lowercase name in a bare-JSON fallback', () => {
+      const result = parseTextToolCalls(
+        '{"name":"read","arguments":{"file_path":"/x"}}',
+        new Set(['Read']),
+      );
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Read');
+    });
+
+    it('accepts a lowercase name in a Hermes-style <function=...> tag', () => {
+      const result = parseTextToolCalls(
+        '<function=read><parameter=file_path>/x</parameter></function>',
+        new Set(['Read']),
+      );
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Read');
+      assert.strictEqual(result.toolCalls[0].function.arguments.file_path, '/x');
+    });
+
+    it('still rejects a name that does not match any tool, even case-insensitively', () => {
+      const result = parseTextToolCalls(
+        '<tool_call>{"name":"PackageJsonName","arguments":{}}</tool_call>',
+        new Set(['Read', 'Write']),
+      );
+      assert.strictEqual(result.toolCalls.length, 0);
+      assert.strictEqual(result.malformedCount, 1);
+    });
+  });
 });

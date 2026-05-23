@@ -5,6 +5,7 @@ import type { PermissionManager } from '../../../security/permissions.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import { errorMessage } from '../../../utils/errors.js';
+import { ToolResolutionError } from '../../../tools/errors.js';
 import type { ToolLoopContext } from './types.js';
 
 export interface ExecuteToolCallOptions {
@@ -257,15 +258,50 @@ async function* executeAndEmit(
       ctx.cwdRef.current = result.cwdAfter;
     }
     recordResult(result.output, tool.name);
+    // Reliability stack (Phase 5): record successful calls on the step
+    // tracker so required-step satisfaction and arg-matched prereq
+    // lookups stay accurate. The enforcer is optional — callers
+    // without `requiredSteps` / prereqs leave it undefined and this is
+    // a no-op.
+    if (result.success && ctx.stepEnforcer) {
+      ctx.stepEnforcer.record(tool.name, args);
+    }
     yield { type: 'tool-call-result', toolName: tool.name, args, result };
   } catch (err: unknown) {
+    // Reliability stack (Phase 6): ToolResolutionError is the
+    // "valid request, no resource" signal from the tool author. Feed
+    // the message back as the tool result so the model can read it
+    // and retry with different args. Tagged with `softError: true`
+    // so the agent loop's hard-error counter skips this case, and
+    // `skipCorrector: true` because the resolution message is
+    // already the model's feedback — running the LLM corrector on
+    // top would be a wasted call.
+    if (err instanceof ToolResolutionError) {
+      recordResult(err.message, tool.name);
+      yield {
+        type: 'tool-call-result',
+        toolName: tool.name,
+        args,
+        result: {
+          success: false,
+          output: err.message,
+          softError: true,
+          skipCorrector: true,
+        },
+      };
+      return;
+    }
     const errMsg = `Tool execution error: ${errorMessage(err)}`;
     recordResult(errMsg, tool.name);
     yield {
       type: 'tool-call-result',
       toolName: tool.name,
       args,
-      result: { success: false, output: errMsg },
+      // `hardError: true` is the signal to the agent loop's
+      // consecutive-hard-error counter — the tool's callable threw,
+      // which is the 5xx case. Distinguishes a thrown exception from
+      // a graceful `{ success: false }` return.
+      result: { success: false, output: errMsg, hardError: true },
     };
   }
 }

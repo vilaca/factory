@@ -6,6 +6,8 @@ import { bashTool } from './bash.js';
 import { globTool } from './glob.js';
 import { grepTool } from './grep.js';
 import { webFetchTool } from './web/index.js';
+import { respondTool } from './respond.js';
+import { validatePrereqReferences } from '../core/agent/step-enforcer.js';
 
 export class ToolRegistry {
   // Canonical store keyed by the handler's exact name. `getAll()` iterates
@@ -33,11 +35,27 @@ export class ToolRegistry {
     this.register(globTool);
     this.register(grepTool);
     this.register(webFetchTool);
+    // Synthetic Respond tool: gives small models a structured terminal
+    // action instead of guessing between "emit text" and "call a tool".
+    // The runtime handler is always available; the agent loop decides per
+    // turn whether to expose it on the wire (see `getDefinitions({ exclude })`
+    // and the auto-enable rule in `run-agent.ts`).
+    this.register(respondTool);
   }
 
   register(handler: ToolHandler): void {
     this.tools.set(handler.name, handler);
     this.byLowerName.set(handler.name.toLowerCase(), handler);
+  }
+
+  /** Validate every registered tool's declared prerequisites. Throws if
+   *  any prereq references a tool name that isn't registered. Run this
+   *  after all `register()` calls — at startup, after the registry is
+   *  fully populated. The reliability spec wants this at build time so
+   *  a typo surfaces as a startup error, not a confusing
+   *  prerequisite_nudge at runtime. */
+  validatePrerequisites(): void {
+    validatePrereqReferences(this.getDefinitions());
   }
 
   unregister(name: string): void {
@@ -55,8 +73,12 @@ export class ToolRegistry {
     return [...this.tools.values()];
   }
 
-  getDefinitions(): ToolDefinition[] {
-    return this.getAll().map(t => t.definition);
+  getDefinitions(opts?: { exclude?: ReadonlySet<string> }): ToolDefinition[] {
+    const exclude = opts?.exclude;
+    const all = this.getAll();
+    return exclude && exclude.size > 0
+      ? all.filter(t => !exclude.has(t.name)).map(t => t.definition)
+      : all.map(t => t.definition);
   }
 
   getNames(): string[] {

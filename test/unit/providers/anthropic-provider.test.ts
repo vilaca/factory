@@ -101,6 +101,58 @@ describe('splitMessagesForAnthropic', () => {
     ];
     assert.throws(() => splitMessagesForAnthropic(messages), /tool message has no tool_call_id/);
   });
+
+  it('synthesises is_error tool_result blocks for unpaired tool_use IDs before a plain user turn', () => {
+    // Reliability stack: a step / prereq / unknown-tool nudge produces
+    // exactly this shape — the assistant emitted a tool_use the framework
+    // refused to execute, then injected a corrective user message instead
+    // of a real tool_result. Anthropic rejects unpaired tool_use, so the
+    // converter must inject synthetic is_error blocks for each dangling id.
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'go' },
+      {
+        role: 'assistant',
+        content: 'attempting',
+        tool_calls: [
+          { id: 'toolu_a', function: { name: 'Terminate', arguments: {} } },
+          { id: 'toolu_b', function: { name: 'AlsoBad', arguments: {} } },
+        ],
+      },
+      { role: 'user', content: 'STOP. You must call ReadFile first.' },
+    ];
+    const { msgs } = splitMessagesForAnthropic(messages);
+    // user, assistant(2 tool_use), user(2 synthetic is_error), user(nudge)
+    assert.strictEqual(msgs.length, 4);
+    assert.strictEqual(msgs[2].role, 'user');
+    assert.deepStrictEqual(msgs[2].content, [
+      { type: 'tool_result', tool_use_id: 'toolu_a', content: 'Not executed.', is_error: true },
+      { type: 'tool_result', tool_use_id: 'toolu_b', content: 'Not executed.', is_error: true },
+    ]);
+    assert.strictEqual(msgs[3].content, 'STOP. You must call ReadFile first.');
+  });
+
+  it('does not inject is_error blocks when every tool_use is paired with a tool_result', () => {
+    const messages: ChatMessage[] = [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ id: 'toolu_a', function: { name: 'X', arguments: {} } }],
+      },
+      { role: 'tool', content: 'ok', tool_call_id: 'toolu_a' },
+      { role: 'user', content: 'next' },
+    ];
+    const { msgs } = splitMessagesForAnthropic(messages);
+    // Walk every block; none should be an is_error tool_result.
+    for (const m of msgs) {
+      if (!Array.isArray(m.content)) continue;
+      for (const block of m.content) {
+        const b = block as { type?: string; is_error?: boolean };
+        if (b.type === 'tool_result') {
+          assert.notStrictEqual(b.is_error, true);
+        }
+      }
+    }
+  });
 });
 
 describe('splitMessagesForAnthropic — cache markers', () => {

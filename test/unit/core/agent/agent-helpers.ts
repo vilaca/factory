@@ -160,6 +160,16 @@ export function makeFakeCM(overrides: Partial<ContextManager> = {}): ContextMana
     getUsagePercent: () => 0,
     getTokenEstimate: () => 0,
     clearCompactionCancelled: () => {},
+    // Tiered (deterministic) phases are no-ops in fakes — tests
+    // exercising the legacy LLM-summary path stay byte-stable. Tests
+    // covering tiered phases override this stub directly.
+    tieredCompact: () => ({ phase: 0, oldCount: 0, newCount: 0, changed: false }),
+    setLastCompactionPhase: () => {},
+    getLastCompactionPhase: () => 0,
+    // Phase 7: threshold warnings default to "none fired" so legacy
+    // agent-loop tests stay byte-stable. Tests exercising the warning
+    // path override this stub.
+    checkThresholds: () => null,
   };
   return { ...base, ...overrides } as unknown as ContextManager;
 }

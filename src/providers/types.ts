@@ -92,6 +92,23 @@ export type ModelRequestSource = 'main' | 'compaction' | 'corrector' | 'subagent
 export interface ChatOptions {
   maxTokens?: number;
   temperature?: number;
+  /** Per-call sampling override. Reliability-stack additions (Phase 10):
+   *  each provider threads as many of these as its backend supports
+   *  into the request body. Anthropic supports temperature / topP /
+   *  topK only; OpenAI-compat supports presencePenalty (no minP /
+   *  repeatPenalty); Ollama + llamacpp support the full set. Per-call
+   *  values win over instance-level / sampling-defaults. */
+  topP?: number;
+  topK?: number;
+  minP?: number;
+  repeatPenalty?: number;
+  presencePenalty?: number;
+  /** When true, the provider auto-applies entries from the per-model
+   *  sampling-defaults table (src/providers/sampling-defaults.ts)
+   *  before sending. Caller-supplied sampling fields above always
+   *  win. Default false — opt-in only, since silent application would
+   *  change behavior on upgrade. */
+  recommendedSampling?: boolean;
   signal?: AbortSignal;
   /** Per-call override for the request-source tag read by the
    *  `instrumentProviderRequests` wrapper. The same wrapped Provider instance
@@ -166,6 +183,32 @@ export interface ChatOptions {
     schema: Record<string, unknown>;
     strict?: boolean;
   };
+  /** Reliability stack (Phase 13): force a tool call rather than free
+   *  text. Maps to Anthropic's `tool_choice: { type: 'any' }`. The
+   *  preprint (Table I) shows this single knob lifts Haiku bare from
+   *  43.8% → 88.9% — useful intermediate guardrail when full step
+   *  enforcement isn't applicable. Default off. Providers without
+   *  the concept ignore it. */
+  forceToolCall?: boolean;
+  /** Reliability stack (docs/reliability/next-steps.md §15): tri-state
+   *  control over inline-reasoning emission.
+   *
+   *    - `true`  — always request thinking; provider raises
+   *                ThinkingNotSupportedError if the backend rejects.
+   *    - `false` — never request thinking, *and* discard any
+   *                `[THINK]...[/THINK]` / `<think>...</think>` blocks
+   *                that leak through in streamed content. Qwen3
+   *                emits them inline even when the request says
+   *                think=false on some serving stacks, so the parser
+   *                drop is load-bearing.
+   *    - `'auto'` / undefined — heuristic: enable for models whose
+   *                name matches /reason|think/i (Ministral Reasoning,
+   *                Qwen3-thinking, etc.). Providers downgrade to
+   *                false on the first backend rejection and cache the
+   *                resolved decision.
+   *
+   *  Providers without any concept of inline thinking ignore the field. */
+  thinking?: boolean | 'auto';
 }
 
 /** Narrow surface returned by `createProvider`. A freshly-minted
@@ -217,4 +260,14 @@ export interface Provider {
     options?: ChatOptions,
   ): Promise<ChatChunk>;
   countTokens?(messages: ChatMessage[]): Promise<number>;
+  /** Reliability stack (Phase 11): backend-context discovery via API.
+   *  Providers that can ask the backend its real context window
+   *  implement this; the agent loop calls it once per session and
+   *  threads the result into ContextManager so budgeting reflects
+   *  reality instead of a hardcoded estimate. Returns null when the
+   *  probe fails (network error, endpoint missing) — caller falls
+   *  back to `getCapabilities(model).contextWindow`. Optional: most
+   *  cloud providers omit this since their windows are documented
+   *  per-model. */
+  discoverContextWindow?(model: string): Promise<number | null>;
 }

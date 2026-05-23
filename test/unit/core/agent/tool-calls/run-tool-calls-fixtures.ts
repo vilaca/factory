@@ -13,6 +13,7 @@ import { ToolRegistry } from '../../../../../src/tools/registry.js';
 import { Conversation } from '../../../../../src/core/context/conversation.js';
 import { PermissionManager } from '../../../../../src/security/permissions.js';
 import { RecoveryState } from '../../../../../src/core/agent/recovery-state.js';
+import type { StepEnforcer } from '../../../../../src/core/agent/step-enforcer.js';
 import type { ToolLoopContext } from '../../../../../src/core/agent/tool-calls/run-tool-calls.js';
 
 export interface FakeToolOptions {
@@ -66,6 +67,7 @@ export interface ContextOverrides {
   hooksConfig?: ToolLoopContext['hooksConfig'];
   onHookStderr?: ToolLoopContext['onHookStderr'];
   onHookError?: ToolLoopContext['onHookError'];
+  stepEnforcer?: StepEnforcer;
 }
 
 export function makeCtx(overrides: ContextOverrides = {}): ToolLoopContext {
@@ -87,6 +89,7 @@ export function makeCtx(overrides: ContextOverrides = {}): ToolLoopContext {
     hooksConfig: overrides.hooksConfig,
     onHookStderr: overrides.onHookStderr,
     onHookError: overrides.onHookError,
+    ...(overrides.stepEnforcer ? { stepEnforcer: overrides.stepEnforcer } : {}),
   };
 }
 

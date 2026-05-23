@@ -1,4 +1,6 @@
 import type { ChatMessage, ToolCallMessage } from '../../providers/types.js';
+import type { MessageType, MessageMeta } from '../../utils/chat-message.js';
+import { stripMetadata, inferDefaultMessageType } from '../../utils/chat-message.js';
 import { CHARS_PER_TOKEN } from '../../utils/tokens.js';
 
 const DEFAULT_MAX_TOOL_RESULT_TOKENS = 6_000;
@@ -12,6 +14,22 @@ function elisionStub(toolName: string, byteLength: number): string {
   return `[elided: tool=${toolName} size=${kb}kB — too large for context, ask again or narrow the call]`;
 }
 
+function resolveMeta(msg: ChatMessage, meta: AppendMeta | undefined): MessageMeta {
+  const type = meta?.type ?? inferDefaultMessageType(msg);
+  const stepIndex = meta?.stepIndex;
+  return stepIndex === undefined ? { type } : { type, stepIndex };
+}
+
+/** Optional per-append tag-and-step metadata. Phase 2 keeps every append
+ *  backwards-compatible by accepting `undefined` here — callers that
+ *  don't tag get the default-inferred type via
+ *  `inferDefaultMessageType`. Later phases (3, 5, 6) start passing
+ *  explicit values when the runtime knows the semantic role. */
+export interface AppendMeta {
+  type?: MessageType;
+  stepIndex?: number;
+}
+
 export class Conversation {
   private messages: ChatMessage[] = [];
 
@@ -20,8 +38,30 @@ export class Conversation {
     private maxToolResultTokens: number = DEFAULT_MAX_TOOL_RESULT_TOKENS,
   ) {}
 
+  /** Returns the conversation as a flat array suitable for sending to a
+   *  provider. The system message is synthesized on every call (we never
+   *  store it in `this.messages`, so it can't be compacted away). Metadata
+   *  tags are stripped at this boundary — providers must never see
+   *  them. Read-only by convention. */
   getMessages(): ChatMessage[] {
-    return [{ role: 'system', content: this.systemPrompt }, ...this.messages];
+    const system: ChatMessage = {
+      role: 'system',
+      content: this.systemPrompt,
+      metadata: { type: 'system_prompt' },
+    };
+    return [system, ...this.messages].map(stripMetadata);
+  }
+
+  /** Internal view that retains semantic metadata. Compaction strategies,
+   *  step enforcement, and other in-process consumers need the tag; the
+   *  wire boundary is `getMessages()`. */
+  getMessagesWithMeta(): ChatMessage[] {
+    const system: ChatMessage = {
+      role: 'system',
+      content: this.systemPrompt,
+      metadata: { type: 'system_prompt' },
+    };
+    return [system, ...this.messages];
   }
 
   getSystemPrompt(): string {
@@ -32,19 +72,22 @@ export class Conversation {
     return this.messages.length;
   }
 
-  addUser(content: string): void {
-    this.messages.push({ role: 'user', content });
+  addUser(content: string, meta?: AppendMeta): void {
+    const msg: ChatMessage = { role: 'user', content };
+    msg.metadata = resolveMeta(msg, meta);
+    this.messages.push(msg);
   }
 
-  addAssistant(content: string, toolCalls?: ToolCallMessage[]): void {
+  addAssistant(content: string, toolCalls?: ToolCallMessage[], meta?: AppendMeta): void {
     const msg: ChatMessage = { role: 'assistant', content };
     if (toolCalls && toolCalls.length > 0) {
       msg.tool_calls = toolCalls;
     }
+    msg.metadata = resolveMeta(msg, meta);
     this.messages.push(msg);
   }
 
-  addToolResult(content: string, toolCallId?: string, toolName?: string): void {
+  addToolResult(content: string, toolCallId?: string, toolName?: string, meta?: AppendMeta): void {
     const cap = this.maxToolResultTokens * CHARS_PER_TOKEN;
     const finalContent =
       content.length > cap ? elisionStub(toolName ?? '<tool>', content.length) : content;
@@ -52,6 +95,7 @@ export class Conversation {
     if (toolCallId) {
       msg.tool_call_id = toolCallId;
     }
+    msg.metadata = resolveMeta(msg, meta);
     this.messages.push(msg);
   }
 
@@ -72,9 +116,17 @@ export class Conversation {
       content.length > cap ? elisionStub(toolName ?? '<tool>', content.length) : content;
     for (let i = this.messages.length - 1; i >= 0; i--) {
       if (this.messages[i]!.role === 'tool') {
+        const prev = this.messages[i]!;
         const msg: ChatMessage = { role: 'tool', content: finalContent };
         if (toolCallId) {
           msg.tool_call_id = toolCallId;
+        }
+        // Preserve the existing tag — this is the corrector replacing the
+        // *same* tool_result slot, not introducing a new semantic class.
+        if (prev.metadata) {
+          msg.metadata = prev.metadata;
+        } else {
+          msg.metadata = { type: 'tool_result' };
         }
         this.messages[i] = msg;
         return;
@@ -121,8 +173,17 @@ export class Conversation {
 
     const kept = this.messages.slice(cutPoint);
     this.messages = [
-      { role: 'user', content: `[Previous conversation summary]\n${summary}` },
-      { role: 'assistant', content: 'Continuing from the summary above.', cacheBoundary: true },
+      {
+        role: 'user',
+        content: `[Previous conversation summary]\n${summary}`,
+        metadata: { type: 'summary' },
+      },
+      {
+        role: 'assistant',
+        content: 'Continuing from the summary above.',
+        cacheBoundary: true,
+        metadata: { type: 'summary' },
+      },
       ...kept,
     ];
 
@@ -163,6 +224,10 @@ export class Conversation {
         content: elisionStub('<tool>', m.content.length),
       };
       if (m.tool_call_id) replacement.tool_call_id = m.tool_call_id;
+      // Preserve the semantic tag across the in-place elision; the
+      // payload shrank but the message is still a tool_result for the
+      // purposes of compaction (Phase 3) and observability.
+      if (m.metadata) replacement.metadata = m.metadata;
       this.messages[i] = replacement;
       aged++;
     }
@@ -175,5 +240,23 @@ export class Conversation {
 
   updateSystemPrompt(prompt: string): void {
     this.systemPrompt = prompt;
+  }
+
+  /** Read-only view of the *stored* messages (system prompt excluded — it
+   *  lives outside this array and is synthesized at getMessages() time).
+   *  Used by in-process consumers like the tiered-compaction strategy
+   *  that need to inspect every message's `metadata` before deciding
+   *  what to cut. Provider-bound code MUST go through `getMessages()`
+   *  instead — it strips metadata at the wire boundary. */
+  getStoredMessages(): readonly ChatMessage[] {
+    return this.messages;
+  }
+
+  /** Replace the stored message list wholesale. Used by tiered
+   *  compaction to install a filtered view in one shot. Doesn't touch
+   *  the system prompt. Caller is responsible for keeping tool_call ↔
+   *  tool_result invariants (Anthropic rejects unpaired tool_use). */
+  replaceStoredMessages(messages: ChatMessage[]): void {
+    this.messages = messages;
   }
 }
