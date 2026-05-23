@@ -15,10 +15,7 @@ function isCodingSpecialistName(model: string): boolean {
  * picker) and menu.tsx (startup picker) call this so the picker shows
  * consistent labels/tiers regardless of which entry point opened it.
  */
-export function buildPickerInfo(
-  source: Provider,
-  model: string,
-): ModelDisplayInfo | undefined {
+export function buildPickerInfo(source: Provider, model: string): ModelDisplayInfo | undefined {
   const info = source.getModelPickerInfo?.(model);
   const label = info?.label ?? source.getDisplayModelName?.(model);
   let tier;

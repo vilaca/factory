@@ -311,30 +311,126 @@ interface OpenAIFamily {
 
 const OPENAI_FAMILIES: ReadonlyArray<OpenAIFamily> = [
   // Current flagships
-  { prefix: 'gpt-5-codex', contextWindow: 1_047_576, maxOutputTokens: 128_000, tier: 'strong', reasoning: true,  vision: true },
-  { prefix: 'gpt-5',       contextWindow: 1_047_576, maxOutputTokens: 128_000, tier: 'strong', reasoning: true,  vision: true },
-  { prefix: 'gpt-4.1',     contextWindow: 1_047_576, maxOutputTokens:  32_768, tier: 'strong', vision: true },
+  {
+    prefix: 'gpt-5-codex',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 128_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'gpt-5',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 128_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'gpt-4.1',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 32_768,
+    tier: 'strong',
+    vision: true,
+  },
 
   // Reasoning series
-  { prefix: 'o4-mini',     contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'medium', reasoning: true, vision: true },
-  { prefix: 'o4',          contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
-  { prefix: 'o3-mini',     contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'medium', reasoning: true, vision: true },
-  { prefix: 'o3',          contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
-  { prefix: 'o1-pro',      contextWindow: 200_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
-  { prefix: 'o1-preview',  contextWindow: 128_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true, supportsTools: false },
-  { prefix: 'o1-mini',     contextWindow: 128_000, maxOutputTokens: 100_000, tier: 'medium', reasoning: true, vision: true, supportsTools: false },
-  { prefix: 'o1',          contextWindow: 128_000, maxOutputTokens: 100_000, tier: 'strong', reasoning: true, vision: true },
+  {
+    prefix: 'o4-mini',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    tier: 'medium',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'o4',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'o3-mini',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    tier: 'medium',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'o3',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'o1-pro',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
+  {
+    prefix: 'o1-preview',
+    contextWindow: 128_000,
+    maxOutputTokens: 100_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+    supportsTools: false,
+  },
+  {
+    prefix: 'o1-mini',
+    contextWindow: 128_000,
+    maxOutputTokens: 100_000,
+    tier: 'medium',
+    reasoning: true,
+    vision: true,
+    supportsTools: false,
+  },
+  {
+    prefix: 'o1',
+    contextWindow: 128_000,
+    maxOutputTokens: 100_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
 
   // Multimodal flagship line
-  { prefix: 'gpt-4o-mini', contextWindow: 128_000, maxOutputTokens: 16_384, tier: 'medium', vision: true },
-  { prefix: 'gpt-4o',      contextWindow: 128_000, maxOutputTokens: 16_384, tier: 'strong', vision: true },
+  {
+    prefix: 'gpt-4o-mini',
+    contextWindow: 128_000,
+    maxOutputTokens: 16_384,
+    tier: 'medium',
+    vision: true,
+  },
+  {
+    prefix: 'gpt-4o',
+    contextWindow: 128_000,
+    maxOutputTokens: 16_384,
+    tier: 'strong',
+    vision: true,
+  },
 
   // Deprecated families — surface a warning and pin to weak tier
-  { prefix: 'gpt-4-turbo',           contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
-  { prefix: 'gpt-4-1106',            contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
-  { prefix: 'gpt-4-',                contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
-  { prefix: 'gpt-3.5-turbo-instruct', contextWindow: 16_385, maxOutputTokens: 4_096, deprecated: true, supportsTools: false },
-  { prefix: 'gpt-3.5-turbo',         contextWindow:  16_385, maxOutputTokens: 4_096, deprecated: true },
+  { prefix: 'gpt-4-turbo', contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
+  { prefix: 'gpt-4-1106', contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
+  { prefix: 'gpt-4-', contextWindow: 128_000, maxOutputTokens: 4_096, deprecated: true },
+  {
+    prefix: 'gpt-3.5-turbo-instruct',
+    contextWindow: 16_385,
+    maxOutputTokens: 4_096,
+    deprecated: true,
+    supportsTools: false,
+  },
+  { prefix: 'gpt-3.5-turbo', contextWindow: 16_385, maxOutputTokens: 4_096, deprecated: true },
 ];
 
 function canonicalizeModelForFamilyLookup(model: string): string {
@@ -349,7 +445,10 @@ function lookupFamily(model: string): OpenAIFamily | undefined {
   const normalized = canonicalizeModelForFamilyLookup(model);
   let best: OpenAIFamily | undefined;
   for (const family of OPENAI_FAMILIES) {
-    if (normalized.startsWith(family.prefix) && (!best || family.prefix.length > best.prefix.length)) {
+    if (
+      normalized.startsWith(family.prefix) &&
+      (!best || family.prefix.length > best.prefix.length)
+    ) {
       best = family;
     }
   }
@@ -423,4 +522,3 @@ function supportsParallelToolCalls(model: string): boolean {
 function supportsVisionByName(model: string): boolean {
   return lookupFamily(model)?.vision ?? false;
 }
-

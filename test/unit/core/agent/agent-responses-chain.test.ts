@@ -124,11 +124,12 @@ describe('runAgent — Responses-API chain capture', () => {
   });
 
   it('forwards responsesChain into provider.chat options when valid for current tuple', async () => {
-    const harness = await runWithChain(
-      'hi',
-      [{ content: 'ok.', responseId: 'resp_2' }],
-      { lastResponseId: 'resp_seed', messageCount: 2, provider: 'mock', model: 'mock-model' },
-    );
+    const harness = await runWithChain('hi', [{ content: 'ok.', responseId: 'resp_2' }], {
+      lastResponseId: 'resp_seed',
+      messageCount: 2,
+      provider: 'mock',
+      model: 'mock-model',
+    });
     const seen = harness.observed.receivedOptions[0]!;
     assert.deepStrictEqual(seen.responsesChain, {
       lastResponseId: 'resp_seed',
@@ -137,11 +138,12 @@ describe('runAgent — Responses-API chain capture', () => {
   });
 
   it('drops a stale chain whose provider does not match the live tuple', async () => {
-    const harness = await runWithChain(
-      'hi',
-      [{ content: 'ok.', responseId: 'resp_3' }],
-      { lastResponseId: 'resp_old', messageCount: 2, provider: 'other-provider', model: 'mock-model' },
-    );
+    const harness = await runWithChain('hi', [{ content: 'ok.', responseId: 'resp_3' }], {
+      lastResponseId: 'resp_old',
+      messageCount: 2,
+      provider: 'other-provider',
+      model: 'mock-model',
+    });
     const seen = harness.observed.receivedOptions[0]!;
     assert.strictEqual(seen.responsesChain, undefined);
   });
@@ -161,11 +163,12 @@ describe('runAgent — Responses-API chain capture', () => {
   });
 
   it('clears the chain when the user aborts mid-stream', async () => {
-    const harness = await runWithChain(
-      'hi',
-      [{ abortMidStream: true }],
-      { lastResponseId: 'resp_pre', messageCount: 1, provider: 'mock', model: 'mock-model' },
-    );
+    const harness = await runWithChain('hi', [{ abortMidStream: true }], {
+      lastResponseId: 'resp_pre',
+      messageCount: 1,
+      provider: 'mock',
+      model: 'mock-model',
+    });
     assert.strictEqual(harness.chain.value, undefined);
   });
 

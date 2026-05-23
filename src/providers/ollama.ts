@@ -114,7 +114,10 @@ export class OllamaProvider implements Provider {
       tools: tools as Tool[],
       // num_predict caps output length so degenerate repetition loops can't
       // run forever. Ollama's default is -1 (no limit).
-      options: { num_ctx: this.resolveContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
+      options: {
+        num_ctx: this.resolveContextWindow(model),
+        num_predict: options?.maxTokens ?? 4096,
+      },
     };
 
     const stream = await this.client.chat(request);
@@ -190,7 +193,10 @@ export class OllamaProvider implements Provider {
       messages: messages as Message[],
       stream: false,
       tools: tools as Tool[],
-      options: { num_ctx: this.resolveContextWindow(model), num_predict: options?.maxTokens ?? 4096 },
+      options: {
+        num_ctx: this.resolveContextWindow(model),
+        num_predict: options?.maxTokens ?? 4096,
+      },
     };
 
     const signal = options?.signal;

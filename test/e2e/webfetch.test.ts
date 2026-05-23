@@ -61,7 +61,14 @@ describe('WebFetch (headless)', () => {
       { content: 'fetched' },
     ]);
     const r = await spawnCliHeadless(
-      ['--provider', 'ollama', '--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`],
+      [
+        '--provider',
+        'ollama',
+        '--model',
+        'test-model:latest',
+        '--host',
+        `http://127.0.0.1:${mockPort}`,
+      ],
       { stdin: 'fetch it\n', home: env.home, cwd: env.cwd, timeoutMs: 15000 },
     );
     assert.strictEqual(r.exitCode, 0, r.stderr);
@@ -94,7 +101,14 @@ describe('WebFetch (headless)', () => {
       { content: 'recovered' },
     ]);
     const r = await spawnCliHeadless(
-      ['--provider', 'ollama', '--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`],
+      [
+        '--provider',
+        'ollama',
+        '--model',
+        'test-model:latest',
+        '--host',
+        `http://127.0.0.1:${mockPort}`,
+      ],
       { stdin: 'fetch a 404\n', home: env.home, cwd: env.cwd, timeoutMs: 15000 },
     );
     // Exit 0 — the run completes even when the fetch failed; the model

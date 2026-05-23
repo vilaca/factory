@@ -39,8 +39,16 @@ export function tmpEnv(opts: { gitInit?: boolean } = {}): TmpEnv {
     globalConfigPath: path.join(home, '.config', 'factory', 'config.json'),
     projectConfigPath: path.join(cwd, '.factory', 'config.json'),
     cleanup(): void {
-      try { fs.rmSync(cwd, { recursive: true, force: true }); } catch { /* ignore */ }
-      try { fs.rmSync(home, { recursive: true, force: true }); } catch { /* ignore */ }
+      try {
+        fs.rmSync(cwd, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+      try {
+        fs.rmSync(home, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
     },
   };
 }

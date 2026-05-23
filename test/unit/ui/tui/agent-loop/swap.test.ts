@@ -6,10 +6,7 @@ import {
   type SwapProviderDeps,
 } from '../../../../../src/ui/tui/agent-loop/swap.js';
 import type { RunRefs } from '../../../../../src/ui/tui/agent-loop/agent-loop-types.js';
-import type {
-  Provider,
-  ProviderCapabilities,
-} from '../../../../../src/providers/types.js';
+import type { Provider, ProviderCapabilities } from '../../../../../src/providers/types.js';
 import type { ProviderDescriptor } from '../../../../../src/providers/registry.js';
 
 // Regression tests for cf880ed — "fix(swap): prime listModels() before
@@ -126,16 +123,18 @@ interface Harness {
   refs: RunRefs;
 }
 
-function makeHarness(opts: {
-  nextProviderName?: string;
-  nextProviderModels?: string[];
-  createProviderThrows?: Error;
-  listModelsThrows?: Error;
-  validation?:
-    | { mode: 'native' }
-    | { mode: 'fallback'; warning: string }
-    | { mode: 'unreachable'; reason: string };
-} = {}): Harness {
+function makeHarness(
+  opts: {
+    nextProviderName?: string;
+    nextProviderModels?: string[];
+    createProviderThrows?: Error;
+    listModelsThrows?: Error;
+    validation?:
+      | { mode: 'native' }
+      | { mode: 'fallback'; warning: string }
+      | { mode: 'unreachable'; reason: string };
+  } = {},
+): Harness {
   const log: CallLog = { order: [] };
   const notices: { level: string; text: string }[] = [];
   const initial = fakeProvider('initial', log);
@@ -168,9 +167,9 @@ function makeHarness(opts: {
     descriptorByAlias: mock.fn((alias: string) =>
       fakeDescriptor(alias),
     ) as unknown as SwapProviderDeps['descriptorByAlias'],
-    loadGlobalConfig: mock.fn(async () => ({}) as unknown as Awaited<
-      ReturnType<SwapProviderDeps['loadGlobalConfig']>
-    >),
+    loadGlobalConfig: mock.fn(
+      async () => ({}) as unknown as Awaited<ReturnType<SwapProviderDeps['loadGlobalConfig']>>,
+    ),
     getKey: mock.fn(() => undefined) as unknown as SwapProviderDeps['getKey'],
     validateModelToolSupport: mock.fn(async () => opts.validation ?? { mode: 'native' }),
   };

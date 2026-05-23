@@ -36,14 +36,7 @@ describe('AsyncMutex', () => {
     ];
     await Promise.all(promises);
 
-    assert.deepStrictEqual(order, [
-      'A:enter',
-      'A:exit',
-      'B:enter',
-      'B:exit',
-      'C:enter',
-      'C:exit',
-    ]);
+    assert.deepStrictEqual(order, ['A:enter', 'A:exit', 'B:enter', 'B:exit', 'C:enter', 'C:exit']);
   });
 
   it('immediately admits the first acquirer without yielding', async () => {

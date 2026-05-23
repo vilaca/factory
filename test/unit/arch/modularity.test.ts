@@ -6,10 +6,7 @@ import { projectFiles } from 'archunit';
 // ARCHITECTURE.md. Each rule is run through ArchUnitTS's framework-agnostic
 // `.check()` and is expected to return an empty violations list.
 
-async function expectNoViolations(
-  rule: { check: () => Promise<unknown[]> },
-  label: string,
-) {
+async function expectNoViolations(rule: { check: () => Promise<unknown[]> }, label: string) {
   const violations = await rule.check();
   assert.deepStrictEqual(
     violations,
@@ -80,7 +77,13 @@ describe('architecture: module boundaries', () => {
   });
 
   it('src/providers/** must not depend on src/ui/, src/tools/, src/core/, src/mcp/, or src/cli/', async () => {
-    for (const upstream of ['src/ui/**', 'src/tools/**', 'src/core/**', 'src/mcp/**', 'src/cli/**']) {
+    for (const upstream of [
+      'src/ui/**',
+      'src/tools/**',
+      'src/core/**',
+      'src/mcp/**',
+      'src/cli/**',
+    ]) {
       const rule = projectFiles()
         .inFolder('src/providers/**', {
           except: ['src/providers/registry.ts', 'src/providers/copilot/auth.ts'],
@@ -150,11 +153,7 @@ describe('architecture: module boundaries', () => {
       .shouldNot()
       .dependOnFiles()
       .inFolder('src/tools/**', {
-        except: [
-          'src/tools/types.ts',
-          'src/tools/registry.ts',
-          'src/tools/index.ts',
-        ],
+        except: ['src/tools/types.ts', 'src/tools/registry.ts', 'src/tools/index.ts'],
       });
     await expectNoViolations(rule, 'ui → concrete tool handlers');
   });
@@ -171,7 +170,7 @@ describe('architecture: module boundaries', () => {
     const rule = projectFiles()
       .inFolder('src/ui/**')
       .should()
-      .adhereTo((file) => {
+      .adhereTo(file => {
         for (const m of file.content.matchAll(importRegex)) {
           if (bannedSdks.includes(m[1])) return false;
         }
@@ -197,7 +196,7 @@ describe('architecture: module boundaries', () => {
     const rule = projectFiles()
       .inFolder('src/ui/**')
       .should()
-      .adhereTo((file) => {
+      .adhereTo(file => {
         for (const m of file.content.matchAll(importRegex)) {
           if (bannedNodeModules.includes(m[1])) return false;
         }
@@ -224,7 +223,7 @@ describe('architecture: module boundaries', () => {
     const rule = projectFiles()
       .inFolder('src/**')
       .should()
-      .adhereTo((file) => {
+      .adhereTo(file => {
         for (const m of file.content.matchAll(importRegex)) {
           if (bannedCliLibs.includes(m[1])) return false;
         }

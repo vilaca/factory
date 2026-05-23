@@ -151,5 +151,3 @@ function supportsReasoningByName(model: string): boolean {
 function isFreeModel(model: string): boolean {
   return model.includes('free') || model === 'big-pickle';
 }
-
-

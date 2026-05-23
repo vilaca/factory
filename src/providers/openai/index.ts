@@ -4,11 +4,7 @@ export { extractUsage } from './usage.js';
 export { formatMessage, buildChatBody, isStrictCompatible } from './messages.js';
 export { fetchOpenAiCatalog } from './catalog.js';
 export { streamOpenAiChat, sendOpenAiChat } from './stream.js';
-export {
-  buildResponsesBody,
-  toResponsesInput,
-  toResponsesTools,
-} from './responses-messages.js';
+export { buildResponsesBody, toResponsesInput, toResponsesTools } from './responses-messages.js';
 export {
   noteFunctionCallItem,
   appendArgsDelta,

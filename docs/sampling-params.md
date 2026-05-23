@@ -21,24 +21,24 @@ Nothing else (top-p, stop sequences, frequency/presence penalty, top-k, seed) is
 
 ### How the two existing knobs flow through
 
-| Provider (file)                                    | Forwards `maxTokens`                                | Forwards `temperature`              |
-| -------------------------------------------------- | --------------------------------------------------- | ----------------------------------- |
-| Anthropic (`anthropic.ts`)                         | `max_tokens` (default 8192)                         | ✗ (ignored)                         |
-| OpenAI (`openai/messages.ts`)                      | `max_completion_tokens` / `max_tokens`              | ✓                                   |
-| Ollama (`ollama.ts`)                               | `options.num_predict` (default 4096)                | ✗ (ignored)                         |
-| llama.cpp (`llamacpp.ts`)                          | via shared OpenAI builder                           | via shared OpenAI builder           |
-| HuggingFace (`huggingface.ts`)                     | `max_tokens` (default 4096)                         | ✗ (ignored)                         |
-| Copilot (`copilot/`)                               | via shared OpenAI builder                           | via shared OpenAI builder           |
-| OpenRouter (`openrouter.ts`)                       | via shared OpenAI builder                           | via shared OpenAI builder           |
-| Vercel AI Gateway (`vercel.ts`)                    | via shared OpenAI builder                           | via shared OpenAI builder           |
-| Google AI Studio (`googleaistudio/`)               | via shared OpenAI builder                           | via shared OpenAI builder           |
-| Mistral / Codestral (`mistral.ts`)                 | via shared OpenAI builder                           | via shared OpenAI builder           |
-| Cerebras (`cerebras.ts`)                           | via shared OpenAI builder                           | via shared OpenAI builder           |
-| Groq (`groq.ts`)                                   | via shared OpenAI builder                           | via shared OpenAI builder (0→1e-8)  |
-| Cohere (`cohere.ts`)                               | `max_tokens`                                        | `temperature`                       |
-| Workers AI (`workersai.ts`)                        | via shared OpenAI builder                           | via shared OpenAI builder (0→1e-8)  |
-| OpenCode Zen → Anthropic (`opencodezen/anthropic.ts`) | `max_tokens`                                      | ✗ (ignored)                         |
-| OpenCode Zen → Google (`opencodezen/google.ts`)    | `generationConfig.maxOutputTokens`                  | `generationConfig.temperature`      |
+| Provider (file)                                       | Forwards `maxTokens`                   | Forwards `temperature`             |
+| ----------------------------------------------------- | -------------------------------------- | ---------------------------------- |
+| Anthropic (`anthropic.ts`)                            | `max_tokens` (default 8192)            | ✗ (ignored)                        |
+| OpenAI (`openai/messages.ts`)                         | `max_completion_tokens` / `max_tokens` | ✓                                  |
+| Ollama (`ollama.ts`)                                  | `options.num_predict` (default 4096)   | ✗ (ignored)                        |
+| llama.cpp (`llamacpp.ts`)                             | via shared OpenAI builder              | via shared OpenAI builder          |
+| HuggingFace (`huggingface.ts`)                        | `max_tokens` (default 4096)            | ✗ (ignored)                        |
+| Copilot (`copilot/`)                                  | via shared OpenAI builder              | via shared OpenAI builder          |
+| OpenRouter (`openrouter.ts`)                          | via shared OpenAI builder              | via shared OpenAI builder          |
+| Vercel AI Gateway (`vercel.ts`)                       | via shared OpenAI builder              | via shared OpenAI builder          |
+| Google AI Studio (`googleaistudio/`)                  | via shared OpenAI builder              | via shared OpenAI builder          |
+| Mistral / Codestral (`mistral.ts`)                    | via shared OpenAI builder              | via shared OpenAI builder          |
+| Cerebras (`cerebras.ts`)                              | via shared OpenAI builder              | via shared OpenAI builder          |
+| Groq (`groq.ts`)                                      | via shared OpenAI builder              | via shared OpenAI builder (0→1e-8) |
+| Cohere (`cohere.ts`)                                  | `max_tokens`                           | `temperature`                      |
+| Workers AI (`workersai.ts`)                           | via shared OpenAI builder              | via shared OpenAI builder (0→1e-8) |
+| OpenCode Zen → Anthropic (`opencodezen/anthropic.ts`) | `max_tokens`                           | ✗ (ignored)                        |
+| OpenCode Zen → Google (`opencodezen/google.ts`)       | `generationConfig.maxOutputTokens`     | `generationConfig.temperature`     |
 
 The `buildChatBody` helper in [`openai/messages.ts`](../src/providers/openai/messages.ts) is the high-leverage spot — touching it lights up nine providers at once. Anthropic, Ollama, Cohere, and the OpenCode Zen sub-adapters each need their own one-liner.
 
@@ -52,26 +52,26 @@ The `buildChatBody` helper in [`openai/messages.ts`](../src/providers/openai/mes
 
 `✓` = native support, `~` = partial / model-dependent, `✗` = not supported.
 
-| Vendor API                          | `top_p` | `top_k` | `stop` / `stop_sequences` | `frequency_penalty` | `presence_penalty` | `seed` |
-| ----------------------------------- | :-----: | :-----: | :-----------------------: | :-----------------: | :----------------: | :----: |
-| OpenAI Chat Completions (gpt-4o etc.) | ✓     | ✗       | ✓                         | ✓                   | ✓                  | ✓      |
-| OpenAI Responses — reasoning models   | ✗     | ✗       | ~                         | ✗                   | ✗                  | ✓      |
-| Anthropic Messages                   | ✓       | ✓       | ✓ `stop_sequences`        | ✗                   | ✗                  | ✗      |
-| Ollama `/api/chat`                   | ✓       | ✓       | ✓ `options.stop[]`        | ✓                   | ✓                  | ✓      |
-| llama.cpp (OpenAI-compat + extras)   | ✓       | ✓       | ✓                         | ✓                   | ✓                  | ✓      |
-| HuggingFace Inference (router)       | ✓       | ~       | ✓                         | ✓                   | ✓                  | ✓      |
-| GitHub Copilot                       | ✓       | ✗       | ✓                         | ✓                   | ✓                  | ~      |
-| OpenRouter                           | ✓       | ✓       | ✓                         | ✓                   | ✓                  | ✓      |
-| Vercel AI Gateway                    | ~       | ~       | ~                         | ~                   | ~                  | ~      |
-| Google AI Studio (OpenAI-compat)     | ✓       | ✗       | ✓                         | ✓                   | ✓                  | ~      |
-| Google AI Studio (native Gemini)     | ✓ `topP`| ✓ `topK`| ✓ `stopSequences`         | ✓                   | ✓                  | ✓      |
-| Mistral / Codestral                  | ✓       | ✗       | ✓                         | ✓ (new models)      | ✓ (new models)     | ✓      |
-| Cerebras                             | ✓       | ✗       | ✓                         | ✗                   | ✗                  | ✓      |
-| Groq                                 | ✓       | ✗       | ✓                         | ✓                   | ✓                  | ✓      |
-| Cohere `/v2/chat`                    | ✓ `p`   | ✓ `k`   | ✓ `stop_sequences`        | ✓                   | ✓                  | ✓      |
-| Workers AI                           | ✓       | ~       | ✓                         | ~                   | ~                  | ~      |
-| OpenCode Zen → Anthropic             | ✓       | ✓       | ✓                         | ✗                   | ✗                  | ✗      |
-| OpenCode Zen → Google                | ✓       | ✓       | ✓                         | ~                   | ~                  | ~      |
+| Vendor API                            | `top_p`  | `top_k`  | `stop` / `stop_sequences` | `frequency_penalty` | `presence_penalty` | `seed` |
+| ------------------------------------- | :------: | :------: | :-----------------------: | :-----------------: | :----------------: | :----: |
+| OpenAI Chat Completions (gpt-4o etc.) |    ✓     |    ✗     |             ✓             |          ✓          |         ✓          |   ✓    |
+| OpenAI Responses — reasoning models   |    ✗     |    ✗     |             ~             |          ✗          |         ✗          |   ✓    |
+| Anthropic Messages                    |    ✓     |    ✓     |    ✓ `stop_sequences`     |          ✗          |         ✗          |   ✗    |
+| Ollama `/api/chat`                    |    ✓     |    ✓     |    ✓ `options.stop[]`     |          ✓          |         ✓          |   ✓    |
+| llama.cpp (OpenAI-compat + extras)    |    ✓     |    ✓     |             ✓             |          ✓          |         ✓          |   ✓    |
+| HuggingFace Inference (router)        |    ✓     |    ~     |             ✓             |          ✓          |         ✓          |   ✓    |
+| GitHub Copilot                        |    ✓     |    ✗     |             ✓             |          ✓          |         ✓          |   ~    |
+| OpenRouter                            |    ✓     |    ✓     |             ✓             |          ✓          |         ✓          |   ✓    |
+| Vercel AI Gateway                     |    ~     |    ~     |             ~             |          ~          |         ~          |   ~    |
+| Google AI Studio (OpenAI-compat)      |    ✓     |    ✗     |             ✓             |          ✓          |         ✓          |   ~    |
+| Google AI Studio (native Gemini)      | ✓ `topP` | ✓ `topK` |     ✓ `stopSequences`     |          ✓          |         ✓          |   ✓    |
+| Mistral / Codestral                   |    ✓     |    ✗     |             ✓             |   ✓ (new models)    |   ✓ (new models)   |   ✓    |
+| Cerebras                              |    ✓     |    ✗     |             ✓             |          ✗          |         ✗          |   ✓    |
+| Groq                                  |    ✓     |    ✗     |             ✓             |          ✓          |         ✓          |   ✓    |
+| Cohere `/v2/chat`                     |  ✓ `p`   |  ✓ `k`   |    ✓ `stop_sequences`     |          ✓          |         ✓          |   ✓    |
+| Workers AI                            |    ✓     |    ~     |             ✓             |          ~          |         ~          |   ~    |
+| OpenCode Zen → Anthropic              |    ✓     |    ✓     |             ✓             |          ✗          |         ✗          |   ✗    |
+| OpenCode Zen → Google                 |    ✓     |    ✓     |             ✓             |          ~          |         ~          |   ~    |
 
 ### Tier-aware caveats
 

@@ -73,10 +73,7 @@ interface SessionProps {
   tabLabel?: string;
 }
 
-function findCachedProvider(
-  cache: Map<string, Provider>,
-  name: string,
-): Provider | undefined {
+function findCachedProvider(cache: Map<string, Provider>, name: string): Provider | undefined {
   const prefix = `${name}\0`;
   for (const [key, value] of cache) {
     if (key.startsWith(prefix)) return value;
@@ -264,7 +261,7 @@ export function Session(props: SessionProps): React.ReactElement {
             const cached = findCachedProvider(pickerProviderCache.current, prov);
             const source =
               cached ??
-              (prov === providerName ? refs.current?.provider ?? props.provider : undefined);
+              (prov === providerName ? (refs.current?.provider ?? props.provider) : undefined);
             return source ? buildPickerInfo(source, m) : undefined;
           }}
           multiKeyProviders={SIMPLE_PROMPT_PROVIDERS}

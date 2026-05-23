@@ -243,9 +243,7 @@ export async function swapProvider(
   // session log via logModelRequest. Mirrors the createInitialRefs wiring
   // in init.ts so post-swap calls aren't invisible.
   const instrumented = refs.sessionLogger
-    ? instrumentProviderRequests(nextProvider, info =>
-        logModelRequestTo(refs.sessionLogger, info),
-      )
+    ? instrumentProviderRequests(nextProvider, info => logModelRequestTo(refs.sessionLogger, info))
     : nextProvider;
   refs.provider = instrumented;
   refs.model = nextModel;

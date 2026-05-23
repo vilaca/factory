@@ -66,9 +66,8 @@ export function makeOpenCompactionPicker(
 export function useCompactionPicker(
   setPickerOpen: (open: boolean) => void,
 ): UseCompactionPickerResult {
-  const [compactionPickerResolver, setCompactionPickerResolverRaw] = useState<
-    CompactionResolver | null
-  >(null);
+  const [compactionPickerResolver, setCompactionPickerResolverRaw] =
+    useState<CompactionResolver | null>(null);
   const pendingCancelRef = useRef<(() => void) | null>(null);
 
   // useState stores functions verbatim only when the value is passed via a

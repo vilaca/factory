@@ -157,7 +157,14 @@ async function tryRipgrep(
   // Skip vendor and build/coverage trees by default. These produce huge
   // duplicate matches (compiled output, c8 HTML reports embed source
   // snippets) the model can't usefully consume.
-  for (const ex of ['!node_modules', '!.git', '!dist', '!dist-test', '!coverage', '!*.tsbuildinfo']) {
+  for (const ex of [
+    '!node_modules',
+    '!.git',
+    '!dist',
+    '!dist-test',
+    '!coverage',
+    '!*.tsbuildinfo',
+  ]) {
     args.push('--glob', ex);
   }
   args.push(pattern, searchPath);

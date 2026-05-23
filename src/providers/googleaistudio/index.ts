@@ -210,11 +210,7 @@ export class GoogleAiStudioProvider implements Provider {
         if (typeof i.name !== 'string' || !modelId) continue;
         idable.push({ ...i, id: modelId });
       }
-      const supportedModels = filterChatModels(
-        'googleaistudio',
-        idable,
-        chatCapabilityReason,
-      );
+      const supportedModels = filterChatModels('googleaistudio', idable, chatCapabilityReason);
       appendProviderLog({
         provider: 'googleaistudio',
         category: 'diagnostic',

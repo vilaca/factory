@@ -121,7 +121,14 @@ export function spawnCli(
       // xterm sequences. F1..F4 use SS3, F5..F12 use CSI ~ with numeric IDs.
       const ss3 = ['P', 'Q', 'R', 'S'];
       const csi: Record<number, string> = {
-        5: '15', 6: '17', 7: '18', 8: '19', 9: '20', 10: '21', 11: '23', 12: '24',
+        5: '15',
+        6: '17',
+        7: '18',
+        8: '19',
+        9: '20',
+        10: '21',
+        11: '23',
+        12: '24',
       };
       if (n >= 1 && n <= 4) {
         proc.write('\x1bO' + ss3[n - 1]);

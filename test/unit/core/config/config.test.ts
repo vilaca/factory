@@ -584,9 +584,9 @@ describe('loadProjectConfig - mcp validation', () => {
     });
     await withTempProject(content, async cwd => {
       await assert.rejects(
-      loadProjectConfig(cwd),
-      /"mcp\.servers\[0\]\.env\["K"\]" must be a string/,
-    );
+        loadProjectConfig(cwd),
+        /"mcp\.servers\[0\]\.env\["K"\]" must be a string/,
+      );
     });
   });
 });

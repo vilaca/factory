@@ -194,4 +194,3 @@ function estimateCopilotContextWindow(model: string): number {
   if (model.includes('gpt') || model.includes('o3') || model.includes('o4')) return 128000;
   return 128000;
 }
-

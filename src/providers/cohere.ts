@@ -386,4 +386,3 @@ function buildModelWarning(model: string, cached?: CohereModel): string | undefi
   if (lower.includes('preview') || lower.includes('nightly')) return 'preview';
   return undefined;
 }
-

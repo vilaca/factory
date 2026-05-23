@@ -31,12 +31,15 @@ async function expectStallAndCaptureDefaultTimeoutUsage(
   }) as typeof setTimeout;
 
   try {
-    await assert.rejects(() => collect(makeStream()), (err: unknown) => {
-      assert.ok(err instanceof Error);
-      assert.match(err.message, /stalled|idle timeout/i);
-      assert.strictEqual((err as Error & { status?: number }).status, 504);
-      return true;
-    });
+    await assert.rejects(
+      () => collect(makeStream()),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /stalled|idle timeout/i);
+        assert.strictEqual((err as Error & { status?: number }).status, 504);
+        return true;
+      },
+    );
     return sawDefault30sTimeout;
   } finally {
     globalThis.setTimeout = originalSetTimeout;
@@ -94,11 +97,22 @@ describe('streamOpenAiResponses', () => {
 
   it('surfaces reasoning_summary_text deltas as content chunks', async () => {
     const events = [
-      dataLine({ type: 'response.reasoning_summary_text.delta', output_index: 0, delta: 'thinking ' }),
-      dataLine({ type: 'response.reasoning_summary_text.delta', output_index: 0, delta: 'summary' }),
+      dataLine({
+        type: 'response.reasoning_summary_text.delta',
+        output_index: 0,
+        delta: 'thinking ',
+      }),
+      dataLine({
+        type: 'response.reasoning_summary_text.delta',
+        output_index: 0,
+        delta: 'summary',
+      }),
       dataLine({
         type: 'response.completed',
-        response: { id: 'resp_reasoning_summary', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+        response: {
+          id: 'resp_reasoning_summary',
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        },
       }),
     ];
     await withSseServer(events, async url => {

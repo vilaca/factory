@@ -183,64 +183,62 @@ export class OpenRouterProvider implements Provider {
     });
 
     const valid = items.filter(hasStringId);
-    const models = filterChatModels('openrouter', valid, chatCapabilityReason)
-      .map(item => ({
-        id: item.id,
-        context_length: typeof item.context_length === 'number' ? item.context_length : undefined,
-        expiration_date: typeof item.expiration_date === 'string' ? item.expiration_date : null,
-        supported_parameters: Array.isArray(item.supported_parameters)
-          ? item.supported_parameters.filter(
-              (value: unknown): value is string => typeof value === 'string',
-            )
+    const models = filterChatModels('openrouter', valid, chatCapabilityReason).map(item => ({
+      id: item.id,
+      context_length: typeof item.context_length === 'number' ? item.context_length : undefined,
+      expiration_date: typeof item.expiration_date === 'string' ? item.expiration_date : null,
+      supported_parameters: Array.isArray(item.supported_parameters)
+        ? item.supported_parameters.filter(
+            (value: unknown): value is string => typeof value === 'string',
+          )
+        : undefined,
+      per_request_limits:
+        item.per_request_limits && typeof item.per_request_limits === 'object'
+          ? (item.per_request_limits as Record<string, unknown>)
+          : null,
+      pricing:
+        item.pricing && typeof item.pricing === 'object'
+          ? {
+              prompt: typeof item.pricing.prompt === 'string' ? item.pricing.prompt : undefined,
+              completion:
+                typeof item.pricing.completion === 'string' ? item.pricing.completion : undefined,
+              request: typeof item.pricing.request === 'string' ? item.pricing.request : undefined,
+              image: typeof item.pricing.image === 'string' ? item.pricing.image : undefined,
+            }
           : undefined,
-        per_request_limits:
-          item.per_request_limits && typeof item.per_request_limits === 'object'
-            ? (item.per_request_limits as Record<string, unknown>)
-            : null,
-        pricing:
-          item.pricing && typeof item.pricing === 'object'
-            ? {
-                prompt: typeof item.pricing.prompt === 'string' ? item.pricing.prompt : undefined,
-                completion:
-                  typeof item.pricing.completion === 'string' ? item.pricing.completion : undefined,
-                request:
-                  typeof item.pricing.request === 'string' ? item.pricing.request : undefined,
-                image: typeof item.pricing.image === 'string' ? item.pricing.image : undefined,
-              }
-            : undefined,
-        top_provider:
-          item.top_provider && typeof item.top_provider === 'object'
-            ? {
-                context_length:
-                  typeof item.top_provider.context_length === 'number'
-                    ? item.top_provider.context_length
-                    : undefined,
-                max_completion_tokens:
-                  typeof item.top_provider.max_completion_tokens === 'number'
-                    ? item.top_provider.max_completion_tokens
-                    : undefined,
-              }
-            : undefined,
-        architecture:
-          item.architecture && typeof item.architecture === 'object'
-            ? {
-                modality:
-                  typeof item.architecture.modality === 'string'
-                    ? item.architecture.modality
-                    : undefined,
-                input_modalities: Array.isArray(item.architecture.input_modalities)
-                  ? item.architecture.input_modalities.filter(
-                      (value: unknown): value is string => typeof value === 'string',
-                    )
+      top_provider:
+        item.top_provider && typeof item.top_provider === 'object'
+          ? {
+              context_length:
+                typeof item.top_provider.context_length === 'number'
+                  ? item.top_provider.context_length
                   : undefined,
-                output_modalities: Array.isArray(item.architecture.output_modalities)
-                  ? item.architecture.output_modalities.filter(
-                      (value: unknown): value is string => typeof value === 'string',
-                    )
+              max_completion_tokens:
+                typeof item.top_provider.max_completion_tokens === 'number'
+                  ? item.top_provider.max_completion_tokens
                   : undefined,
-              }
-            : undefined,
-      }));
+            }
+          : undefined,
+      architecture:
+        item.architecture && typeof item.architecture === 'object'
+          ? {
+              modality:
+                typeof item.architecture.modality === 'string'
+                  ? item.architecture.modality
+                  : undefined,
+              input_modalities: Array.isArray(item.architecture.input_modalities)
+                ? item.architecture.input_modalities.filter(
+                    (value: unknown): value is string => typeof value === 'string',
+                  )
+                : undefined,
+              output_modalities: Array.isArray(item.architecture.output_modalities)
+                ? item.architecture.output_modalities.filter(
+                    (value: unknown): value is string => typeof value === 'string',
+                  )
+                : undefined,
+            }
+          : undefined,
+    }));
     this.modelsCache = models;
 
     return models;
@@ -262,9 +260,7 @@ function hasStringId(item: unknown): item is OpenRouterModel & { id: string } {
 
 function chatCapabilityReason(item: OpenRouterModel & { id: string }): true | string {
   const modality =
-    typeof item.architecture?.modality === 'string'
-      ? item.architecture.modality.toLowerCase()
-      : '';
+    typeof item.architecture?.modality === 'string' ? item.architecture.modality.toLowerCase() : '';
   if (modality && !modality.includes('text')) {
     return `non-chat: modality '${item.architecture?.modality}' lacks text`;
   }

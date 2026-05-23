@@ -265,4 +265,3 @@ function estimateMaxOutput(model: string): number {
   if (model.includes('mini') || model.includes('haiku') || model.includes('flash')) return 8192;
   return 16384;
 }
-

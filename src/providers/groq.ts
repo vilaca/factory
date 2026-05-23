@@ -269,4 +269,3 @@ function supportsReasoningByName(model: string): boolean {
     model.includes('groq/compound')
   );
 }
-

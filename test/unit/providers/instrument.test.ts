@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { instrumentProviderRequests, type ModelRequestInfo } from '../../../src/providers/instrument.js';
+import {
+  instrumentProviderRequests,
+  type ModelRequestInfo,
+} from '../../../src/providers/instrument.js';
 import type {
   ChatChunk,
   ChatMessage,
@@ -22,10 +25,7 @@ function fakeCaps(): ProviderCapabilities {
   };
 }
 
-function fakeProvider(
-  name: string,
-  log: { calls: string[] },
-): Provider {
+function fakeProvider(name: string, log: { calls: string[] }): Provider {
   async function* stream(): AsyncGenerator<ChatChunk> {
     yield { content: 'hello', done: true };
   }
@@ -42,12 +42,7 @@ function fakeProvider(
       log.calls.push(`${name}:getModelInfo`);
       return { supportsTools: true };
     },
-    chat(
-      _model: string,
-      _messages: ChatMessage[],
-      _tools?: ToolDefinition[],
-      _opts?: ChatOptions,
-    ) {
+    chat(_model: string, _messages: ChatMessage[], _tools?: ToolDefinition[], _opts?: ChatOptions) {
       log.calls.push(`${name}:chat`);
       return stream();
     },
@@ -133,12 +128,9 @@ describe('instrumentProviderRequests', () => {
     const wrapped = instrumentProviderRequests(inner, info => {
       captured.push(info);
     });
-    await wrapped.chatNoStream(
-      'm1',
-      [{ role: 'user', content: 'x' }],
-      undefined,
-      { _requestSource: 'corrector' },
-    );
+    await wrapped.chatNoStream('m1', [{ role: 'user', content: 'x' }], undefined, {
+      _requestSource: 'corrector',
+    });
     await wrapped.chatNoStream('m1', [{ role: 'user', content: 'y' }]);
     assert.equal(captured[0]?.source, 'corrector');
     assert.equal(captured[1]?.source, 'main');
@@ -168,7 +160,11 @@ describe('instrumentProviderRequests', () => {
     } finally {
       process.stderr.write = originalWrite;
     }
-    assert.equal(stderrCalls.length, 1, `expected one stderr line, got: ${JSON.stringify(stderrCalls)}`);
+    assert.equal(
+      stderrCalls.length,
+      1,
+      `expected one stderr line, got: ${JSON.stringify(stderrCalls)}`,
+    );
     assert.match(stderrCalls[0]!, /model-request logger failed/);
   });
 

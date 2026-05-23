@@ -17,7 +17,7 @@ The pattern was structural, not per-callsite: components that owned UI error ren
 
 Every error or warning that is surfaced to the user — by `addNotice('danger' | 'warn', …)`, by an error stage in the provider picker, or by any equivalent affordance in headless mode — **must** also be written to the active session log via `SessionLogger.logWarning(source, message)`. The logger is the single source of truth for what the agent saw and tried to communicate.
 
-To make this enforceable rather than aspirational, the routing lives at the surface where errors are *displayed*, not at each call site:
+To make this enforceable rather than aspirational, the routing lives at the surface where errors are _displayed_, not at each call site:
 
 - `addNotice` in `use-agent-loop.ts` mirrors `danger` and `warn` notices into `sessionLogger.logWarning` (likewise `addNoticeBlock`). Any new caller that uses `addNotice('danger', …)` is logged automatically.
 - UI components that don't go through `addNotice` (e.g. `ProviderPicker`, which manages its own error stage) accept an `onError(source, message)` callback; the host wires it back to the agent's `addNotice`/`logWarning`.

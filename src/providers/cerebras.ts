@@ -195,4 +195,3 @@ function estimateMaxOutput(model: string): number {
 function supportsReasoning(model: string): boolean {
   return model.includes('gpt-oss') || model.includes('zai-glm') || model.includes('qwen');
 }
-

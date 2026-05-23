@@ -358,4 +358,3 @@ function supportsVisionByName(model: string): boolean {
 function supportsReasoningByName(model: string): boolean {
   return model.includes('magistral');
 }
-

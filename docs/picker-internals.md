@@ -20,8 +20,13 @@ provider catalog → listModels() filter → prepareModels() sort → ProviderPi
 Every catalog drop lands in `~/.factory/provider-events.jsonl`:
 
 ```json
-{"ts":"2026-05-09T...","provider":"openai","category":"diagnostic","action":"list-models-filter",
- "detail":"{\"kept\":42,\"dropped\":[{\"id\":\"whisper-1\",\"reason\":\"non-chat: matches 'whisper'\"}, ...]}"}
+{
+  "ts": "2026-05-09T...",
+  "provider": "openai",
+  "category": "diagnostic",
+  "action": "list-models-filter",
+  "detail": "{\"kept\":42,\"dropped\":[{\"id\":\"whisper-1\",\"reason\":\"non-chat: matches 'whisper'\"}, ...]}"
+}
 ```
 
 Inspect with:
@@ -49,7 +54,7 @@ Coding-specialist detection lives in `build-info.ts` `isCodingSpecialistName()` 
 
 Every provider must populate `getCapabilities(model).modelTier`. The `weak`/`medium`/`strong` distinction is provider-specific because catalog conventions differ. Two patterns recur:
 
-- **Mini/nano demotion**: a smaller variant of an otherwise-strong family. Most providers handle this with a longest-prefix table that has explicit rows for the mini variants. The OpenAI provider also has a generic `/(?:^|[-/])(?:mini|nano)\b/` regex as a *fallback* so an unknown future `gpt-6-mini` still demotes correctly.
+- **Mini/nano demotion**: a smaller variant of an otherwise-strong family. Most providers handle this with a longest-prefix table that has explicit rows for the mini variants. The OpenAI provider also has a generic `/(?:^|[-/])(?:mini|nano)\b/` regex as a _fallback_ so an unknown future `gpt-6-mini` still demotes correctly.
 - **Deprecated families**: pinned to `weak` so the picker pushes them to the bottom even when context size would otherwise rank them higher.
 
 ## OpenAI: why one big table
@@ -60,7 +65,14 @@ Rather than scatter `startsWith` chains across six functions, all per-family kno
 
 ```ts
 const OPENAI_FAMILIES: ReadonlyArray<OpenAIFamily> = [
-  { prefix: 'gpt-5', contextWindow: 1_047_576, maxOutputTokens: 128_000, tier: 'strong', reasoning: true, vision: true },
+  {
+    prefix: 'gpt-5',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 128_000,
+    tier: 'strong',
+    reasoning: true,
+    vision: true,
+  },
   // ...
   { prefix: 'gpt-3.5-turbo', contextWindow: 16_385, maxOutputTokens: 4_096, deprecated: true },
 ];
@@ -72,20 +84,20 @@ const OPENAI_FAMILIES: ReadonlyArray<OpenAIFamily> = [
 
 **Defaults when no row matches** (used for new flagships before someone adds a row):
 
-| Field | Default | Effect |
-|---|---|---|
-| `contextWindow` | `128_000` | sorts mid-pack |
-| `maxOutputTokens` | `16_384` | sorts mid-pack |
-| `reasoning` | `false` | API request keeps `temperature` |
-| `vision` | `false` | not flagged in detail string |
-| `supportsTools` | `true` | tools enabled |
+| Field             | Default                                         | Effect                                                       |
+| ----------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| `contextWindow`   | `128_000`                                       | sorts mid-pack                                               |
+| `maxOutputTokens` | `16_384`                                        | sorts mid-pack                                               |
+| `reasoning`       | `false`                                         | API request keeps `temperature`                              |
+| `vision`          | `false`                                         | not flagged in detail string                                 |
+| `supportsTools`   | `true`                                          | tools enabled                                                |
 | `tier` (override) | falls through to mini/nano regex, then `strong` | flagships float to top of `strong`; minis demote to `medium` |
 
 Self-correcting: a brand-new `gpt-6-titan` with no table row lands in middle of `strong` tier with default capabilities — visible, not at the top, not buried.
 
 ## Date-alias dedup
 
-OpenAI's catalog returns both an alias and its dated pin (e.g. `o3-mini` *and* `o3-mini-2025-01-31`). The provider drops the dated form when its alias is also present:
+OpenAI's catalog returns both an alias and its dated pin (e.g. `o3-mini` _and_ `o3-mini-2025-01-31`). The provider drops the dated form when its alias is also present:
 
 ```ts
 const aliasBase = stripDateSuffix(item.id);
@@ -96,28 +108,28 @@ Recognised suffixes: `-YYYY-MM-DD` and `-NNNN` (e.g. `gpt-4-0613`). The drop is 
 
 ## Provider catalog signals (cheat sheet)
 
-| Provider | Context window | Deprecation flag | Mini/nano detection | Notes |
-|---|---|---|---|---|
-| OpenAI | inferred (table) | inferred (table) | regex + table | richest inference logic |
-| Groq | inferred | none | regex | small catalog |
-| OpenRouter | catalog (`top_provider.context_length`) | catalog (`expiration_date`) | from `architecture` | most metadata of any provider |
-| Mistral | catalog (`max_context_length`) | inferred | substring | catalog has `capabilities.completion_chat` |
-| Cohere | catalog (`context_length`) | catalog (`is_deprecated`) | n/a | catalog can be filtered server-side via `?endpoint=chat` |
-| Anthropic | inferred (3-model curated list) | n/a (curated) | n/a | no public catalog API |
-| HuggingFace | inferred (curated list) | n/a | n/a | no "models I can use" endpoint |
-| Google AI Studio | catalog (`inputTokenLimit`) | name substring | regex | rich filter via `supportedGenerationMethods` |
-| Vercel AI Gateway | catalog (`context_window`) | name substring | n/a | filters to `type === 'language'` |
-| Cerebras / Workers AI / Copilot / OpenCode Zen / llama.cpp / Ollama | inferred or upstream-trusted | varies | varies | see provider source |
+| Provider                                                            | Context window                          | Deprecation flag            | Mini/nano detection | Notes                                                    |
+| ------------------------------------------------------------------- | --------------------------------------- | --------------------------- | ------------------- | -------------------------------------------------------- |
+| OpenAI                                                              | inferred (table)                        | inferred (table)            | regex + table       | richest inference logic                                  |
+| Groq                                                                | inferred                                | none                        | regex               | small catalog                                            |
+| OpenRouter                                                          | catalog (`top_provider.context_length`) | catalog (`expiration_date`) | from `architecture` | most metadata of any provider                            |
+| Mistral                                                             | catalog (`max_context_length`)          | inferred                    | substring           | catalog has `capabilities.completion_chat`               |
+| Cohere                                                              | catalog (`context_length`)              | catalog (`is_deprecated`)   | n/a                 | catalog can be filtered server-side via `?endpoint=chat` |
+| Anthropic                                                           | inferred (3-model curated list)         | n/a (curated)               | n/a                 | no public catalog API                                    |
+| HuggingFace                                                         | inferred (curated list)                 | n/a                         | n/a                 | no "models I can use" endpoint                           |
+| Google AI Studio                                                    | catalog (`inputTokenLimit`)             | name substring              | regex               | rich filter via `supportedGenerationMethods`             |
+| Vercel AI Gateway                                                   | catalog (`context_window`)              | name substring              | n/a                 | filters to `type === 'language'`                         |
+| Cerebras / Workers AI / Copilot / OpenCode Zen / llama.cpp / Ollama | inferred or upstream-trusted            | varies                      | varies              | see provider source                                      |
 
 ## When metadata changes
 
-| Change | What to update |
-|---|---|
-| OpenAI ships a new flagship (`gpt-6`, etc.) | Add a row to `OPENAI_FAMILIES`. Existing functions inherit it. |
-| OpenAI deprecates a family | Set `deprecated: true` on the matching row. Picker shows warning + sinks to weak tier. |
-| New non-chat endpoint type ships (e.g. `/v1/realtime-vision`) | Add a substring to that provider's `NON_CHAT_PATTERNS`. Drops are logged. |
-| New coding-specialist family (Anthropic-codex, etc.) | Nothing — `codex`/`coder` substring is detected generically. |
-| Provider exposes new capability metadata | Plumb it through `getCapabilities()`; picker auto-uses ctx/maxOut. |
+| Change                                                        | What to update                                                                         |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| OpenAI ships a new flagship (`gpt-6`, etc.)                   | Add a row to `OPENAI_FAMILIES`. Existing functions inherit it.                         |
+| OpenAI deprecates a family                                    | Set `deprecated: true` on the matching row. Picker shows warning + sinks to weak tier. |
+| New non-chat endpoint type ships (e.g. `/v1/realtime-vision`) | Add a substring to that provider's `NON_CHAT_PATTERNS`. Drops are logged.              |
+| New coding-specialist family (Anthropic-codex, etc.)          | Nothing — `codex`/`coder` substring is detected generically.                           |
+| Provider exposes new capability metadata                      | Plumb it through `getCapabilities()`; picker auto-uses ctx/maxOut.                     |
 
 ## Cross-references
 

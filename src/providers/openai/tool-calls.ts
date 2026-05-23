@@ -59,4 +59,3 @@ export function finalizeToolCalls(toolCalls: StreamingToolCallAcc): ToolCallMess
     ];
   });
 }
-

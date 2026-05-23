@@ -4,9 +4,8 @@ import { sendOpenAiChat, streamOpenAiChat } from '../../../../src/providers/open
 import type { ChatChunk } from '../../../../src/providers/types.js';
 import { makeSseHelpers } from './sse-test-helpers.js';
 
-const { withSseServer, withFailingServer, withHangingSseServer } = makeSseHelpers(
-  '/v1/chat/completions',
-);
+const { withSseServer, withFailingServer, withHangingSseServer } =
+  makeSseHelpers('/v1/chat/completions');
 
 async function collect(gen: AsyncGenerator<ChatChunk>): Promise<ChatChunk[]> {
   const out: ChatChunk[] = [];
@@ -33,12 +32,15 @@ async function expectStallAndCaptureDefaultTimeoutUsage(
   }) as typeof setTimeout;
 
   try {
-    await assert.rejects(() => collect(makeStream()), (err: unknown) => {
-      assert.ok(err instanceof Error);
-      assert.match(err.message, /stalled|idle timeout/i);
-      assert.strictEqual((err as Error & { status?: number }).status, 504);
-      return true;
-    });
+    await assert.rejects(
+      () => collect(makeStream()),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /stalled|idle timeout/i);
+        assert.strictEqual((err as Error & { status?: number }).status, 504);
+        return true;
+      },
+    );
     return sawDefault30sTimeout;
   } finally {
     globalThis.setTimeout = originalSetTimeout;
@@ -132,7 +134,11 @@ describe('streamOpenAiChat', () => {
               streamOpenAiChat({
                 url,
                 headers: {},
-                body: { model: 'gpt-4o', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+                body: {
+                  model: 'gpt-4o',
+                  stream: true,
+                  messages: [{ role: 'user', content: 'hi' }],
+                },
                 providerName: 'OpenAI',
               }),
             ),
@@ -164,7 +170,11 @@ describe('streamOpenAiChat', () => {
               streamOpenAiChat({
                 url,
                 headers: {},
-                body: { model: 'gpt-4o', stream: true, messages: [{ role: 'user', content: 'hi' }] },
+                body: {
+                  model: 'gpt-4o',
+                  stream: true,
+                  messages: [{ role: 'user', content: 'hi' }],
+                },
                 signal: controller.signal,
                 providerName: 'OpenAI',
               }),
