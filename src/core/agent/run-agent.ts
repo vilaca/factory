@@ -288,10 +288,7 @@ export async function* runAgent(
       // refusal/filter signal.
       //   OpenAI:    `content_filter` — output classified as policy-violating.
       //   Anthropic: `refusal`        — Claude declined mid-turn (4.x).
-      if (
-        modelResult.doneReason === 'content_filter' ||
-        modelResult.doneReason === 'refusal'
-      ) {
+      if (modelResult.doneReason === 'content_filter' || modelResult.doneReason === 'refusal') {
         yield { type: 'output-blocked', reason: modelResult.doneReason };
       }
 

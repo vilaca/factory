@@ -92,7 +92,10 @@ describe('parseSseStream', () => {
 
   it('throws when no SSE bytes arrive before idleTimeoutMs', async () => {
     const reader = makeHangingReader();
-    await assert.rejects(() => collect(parseSseStream(reader, { idleTimeoutMs: 5 })), /idle timeout/i);
+    await assert.rejects(
+      () => collect(parseSseStream(reader, { idleTimeoutMs: 5 })),
+      /idle timeout/i,
+    );
   });
 
   it('resets idle timeout when keepalive comments keep arriving', async () => {
@@ -350,7 +353,11 @@ describe('isStrictCompatible', () => {
 
   it('rejects when additionalProperties is not explicitly false', () => {
     assert.strictEqual(
-      isStrictCompatible({ type: 'object', required: ['a'], properties: { a: { type: 'string' } } }),
+      isStrictCompatible({
+        type: 'object',
+        required: ['a'],
+        properties: { a: { type: 'string' } },
+      }),
       false,
     );
   });
@@ -398,9 +405,6 @@ describe('isStrictCompatible', () => {
   });
 
   it('accepts an empty closed-form object', () => {
-    assert.strictEqual(
-      isStrictCompatible({ type: 'object', additionalProperties: false }),
-      true,
-    );
+    assert.strictEqual(isStrictCompatible({ type: 'object', additionalProperties: false }), true);
   });
 });

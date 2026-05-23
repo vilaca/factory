@@ -58,9 +58,7 @@ function isSubstantivePrompt(s: string): boolean {
  * logger is attached. Exported so the unit test can assert that
  * `withKey` / `withTuple` actually wrap their results.
  */
-export function makeRotationWrap(
-  logger: SessionLogger | undefined,
-): (p: Provider) => Provider {
+export function makeRotationWrap(logger: SessionLogger | undefined): (p: Provider) => Provider {
   if (!logger) return p => p;
   return p => instrumentProviderRequests(p, info => logModelRequestTo(logger, info));
 }

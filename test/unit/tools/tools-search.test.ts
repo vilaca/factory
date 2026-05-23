@@ -117,7 +117,11 @@ describe('Grep tool', () => {
         path: tmp,
         include_content: true,
       });
-      assert.strictEqual(result.success, true, `expected success, got: ${result.output.slice(0, 200)}`);
+      assert.strictEqual(
+        result.success,
+        true,
+        `expected success, got: ${result.output.slice(0, 200)}`,
+      );
       const outLines = result.output.split('\n');
       assert.strictEqual(outLines.length, 1001, `expected 1001 lines, got ${outLines.length}`);
       assert.ok(result.output.includes('truncated'));

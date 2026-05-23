@@ -218,9 +218,7 @@ describe('buildResponsesBody', () => {
     assert.strictEqual('instructions' in body, false);
     // Only messages[3..] should map to input — the prior turns and system
     // prompt are already retained server-side under previous_response_id.
-    assert.deepStrictEqual(body.input, [
-      { type: 'message', role: 'user', content: 'turn 2 user' },
-    ]);
+    assert.deepStrictEqual(body.input, [{ type: 'message', role: 'user', content: 'turn 2 user' }]);
   });
 
   it('flattens tools and sets parallel_tool_calls only when tools are present', () => {

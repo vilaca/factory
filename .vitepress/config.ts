@@ -12,8 +12,7 @@ export default defineConfig({
   // the built site must know this so internal links resolve correctly.
   base: '/factory/',
   title: 'factory',
-  description:
-    'A terminal-first coding agent. Self-hosted, provider-agnostic, configurable.',
+  description: 'A terminal-first coding agent. Self-hosted, provider-agnostic, configurable.',
   cleanUrls: true,
   lastUpdated: true,
   // README links to relative paths like ./docs/providers.md and
@@ -89,9 +88,7 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/vilaca/factory' },
-    ],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/vilaca/factory' }],
     editLink: {
       pattern: 'https://github.com/vilaca/factory/edit/main/:path',
       text: 'Edit this page on GitHub',

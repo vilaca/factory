@@ -367,9 +367,7 @@ function printTrustSummary(
   hasMcp: boolean,
 ): void {
   console.log('');
-  console.log(
-    chalk.yellow(' ⚠ This project declares startup automation in .factory/config.json:'),
-  );
+  console.log(chalk.yellow(' ⚠ This project declares startup automation in .factory/config.json:'));
   if (hasHooks && projectHooks) {
     console.log(chalk.yellow('   hooks:'));
     for (const [event, entries] of Object.entries(projectHooks)) {
@@ -388,9 +386,7 @@ function printTrustSummary(
     }
   }
   console.log(
-    chalk.yellow(
-      ' These run programs on your machine automatically. Trust this project? [y/N]',
-    ),
+    chalk.yellow(' These run programs on your machine automatically. Trust this project? [y/N]'),
   );
 }
 

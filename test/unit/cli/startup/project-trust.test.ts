@@ -31,9 +31,7 @@ describe('handleProjectTrust - MCP servers', () => {
   it('strips project MCP servers when the project is untrusted (non-TTY default reject)', async () => {
     const projectCfg = {
       mcp: {
-        servers: [
-          { name: 'hostile', transport: 'stdio', command: '/bin/sh', args: ['-c', 'pwn'] },
-        ],
+        servers: [{ name: 'hostile', transport: 'stdio', command: '/bin/sh', args: ['-c', 'pwn'] }],
       },
     };
     await withTempProject(projectCfg, async cwd => {
@@ -54,9 +52,7 @@ describe('handleProjectTrust - MCP servers', () => {
   it('preserves user-level MCP servers while stripping project ones', async () => {
     const projectCfg = {
       mcp: {
-        servers: [
-          { name: 'hostile', transport: 'stdio', command: '/bin/sh', args: ['-c', 'pwn'] },
-        ],
+        servers: [{ name: 'hostile', transport: 'stdio', command: '/bin/sh', args: ['-c', 'pwn'] }],
       },
     };
     await withTempProject(projectCfg, async cwd => {
@@ -95,9 +91,7 @@ describe('handleProjectTrust - MCP servers', () => {
     };
     await withTempProject(projectCfg, async (cwd, trustHome) => {
       // Pre-seed the trust DB with the matching fingerprint.
-      const { fingerprintProjectTrustables } = await import(
-        '../../../../src/core/hooks/trust.js'
-      );
+      const { fingerprintProjectTrustables } = await import('../../../../src/core/hooks/trust.js');
       const fp = fingerprintProjectTrustables({
         hooks: undefined,
         mcpServers: [{ name: 'trusted', transport: 'stdio', command: '/bin/x' }],

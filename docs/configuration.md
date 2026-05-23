@@ -39,13 +39,13 @@ See [providers.md](./providers.md) for the per-provider env-var table.
 
 Behavioural overrides:
 
-| Variable                                | Purpose                                                                          |
-| --------------------------------------- | -------------------------------------------------------------------------------- |
-| `FACTORY_DEBUG=1`                       | Print startup checkpoints (picker, auth, provider, models, validation) to stderr |
-| `XDG_CONFIG_HOME`                       | Override config directory (defaults to `~/.config`)                              |
-| `FACTORY_GITHUB_LOGIN_BASE_URL`         | Override GitHub OAuth host for Copilot auth                                      |
-| `FACTORY_GITHUB_API_BASE_URL`           | Override GitHub API host for Copilot auth                                        |
-| `FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS` | Max ms between SSE events before an OpenAI stream aborts with a 504. Default `30000`. Raise for heavy reasoning. |
+| Variable                             | Purpose                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `FACTORY_DEBUG=1`                    | Print startup checkpoints (picker, auth, provider, models, validation) to stderr                                             |
+| `XDG_CONFIG_HOME`                    | Override config directory (defaults to `~/.config`)                                                                          |
+| `FACTORY_GITHUB_LOGIN_BASE_URL`      | Override GitHub OAuth host for Copilot auth                                                                                  |
+| `FACTORY_GITHUB_API_BASE_URL`        | Override GitHub API host for Copilot auth                                                                                    |
+| `FACTORY_OPENAI_SSE_IDLE_TIMEOUT_MS` | Max ms between SSE events before an OpenAI stream aborts with a 504. Default `30000`. Raise for heavy reasoning.             |
 | `FACTORY_OPENAI_RESPONSES_STORE`     | Set to `false`/`0` to send `store: false` on Responses-API calls (disables `previous_response_id` chaining). Default `true`. |
 
 ## Config files

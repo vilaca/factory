@@ -35,7 +35,11 @@ export function useValidateKeyEffect(args: UseValidateKeyEffectArgs): void {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<ValidateResult>(resolve => {
       timeoutHandle = setTimeout(
-        () => resolve({ ok: false, error: `validation timed out after ${VALIDATE_TIMEOUT_MS / 1000}s` }),
+        () =>
+          resolve({
+            ok: false,
+            error: `validation timed out after ${VALIDATE_TIMEOUT_MS / 1000}s`,
+          }),
         VALIDATE_TIMEOUT_MS,
       );
     });

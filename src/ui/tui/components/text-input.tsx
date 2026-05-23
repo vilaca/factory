@@ -1,11 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, usePaste } from 'ink';
 import chalk from 'chalk';
-import {
-  cursorRowCol,
-  deleteBeforeCursor,
-  insertAtCursor,
-} from './text-input-buffer.js';
+import { cursorRowCol, deleteBeforeCursor, insertAtCursor } from './text-input-buffer.js';
 
 /**
  * Minimal text input. Replaces ink-text-input because that component
@@ -157,8 +153,7 @@ export function TextInput({
           if (col >= line.length) {
             content = line + chalk.inverse(' ');
           } else {
-            content =
-              line.slice(0, col) + chalk.inverse(line[col]) + line.slice(col + 1);
+            content = line.slice(0, col) + chalk.inverse(line[col]) + line.slice(col + 1);
           }
         } else {
           // Render empty rows as a single space so they still consume a

@@ -420,11 +420,7 @@ describe('OpenAIProvider', () => {
       },
       async baseUrl => {
         const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
-        await provider.chatNoStream(
-          'gpt-5.3-codex',
-          [{ role: 'user', content: 'go' }],
-          undefined,
-        );
+        await provider.chatNoStream('gpt-5.3-codex', [{ role: 'user', content: 'go' }], undefined);
       },
     );
   });
@@ -463,12 +459,9 @@ describe('OpenAIProvider', () => {
       },
       async baseUrl => {
         const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
-        await provider.chatNoStream(
-          'gpt-5-codex',
-          [{ role: 'user', content: 'go' }],
-          undefined,
-          { reasoningEffort: 'high' },
-        );
+        await provider.chatNoStream('gpt-5-codex', [{ role: 'user', content: 'go' }], undefined, {
+          reasoningEffort: 'high',
+        });
       },
     );
   });
@@ -500,12 +493,9 @@ describe('OpenAIProvider', () => {
       },
       async baseUrl => {
         const provider = new OpenAIProvider({ token: 'test-token', host: baseUrl });
-        await provider.chatNoStream(
-          'gpt-4o',
-          [{ role: 'user', content: 'hi' }],
-          undefined,
-          { maxTokens: 8 },
-        );
+        await provider.chatNoStream('gpt-4o', [{ role: 'user', content: 'hi' }], undefined, {
+          maxTokens: 8,
+        });
       },
     );
   });

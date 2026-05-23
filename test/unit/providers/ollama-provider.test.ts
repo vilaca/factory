@@ -152,10 +152,7 @@ describe('OllamaProvider.getCapabilities', () => {
     const unreachable = new OllamaProvider('http://127.0.0.1:1');
     await unreachable.primeModelCache!('whatever:latest');
     // No throw; capability lookup still works via estimate.
-    assert.strictEqual(
-      unreachable.getCapabilities('llama3:8b').contextWindow,
-      8192,
-    );
+    assert.strictEqual(unreachable.getCapabilities('llama3:8b').contextWindow, 8192);
   });
 });
 

@@ -167,10 +167,7 @@ export function buildJsonSchemaFormat(
  *  openrouter, vercel, workersai, mistral, googleaistudio, copilot,
  *  opencodezen), some of which reject unknown fields. The Responses path
  *  (toResponsesTools) does always emit `strict` because it's OpenAI-only. */
-function maybeStrictify(
-  tools: ToolDefinition[],
-  opt: boolean | undefined,
-): ToolDefinition[] {
+function maybeStrictify(tools: ToolDefinition[], opt: boolean | undefined): ToolDefinition[] {
   if (!opt) return tools;
   return tools.map(t =>
     isStrictCompatible(t.function.parameters)

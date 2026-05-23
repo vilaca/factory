@@ -17,11 +17,7 @@ export function markerHookCommand(markerPath: string): string {
   return `touch "${markerPath}"`;
 }
 
-export function writeHook(
-  cwd: string,
-  event: HookEvent,
-  entry: HookEntry,
-): void {
+export function writeHook(cwd: string, event: HookEvent, entry: HookEntry): void {
   const cfgPath = path.join(cwd, '.factory', 'config.json');
   let existing: { agent?: { hooks?: HooksConfig } } = {};
   if (fs.existsSync(cfgPath)) {

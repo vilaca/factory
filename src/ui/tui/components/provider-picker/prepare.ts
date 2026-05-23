@@ -16,7 +16,8 @@ export function prepareModels(
     const infoB = getModelInfo?.(b);
     const tierDiff = rankFor(infoB?.tier) - rankFor(infoA?.tier);
     if (tierDiff !== 0) return tierDiff;
-    const codingDiff = Number(infoB?.codingSpecialist ?? false) - Number(infoA?.codingSpecialist ?? false);
+    const codingDiff =
+      Number(infoB?.codingSpecialist ?? false) - Number(infoA?.codingSpecialist ?? false);
     if (codingDiff !== 0) return codingDiff;
     const ctxDiff = (infoB?.contextWindow ?? 0) - (infoA?.contextWindow ?? 0);
     if (ctxDiff !== 0) return ctxDiff;

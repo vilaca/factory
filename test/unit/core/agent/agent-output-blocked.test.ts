@@ -55,9 +55,7 @@ describe('Agent loop — output-blocked event', () => {
     // Defensive: only one of the branches in run-agent.ts should match a
     // given doneReason. Here we pick `length` and confirm output-blocked
     // does not fire (output-cap-reached should fire instead).
-    const provider = createMockProvider([
-      { content: 'truncated', doneReason: 'length' },
-    ]);
+    const provider = createMockProvider([{ content: 'truncated', doneReason: 'length' }]);
     const events = await collectEvents('hi', provider);
 
     assert.strictEqual(findEvents(events, 'output-blocked').length, 0);

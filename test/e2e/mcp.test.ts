@@ -46,9 +46,7 @@ describe('MCP integration (headless)', () => {
       host: `http://127.0.0.1:${mockPort}`,
       permissions: { allowAll: ['mock-mcp__echo', 'echo'] },
       mcp: {
-        servers: [
-          { name: 'mock-mcp', transport: 'stdio', command: 'node', args: [MOCK_MCP] },
-        ],
+        servers: [{ name: 'mock-mcp', transport: 'stdio', command: 'node', args: [MOCK_MCP] }],
       },
     });
     // The MCP tool name is mangled with the server prefix when registered
@@ -69,7 +67,14 @@ describe('MCP integration (headless)', () => {
       { content: 'mcp called' },
     ]);
     const r = await spawnCliHeadless(
-      ['--provider', 'ollama', '--model', 'test-model:latest', '--host', `http://127.0.0.1:${mockPort}`],
+      [
+        '--provider',
+        'ollama',
+        '--model',
+        'test-model:latest',
+        '--host',
+        `http://127.0.0.1:${mockPort}`,
+      ],
       { stdin: 'invoke mcp\n', home: env.home, cwd: env.cwd, timeoutMs: 20000 },
     );
     // Tolerant assertion: either the tool was invoked (✓ in stderr), or the

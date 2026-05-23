@@ -67,7 +67,10 @@ describe('makeOpenCompactionPicker', () => {
 
     assert.deepEqual(await p, pick);
     // Two resolver writes: install + clear. Two picker writes: open + close.
-    assert.deepEqual(h.resolverCalls.map(r => (r === null ? 'null' : 'fn')), ['fn', 'null']);
+    assert.deepEqual(
+      h.resolverCalls.map(r => (r === null ? 'null' : 'fn')),
+      ['fn', 'null'],
+    );
     assert.deepEqual(h.pickerOpenCalls, [true, false]);
   });
 
@@ -99,7 +102,10 @@ describe('makeOpenCompactionPicker', () => {
     assert.equal(typeof h.currentResolver(), 'function');
 
     // Resolver writes in order: install R1, install R2. No null between.
-    assert.deepEqual(h.resolverCalls.map(r => (r === null ? 'null' : 'fn')), ['fn', 'fn']);
+    assert.deepEqual(
+      h.resolverCalls.map(r => (r === null ? 'null' : 'fn')),
+      ['fn', 'fn'],
+    );
   });
 
   it('the second promise still resolves on a pick after a back-to-back open', async () => {

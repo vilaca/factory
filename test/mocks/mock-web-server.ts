@@ -13,9 +13,7 @@ export function createMockWebServer(): http.Server {
     const url = req.url ?? '/';
     if (url === '/hello') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(
-        '<!doctype html><html><body><h1>Hello Markdown</h1><p>WEBFETCH_OK</p></body></html>',
-      );
+      res.end('<!doctype html><html><body><h1>Hello Markdown</h1><p>WEBFETCH_OK</p></body></html>');
       return;
     }
     if (url === '/huge') {

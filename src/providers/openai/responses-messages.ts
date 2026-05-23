@@ -1,9 +1,4 @@
-import type {
-  ChatMessage,
-  ChatOptions,
-  ReasoningEffort,
-  ToolDefinition,
-} from '../types.js';
+import type { ChatMessage, ChatOptions, ReasoningEffort, ToolDefinition } from '../types.js';
 import { applyCommonOpenAiOptions, buildJsonSchemaFormat, isStrictCompatible } from './messages.js';
 
 interface BuildResponsesBodyOptions {

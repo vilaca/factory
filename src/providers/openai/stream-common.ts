@@ -68,10 +68,7 @@ export class OpenAiSseIdleAbortReason extends Error {
  *  Centralizes the check so the two transports stay aligned and the
  *  detection isn't done by string matching on `error.message`. */
 export function isIdleTimeoutFailure(error: unknown, controller: AbortController): boolean {
-  if (
-    controller.signal.aborted &&
-    controller.signal.reason instanceof OpenAiSseIdleAbortReason
-  ) {
+  if (controller.signal.aborted && controller.signal.reason instanceof OpenAiSseIdleAbortReason) {
     return true;
   }
   return error instanceof SseIdleTimeoutError;

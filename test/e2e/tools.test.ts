@@ -128,9 +128,7 @@ describe('Built-in tools (headless)', () => {
     setNextResponses([
       {
         content: '',
-        tool_calls: [
-          { function: { name: 'Bash', arguments: { command: 'echo BASH_OK' } } },
-        ],
+        tool_calls: [{ function: { name: 'Bash', arguments: { command: 'echo BASH_OK' } } }],
       },
       { content: 'shell said BASH_OK' },
     ]);

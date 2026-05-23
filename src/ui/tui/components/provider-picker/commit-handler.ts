@@ -20,9 +20,7 @@ export type CommitHandlerDeps = {
     | null;
   /** Resolver for the rotation-fallback picker. Present when the picker was
    *  opened from the rate-limit / auth fallback flow. */
-  fallbackPickerResolver?:
-    | ((value: { provider: string; model: string } | null) => void)
-    | null;
+  fallbackPickerResolver?: ((value: { provider: string; model: string } | null) => void) | null;
   /** Drives the actual provider/model swap. The picker must remain open
    *  until this promise settles — closing earlier un-gates TextInput and
    *  races the first post-pick prompt against stale refs. */

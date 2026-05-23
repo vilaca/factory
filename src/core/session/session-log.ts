@@ -436,9 +436,7 @@ export async function getRecentSessions(limit = 16): Promise<RecentSession[]> {
   // dedupe, but some collapse on provider/model. Capping the fan-out keeps
   // long history directories from spawning hundreds of fs reads.
   const fanout = Math.min(sessions.length, limit * 4);
-  const entries = await Promise.all(
-    sessions.slice(0, fanout).map(s => readRecentSession(s.path)),
-  );
+  const entries = await Promise.all(sessions.slice(0, fanout).map(s => readRecentSession(s.path)));
   const seen = new Set<string>();
   const out: RecentSession[] = [];
   for (const entry of entries) {

@@ -136,24 +136,23 @@ describe('runToolCalls — parallel Delegate batches', () => {
     const promise = collect(runToolCalls(calls, ctx, 'sig', makeRecovery()));
 
     for (let i = 0; i < 20 && startedDelegates < 2; i++) await tick();
-    assert.strictEqual(
-      startedDelegates,
-      2,
-      'both delegates started before the second Read ran',
-    );
+    assert.strictEqual(startedDelegates, 2, 'both delegates started before the second Read ran');
 
     // The first Read completed before delegates started; the second Read
     // should not have run yet because the delegate batch hasn't finished.
-    assert.deepStrictEqual(order.filter(s => s.startsWith('read')), ['read:first']);
+    assert.deepStrictEqual(
+      order.filter(s => s.startsWith('read')),
+      ['read:first'],
+    );
 
     releaseDelegates!();
     await promise;
 
     // After delegates finish, the second Read runs.
-    assert.deepStrictEqual(order.filter(s => s.startsWith('read')), [
-      'read:first',
-      'read:last',
-    ]);
+    assert.deepStrictEqual(
+      order.filter(s => s.startsWith('read')),
+      ['read:first', 'read:last'],
+    );
     // Both delegates ran.
     assert.strictEqual(order.filter(s => s.startsWith('delegate-start')).length, 2);
     assert.strictEqual(order.filter(s => s.startsWith('delegate-end')).length, 2);
@@ -172,25 +171,19 @@ describe('runToolCalls — parallel Delegate batches', () => {
       callOf('Delegate', { task: 'C' }, 'c'),
     ];
     let n = 0;
-    const { result, events } = await collect(
-      runToolCalls(calls, ctx, 'sig', makeRecovery()),
-      {
-        // Deny the second call, allow the others.
-        onPermission: () => {
-          n++;
-          return n === 2 ? 'deny' : 'allow';
-        },
+    const { result, events } = await collect(runToolCalls(calls, ctx, 'sig', makeRecovery()), {
+      // Deny the second call, allow the others.
+      onPermission: () => {
+        n++;
+        return n === 2 ? 'deny' : 'allow';
       },
-    );
+    });
 
     assert.strictEqual(result.deniedCount, 1, 'exactly one denial counted');
     // Two delegates actually executed (A and C); B was denied at the gate.
     assert.strictEqual(delegate.calls.length, 2);
     // Three permission-request events were yielded (one per call).
-    assert.strictEqual(
-      events.filter(e => e.type === 'permission-request').length,
-      3,
-    );
+    assert.strictEqual(events.filter(e => e.type === 'permission-request').length, 3);
   });
 
   it('serializes permission prompts within a parallel Delegate batch', async () => {
@@ -300,10 +293,7 @@ describe('runToolCalls — parallel Delegate batches', () => {
 
     assert.strictEqual(promptCount, 1, 'only the first delegate prompted');
     assert.strictEqual(delegate.calls.length, 3, 'all three still executed');
-    assert.strictEqual(
-      events.filter(e => e.type === 'permission-request').length,
-      1,
-    );
+    assert.strictEqual(events.filter(e => e.type === 'permission-request').length, 1);
   });
 
   it('does not hang queued prompts when abort fires mid-batch', async () => {

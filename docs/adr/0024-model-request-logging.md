@@ -41,7 +41,7 @@ Logging is best-effort: if `onRequest` throws, the wrapper surfaces the failure 
 
 **Known gap.**
 
-- Subagent (Delegate tool) calls are *not* currently wrapped. `registerSubagentTool` runs at process startup in `src/index.ts`, before any per-tab `SessionLogger` exists; the same comment block already notes "needs per-tab tool registration to fix properly" (`src/index.ts:151-156`). Once that follow-up lands, the Delegate tool will receive a wrapped provider and `source: 'subagent'` rows will start appearing. The `'subagent'` literal in `ModelRequestSource` is included now so the schema is forward-compatible.
+- Subagent (Delegate tool) calls are _not_ currently wrapped. `registerSubagentTool` runs at process startup in `src/index.ts`, before any per-tab `SessionLogger` exists; the same comment block already notes "needs per-tab tool registration to fix properly" (`src/index.ts:151-156`). Once that follow-up lands, the Delegate tool will receive a wrapped provider and `source: 'subagent'` rows will start appearing. The `'subagent'` literal in `ModelRequestSource` is included now so the schema is forward-compatible.
 
 **Invariants future contributors must preserve.**
 

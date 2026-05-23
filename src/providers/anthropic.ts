@@ -340,7 +340,6 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
   return { system, msgs };
 }
 
-
 // ─── Picker / capability helpers ───────────────────────────────────────
 
 /** Tier classification derived from the model id. The Models API doesn't

@@ -101,7 +101,9 @@ describe('primeContextWindowFromActiveProvider', () => {
     await flush();
     assert.equal(setContextWindow.mock.callCount(), 0);
     assert.equal(
-      (refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>).mock.callCount(),
+      (
+        refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>
+      ).mock.callCount(),
       0,
     );
   });
@@ -119,9 +121,13 @@ describe('primeContextWindowFromActiveProvider', () => {
     provider.resolvePrime();
     await flush();
 
-    assert.deepEqual(setContextWindow.mock.calls.map(c => c.arguments), [[131_072]]);
-    const cmCalls = (refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>)
-      .mock.calls;
+    assert.deepEqual(
+      setContextWindow.mock.calls.map(c => c.arguments),
+      [[131_072]],
+    );
+    const cmCalls = (
+      refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>
+    ).mock.calls;
     assert.deepEqual(
       cmCalls.map(c => c.arguments),
       [[131_072]],
@@ -143,7 +149,9 @@ describe('primeContextWindowFromActiveProvider', () => {
 
     assert.equal(setContextWindow.mock.callCount(), 0, 'stale prime must not update React state');
     assert.equal(
-      (refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>).mock.callCount(),
+      (
+        refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>
+      ).mock.callCount(),
       0,
       'stale prime must not update ContextManager',
     );
@@ -163,7 +171,9 @@ describe('primeContextWindowFromActiveProvider', () => {
 
     assert.equal(setContextWindow.mock.callCount(), 0);
     assert.equal(
-      (refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>).mock.callCount(),
+      (
+        refs.current!.contextManager.setContextWindow as unknown as ReturnType<typeof mock.fn>
+      ).mock.callCount(),
       0,
     );
   });

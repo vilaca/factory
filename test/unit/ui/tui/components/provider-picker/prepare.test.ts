@@ -12,12 +12,15 @@ function infoFor(map: Record<string, Partial<ModelDisplayInfo>>) {
 
 describe('prepareModels', () => {
   it('sorts by tier descending: strong > medium > weak > undefined', () => {
-    const sorted = prepareModels(['weak-1', 'strong-1', 'medium-1', 'unknown-1'], infoFor({
-      'strong-1': { tier: 'strong' },
-      'medium-1': { tier: 'medium' },
-      'weak-1': { tier: 'weak' },
-      // unknown-1 omitted -> undefined tier
-    }));
+    const sorted = prepareModels(
+      ['weak-1', 'strong-1', 'medium-1', 'unknown-1'],
+      infoFor({
+        'strong-1': { tier: 'strong' },
+        'medium-1': { tier: 'medium' },
+        'weak-1': { tier: 'weak' },
+        // unknown-1 omitted -> undefined tier
+      }),
+    );
     assert.deepStrictEqual(sorted, ['strong-1', 'medium-1', 'weak-1', 'unknown-1']);
   });
 
@@ -41,23 +44,34 @@ describe('prepareModels', () => {
         },
       }),
     );
-    assert.deepStrictEqual(sorted, ['gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.5-pro', 'gpt-5.4-pro']);
+    assert.deepStrictEqual(sorted, [
+      'gpt-5.3-codex',
+      'gpt-5.2-codex',
+      'gpt-5.5-pro',
+      'gpt-5.4-pro',
+    ]);
   });
 
   it('within a tier, larger context window comes first', () => {
-    const sorted = prepareModels(['gpt-4o', 'gpt-5', 'gpt-3.5-turbo'], infoFor({
-      'gpt-5': { tier: 'strong', contextWindow: 1_000_000 },
-      'gpt-4o': { tier: 'strong', contextWindow: 128_000 },
-      'gpt-3.5-turbo': { tier: 'strong', contextWindow: 16_000 },
-    }));
+    const sorted = prepareModels(
+      ['gpt-4o', 'gpt-5', 'gpt-3.5-turbo'],
+      infoFor({
+        'gpt-5': { tier: 'strong', contextWindow: 1_000_000 },
+        'gpt-4o': { tier: 'strong', contextWindow: 128_000 },
+        'gpt-3.5-turbo': { tier: 'strong', contextWindow: 16_000 },
+      }),
+    );
     assert.deepStrictEqual(sorted, ['gpt-5', 'gpt-4o', 'gpt-3.5-turbo']);
   });
 
   it('falls back to maxOutputTokens when contextWindow ties', () => {
-    const sorted = prepareModels(['gpt-4.1', 'gpt-5'], infoFor({
-      'gpt-5': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 128_000 },
-      'gpt-4.1': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 32_000 },
-    }));
+    const sorted = prepareModels(
+      ['gpt-4.1', 'gpt-5'],
+      infoFor({
+        'gpt-5': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 128_000 },
+        'gpt-4.1': { tier: 'strong', contextWindow: 1_000_000, maxOutputTokens: 32_000 },
+      }),
+    );
     assert.deepStrictEqual(sorted, ['gpt-5', 'gpt-4.1']);
   });
 
@@ -90,6 +104,9 @@ describe('prepareModels', () => {
   });
 
   it('handles an empty input', () => {
-    assert.deepStrictEqual(prepareModels([], () => undefined), []);
+    assert.deepStrictEqual(
+      prepareModels([], () => undefined),
+      [],
+    );
   });
 });
