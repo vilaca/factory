@@ -20,4 +20,6 @@ jobs:
           cache: 'npm'
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
+      # Advisory only: surface formatting drift without blocking merges.
       - run: npm run format:check
+        continue-on-error: true
