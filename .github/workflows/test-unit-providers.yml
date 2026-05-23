@@ -1,4 +1,4 @@
-name: Test (unit)
+name: Test (unit providers)
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  test-unit:
+  test-unit-providers:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +20,4 @@ jobs:
           cache: 'npm'
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
-      # Unit suite must pass — this step gates the build.
-      - run: npm run test:unit
-      # Coverage thresholds are advisory: surface drift without blocking merges.
-      - run: npm run coverage
-        continue-on-error: true
+      - run: npm run test:unit:providers
