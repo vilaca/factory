@@ -140,22 +140,23 @@ export function decideStartupSource(
 }
 
 /**
- * Persist the merged rotation config to the global config file. Performs
- * a top-level shallow merge by reading `loadGlobal`, mutating only the
- * `agent.rotation` block, and writing back via `saveGlobal`. Both I/O
- * functions are injected so tests can stub them; production callers pass
- * `loadGlobalConfig` / `saveGlobalConfig` from `core/config/`.
+ * Persist the merged rotation config to the global config file.
  *
- * Throws if either I/O step throws — caller decides how to surface the
+ * Uses `updateGlobal` (the injected `updateGlobalConfig`) so the read,
+ * shallow-merge, and write all happen under the config mutex. The
+ * previous load-then-save shape lost concurrent writes — same bug
+ * class as f848472. The mutator is injected so tests can stub it.
+ *
+ * Throws if `updateGlobal` throws — caller decides how to surface the
  * failure (main() prints to stderr and exits non-zero).
  */
 export async function persistRotationConfig(
   rotation: RotationConfig,
-  loadGlobal: () => Promise<Config>,
-  saveGlobal: (patch: Partial<Config>) => Promise<unknown>,
+  updateGlobal: (
+    mutate: (current: Config) => Partial<Config> | Promise<Partial<Config>>,
+  ) => Promise<unknown>,
 ): Promise<void> {
-  const global = await loadGlobal();
-  await saveGlobal({
-    agent: { ...global.agent, rotation },
-  });
+  await updateGlobal(current => ({
+    agent: { ...current.agent, rotation },
+  }));
 }

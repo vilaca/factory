@@ -3,7 +3,7 @@ import type { RotationEntry } from '../../../core/config/types.js';
 import { tupleKey } from '../../../core/config/types.js';
 import { parseRotationEntry } from '../../../cli/startup/parse-rotation.js';
 import { descriptorByAlias } from '../../../providers/registry.js';
-import { loadGlobalConfig, saveGlobalConfig } from '../../../core/config/index.js';
+import { updateGlobalConfig } from '../../../core/config/index.js';
 
 export function activeScope(
   agent: AgentLoopApi,
@@ -102,17 +102,23 @@ export function writeChain(agent: AgentLoopApi, target: ChainTarget, next: Rotat
 export async function persist(agent: AgentLoopApi): Promise<void> {
   const refs = agent.refs.current;
   if (!refs) return;
-  const global = await loadGlobalConfig();
-  const nextRotation = {
-    ...global.agent?.rotation,
-    keys: refs.rotation.keysEnabled,
-    models: refs.rotation.modelsEnabled,
-    default: refs.rotation.default,
-    overrides: refs.rotation.overrides,
-  };
-  await saveGlobalConfig({
-    agent: { ...global.agent, rotation: nextRotation },
-  });
+  // RMW under the config mutex via updateGlobalConfig. The earlier
+  // load-then-save shape would lose data on concurrent writers
+  // (e.g. another tab toggling rotation at the same time) — same
+  // bug class as f848472. updateGlobalConfig holds the in-process
+  // lock across the read, transform, and write.
+  await updateGlobalConfig(current => ({
+    agent: {
+      ...current.agent,
+      rotation: {
+        ...current.agent?.rotation,
+        keys: refs.rotation.keysEnabled,
+        models: refs.rotation.modelsEnabled,
+        default: refs.rotation.default,
+        overrides: refs.rotation.overrides,
+      },
+    },
+  }));
 }
 
 export function describeTarget(target: ChainTarget): string {
