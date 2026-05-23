@@ -32,20 +32,21 @@ Turn-loop orchestration. If you're modifying how a turn runs (model call → par
 
 If you're editing `run-agent.ts`, you'll see these names. They are explicit fields, not magic:
 
-| Name | Mutated by | Read by |
-|---|---|---|
-| `recovery` (RecoveryState) | `runToolCalls`, retry branches | every error/exit path |
-| `lastUsage` | `callModel` | turn-complete emissions, context-fullness checks |
-| `provider`, `model` | rotation branches in `call-model/` | model call, cache-boundary placement |
-| `turnsUsed` | one increment per loop iteration | budget checks, all exit paths |
-| `emittedStepCompletions` (Set) | `settleCleanBatch` | dedup guard for `step-completed` events |
-| `chainRef` (Responses-API pointer) | `captureChainPointer` after each successful turn | next call's input slice |
+| Name                               | Mutated by                                       | Read by                                          |
+| ---------------------------------- | ------------------------------------------------ | ------------------------------------------------ |
+| `recovery` (RecoveryState)         | `runToolCalls`, retry branches                   | every error/exit path                            |
+| `lastUsage`                        | `callModel`                                      | turn-complete emissions, context-fullness checks |
+| `provider`, `model`                | rotation branches in `call-model/`               | model call, cache-boundary placement             |
+| `turnsUsed`                        | one increment per loop iteration                 | budget checks, all exit paths                    |
+| `emittedStepCompletions` (Set)     | `settleCleanBatch`                               | dedup guard for `step-completed` events          |
+| `chainRef` (Responses-API pointer) | `captureChainPointer` after each successful turn | next call's input slice                          |
 
 Don't introduce new ambient state. If you need persistence across iterations, extend `RecoveryState` (typed) rather than adding loose locals.
 
 ## Invariants enforced in `test/unit/arch/modularity.test.ts`
 
 When you touch model invocation, rotation, or selection, verify these still pass:
+
 - Acyclic imports inside `core/agent/`.
 - `ModelSelection` shape must not be re-declared (no parallel DTOs for `{provider, model, keyId}`).
 - "Prime-before-use" for providers — `prime()` must run before `chat()` / `chatNoStream()`.
