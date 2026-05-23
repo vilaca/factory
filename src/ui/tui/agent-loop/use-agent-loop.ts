@@ -4,7 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import type { DisplayItem, ToolCallSummary } from '../types.js';
-import { defaultRegistry } from '../../../tools/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
 import { runAgentLoopInternal, processInput } from './run-loop.js';
 import { refreshGitState } from './git-state.js';
@@ -93,7 +92,9 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   }
   function refreshTokenEstimate(): void {
     if (!refs.current) return;
-    const defs = refs.current.useTextToolFallback ? [] : defaultRegistry.getDefinitions();
+    const defs = refs.current.useTextToolFallback
+      ? []
+      : refs.current.toolRegistry.getDefinitions();
     refs.current.contextManager.refreshEstimate(defs);
     setEstimatedTokens(refs.current.contextManager.getTokenEstimate());
   }

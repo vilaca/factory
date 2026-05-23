@@ -6,7 +6,6 @@
 import type { MutableRefObject } from 'react';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
-import { defaultRegistry } from '../../../tools/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
 import { primeContextWindowFromActiveProvider } from './prime-context-window.js';
 import {
@@ -170,7 +169,9 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   // baseline before the first model response. Pass `[]` when text-tool
   // fallback is on — refreshEstimate counts tools-schema overhead, and
   // there's nothing to count in that mode.
-  const defs = ctx.refs.current.useTextToolFallback ? [] : defaultRegistry.getDefinitions();
+  const defs = ctx.refs.current.useTextToolFallback
+    ? []
+    : ctx.refs.current.toolRegistry.getDefinitions();
   ctx.refs.current.contextManager.refreshEstimate(defs);
   ctx.setEstimatedTokens(ctx.refs.current.contextManager.getTokenEstimate());
 

@@ -129,6 +129,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     pastHistory: [],
     provider: instrumentedProvider,
     model: opts.model,
+    toolRegistry: opts.toolRegistry,
     primary: { provider: instrumentedProvider.name, model: opts.model },
     ...(opts.keyId ? { activeKeyId: opts.keyId } : {}),
     useTextToolFallback: input.useTextToolFallback,

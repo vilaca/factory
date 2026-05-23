@@ -388,6 +388,63 @@ describe('architecture: module boundaries', () => {
     await expectNoViolations(rule, 'prime-before-use on minted providers');
   });
 
+  // Shared agent-event renderer contract.
+  //
+  // Background: src/ui/headless.ts and src/ui/tui/agent-loop/event-handler.ts
+  // used to duplicate rotation/fingerprint/hook formatting — a divergence
+  // would silently produce mismatched labels across surfaces. The helpers
+  // now live in src/ui/agent-events/render.ts; both surfaces import from
+  // there. Forbid any other source file from declaring a function with
+  // those names (catches the most likely regression: someone reintroduces
+  // the inline helper instead of importing).
+  it('describeRotationReason / fingerprintLabel / formatHookDisplay must live only in src/ui/agent-events/render.ts', async () => {
+    const rule = projectFiles()
+      .inFolder('src/**', { except: ['src/ui/agent-events/render.ts'] })
+      .should()
+      .adhereTo(file => {
+        // Allow imports — only forbid local declarations.
+        const src = file.content;
+        const localDecl =
+          /\b(?:function|const|let|var)\s+(describeRotationReason|fingerprintLabel|formatHookDisplay)\b/;
+        return !localDecl.test(src);
+      }, 'shared event-render helpers must be imported from src/ui/agent-events/render.ts');
+    await expectNoViolations(rule, 'shared renderer helpers');
+  });
+
+  // defaultRegistry singleton contract.
+  //
+  // Background: src/tools/index.ts exports a `defaultRegistry` populated
+  // with the built-in tools. Production code used to import it directly
+  // and mutate it at CLI startup (registering MCP and subagent tools);
+  // that turned the registry into process-global state and foreclosed on
+  // any feature that wants per-session tool sets (multi-session daemon,
+  // parallel subagents with different scopes, dynamic plug-in/out).
+  //
+  // Production code now constructs `new ToolRegistry()` in src/index.ts
+  // and threads it through `appOptions.toolRegistry`. `defaultRegistry`
+  // is kept ONLY as a tests convenience. Enforce: no source file under
+  // src/** (other than the file that defines it) imports defaultRegistry.
+  it('production code outside src/tools/index.ts must not import defaultRegistry', async () => {
+    const rule = projectFiles()
+      .inFolder('src/**', { except: ['src/tools/index.ts'] })
+      .should()
+      .adhereTo(file => {
+        // Strip comments + string literals — doc comments that mention
+        // the deprecated name (e.g. "@deprecated; use toolRegistry not
+        // defaultRegistry") are legitimate and shouldn't trip the rule.
+        // Mirrors the comment-stripper used in the status-bar contract
+        // above. The remaining match is on bare identifier usage —
+        // imports, references, anywhere in actual code.
+        const code = file.content
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|[^:])\/\/.*$/gm, '$1')
+          .replace(/"(?:\\.|[^"\\])*"/g, '""')
+          .replace(/'(?:\\.|[^'\\])*'/g, "''");
+        return !/\bdefaultRegistry\b/.test(code);
+      }, 'defaultRegistry is a tests-only convenience — production must use options.toolRegistry');
+    await expectNoViolations(rule, 'defaultRegistry singleton');
+  });
+
   it('src/** must not import a CLI argument-parsing library', async () => {
     const bannedCliLibs = [
       'commander',
