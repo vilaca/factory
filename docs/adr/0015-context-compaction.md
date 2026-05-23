@@ -1,6 +1,5 @@
 # 0015 — Context compaction: recency window + summary, fingerprinted in the read-cache
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

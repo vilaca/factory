@@ -1,6 +1,5 @@
 # 0008 — `src/ui/` is a presentation layer: no concrete providers, tools, SDKs, or direct network
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

@@ -1,6 +1,5 @@
 # 0006 — `src/mcp/` and `src/ui/` must not import each other
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

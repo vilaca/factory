@@ -1,6 +1,5 @@
 # 0016 — MCP servers wrapped as `ToolHandler`s in the shared registry
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

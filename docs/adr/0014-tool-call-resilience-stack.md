@@ -1,6 +1,5 @@
 # 0014 — Tool-call resilience stack for non-frontier models
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

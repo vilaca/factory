@@ -1,6 +1,5 @@
 # 0018 — Hooks: sandboxed env, forbidden-command guard, first-run trust prompt
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

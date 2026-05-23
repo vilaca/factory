@@ -1,6 +1,5 @@
 # 0020 — Manual argv parser; no `commander` / `yargs`
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

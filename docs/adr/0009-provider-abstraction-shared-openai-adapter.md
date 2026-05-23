@@ -1,6 +1,5 @@
 # 0009 — Provider abstraction with a shared OpenAI-compatible adapter
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

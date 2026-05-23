@@ -1,6 +1,5 @@
 # 0007 — `src/ui/headless.ts` must not depend on the TUI tree
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

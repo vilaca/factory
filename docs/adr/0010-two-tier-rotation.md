@@ -1,6 +1,5 @@
 # 0010 — Two-tier rotation: per-key, then per-`provider:model` tuple
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

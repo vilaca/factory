@@ -1,6 +1,5 @@
 # 0001 — No cyclic imports anywhere under `src/`
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

@@ -1,6 +1,5 @@
 # 0019 — Multi-tab session model: each tab is an independent agent
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

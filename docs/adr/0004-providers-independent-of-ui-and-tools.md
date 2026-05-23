@@ -1,6 +1,5 @@
 # 0004 — `src/providers/` has no dependency on `src/ui/` or `src/tools/`
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

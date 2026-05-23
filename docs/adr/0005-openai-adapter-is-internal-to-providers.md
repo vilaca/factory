@@ -1,6 +1,5 @@
 # 0005 — `src/providers/openai/` is an internal adapter — no external importers
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

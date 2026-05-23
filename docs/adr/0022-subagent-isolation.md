@@ -1,6 +1,5 @@
 # 0022 — Subagent isolation: separate conversation + restricted Bash allowlist
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

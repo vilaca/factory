@@ -1,6 +1,5 @@
 # 0023 — All errors and warnings must reach the session log
 
-- **Status:** Accepted
 - **Date:** 2026-05-22
 - **Supersedes:** —
 - **Superseded-by:** —

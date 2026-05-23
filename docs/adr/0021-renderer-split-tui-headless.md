@@ -1,6 +1,5 @@
 # 0021 — Renderer split: Ink TUI vs plain-stdout headless, one core loop
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

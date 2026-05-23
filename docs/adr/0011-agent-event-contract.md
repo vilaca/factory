@@ -1,6 +1,5 @@
 # 0011 — `AgentEvent` as the single contract between core loop and renderers
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —

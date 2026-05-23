@@ -1,6 +1,5 @@
 # 0002 — `src/core/` has no dependency on `src/ui/` or `src/cli/`
 
-- **Status:** Accepted
 - **Date:** 2026-05-18
 - **Supersedes:** —
 - **Superseded-by:** —
