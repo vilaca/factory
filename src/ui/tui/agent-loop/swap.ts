@@ -5,6 +5,7 @@
 
 import type { MutableRefObject } from 'react';
 import { ContextManager } from '../../../core/context/context-manager.js';
+import { parseModelSpec } from '../../../core/selection/parse-model-spec.js';
 import { makeCompactionResolver } from './compaction-resolver.js';
 import { primeContextWindowFromActiveProvider } from './prime-context-window.js';
 import { validateModelToolSupport as defaultValidateModelToolSupport } from '../../../core/auth/model-validation.js';
@@ -83,18 +84,14 @@ export async function swapModel(
 ): Promise<void> {
   const refs = ctx.refs.current;
   if (!refs) return;
-  if (name.includes(':')) {
-    const [providerPart, ...rest] = name.split(':');
-    const modelPart = rest.join(':');
-    // Only treat `<a>:<b>` as provider:model when the prefix is actually a
-    // known provider alias. Otherwise `name` is a bare model whose tag
-    // happens to contain a colon (Ollama style — e.g.
-    // `deepseek-coder:33b-instruct`, `llama3.1:8b`) and belongs to the
-    // current provider.
-    if (providerPart && modelPart && deps.descriptorByAlias(providerPart)) {
-      await swapProvider(providerPart, modelPart, undefined, ctx, deps);
-      return;
-    }
+  // Centralised parser — see src/core/selection/parse-model-spec.ts.
+  // Encodes the "only treat `<a>:<b>` as provider:model when `<a>` is a
+  // known alias" rule that 6287738 introduced, so Ollama-style tagged
+  // names (`deepseek-coder:33b-instruct`, `llama3.1:8b`) stay bare.
+  const spec = parseModelSpec(name, deps.descriptorByAlias);
+  if (spec.kind === 'provider-model') {
+    await swapProvider(spec.provider, spec.model, undefined, ctx, deps);
+    return;
   }
   const provider = refs.provider;
   const validation = await deps.validateModelToolSupport(provider, name);
