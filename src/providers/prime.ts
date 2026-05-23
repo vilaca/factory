@@ -42,10 +42,7 @@ export interface PrimedResult {
  *
  *  Returns the SAME instance, narrowed to `Provider`. The cast is safe
  *  because every concrete provider class implements both interfaces. */
-export async function prime(
-  p: UnprimedProvider,
-  targetModel?: string,
-): Promise<PrimedResult> {
+export async function prime(p: UnprimedProvider, targetModel?: string): Promise<PrimedResult> {
   const models = await p.listModels();
   if (targetModel && p.primeModelCache) {
     await p.primeModelCache(targetModel);

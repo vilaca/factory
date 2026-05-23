@@ -1,10 +1,7 @@
 import React from 'react';
 import os from 'os';
 import { Box, Text } from 'ink';
-import {
-  contextFillTokens,
-  type PromptTokensCarrier,
-} from '../../../providers/usage.js';
+import { contextFillTokens, type PromptTokensCarrier } from '../../../providers/usage.js';
 
 const HOME_DIR = os.homedir();
 

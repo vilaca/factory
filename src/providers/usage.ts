@@ -38,9 +38,7 @@ export interface PromptTokensCarrier {
  *  completion tokens fold into the next prompt as a (usually small)
  *  assistant message rather than appearing verbatim. Using totalTokens
  *  makes the gauge jitter every turn (see 44aeb26). */
-export function contextFillTokens(
-  usage: PromptTokensCarrier | undefined,
-): number | undefined {
+export function contextFillTokens(usage: PromptTokensCarrier | undefined): number | undefined {
   if (!usage) return undefined;
   if (usage.promptTokens === undefined) return undefined;
   if (usage.promptTokens === 0) return undefined;
