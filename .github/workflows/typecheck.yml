@@ -21,3 +21,8 @@ jobs:
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
       - run: npx tsc --noEmit
+      # Also gate the test-tree typecheck. `npm run test:unit` uses tsx (no
+      # typecheck) so latent type errors in test/** can hide until release
+      # gates run — see 4d9ba37 for the prior breakage. Failing here cuts
+      # that out.
+      - run: npx tsc -p tsconfig.test.json --noEmit
