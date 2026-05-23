@@ -1,6 +1,12 @@
 # 🏭 factory
 
-[![CI](https://github.com/vilaca/factory/actions/workflows/ci.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/ci.yml)
+[![Lint](https://github.com/vilaca/factory/actions/workflows/lint.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/lint.yml)
+[![Typecheck](https://github.com/vilaca/factory/actions/workflows/typecheck.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/typecheck.yml)
+[![Unit tests](https://github.com/vilaca/factory/actions/workflows/test-unit.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/test-unit.yml)
+[![E2E mocks](https://github.com/vilaca/factory/actions/workflows/test-e2e-mocks.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/test-e2e-mocks.yml)
+[![E2E no-mocks](https://github.com/vilaca/factory/actions/workflows/test-e2e-no-mocks.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/test-e2e-no-mocks.yml)
+[![E2E headless](https://github.com/vilaca/factory/actions/workflows/test-e2e-headless.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/test-e2e-headless.yml)
+[![E2E pty](https://github.com/vilaca/factory/actions/workflows/test-e2e-pty.yml/badge.svg)](https://github.com/vilaca/factory/actions/workflows/test-e2e-pty.yml)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)
 
