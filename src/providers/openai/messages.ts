@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatOptions, ToolDefinition } from '../types.js';
+import { resolveSampling, applySamplingToBody } from '../shared.js';
 
 // TODO(vision): support multimodal `content` (image_url for chat, input_image
 // for Responses). Today ChatMessage.content is `string` (types.ts:7) and ~35
@@ -74,6 +75,11 @@ interface BuildChatBodyOptions {
    *  Default off — only safe when the upstream is Anthropic (e.g.
    *  OpenRouter routing to `anthropic/claude-*`). */
   cacheControl?: boolean;
+  /** Caller-side label routed to `resolveSampling` so the
+   *  per-model sampling-defaults diagnostic log fires with the
+   *  correct provider attribution. Optional; omitting it suppresses
+   *  the log (defaults still apply). */
+  providerName?: string;
 }
 
 export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknown> {
@@ -105,9 +111,17 @@ export function buildChatBody(opts: BuildChatBodyOptions): Record<string, unknow
   if (opts.options?.maxTokens) {
     body[opts.maxTokensField ?? 'max_completion_tokens'] = opts.options.maxTokens;
   }
-  if (opts.options?.temperature !== undefined) {
-    body.temperature = opts.options.temperature;
-  }
+  // Phase 10: resolve sampling values from (per-call override → instance
+  // defaults → per-model defaults table) and merge into the body. Drops
+  // undefined fields, so providers that didn't override anything see no
+  // change. `temperature` is included in ResolvedSampling, so the
+  // legacy `body.temperature = options.temperature` write is now
+  // subsumed.
+  const resolved = resolveSampling(opts.options, {
+    model: opts.model,
+    providerName: opts.providerName,
+  });
+  applySamplingToBody(body, resolved);
   // TODO(provider-capabilities/openai-options): buildChatBody is reused by
   // multiple "OpenAI-compatible" providers, some of which reject unknown
   // OpenAI-only fields. Gate these pass-through options (and response_format

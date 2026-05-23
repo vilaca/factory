@@ -154,6 +154,7 @@ export class OpenAIProvider implements Provider {
       stream,
       options: adjusted,
       parallelToolCalls: supportsParallelToolCalls(lower),
+      providerName: 'openai',
     });
   }
 

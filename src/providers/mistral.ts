@@ -165,6 +165,7 @@ export class MistralProvider implements Provider {
       options,
       maxTokensField: 'max_tokens',
       extra: tools && tools.length > 0 ? { tool_choice: 'auto' } : undefined,
+      providerName: this.displayName,
     });
   }
 

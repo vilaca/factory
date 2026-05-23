@@ -15,4 +15,5 @@ export const TOOL_NAMES = {
   Glob: 'Glob',
   WebFetch: 'WebFetch',
   Delegate: 'Delegate',
+  Respond: 'Respond',
 } as const;

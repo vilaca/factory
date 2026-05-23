@@ -90,7 +90,14 @@ export class CerebrasProvider implements Provider {
     yield* streamOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.authHeaders(),
-      body: buildChatBody({ model, messages, tools, stream: true, options }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: true,
+        options,
+        providerName: 'Cerebras',
+      }),
       signal: options?.signal,
       providerName: 'Cerebras',
     });
@@ -105,7 +112,14 @@ export class CerebrasProvider implements Provider {
     return sendOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.authHeaders(),
-      body: buildChatBody({ model, messages, tools, stream: false, options }),
+      body: buildChatBody({
+        model,
+        messages,
+        tools,
+        stream: false,
+        options,
+        providerName: 'Cerebras',
+      }),
       signal: options?.signal,
       providerName: 'Cerebras',
     });

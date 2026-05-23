@@ -8,6 +8,34 @@ export { TOOL_NAMES };
 
 export type ToolCategory = 'read-only' | 'write' | 'execute';
 
+/**
+ * Tool execution result.
+ *
+ * Valid flag combinations (the matrix is implicit elsewhere; codified
+ * here so tool authors don't have to grep the agent loop):
+ *
+ * | Outcome                          | success | softError | hardError | skipCorrector | empty | important |
+ * | -------------------------------- | ------- | --------- | --------- | ------------- | ----- | --------- |
+ * | clean success                    | true    | —         | —         | —             | —     | —         |
+ * | clean success, no data           | true    | —         | —         | —             | true  | —         |
+ * | clean success, body load-bearing | true    | —         | —         | —             | —     | true      |
+ * | soft fail (corrector retries)    | false   | —         | —         | —             | —     | —         |
+ * | soft fail, hint already in body  | false   | —         | —         | true          | —     | —         |
+ * | tool-resolution miss (404-ish)   | false   | true      | —         | true          | —     | —         |
+ * | unexpected exception (5xx-ish)   | false   | —         | true      | —             | —     | —         |
+ *
+ * Rules:
+ *   - `success: true` never carries `softError`, `hardError`, or
+ *     `skipCorrector` (those describe failure modes only).
+ *   - `softError` and `hardError` are mutually exclusive — they
+ *     classify *how* the tool failed.
+ *   - `softError` is set by the executor when the callable threw
+ *     `ToolResolutionError`, always paired with `skipCorrector: true`.
+ *   - `hardError` is set by the executor when the callable threw any
+ *     other exception; the agent loop bumps the consecutive-hard-error
+ *     counter only in this case.
+ *   - `cwdAfter` is Bash-only and orthogonal to the rest.
+ */
 export interface ToolResult {
   success: boolean;
   output: string;
@@ -35,6 +63,24 @@ export interface ToolResult {
    * char file slice. The agent loop checks this flag and skips the corrector
    * when true. */
   skipCorrector?: boolean;
+  /** Set when the tool's callable threw `ToolResolutionError` — the
+   *  reliability-stack analogue of an HTTP 404: valid request, no
+   *  matching data. The agent loop reads this to *suppress* the
+   *  consecutive-hard-error counter for this call: ToolResolutionError
+   *  doesn't count toward `maxHardToolErrors`. Always paired with
+   *  `success: false` and `skipCorrector: true` (the model already
+   *  has the resolution message; the LLM corrector would just burn a
+   *  call). See `src/tools/errors.ts`. */
+  softError?: boolean;
+  /** Set when the tool's callable threw an unexpected exception (a
+   *  non-`ToolResolutionError`). Distinguishes "the tool threw" from
+   *  "the tool returned `{ success: false }` gracefully." Only the
+   *  former bumps the consecutive-hard-error counter
+   *  (docs/reliability/next-steps.md §9, "5xx-equivalent"). Existing tools that fail
+   *  by returning `{ success: false, output: 'No such file' }` —
+   *  Read, Edit, Bash exit codes, etc. — stay on the soft path and
+   *  recover via the LLM corrector / format-retry path. */
+  hardError?: boolean;
 }
 
 /** Per-call context that an agent loop passes when executing a tool.

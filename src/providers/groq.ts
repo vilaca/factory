@@ -125,6 +125,7 @@ export class GroqProvider implements Provider {
       stream,
       options: adjusted,
       parallelToolCalls: supportsParallelToolCalls(lower),
+      providerName: PROVIDER_NAME,
     });
   }
 

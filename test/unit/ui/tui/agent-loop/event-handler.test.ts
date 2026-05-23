@@ -691,7 +691,7 @@ describe('event-handler — misc notice handlers', () => {
     const { ss } = makeSs();
     handleAgentEvent({ type: 'compaction-start', aggressive: true }, deps, ss);
     handleAgentEvent(
-      { type: 'compaction', oldMessages: 50, newMessages: 12, aggressive: true },
+      { type: 'compaction', oldMessages: 50, newMessages: 12, aggressive: true, phase: 4 },
       deps,
       ss,
     );
@@ -710,7 +710,7 @@ describe('event-handler — misc notice handlers', () => {
     const { ss } = makeSs();
     handleAgentEvent({ type: 'compaction-start', aggressive: false }, deps, ss);
     handleAgentEvent(
-      { type: 'compaction', oldMessages: 5, newMessages: 3, aggressive: false },
+      { type: 'compaction', oldMessages: 5, newMessages: 3, aggressive: false, phase: 1 },
       deps,
       ss,
     );

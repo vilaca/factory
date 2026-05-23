@@ -8,6 +8,7 @@ import type { PermissionManager } from '../../../security/permissions.js';
 import type { BashDedupTracker } from './bash-dedup.js';
 import type { FileCache } from '../cache/file-cache.js';
 import type { AsyncMutex } from './async-mutex.js';
+import type { StepEnforcer } from '../step-enforcer.js';
 
 export interface ToolLoopContext {
   conversation: Conversation;
@@ -44,4 +45,11 @@ export interface ToolLoopContext {
    *  that invariant without forcing execution itself to serialize. Other
    *  call sites leave this undefined and pay no overhead. */
   permissionMutex?: AsyncMutex;
+  /** Reliability-stack step enforcer. When set, the tool-execution
+   *  pipeline calls `enforcer.record(name, args)` after a successful
+   *  call so the tracker knows that required step was completed and
+   *  the prereq lookups for later tools have the matching args.
+   *  Optional — callers without `requiredSteps` / `terminalTools` /
+   *  prereqs leave this undefined and the recording is a no-op. */
+  stepEnforcer?: StepEnforcer;
 }

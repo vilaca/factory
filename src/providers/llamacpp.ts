@@ -13,9 +13,45 @@ const PROVIDER_NAME = 'llama.cpp';
 export class LlamaCppProvider implements Provider {
   name = 'llamacpp';
   private baseUrl: string;
+  /** Cached context window discovered via `/props`. Probed on first
+   *  `discoverContextWindow` call and reused; one HTTP round-trip per
+   *  session. */
+  private discoveredContextWindow: number | undefined;
 
   constructor(host?: string) {
     this.baseUrl = host ?? 'http://127.0.0.1:8080';
+  }
+
+  /**
+   * Reliability stack (Phase 11): ask llama-server for its actual
+   * context window via the read-only `/props` endpoint instead of
+   * guessing. Returns null if the probe fails — caller falls back to
+   * the static estimate from `getCapabilities()`. Cached for the life
+   * of the provider instance; one probe per session.
+   *
+   * Strips a `/v1` suffix from the base URL since `/props` lives at
+   * the root of llama-server, not under the OpenAI-compat surface.
+   */
+  async discoverContextWindow(_model: string): Promise<number | null> {
+    if (this.discoveredContextWindow !== undefined) {
+      return this.discoveredContextWindow;
+    }
+    const root = this.baseUrl.replace(/\/v1\/?$/, '');
+    try {
+      const res = await fetch(`${root}/props`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        default_generation_settings?: { n_ctx?: number };
+      };
+      const n = data.default_generation_settings?.n_ctx;
+      if (typeof n === 'number' && n > 0) {
+        this.discoveredContextWindow = n;
+        return n;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   async listModels(): Promise<string[]> {
@@ -73,6 +109,7 @@ export class LlamaCppProvider implements Provider {
         stream: true,
         options,
         parallelToolCalls: false,
+        providerName: PROVIDER_NAME,
       }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,
@@ -95,6 +132,7 @@ export class LlamaCppProvider implements Provider {
         stream: false,
         options,
         parallelToolCalls: false,
+        providerName: PROVIDER_NAME,
       }),
       signal: options?.signal,
       providerName: PROVIDER_NAME,

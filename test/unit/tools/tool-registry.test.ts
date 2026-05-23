@@ -4,11 +4,15 @@ import { defaultRegistry } from '../../../src/tools/index.js';
 import type { ToolCategory } from '../../../src/tools/types.js';
 
 describe('Tool registry', () => {
-  const expectedTools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch'];
+  // Respond is registered alongside the 7 built-ins (synthetic terminal tool
+  // for the small-model reliability path; see src/tools/respond.ts). It's
+  // counted here so the registry's storage assertions stay honest; the
+  // agent loop filters it from the wire surface for strong-tier models.
+  const expectedTools = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'Respond'];
 
-  it('getAll returns all 7 tools', () => {
+  it('getAll returns all 8 tools', () => {
     const tools = defaultRegistry.getAll();
-    assert.strictEqual(tools.length, 7);
+    assert.strictEqual(tools.length, expectedTools.length);
     const names = tools.map(t => t.name);
     for (const name of expectedTools) {
       assert.ok(names.includes(name), `Missing tool: ${name}`);
@@ -17,13 +21,20 @@ describe('Tool registry', () => {
 
   it('getDefinitions returns definitions for all tools', () => {
     const defs = defaultRegistry.getDefinitions();
-    assert.strictEqual(defs.length, 7);
+    assert.strictEqual(defs.length, expectedTools.length);
     for (const def of defs) {
       assert.strictEqual(def.type, 'function');
       assert.ok(def.function.name, 'definition must have a name');
       assert.ok(def.function.description, 'definition must have a description');
       assert.strictEqual(def.function.parameters.type, 'object');
     }
+  });
+
+  it('getDefinitions honors the exclude set', () => {
+    const all = defaultRegistry.getDefinitions();
+    const filtered = defaultRegistry.getDefinitions({ exclude: new Set(['Respond']) });
+    assert.strictEqual(filtered.length, all.length - 1);
+    assert.ok(!filtered.some(d => d.function.name === 'Respond'));
   });
 
   it('get finds tools by exact name', () => {

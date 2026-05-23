@@ -11,6 +11,42 @@ import type {
   ModelInfo,
 } from './types.js';
 import { errorCode, errorMessage, isError, makeAbortError } from '../utils/errors.js';
+import { resolveSampling, resolveThinking, type ResolvedSampling } from './shared.js';
+import { discardThinkTags } from '../utils/think-tags.js';
+import {
+  buildPromptModeToolPreamble,
+  downgradeMessagesForPromptMode,
+  withPromptModeSystem,
+} from './ollama-prompt-mode.js';
+
+type ToolMode = 'native' | 'prompt';
+
+/** Build the per-request `options` object for Ollama's chat endpoint.
+ *  Pulled out of the chat/chatNoStream bodies so the per-call sampling
+ *  threading is a flat data transform (each key in `sampling` maps 1:1
+ *  to an Ollama option) instead of a long inline conditional ladder.
+ *  Ollama silently ignores undefined fields, but trimming them keeps
+ *  request shape stable across calls for log diffing. */
+function ollamaOptions(
+  numCtx: number,
+  maxTokens: number | undefined,
+  sampling: ResolvedSampling,
+): Record<string, unknown> {
+  const opts: Record<string, unknown> = {
+    // num_ctx comes from the caller so the per-model real value
+    // (populated by primeModelCache → contextWindowCache) wins over
+    // the hardcoded estimate; sending a num_ctx larger than the
+    // model's configured context overflows ollama server-side.
+    num_ctx: numCtx,
+    num_predict: maxTokens ?? 4096,
+  };
+  // Ollama's option names match the snake_case ResolvedSampling shape
+  // 1:1, so the merge is a plain copy of defined fields.
+  for (const [k, v] of Object.entries(sampling)) {
+    if (v !== undefined) opts[k] = v;
+  }
+  return opts;
+}
 
 export class OllamaProvider implements Provider {
   name = 'ollama';
@@ -85,12 +121,47 @@ export class OllamaProvider implements Provider {
     };
   }
 
+  /** Reliability stack §16: per-model tool-mode cache. `getModelInfo`
+   *  reports whether Ollama considers the model tool-capable; if not,
+   *  we transparently downgrade to prompt-mode (system-injected tool
+   *  schema + text round-trip). Cached so we don't pay the /api/show
+   *  cost on every chat call. */
+  private toolModeCache = new Map<string, ToolMode>();
+  private async resolveToolMode(model: string, hasTools: boolean): Promise<ToolMode> {
+    // No tools → mode is irrelevant; don't probe and don't cache.
+    if (!hasTools) return 'native';
+    const cached = this.toolModeCache.get(model);
+    if (cached) return cached;
+    try {
+      const info = await this.getModelInfo(model);
+      const mode: ToolMode = info.supportsTools ? 'native' : 'prompt';
+      this.toolModeCache.set(model, mode);
+      return mode;
+    } catch {
+      // Probe failed (model not pulled, server unreachable). Default to
+      // native — the underlying chat call will surface the real error
+      // via translateOllamaError. Don't cache so a subsequent successful
+      // probe wins.
+      return 'native';
+    }
+  }
+
   /** Populate per-model caches (currently just `contextWindowCache`) so the
    *  synchronous `getCapabilities` reads the model's real context length
    *  instead of the hardcoded estimate. Best-effort: failures (server down,
    *  model not pulled) leave the cache empty and `getCapabilities` falls
    *  through to `estimateContextWindow`. Mirrors the listModels priming
-   *  step in swap.ts. */
+   *  step in swap.ts.
+   *
+   *  Note: this supersedes the reliability stack's `discoverContextWindow`
+   *  for Ollama. Both probe `/api/show` and parse the same
+   *  `<arch>.context_length` key out of `model_info`; we keep a single
+   *  cache (`contextWindowCache`) and a single priming entry point so
+   *  callers don't duplicate the round-trip. The `Provider.discoverContextWindow`
+   *  interface (docs/reliability/next-steps.md §11) is still implemented
+   *  by `LlamaCppProvider` for the `/props` lookup; Ollama doesn't
+   *  implement it since `primeModelCache` already populates the cache
+   *  that `getCapabilities` reads. */
   async primeModelCache(model: string): Promise<void> {
     try {
       await this.getModelInfo(model);
@@ -122,24 +193,49 @@ export class OllamaProvider implements Provider {
     return this.contextWindowCache.get(model) ?? estimateContextWindow(model);
   }
 
+  /** Common request-builder for `chat` / `chatNoStream`. Pulls the
+   *  tool-mode resolution + sampling + thinking branches out of the
+   *  public methods so they stay under the eslint complexity cap.
+   *  Prompt-mode strips `tools` from the wire payload — the model
+   *  discovers them via the injected system preamble and emits its
+   *  call as text the agent layer's <tool_call> parser picks up. */
+  private async buildChatRequest(
+    model: string,
+    messages: ChatMessage[],
+    tools: ToolDefinition[] | undefined,
+    options: ChatOptions | undefined,
+  ): Promise<{ base: Omit<ChatRequest, 'stream'>; think: boolean }> {
+    const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
+    const think = resolveThinking(model, options?.thinking);
+    const hasTools = !!tools && tools.length > 0;
+    const toolMode = await this.resolveToolMode(model, hasTools);
+    const messagesForWire =
+      toolMode === 'prompt'
+        ? withPromptModeSystem(
+            downgradeMessagesForPromptMode(messages),
+            buildPromptModeToolPreamble(tools!),
+          )
+        : (messages as Message[]);
+    const base: Omit<ChatRequest, 'stream'> = {
+      model,
+      messages: messagesForWire,
+      ...(toolMode === 'native' && hasTools ? { tools: tools as Tool[] } : {}),
+      // num_predict caps output length so degenerate repetition loops can't
+      // run forever. Ollama's default is -1 (no limit).
+      options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
+      think,
+    };
+    return { base, think };
+  }
+
   async *chat(
     model: string,
     messages: ChatMessage[],
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
-    const request: ChatRequest & { stream: true } = {
-      model,
-      messages: messages as Message[],
-      stream: true,
-      tools: tools as Tool[],
-      // num_predict caps output length so degenerate repetition loops can't
-      // run forever. Ollama's default is -1 (no limit).
-      options: {
-        num_ctx: this.resolveContextWindow(model),
-        num_predict: options?.maxTokens ?? 4096,
-      },
-    };
+    const { base, think } = await this.buildChatRequest(model, messages, tools, options);
+    const request: ChatRequest & { stream: true } = { ...base, stream: true };
 
     const stream = await this.client.chat(request);
     // Tie the iterator's abort to our signal so cancellation propagates to the
@@ -166,30 +262,7 @@ export class OllamaProvider implements Provider {
     }
     try {
       for await (const chunk of stream) {
-        const result: ChatChunk = {};
-        if (chunk.message?.content) {
-          result.content = chunk.message.content;
-        }
-        if (chunk.message?.tool_calls) {
-          result.tool_calls = chunk.message.tool_calls.map(tc => ({
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments as Record<string, unknown>,
-            },
-          }));
-        }
-        if (chunk.done) {
-          result.done = true;
-          if (typeof chunk.done_reason === 'string') result.doneReason = chunk.done_reason;
-          if (chunk.eval_count || chunk.prompt_eval_count) {
-            result.usage = {
-              promptTokens: chunk.prompt_eval_count ?? 0,
-              completionTokens: chunk.eval_count ?? 0,
-              totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
-            };
-          }
-        }
-        yield result;
+        yield mapOllamaChunk(chunk, think);
       }
     } catch (err: unknown) {
       // The iterator throws when stream.abort() runs. Surface this as an
@@ -209,16 +282,8 @@ export class OllamaProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
-    const request: ChatRequest & { stream: false } = {
-      model,
-      messages: messages as Message[],
-      stream: false,
-      tools: tools as Tool[],
-      options: {
-        num_ctx: this.resolveContextWindow(model),
-        num_predict: options?.maxTokens ?? 4096,
-      },
-    };
+    const { base, think } = await this.buildChatRequest(model, messages, tools, options);
+    const request: ChatRequest & { stream: false } = { ...base, stream: false };
 
     const signal = options?.signal;
     if (signal?.aborted) {
@@ -238,28 +303,60 @@ export class OllamaProvider implements Provider {
       throw translateOllamaError(err);
     }
 
-    const result: ChatChunk = {
-      content: response.message?.content,
-      done: true,
-    };
-    if (typeof response.done_reason === 'string') result.doneReason = response.done_reason;
-    if (response.message?.tool_calls) {
-      result.tool_calls = response.message.tool_calls.map(tc => ({
-        function: {
-          name: tc.function.name,
-          arguments: tc.function.arguments as Record<string, unknown>,
-        },
-      }));
-    }
-    if (response.eval_count || response.prompt_eval_count) {
+    // Non-streaming responses are implicitly "done"; reuse the streaming
+    // mapper with done=true forced on top.
+    return { ...mapOllamaChunk({ ...response, done: true }, think), done: true };
+  }
+}
+
+/** Shape we read off Ollama responses. Both streaming chunks and
+ *  /api/chat non-stream responses fit this — distinct fields stay
+ *  optional. Captured as an interface (rather than `any`-coerced) so
+ *  the mapper stays type-checked. */
+interface OllamaChunkLike {
+  message?: {
+    content?: string;
+    tool_calls?: ReadonlyArray<{
+      function: { name: string; arguments: unknown };
+    }>;
+  };
+  done?: boolean;
+  done_reason?: string;
+  eval_count?: number;
+  prompt_eval_count?: number;
+}
+
+/** Convert an Ollama streaming chunk (or non-stream response coerced
+ *  to the same shape) into the cross-provider ChatChunk. Extracted
+ *  from `chat`/`chatNoStream` so the per-method complexity stays
+ *  under the eslint cap. Applies the §15 think-tag discard when the
+ *  caller opted out of thinking. */
+function mapOllamaChunk(chunk: OllamaChunkLike, think: boolean): ChatChunk {
+  const result: ChatChunk = {};
+  const rawContent = chunk.message?.content;
+  if (rawContent) {
+    result.content = think ? rawContent : discardThinkTags(rawContent);
+  }
+  if (chunk.message?.tool_calls) {
+    result.tool_calls = chunk.message.tool_calls.map(tc => ({
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments as Record<string, unknown>,
+      },
+    }));
+  }
+  if (chunk.done) {
+    result.done = true;
+    if (typeof chunk.done_reason === 'string') result.doneReason = chunk.done_reason;
+    if (chunk.eval_count || chunk.prompt_eval_count) {
       result.usage = {
-        promptTokens: response.prompt_eval_count ?? 0,
-        completionTokens: response.eval_count ?? 0,
-        totalTokens: (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
+        promptTokens: chunk.prompt_eval_count ?? 0,
+        completionTokens: chunk.eval_count ?? 0,
+        totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
       };
     }
-    return result;
   }
+  return result;
 }
 
 /**
