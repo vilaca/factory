@@ -272,10 +272,15 @@ function runSingleHook(
       resolve({ parsed: { notice }, stderr });
     });
 
+    // Fast hooks (e.g. `touch <marker>`) can exit before we get here, so the
+    // stdin pipe may already be closed. Both the sync .end() throw and the
+    // async 'error' event need to be swallowed — without the listener, an
+    // async EPIPE escalates to uncaughtException and exits the CLI with 1.
+    child.stdin?.on('error', () => {});
     try {
       child.stdin?.end(stdinJson);
     } catch {
-      // stdin may already be closed if the hook exited fast; ignore.
+      /* ignore — see comment above */
     }
   });
 }
