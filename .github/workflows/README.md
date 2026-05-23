@@ -1,14 +1,24 @@
 # GitHub Actions Workflows
 
-**TODO** — no workflows are configured yet.
+Each test script and each validation runs as its own workflow so failures
+are surfaced and re-runnable independently in the PR checks list.
 
-The main [`README.md`](../../README.md) links here from its CI/CD section
-in anticipation of automated CI, release, and security-scanning
-workflows. Until those are added this directory only exists to keep the
-link from 404'ing.
+Validations (run on push to `main` and on PR):
 
-Planned (none implemented):
+- `lint.yml` — `eslint`.
+- `typecheck.yml` — `tsc --noEmit`.
+- `format-check.yml` — `prettier --check`.
+- `knip.yml` — unused-export / dependency check.
 
-- `ci.yml` — lint + build + test on push and pull request.
-- `release.yml` — build artifacts and create a GitHub Release on `v*` tags.
-- `security.yml` — `npm audit` and CodeQL JS/TS scan on a weekly schedule.
+Tests (run on push to `main` and on PR):
+
+- `test-unit.yml` — `npm run test:unit`.
+- `test-e2e-mocks.yml` — `npm run test:e2e:mocks`.
+- `test-e2e-no-mocks.yml` — `npm run test:e2e:no-mocks`.
+- `test-e2e-headless.yml` — `npm run test:e2e:headless` (headless CLI/tools/hooks/mcp/etc.).
+- `test-e2e-pty.yml` — `npm run test:e2e:pty` (slash-commands/tabs/picker/plan-mode).
+- `coverage.yml` — `npm run coverage` (c8 thresholds on unit suite).
+
+Docs:
+
+- `docs.yml` — builds and deploys the VitePress site to GitHub Pages.
