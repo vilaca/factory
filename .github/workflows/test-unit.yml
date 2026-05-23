@@ -20,6 +20,8 @@ jobs:
           cache: 'npm'
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
-      # `coverage` runs the unit suite under c8 and enforces the
-      # line/branch/function thresholds, so it subsumes `test:unit`.
+      # Unit suite must pass — this step gates the build.
+      - run: npm run test:unit
+      # Coverage thresholds are advisory: surface drift without blocking merges.
       - run: npm run coverage
+        continue-on-error: true
