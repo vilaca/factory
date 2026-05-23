@@ -297,26 +297,44 @@ describe('decideStartupSource', () => {
 });
 
 describe('persistRotationConfig', () => {
-  it('reads global config, then writes back with the rotation block patched', async () => {
+  // `updateGlobal` is a function that takes a mutator and applies it to
+  // the current config atomically. The stub here captures the mutator
+  // invocation so each test can assert (a) the right current config was
+  // passed and (b) the right patch was produced. This mirrors the real
+  // `updateGlobalConfig` shape from src/core/config/index.ts.
+  type UpdateGlobal = Parameters<typeof persistRotationConfig>[1];
+
+  function makeUpdateGlobal(current: Config): {
+    updateGlobal: UpdateGlobal;
+    patches: Partial<Config>[];
+    mutatorSawCurrent: Config[];
+  } {
+    const patches: Partial<Config>[] = [];
+    const mutatorSawCurrent: Config[] = [];
+    const updateGlobal: UpdateGlobal = async mutate => {
+      mutatorSawCurrent.push(current);
+      const patch = await mutate(current);
+      patches.push(patch);
+      return undefined;
+    };
+    return { updateGlobal, patches, mutatorSawCurrent };
+  }
+
+  it('produces a patch that overwrites rotation while preserving other agent fields', async () => {
     const global = {
       provider: 'anthropic',
       agent: { hooks: { PreToolUse: [{ command: 'echo' }] } },
     } as unknown as Config;
-    let savedPatch: Partial<Config> | null = null;
-    const loadGlobal = async (): Promise<Config> => global;
-    const saveGlobal = async (patch: Partial<Config>): Promise<unknown> => {
-      savedPatch = patch;
-      return undefined;
-    };
+    const { updateGlobal, patches } = makeUpdateGlobal(global);
     const newRotation = {
       keys: true,
       models: false,
       default: [{ provider: 'groq', model: 'llama-3.3-70b' }],
     };
-    await persistRotationConfig(newRotation, loadGlobal, saveGlobal);
+    await persistRotationConfig(newRotation, updateGlobal);
 
-    assert.notStrictEqual(savedPatch, null);
-    const patch = savedPatch as unknown as Partial<Config>;
+    assert.equal(patches.length, 1);
+    const patch = patches[0]!;
     // The rotation block was overwritten...
     assert.deepStrictEqual(patch.agent?.rotation, newRotation);
     // ...but the unrelated agent.hooks block was preserved.
@@ -326,35 +344,18 @@ describe('persistRotationConfig', () => {
   });
 
   it('handles undefined existing agent block (no other agent fields to preserve)', async () => {
-    let savedPatch: Partial<Config> | null = null;
-    const loadGlobal = async (): Promise<Config> => ({}) as unknown as Config;
-    const saveGlobal = async (patch: Partial<Config>): Promise<unknown> => {
-      savedPatch = patch;
-      return undefined;
-    };
-    await persistRotationConfig({ keys: false }, loadGlobal, saveGlobal);
-    assert.deepStrictEqual(savedPatch, { agent: { rotation: { keys: false } } });
+    const { updateGlobal, patches } = makeUpdateGlobal({} as unknown as Config);
+    await persistRotationConfig({ keys: false }, updateGlobal);
+    assert.deepStrictEqual(patches[0], { agent: { rotation: { keys: false } } });
   });
 
-  it('propagates load errors', async () => {
-    const loadGlobal = async (): Promise<Config> => {
-      throw new Error('disk read failed');
-    };
-    const saveGlobal = async (): Promise<unknown> => undefined;
-    await assert.rejects(
-      persistRotationConfig({ keys: true }, loadGlobal, saveGlobal),
-      /disk read failed/,
-    );
-  });
-
-  it('propagates save errors', async () => {
-    const loadGlobal = async (): Promise<Config> => ({}) as unknown as Config;
-    const saveGlobal = async (): Promise<unknown> => {
-      throw new Error('disk write failed');
+  it('propagates errors thrown by updateGlobal', async () => {
+    const updateGlobal: UpdateGlobal = async () => {
+      throw new Error('config write failed');
     };
     await assert.rejects(
-      persistRotationConfig({ keys: true }, loadGlobal, saveGlobal),
-      /disk write failed/,
+      persistRotationConfig({ keys: true }, updateGlobal),
+      /config write failed/,
     );
   });
 });

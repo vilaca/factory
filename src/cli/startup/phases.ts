@@ -54,8 +54,8 @@ export async function applyRotationPhase(config: Config, cliArgs: CliArgs): Prom
   config.agent = { ...config.agent, rotation: next };
   if (cliArgs.saveRotate) {
     try {
-      const { loadGlobalConfig, saveGlobalConfig } = await import('../../core/config/index.js');
-      await persistRotationConfig(next, loadGlobalConfig, saveGlobalConfig);
+      const { updateGlobalConfig } = await import('../../core/config/index.js');
+      await persistRotationConfig(next, updateGlobalConfig);
     } catch (err: unknown) {
       console.log(renderError(`Failed to save rotation config: ${errorMessage(err)}`));
       process.exit(1);

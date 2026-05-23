@@ -230,6 +230,39 @@ describe('architecture: module boundaries', () => {
   // the canonical post-split priming call; the other two are
   // grandfathered for files that call those methods directly
   // (e.g. priming via a separate explicit listModels).
+  // Config RMW contract.
+  //
+  // Background: f848472 fixed a race where `Session` did
+  // `read-config → mutate → write-config` without holding the config
+  // mutex. Two tabs hitting rate limits would clobber each other's
+  // writes. The fix routed all dependent updates through
+  // `updateGlobalConfig(fn)`, which holds the mutex across the read,
+  // transform, and write.
+  //
+  // The contract: when a new value depends on the prior value, callers
+  // MUST use `updateGlobalConfig`. `loadGlobalConfig` + `saveGlobalConfig`
+  // is reserved for unconditional updates (token saves, auth-mode flag,
+  // etc.). We can't fully verify "depends on prior" statically, but we
+  // can catch the necessary condition: any file that imports BOTH
+  // `loadGlobalConfig` AND `saveGlobalConfig` is almost certainly doing
+  // RMW — flag it.
+  //
+  // The one legitimate exception is `src/core/config/index.ts` itself
+  // (the migration code path calls saveGlobalConfig from inside
+  // loadGlobalConfigUncached). It's allowlisted.
+  it('files must not pair loadGlobalConfig with saveGlobalConfig — use updateGlobalConfig (f848472 contract)', async () => {
+    const rule = projectFiles()
+      .inFolder('src/**', { except: ['src/core/config/index.ts'] })
+      .should()
+      .adhereTo(file => {
+        const src = file.content;
+        const loads = /\bloadGlobalConfig\b/.test(src);
+        const saves = /\bsaveGlobalConfig\b/.test(src);
+        return !(loads && saves);
+      }, 'loadGlobalConfig + saveGlobalConfig in the same file is RMW — use updateGlobalConfig');
+    await expectNoViolations(rule, 'config RMW via load+save');
+  });
+
   it('files that mint a provider AND read capabilities must also prime via prime / listModels / primeModelCache', async () => {
     const rule = projectFiles()
       .inFolder('src/**')
