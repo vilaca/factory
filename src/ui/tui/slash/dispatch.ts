@@ -179,7 +179,7 @@ async function handleCompactionModel(arg: string, ctx: SlashCommandContext): Pro
   const refs = ctx.agent.refs.current;
   if (!refs) return;
   const trimmed = arg.trim().toLowerCase();
-  if (trimmed === 'show' || trimmed === 'status') {
+  if (trimmed === 'show') {
     if (refs.compactionTarget) {
       ctx.agent.addNotice(
         'info',
@@ -193,7 +193,7 @@ async function handleCompactionModel(arg: string, ctx: SlashCommandContext): Pro
     }
     return;
   }
-  if (trimmed === 'clear' || trimmed === 'reset' || trimmed === 'default') {
+  if (trimmed === 'clear') {
     refs.compactionTarget = undefined;
     ctx.agent.addNotice(
       'info',

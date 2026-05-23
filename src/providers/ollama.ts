@@ -291,8 +291,10 @@ function estimateContextWindow(model: string): number {
  *  through and Map iteration order can't surface a less-specific match
  *  when multiple keys are present. Returns 0 when the field is absent or
  *  non-numeric — callers fall back to {@link estimateContextWindow}.
- *  Defensive against both a real `Map` and a plain-object payload (some
- *  test fakes use the latter even though the SDK types declare a Map). */
+ *  The SDK types declare `model_info: Map<string, any>`, but `show()`
+ *  returns `(await response.json()) as ShowResponse` — JSON has no Map,
+ *  so the runtime payload is always a plain object. The Map branch is
+ *  defensive cover for a future SDK that actually constructs one. */
 function extractContextLength(modelInfo: unknown): number {
   if (!modelInfo) return 0;
   const entries: Iterable<[string, unknown]> =
