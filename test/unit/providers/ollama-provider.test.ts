@@ -120,6 +120,34 @@ describe('OllamaProvider.getCapabilities', () => {
     assert.strictEqual(p.getCapabilities('deepseek-coder:33b').contextWindow, 16384);
   });
 
+  it('picks the first matching <arch>.context_length when model_info has several', async () => {
+    // Pins iteration-order behavior: when ollama returns multiple
+    // `<arch>.context_length` keys, the FIRST one wins (Object.entries
+    // follows insertion order). We deliberately do not try to disambiguate
+    // — see extractContextLength's docstring. If ollama ever ships ambiguous
+    // payloads in the wild this test will fail loudly and we can revisit.
+    setModelInfo({
+      'general.context_length': 4096,
+      'deepseek2.context_length': 131072,
+    });
+    const p = provider();
+    await p.primeModelCache!('deepseek-coder:33b');
+    assert.strictEqual(
+      p.getCapabilities('deepseek-coder:33b').contextWindow,
+      4096,
+      'first inserted key wins per documented ordering',
+    );
+  });
+
+  it('ignores `context_length` without an arch prefix', async () => {
+    // Anchor on the `<arch>.context_length` shape — a bare
+    // `context_length` (no dot prefix) must not be picked up.
+    setModelInfo({ context_length: 99999 });
+    const p = provider();
+    await p.primeModelCache!('deepseek-coder:33b');
+    assert.strictEqual(p.getCapabilities('deepseek-coder:33b').contextWindow, 16384);
+  });
+
   it('primeModelCache swallows transport failures', async () => {
     const unreachable = new OllamaProvider('http://127.0.0.1:1');
     await unreachable.primeModelCache!('whatever:latest');

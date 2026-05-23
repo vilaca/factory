@@ -8,6 +8,7 @@ import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
 import { defaultRegistry } from '../../../tools/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
+import { primeContextWindowFromActiveProvider } from './prime-context-window.js';
 import {
   createInitialRefs,
   initSkillsRegistry,
@@ -160,23 +161,10 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   });
 
   // Some providers (ollama) need an async call to learn the model's real
-  // context window. Fire-and-forget: when it settles, refresh the
-  // ContextManager's contextWindow so compaction budgets against the right
-  // limit, and push the value into React state so the StatusBar's
-  // denominator updates too. The initial value is a conservative estimate;
-  // the primed value is the model's actual context — trust it whether it's
-  // larger or smaller.
-  const provider = ctx.refs.current.provider;
-  const activeModel = ctx.refs.current.model;
-  if (provider.primeModelCache) {
-    void provider.primeModelCache(activeModel).then(() => {
-      const refs = ctx.refs.current;
-      if (!refs || refs.provider !== provider || refs.model !== activeModel) return;
-      const updated = provider.getCapabilities(activeModel).contextWindow;
-      refs.contextManager.setContextWindow(updated);
-      ctx.setContextWindow(updated);
-    });
-  }
+  // context window. Fire-and-forget: when it settles, refresh
+  // ContextManager + React state so compaction budgets against the right
+  // limit and the StatusBar denominator updates.
+  primeContextWindowFromActiveProvider(ctx.refs, ctx.setContextWindow);
 
   // Seed the token estimate so the status bar shows the system prompt's
   // baseline before the first model response. Pass `[]` when text-tool

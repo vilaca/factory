@@ -6,6 +6,7 @@
 import type { MutableRefObject } from 'react';
 import { ContextManager } from '../../../core/context/context-manager.js';
 import { makeCompactionResolver } from './compaction-resolver.js';
+import { primeContextWindowFromActiveProvider } from './prime-context-window.js';
 import { validateModelToolSupport as defaultValidateModelToolSupport } from '../../../core/auth/model-validation.js';
 import { loadGlobalConfig as defaultLoadGlobalConfig } from '../../../core/config/index.js';
 import { getKey as defaultGetKey } from '../../../core/auth/credentials.js';
@@ -67,23 +68,8 @@ function rebuildContextManager(refs: NonNullable<RunRefs>, ctx: SwapContext): vo
   // denominator flips to the new model's window before the prime resolves.
   ctx.setContextWindow(caps.contextWindow);
   // Best-effort async prime for providers (ollama) whose contextWindow is
-  // only known after a /show call. Mirrors the mount-time priming in
-  // setup.ts. The provider/model identity check guards against a second
-  // swap landing while this is in flight — we only update the manager if
-  // refs still point at the same tuple we primed for. The primed value is
-  // the model's actual context — trust it whether it's larger or smaller
-  // than the estimate.
-  const provider = refs.provider;
-  const activeModel = refs.model;
-  if (provider.primeModelCache) {
-    void provider.primeModelCache(activeModel).then(() => {
-      const current = ctx.refs.current;
-      if (!current || current.provider !== provider || current.model !== activeModel) return;
-      const updated = provider.getCapabilities(activeModel).contextWindow;
-      current.contextManager.setContextWindow(updated);
-      ctx.setContextWindow(updated);
-    });
-  }
+  // only known after a /show call. Mirrors the mount-time prime in setup.ts.
+  primeContextWindowFromActiveProvider(ctx.refs, ctx.setContextWindow);
 }
 
 /** Swap to another model on the *current* provider. Honors `provider:model`

@@ -287,10 +287,13 @@ function estimateContextWindow(model: string): number {
 /** Extract the model's native context length from ollama's `/api/show`
  *  `model_info` field. Ollama prefixes the key by architecture (e.g.
  *  `llama.context_length`, `qwen2.context_length`, `deepseek2.context_length`),
- *  and we anchor on that exact shape so unrelated dotted keys don't slip
- *  through and Map iteration order can't surface a less-specific match
- *  when multiple keys are present. Returns 0 when the field is absent or
+ *  and we anchor on `<single-dotted-segment>.context_length` so unrelated
+ *  dotted keys don't slip through. Returns 0 when the field is absent or
  *  non-numeric — callers fall back to {@link estimateContextWindow}.
+ *  If `model_info` ever contains more than one matching key, iteration
+ *  order decides — that's server-controlled (Object.entries follows
+ *  insertion order, Map preserves it), so we trust whatever ollama puts
+ *  first rather than try to guess which arch is "more specific."
  *  The SDK types declare `model_info: Map<string, any>`, but `show()`
  *  returns `(await response.json()) as ShowResponse` — JSON has no Map,
  *  so the runtime payload is always a plain object. The Map branch is
