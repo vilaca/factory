@@ -47,7 +47,7 @@ export function extractThinkTags(content: string): ThinkExtractResult {
 
 /**
  * Strip inline think tags from streamed content when the caller asked
- * not to see thinking (`thinking: false` per next-steps.md §15). Used
+ * not to see thinking (`thinking: false` per docs/reliability/next-steps.md §15). Used
  * by provider adapters that can't fully suppress the model's `<think>`
  * emission server-side — Qwen3 on certain serving stacks leaks the
  * tags even when the request says `think=false`.

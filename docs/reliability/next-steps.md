@@ -1,6 +1,33 @@
 # Reliability Layer for Small-Model Tool Calling — Feature Inventory
 
-A deep dive into a Python framework that takes an 8B local model from ~38% to ~99% on multi-step tool-calling workflows. This document captures every feature, the algorithm behind it, and the small-model failure mode it removes. Aim: reproduce this on our own stack.
+> **Status.** These are research notes captured from the upstream Python
+> framework described in the IEEE preprint (see `paper-findings.md` for the
+> empirical numbers). They were used as the spec to drive the TypeScript port
+> in this repo; they are *not* the implementation. The §N anchors below are
+> referenced from `src/` doc-comments — when you see "(docs/reliability/next-steps.md §7)"
+> in the codebase, the actual implementation is the surrounding TS file. The
+> Python signatures (`Pydantic`, `asyncio`, `dataclass`, `def`) describe the
+> upstream framework's shape; equivalent TS lives in `src/core/agent/`,
+> `src/core/context/`, `src/providers/`, `src/tools/`, and `src/utils/`.
+>
+> **Quick map to the TS implementation** — when reading a section here, the
+> corresponding code is:
+>
+> | This doc                                 | TS code                                                     |
+> | ---------------------------------------- | ----------------------------------------------------------- |
+> | §3 Message tagging / control flow        | `src/utils/chat-message.ts`, `src/core/agent/step-tracker.ts` |
+> | §4 Response validator                    | `src/core/agent/validator.ts`                                |
+> | §7 Step enforcer / nudges                | `src/core/agent/step-enforcer.ts`, `src/core/agent/nudges.ts` |
+> | §8 Tool prerequisites                    | `src/utils/tool-definition.ts`, `src/tools/registry.ts`      |
+> | §9 ReliabilityError hierarchy            | `src/core/agent/errors.ts`, `src/tools/errors.ts`            |
+> | §10 Tiered compaction                    | `src/core/context/tiered-compact.ts`                         |
+> | §13 Respond tool                         | `src/tools/respond.ts`                                       |
+> | §14–15 Reasoning fold / think tags       | `src/core/agent/reasoning.ts`, `src/utils/think-tags.ts`     |
+> | §16 Ollama prompt-mode + Anthropic shim  | `src/providers/ollama-prompt-mode.ts`, `src/providers/anthropic.ts` |
+> | §17 Per-model sampling defaults          | `src/providers/sampling-defaults.ts`, `src/providers/shared.ts` |
+> | §38 Context manager / LLM-summary path   | `src/core/context/context-manager.ts`, `src/core/agent/compaction.ts` |
+
+A deep dive into a Python framework that takes an 8B local model from ~38% to ~99% on multi-step tool-calling workflows. This document captures every feature, the algorithm behind it, and the small-model failure mode it removes.
 
 The framework targets self-hosted models in the 8B–14B class on consumer GPUs (12–32GB VRAM), running against Ollama, llama-server, Llamafile, or Anthropic as backends. The reliability gain comes from a layered guardrail stack plus aggressive context management — none of the layers are individually clever; the value is in stacking them and in turning every reliability decision into structured text manipulation rather than a model judgement call.
 

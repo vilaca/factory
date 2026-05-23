@@ -1,5 +1,3 @@
-import { TOOL_NAMES } from '../../utils/tool-names.js';
-
 /**
  * Frozen Nudge dataclass shared between the response validator (Phase 4),
  * step enforcer (Phase 5), and the agent loop. Carrying a structured
@@ -130,10 +128,3 @@ export function stepNudge(
   });
 }
 
-/** Re-export the canonical tool name so consumers in this file's
- *  immediate neighbourhood don't have to import from two places. The
- *  step-nudge templates above reference tools by string, not by
- *  enum — they pass through whatever the runtime called the tool. The
- *  Respond constant is here as a courtesy for callers that want to
- *  reference it in their custom nudge wording. */
-export const RESPOND_TOOL = TOOL_NAMES.Respond;

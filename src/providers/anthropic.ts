@@ -11,6 +11,7 @@ import type {
   ChatOptions,
 } from './types.js';
 import { formatTokenCount, parseToolArgs, resolveSampling, type ResolvedSampling } from './shared.js';
+import { appendProviderLog } from '../utils/provider-log.js';
 
 /** Build the Anthropic-only subset of sampling + tool_choice extras for
  *  a single call. Anthropic accepts `temperature`, `top_p`, `top_k`,
@@ -344,9 +345,22 @@ export function splitMessagesForAnthropic(messages: ChatMessage[]): {
       } else {
         msgs.push({ role: 'user', content: [block] });
       }
-      // Mark this tool_use as resolved.
+      // Mark this tool_use as resolved. If the id doesn't match any
+      // pending tool_use, the API will 400 with "unexpected tool_use_id";
+      // log a diagnostic breadcrumb so the orphan is traceable at the
+      // boundary rather than only via the opaque upstream rejection.
       const idx = pendingToolUseIds.indexOf(msg.tool_call_id);
-      if (idx >= 0) pendingToolUseIds.splice(idx, 1);
+      if (idx >= 0) {
+        pendingToolUseIds.splice(idx, 1);
+      } else {
+        appendProviderLog({
+          provider: 'anthropic',
+          category: 'diagnostic',
+          action: 'tool-result-orphan',
+          outcome: 'error',
+          detail: `tool_call_id=${msg.tool_call_id} did not match any pending tool_use`,
+        });
+      }
     } else {
       // Plain user / plain assistant text. Before pushing this
       // message, flush any pending tool_use IDs as synthetic

@@ -148,7 +148,7 @@ export function autoDetectThinking(model: string): boolean {
   return /reason|think/i.test(model);
 }
 
-/** Resolve the tri-state `thinking` per-call option (next-steps.md §15)
+/** Resolve the tri-state `thinking` per-call option (docs/reliability/next-steps.md §15)
  *  into a concrete boolean for the wire request. Pure — providers wrap
  *  this with their own resolved-mode cache so a backend that rejected
  *  the `true` request once gets downgraded to false for subsequent

@@ -21,6 +21,7 @@ interface ParseResult {
 function tryParseToolCall(
   jsonText: string,
   knownToolNames?: ReadonlySet<string>,
+  knownToolNamesLower?: ReadonlyMap<string, string>,
 ): ToolCallMessage | null {
   try {
     const parsed = JSON.parse(jsonText.trim());
@@ -33,19 +34,37 @@ function tryParseToolCall(
       // Reject names that aren't actual tools — common false positive when the
       // model emits JSON describing data (e.g. package.json content with a
       // "name" field). Only enforce when we know what tools exist.
-      if (knownToolNames && !knownToolNames.has(parsed.name)) {
-        return null;
+      // Case-insensitive: small models routinely lowercase ("read" instead of
+      // "Read"); the registry's `get()` and the validator's unknown-tool
+      // check are both case-insensitive, so the parser must be too — otherwise
+      // a lowercase call is silently dropped before either gets to see it.
+      // We canonicalize to the registered name so downstream consumers (which
+      // assume exact-case) stay happy.
+      let resolvedName = parsed.name;
+      if (knownToolNames && !knownToolNames.has(resolvedName)) {
+        const canonical = knownToolNamesLower?.get(resolvedName.toLowerCase());
+        if (!canonical) return null;
+        resolvedName = canonical;
       }
       const args =
         typeof parsed.arguments === 'object' && parsed.arguments !== null
           ? (parsed.arguments as Record<string, unknown>)
           : {};
-      return { function: { name: parsed.name, arguments: args } };
+      return { function: { name: resolvedName, arguments: args } };
     }
   } catch {
     // fall through
   }
   return null;
+}
+
+/** Build a lowercase→canonical map once per parse call. The parser is hot
+ *  on every assistant turn; building this on each tryParseToolCall would
+ *  be O(N*M) for N tools and M JSON blobs in the response. */
+function buildLowerNameMap(known: ReadonlySet<string>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const n of known) out.set(n.toLowerCase(), n);
+  return out;
 }
 
 function stripObjects(content: string, objects: string[]): string {
@@ -63,9 +82,12 @@ export function parseTextToolCalls(
   const toolCalls: ToolCallMessage[] = [];
   const sources: ParseSource[] = [];
   let malformedCount = 0;
+  const knownToolNamesLower = knownToolNames
+    ? buildLowerNameMap(knownToolNames)
+    : undefined;
 
   let cleaned = content.replace(TOOL_CALL_TAG_PATTERN, (_match, body: string) => {
-    const call = tryParseToolCall(body, knownToolNames);
+    const call = tryParseToolCall(body, knownToolNames, knownToolNamesLower);
     if (call) {
       toolCalls.push(call);
       sources.push('tag');
@@ -77,9 +99,14 @@ export function parseTextToolCalls(
 
   // Hermes/Llama style: <function=Name><parameter=k>v</parameter></function>
   cleaned = cleaned.replace(FUNCTION_TAG_PATTERN, (_match, name: string, body: string) => {
-    if (knownToolNames && !knownToolNames.has(name)) {
-      malformedCount++;
-      return '';
+    let resolvedName = name;
+    if (knownToolNames && !knownToolNames.has(resolvedName)) {
+      const canonical = knownToolNamesLower?.get(resolvedName.toLowerCase());
+      if (!canonical) {
+        malformedCount++;
+        return '';
+      }
+      resolvedName = canonical;
     }
     const args: Record<string, unknown> = {};
     let paramMatch: RegExpExecArray | null;
@@ -95,7 +122,7 @@ export function parseTextToolCalls(
         args[key] = raw;
       }
     }
-    toolCalls.push({ function: { name, arguments: args } });
+    toolCalls.push({ function: { name: resolvedName, arguments: args } });
     sources.push('function-tag');
     return '';
   });
@@ -103,7 +130,7 @@ export function parseTextToolCalls(
   cleaned = cleaned.replace(/<\/tool_call>/g, '');
 
   cleaned = cleaned.replace(JSON_FENCE_PATTERN, (match, body: string) => {
-    const call = tryParseToolCall(body, knownToolNames);
+    const call = tryParseToolCall(body, knownToolNames, knownToolNamesLower);
     if (call) {
       toolCalls.push(call);
       sources.push('fence');
@@ -127,7 +154,7 @@ export function parseTextToolCalls(
       let allMatched = true;
       const recovered: ToolCallMessage[] = [];
       for (const obj of objects) {
-        const call = tryParseToolCall(obj, knownToolNames);
+        const call = tryParseToolCall(obj, knownToolNames, knownToolNamesLower);
         if (!call) {
           allMatched = false;
           break;
