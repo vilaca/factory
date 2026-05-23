@@ -1,6 +1,10 @@
 import React from 'react';
 import os from 'os';
 import { Box, Text } from 'ink';
+import {
+  contextFillTokens,
+  type PromptTokensCarrier,
+} from '../../../providers/usage.js';
 
 const HOME_DIR = os.homedir();
 
@@ -55,22 +59,25 @@ export function formatTokenSegment(
   return ` · ctx ${totalTokens.toLocaleString()}/${contextWindow.toLocaleString()} (${tokenPct}%)${suffix}`;
 }
 
-/** Choose which token figure feeds the status bar. The model-reported
- *  `promptTokens` is the right metric — it's "how full is the next prompt",
- *  i.e. system prompt + running conversation since the last compaction.
- *  `totalTokens` (= prompt + completion) caused the figure to jitter down
- *  whenever the model gave a long reply, since completion tokens fold into
- *  the next prompt as a (usually small) assistant message rather than
- *  reappearing verbatim (see fix 44aeb26). The local `estimatedTokens` is
- *  the pre-first-response fallback. Returns the count + whether it should
- *  be marked as an estimate in the UI. */
+/** Choose which token figure feeds the status bar. Routes through
+ *  `contextFillTokens` (src/providers/usage.ts) — the canonical
+ *  selector for "how full is my next prompt", which is the only
+ *  semantically-right numerator for a context-window gauge.
+ *  `estimatedTokens` is the pre-first-response fallback. Returns
+ *  the count + whether it should be marked as an estimate in the UI.
+ *
+ *  The output field is named `totalTokens` for backwards-compat with
+ *  the StatusBar prop shape — it's the displayed "tokens used" figure,
+ *  NOT the `TokenUsage.totalTokens` field (see contextFillTokens
+ *  docstring for why those are different things). */
 export function selectDisplayTokens(
-  lastUsage: { promptTokens?: number } | undefined,
+  lastUsage: PromptTokensCarrier | undefined,
   estimatedTokens: number | undefined,
 ): { totalTokens: number | undefined; tokensAreEstimate: boolean } {
+  const fill = contextFillTokens(lastUsage);
   return {
-    totalTokens: lastUsage?.promptTokens ?? estimatedTokens,
-    tokensAreEstimate: lastUsage?.promptTokens === undefined && estimatedTokens !== undefined,
+    totalTokens: fill ?? estimatedTokens,
+    tokensAreEstimate: fill === undefined && estimatedTokens !== undefined,
   };
 }
 

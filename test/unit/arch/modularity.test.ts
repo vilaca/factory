@@ -146,6 +146,9 @@ describe('architecture: module boundaries', () => {
           // (returned by createProvider) to Provider. UI call sites
           // that mint a provider must route through prime().
           'src/providers/prime.ts',
+          // usage.ts is the canonical selector for "how full is my
+          // next prompt?" — status-bar.tsx is the primary consumer.
+          'src/providers/usage.ts',
         ],
       });
     await expectNoViolations(rule, 'ui → concrete provider impls');
@@ -250,6 +253,53 @@ describe('architecture: module boundaries', () => {
   // The one legitimate exception is `src/core/config/index.ts` itself
   // (the migration code path calls saveGlobalConfig from inside
   // loadGlobalConfigUncached). It's allowlisted.
+  // TokenUsage field-plucking contract.
+  //
+  // Background: 44aeb26 fixed a status-bar bug where the
+  // context-fullness gauge fed `totalTokens` (= prompt + completion)
+  // into the numerator. The figure jittered downward each turn
+  // because completion tokens fold into the next prompt as a small
+  // assistant message, not the full verbatim completion. The right
+  // metric is `promptTokens`. `src/providers/usage.ts:contextFillTokens`
+  // owns the answer.
+  //
+  // Enforce that the status-bar component (and any future similar
+  // gauge) doesn't read TokenUsage fields directly — it must route
+  // through contextFillTokens. We can't easily distinguish "reading
+  // for context fullness" from "reading for cost analytics", so the
+  // narrowest enforceable rule is: status-bar.tsx must not name
+  // `totalTokens`, `completionTokens`, or `reasoningTokens` literally.
+  // (`promptTokens` is permitted — it's the field the gauge cares
+  // about, and contextFillTokens itself reads it.)
+  it('status-bar.tsx must read TokenUsage only via contextFillTokens (44aeb26 contract)', async () => {
+    const rule = projectFiles()
+      .inFolder('src/ui/tui/components/**')
+      .should()
+      .adhereTo(file => {
+        if (!file.path.endsWith('status-bar.tsx')) return true;
+        // Strip comments + strings before the field-access check, so
+        // mentions in docstrings ("see TokenUsage.totalTokens for why")
+        // and string literals don't trip the rule. This is a
+        // coarse-but-honest comment stripper — multi-line `/* */`,
+        // single-line `//`, and double-quoted string literals — which
+        // matches what status-bar.tsx actually uses.
+        const code = file.content
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|[^:])\/\/.*$/gm, '$1')
+          .replace(/"(?:\\.|[^"\\])*"/g, '""')
+          .replace(/'(?:\\.|[^'\\])*'/g, "''");
+        // Forbid plucking fields that have ever been mistaken for
+        // "context fullness" (totalTokens being the original bug, the
+        // others being the obvious next-wrong-guess). The StatusBar's
+        // local variable named `totalTokens` is fine — it's the
+        // displayed figure, not a `usage.totalTokens` field read — so
+        // we only flag dotted member access (`something.totalTokens`).
+        const fieldAccess = /\.(totalTokens|completionTokens|reasoningTokens)\b/;
+        return !fieldAccess.test(code);
+      }, 'status-bar.tsx reads TokenUsage fields directly — use contextFillTokens (44aeb26)');
+    await expectNoViolations(rule, 'status-bar field-plucking');
+  });
+
   it('files must not pair loadGlobalConfig with saveGlobalConfig — use updateGlobalConfig (f848472 contract)', async () => {
     const rule = projectFiles()
       .inFolder('src/**', { except: ['src/core/config/index.ts'] })

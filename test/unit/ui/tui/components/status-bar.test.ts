@@ -52,12 +52,17 @@ describe('selectDisplayTokens — fix 44aeb26', () => {
   });
 
   it('treats promptTokens=0 as "no count yet" and uses the estimate', () => {
-    // Defensible either way, but pin the current behavior: 0 is falsy in
-    // the ?? chain only via `=== undefined` checks; selectDisplayTokens
-    // uses `??`, so 0 passes through. Document that.
+    // After routing through contextFillTokens (src/providers/usage.ts),
+    // a 0-valued promptTokens is treated as "no real count" — system
+    // prompts are always >0 in practice, so 0 here means the provider
+    // bugged out or hasn't reported yet. We prefer the local estimate
+    // over displaying "ctx 0/N (0%)" which would be misleading. (This
+    // is a deliberate semantics change from the prior `?? `-only chain
+    // that let 0 pass through; the new behaviour matches the docstring
+    // intent of contextFillTokens.)
     const r = selectDisplayTokens({ promptTokens: 0 }, 100);
-    assert.equal(r.totalTokens, 0);
-    assert.equal(r.tokensAreEstimate, false);
+    assert.equal(r.totalTokens, 100);
+    assert.equal(r.tokensAreEstimate, true);
   });
 });
 
