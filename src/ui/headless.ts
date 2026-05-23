@@ -96,7 +96,7 @@ function formatArgsBrief(args: Record<string, unknown>): string {
  *  runner. Returns the (possibly updated) {exitCode, permissionDeniedTool}
  *  so the caller can thread state through the for-await loop without
  *  hoisting the giant switch into the main function body. */
-// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- exhaustive switch over AgentEvent variants; each case is a one-liner.
+// eslint-disable-next-line complexity -- exhaustive switch over AgentEvent variants; each case is a one-liner.
 function handleAgentEvent(
   event: AgentEvent,
   state: { exitCode: number; permissionDeniedTool: string | undefined },

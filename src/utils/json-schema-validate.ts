@@ -38,37 +38,54 @@ function walk(path: string, schema: JsonSchema, value: unknown): string | null {
     if (err) return err;
   }
 
-  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
-    const choices = schema.enum.map(e => JSON.stringify(e)).join(', ');
-    return `${labelFor(path)} must be one of: ${choices} (got ${JSON.stringify(value)})`;
-  }
+  const enumErr = checkEnum(path, schema, value);
+  if (enumErr) return enumErr;
 
   if (schema.type === 'object' && isPlainObject(value)) {
-    if (Array.isArray(schema.required)) {
-      for (const r of schema.required) {
-        if (!(r in value)) {
-          return `missing required field "${r}"${path ? ` at ${path}` : ''}`;
-        }
-      }
-    }
-    if (schema.properties) {
-      for (const [k, propSchema] of Object.entries(schema.properties)) {
-        if (k in value) {
-          const childPath = path ? `${path}.${k}` : k;
-          const err = walk(childPath, propSchema, (value as Record<string, unknown>)[k]);
-          if (err) return err;
-        }
-      }
-    }
+    return walkObject(path, schema, value);
   }
 
   if (schema.type === 'array' && Array.isArray(value) && schema.items) {
-    for (let i = 0; i < value.length; i++) {
-      const err = walk(`${path}[${i}]`, schema.items, value[i]);
+    return walkArray(path, schema.items, value);
+  }
+
+  return null;
+}
+
+function checkEnum(path: string, schema: JsonSchema, value: unknown): string | null {
+  if (!Array.isArray(schema.enum) || schema.enum.includes(value)) return null;
+  const choices = schema.enum.map(e => JSON.stringify(e)).join(', ');
+  return `${labelFor(path)} must be one of: ${choices} (got ${JSON.stringify(value)})`;
+}
+
+function walkObject(
+  path: string,
+  schema: JsonSchema,
+  value: Record<string, unknown>,
+): string | null {
+  if (Array.isArray(schema.required)) {
+    for (const r of schema.required) {
+      if (!(r in value)) {
+        return `missing required field "${r}"${path ? ` at ${path}` : ''}`;
+      }
+    }
+  }
+  if (schema.properties) {
+    for (const [k, propSchema] of Object.entries(schema.properties)) {
+      if (!(k in value)) continue;
+      const childPath = path ? `${path}.${k}` : k;
+      const err = walk(childPath, propSchema, value[k]);
       if (err) return err;
     }
   }
+  return null;
+}
 
+function walkArray(path: string, items: JsonSchema, value: unknown[]): string | null {
+  for (let i = 0; i < value.length; i++) {
+    const err = walk(`${path}[${i}]`, items, value[i]);
+    if (err) return err;
+  }
   return null;
 }
 

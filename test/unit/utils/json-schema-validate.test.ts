@@ -128,10 +128,7 @@ describe('validateAgainstSchema', () => {
       },
     };
     assert.strictEqual(validateAgainstSchema(readSchema, { file_path: '/etc/hosts' }), null);
-    assert.match(
-      validateAgainstSchema(readSchema, {}) ?? '',
-      /missing required field "file_path"/,
-    );
+    assert.match(validateAgainstSchema(readSchema, {}) ?? '', /missing required field "file_path"/);
     assert.match(
       validateAgainstSchema(readSchema, { file_path: 7 }) ?? '',
       /file_path must be a string/,

@@ -92,9 +92,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   }
   function refreshTokenEstimate(): void {
     if (!refs.current) return;
-    const defs = refs.current.useTextToolFallback
-      ? []
-      : refs.current.toolRegistry.getDefinitions();
+    const defs = refs.current.useTextToolFallback ? [] : refs.current.toolRegistry.getDefinitions();
     refs.current.contextManager.refreshEstimate(defs);
     setEstimatedTokens(refs.current.contextManager.getTokenEstimate());
   }
