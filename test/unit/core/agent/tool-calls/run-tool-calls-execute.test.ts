@@ -33,6 +33,92 @@ describe('executeToolCall — input shape', () => {
   });
 });
 
+describe('executeToolCall — schema validation', () => {
+  // A tool with a real JSON Schema — strict enough to reject the "missing
+  // required field" and "wrong type" cases without touching tool internals.
+  // Mirrors the shape src/tools/read.ts declares.
+  const schemaToolBuilder = () => {
+    const calls: Record<string, unknown>[] = [];
+    const handler = {
+      name: 'Strict',
+      description: 'fake',
+      category: 'read-only' as const,
+      definition: {
+        type: 'function' as const,
+        function: {
+          name: 'Strict',
+          description: 'fake',
+          parameters: {
+            type: 'object',
+            required: ['file_path'],
+            properties: {
+              file_path: { type: 'string' },
+              offset: { type: 'number' },
+            },
+          },
+        },
+      },
+      async execute(args: Record<string, unknown>) {
+        calls.push(args);
+        return { success: true, output: 'ok' };
+      },
+    };
+    return Object.assign(handler, { calls });
+  };
+
+  it('rejects bad args before the tool runs and never prompts for permission', async () => {
+    const tool = schemaToolBuilder();
+    const conv = new Conversation('sys');
+    const ctx = makeCtx({ conversation: conv, toolRegistry: makeRegistry([tool]) });
+    const { events } = await collect(executeToolCall(tc('Strict', {}), ctx));
+    assert.strictEqual(tool.calls.length, 0);
+    assert.ok(!events.some(e => e.type === 'permission-request'));
+
+    const result = events.find(e => e.type === 'tool-call-result');
+    assert.ok(result && result.type === 'tool-call-result');
+    assert.strictEqual(result.result.success, false);
+    assert.strictEqual(result.result.softError, true);
+    assert.strictEqual(result.result.skipCorrector, true);
+    assert.match(result.result.output, /Invalid arguments for "Strict"/);
+    assert.match(result.result.output, /missing required field "file_path"/);
+  });
+
+  it('emits tool-call-start before the failure so the UI start/result pair stays balanced', async () => {
+    const tool = schemaToolBuilder();
+    const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
+    const { events } = await collect(executeToolCall(tc('Strict', { file_path: 7 }), ctx));
+    const types = events.map(e => e.type);
+    assert.deepStrictEqual(types, ['tool-call-start', 'tool-call-result']);
+    const result = events[1]!;
+    assert.strictEqual(result.type, 'tool-call-result');
+    if (result.type === 'tool-call-result') {
+      assert.match(result.result.output, /file_path must be a string/);
+    }
+  });
+
+  it('lets a valid call proceed normally through the permission gate', async () => {
+    const tool = schemaToolBuilder();
+    const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
+    const { events } = await collect(
+      executeToolCall(tc('Strict', { file_path: '/etc/hosts' }), ctx),
+    );
+    assert.strictEqual(tool.calls.length, 1);
+    assert.ok(events.some(e => e.type === 'permission-request'));
+    assert.ok(events.some(e => e.type === 'tool-call-result'));
+  });
+
+  it('skips validation silently when the tool declares an empty schema (fakeTool default)', async () => {
+    // fakeTool produces `parameters: {}` — malformed by our validator's
+    // standards. The validator is forgiving by design (MCP tools may bring
+    // arbitrary shapes), so the call should pass through to permission.
+    const tool = fakeTool({ name: 'Open' });
+    const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
+    const { events } = await collect(executeToolCall(tc('Open', { whatever: 1 }), ctx));
+    assert.strictEqual(tool.calls.length, 1);
+    assert.ok(events.some(e => e.type === 'permission-request'));
+  });
+});
+
 describe('executeToolCall — plan mode', () => {
   it('queues a write tool without executing', async () => {
     const tool = fakeTool({ name: 'Write', category: 'write' });

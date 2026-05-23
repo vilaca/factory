@@ -6,6 +6,7 @@ import { TOOL_NAMES } from '../../../tools/types.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { ToolResolutionError } from '../../../tools/errors.js';
+import { validateAgainstSchema } from '../../../utils/json-schema-validate.js';
 import type { ToolLoopContext } from './types.js';
 
 export interface ExecuteToolCallOptions {
@@ -43,6 +44,33 @@ export async function* executeToolCall(
     const errMsg = `Error: unknown tool "${fnName}"`;
     recordResult(errMsg, fnName);
     yield { type: 'error', error: new Error(errMsg) };
+    return;
+  }
+
+  // Validate args against the tool's declared JSON Schema before the tool
+  // body sees them. Catches the "model called with wrong-shape args"
+  // failure mode at the boundary — no tool-body code paths run on
+  // malformed input, and the model gets a structured corrective message
+  // to retry against. Flagged softError+skipCorrector for the same
+  // reason ToolResolutionError is: it's the model's fault (not the
+  // tool's), and the message is already actionable, so the LLM
+  // corrector would just burn a call.
+  const schemaError = validateAgainstSchema(tool.definition.function.parameters, args);
+  if (schemaError) {
+    const errMsg = `Invalid arguments for "${tool.name}": ${schemaError}`;
+    recordResult(errMsg, tool.name);
+    yield { type: 'tool-call-start', toolName: tool.name, args };
+    yield {
+      type: 'tool-call-result',
+      toolName: tool.name,
+      args,
+      result: {
+        success: false,
+        output: errMsg,
+        softError: true,
+        skipCorrector: true,
+      },
+    };
     return;
   }
 
