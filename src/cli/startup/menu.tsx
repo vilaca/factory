@@ -11,13 +11,17 @@ import {
   type RecentPair,
 } from '../../ui/tui/components/provider-picker/index.js';
 import { buildPickerInfo } from '../../ui/tui/components/provider-picker/build-info.js';
+import type { ModelSelection } from '../../core/selection/types.js';
 
-interface StartupSelection {
+/** Startup-time variant of ModelSelection: provider is narrowed to the
+ *  set of providers eligible for startup, and model is optional (a
+ *  no-model selection means "land on this provider but don't pick a
+ *  model yet — fall back to default"). Inherits keyId and any future
+ *  cross-cutting fields from ModelSelection so 550f093-style hop drops
+ *  become impossible. */
+interface StartupSelection extends Omit<ModelSelection, 'provider' | 'model'> {
   provider: StartupProviderName;
-  /** Set when the user picked a recent (provider, model) pair directly. */
   model?: string;
-  /** Set when that recent pair was tied to a specific saved key. */
-  keyId?: string;
 }
 
 export async function selectStartupSession(

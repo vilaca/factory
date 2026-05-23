@@ -4,10 +4,15 @@ import crypto from 'crypto';
 import type { AgentEvent } from '../agent/types.js';
 import { errorMessage } from '../../utils/errors.js';
 import { factoryHomePath } from '../../utils/factory-paths.js';
+import type { ModelSelection, SessionErrorStatus } from '../selection/types.js';
 
-interface SessionStartMeta {
-  model: string;
-  provider: string;
+/** Re-exported for backwards-compat — the canonical declaration lives in
+ *  `src/core/selection/types.ts` to avoid a session-log ↔ selection
+ *  type-level cycle (RecentSession extends ModelSelection, and the
+ *  picker carries the status badge as part of the selection record). */
+export type { SessionErrorStatus };
+
+interface SessionStartMeta extends ModelSelection {
   cwd: string;
   experimental?: Record<string, boolean>;
   turnTimeoutSec?: number;
@@ -16,8 +21,6 @@ interface SessionStartMeta {
   mcp?: { servers: string[]; toolCount: number };
   gitBranch?: string;
   gitDirty?: boolean | null;
-  /** Set when the session was opened against a specific saved key. */
-  keyId?: string;
 }
 
 export interface SessionLogger {
@@ -49,24 +52,16 @@ export interface SessionLogger {
   close(): void;
 }
 
-interface LastSessionSelection {
-  provider: string;
-  model: string;
-  /** Set when the session was opened against a specific saved key. Older
-   *  logs predate the multi-key store and have no keyId — callers must
-   *  treat missing keyId as "use the default key for this provider". */
-  keyId?: string;
-}
+/** Alias of the canonical ModelSelection record — kept named so the
+ *  read sites (getLastSessionSelection) document their intent
+ *  (resuming the most recent session). New fields on ModelSelection
+ *  flow through here automatically. */
+type LastSessionSelection = ModelSelection;
 
-export type SessionErrorStatus = 'throttle' | 'quota' | 'permission' | 'error';
-
-export interface RecentSession {
-  provider: string;
-  model: string;
+/** A row in the recent-sessions list. Carries a ModelSelection plus
+ *  the `startedAt` timestamp that the picker uses to sort. */
+export interface RecentSession extends ModelSelection {
   startedAt: string;
-  status?: SessionErrorStatus;
-  /** Same semantics as LastSessionSelection.keyId — optional, missing on old logs. */
-  keyId?: string;
 }
 
 interface ProviderAuthMeta {
@@ -312,11 +307,8 @@ function classifyErrorMessage(message: string): SessionErrorStatus {
   return 'error';
 }
 
-interface SessionStartHeader {
-  provider: string;
-  model: string;
+interface SessionStartHeader extends ModelSelection {
   startedAt: string;
-  keyId?: string;
 }
 
 /** Parse the session-start line; returns null if it isn't one or is malformed. */
@@ -339,10 +331,7 @@ function parseSessionStart(line: string): SessionStartHeader | null {
   return header;
 }
 
-interface SessionRollup {
-  model: string;
-  provider: string;
-  keyId: string | undefined;
+interface SessionRollup extends ModelSelection {
   userInputCount: number;
   lastErrorMessage: string | null;
 }

@@ -8,6 +8,7 @@ import type { FileCache } from './cache/file-cache.js';
 import type { HooksConfig, ProviderKey, RotationEntry } from '../config/types.js';
 import type { PathPolicy } from '../../security/paths.js';
 import type { EnvPolicy } from '../../security/env.js';
+import type { ModelSelection } from '../selection/types.js';
 
 export type { PermissionDecision };
 
@@ -24,12 +25,9 @@ type StopReason = 'completed' | 'user-abort' | 'token-limit' | 'turn-limit' | 'e
  *  `messageCount` is the conversation length captured AFTER the assistant
  *  response was appended; the body builder slices messages[messageCount:]
  *  before mapping to the Responses API `input` array. */
-export interface ResponsesChain {
+export interface ResponsesChain extends ModelSelection {
   lastResponseId: string;
   messageCount: number;
-  provider: string;
-  model: string;
-  keyId?: string;
 }
 
 export type AgentEvent =

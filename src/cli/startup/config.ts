@@ -7,6 +7,7 @@ import type {
   RotationEntry,
 } from '../../core/config/types.js';
 import type { CliArgs } from '../args.js';
+import type { ModelSelection } from '../../core/selection/types.js';
 
 /**
  * Decide whether the user can fast-path back into the previous session
@@ -14,7 +15,7 @@ import type { CliArgs } from '../args.js';
  * (provider, model) is still reachable in the current probe results.
  */
 export function canResumeLastSession(
-  last: { provider: string; model: string },
+  last: ModelSelection,
   probed: Map<StartupProviderName, string[] | null>,
 ): boolean {
   const descriptor: ProviderDescriptor | undefined =
@@ -114,15 +115,19 @@ export function buildExperimentalConfig(
  *
  * Pure — no I/O. The picker invocation itself stays in the caller.
  */
+/** Discriminated union describing where the startup model came from. The
+ *  'last-session' variant carries a full ModelSelection so adding new
+ *  cross-cutting fields (per-key budget, capability flags) flows through
+ *  here without a parallel DTO. */
 export type StartupSource =
   | { kind: 'config'; provider: string }
-  | { kind: 'last-session'; provider: string; model: string; keyId?: string }
+  | ({ kind: 'last-session' } & ModelSelection)
   | { kind: 'picker' };
 
 export function decideStartupSource(
   config: { provider?: string },
   cliArgs: Pick<CliArgs, 'pick'>,
-  lastSession: { provider: string; model: string; keyId?: string } | null,
+  lastSession: ModelSelection | null,
   probedModels: Map<StartupProviderName, string[] | null>,
 ): StartupSource {
   if (config.provider) {

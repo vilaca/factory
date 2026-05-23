@@ -27,6 +27,7 @@ import { buildPickerOptions, findDefaultSelection } from '../picker.js';
 import { selectModelInk, selectStartupSession } from './menu.js';
 import { parseRotationChain } from './parse-rotation.js';
 import { applyCliRotationOverrides, decideStartupSource, persistRotationConfig } from './config.js';
+import type { ModelSelection } from '../../core/selection/types.js';
 
 /**
  * Apply CLI rotation overrides to `config.agent.rotation` and (when
@@ -63,6 +64,11 @@ export async function applyRotationPhase(config: Config, cliArgs: CliArgs): Prom
   }
 }
 
+/** Result of provider resolution. The `resume*` field names retain the
+ *  startup-time semantics ("resume from this model/key from prior
+ *  session"); structurally each maps to ModelSelection. The
+ *  fields are kept positional rather than wrapping a ModelSelection
+ *  because the call site spreads them as positional args downstream. */
 interface ProviderSelection {
   providerName: string;
   resumeModel: string | null;
@@ -72,11 +78,16 @@ interface ProviderSelection {
 /**
  * Decide which provider to launch on (config / last-session fast-path /
  * interactive picker), invoking the picker when needed.
+ *
+ * `lastSession` is the canonical ModelSelection record — threading it
+ * through this signature (rather than re-declaring a parallel DTO with
+ * keyId optional) is what 550f093 fixed. New cross-cutting fields on
+ * ModelSelection flow through here for free.
  */
 export async function resolveProvider(
   config: Config,
   cliArgs: CliArgs,
-  lastSession: { provider: string; model: string; keyId?: string } | null,
+  lastSession: ModelSelection | null,
   credentials: Map<StartupProviderName, StartupCredentials>,
   probedModels: Map<StartupProviderName, string[] | null>,
 ): Promise<ProviderSelection> {
@@ -239,7 +250,7 @@ export async function selectAndValidateModel(
   providerName: string,
   config: Config,
   resumeModel: string | null,
-  lastSession: { provider: string; model: string } | null,
+  lastSession: ModelSelection | null,
   availableModels: string[] | null,
 ): Promise<ValidatedModel> {
   let model: string;
