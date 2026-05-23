@@ -20,4 +20,6 @@ jobs:
           cache: 'npm'
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
+      # Advisory only: surface unused exports/deps without blocking merges.
       - run: npm run knip
+        continue-on-error: true

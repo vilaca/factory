@@ -7,8 +7,8 @@ Validations (run on push to `main` and on PR):
 
 - `lint.yml` — `eslint`.
 - `typecheck.yml` — `tsc --noEmit`.
-- `format-check.yml` — `prettier --check`.
-- `knip.yml` — unused-export / dependency check.
+- `format-check.yml` — `prettier --check` (advisory; does not fail the build).
+- `knip.yml` — unused-export / dependency check (advisory; does not fail the build).
 
 Tests (run on push to `main` and on PR):
 
