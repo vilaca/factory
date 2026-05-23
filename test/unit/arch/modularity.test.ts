@@ -205,6 +205,39 @@ describe('architecture: module boundaries', () => {
     await expectNoViolations(rule, 'ui → node network/process modules');
   });
 
+  // Prime-before-use contract for providers.
+  //
+  // Background: cf880ed fixed a bug where swap.ts called
+  // `getCapabilities()` on a freshly-minted provider whose model-info
+  // cache was empty — Anthropic's getCapabilities throws on a cache
+  // miss. The fix was to call `listModels()` (or `primeModelCache()`)
+  // first. The same shape exists at several other call sites that
+  // construct providers (`compaction-resolver.ts`, `run-loop.ts`,
+  // `headless.ts`, `Session.tsx`).
+  //
+  // We can't fully verify ordering statically without parsing the AST,
+  // but we can enforce the necessary condition: any file that BOTH
+  // mints a provider via `createProvider(` AND reads capabilities via
+  // `getCapabilities(` on the local scope must also call `listModels(`
+  // or `primeModelCache(` somewhere in the same file. This catches
+  // "minted but never primed" — the bug class — while allowing
+  // unrelated `getCapabilities` consumers (which receive an already-
+  // primed provider via refs) to coexist.
+  it('files that mint a provider AND read capabilities must also prime via listModels / primeModelCache', async () => {
+    const rule = projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(file => {
+        const src = file.content;
+        const mints = /\bcreateProvider\s*\(/.test(src);
+        const reads = /\bgetCapabilities\s*\(/.test(src);
+        if (!(mints && reads)) return true;
+        const primes = /\b(listModels|primeModelCache)\s*\(/.test(src);
+        return primes;
+      }, 'Provider mint + capability read without listModels/primeModelCache priming (cf880ed contract)');
+    await expectNoViolations(rule, 'prime-before-use on minted providers');
+  });
+
   it('src/** must not import a CLI argument-parsing library', async () => {
     const bannedCliLibs = [
       'commander',
