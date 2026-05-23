@@ -9,6 +9,7 @@ import type { ChatMessage, ToolDefinition } from '../../../src/providers/types.j
 
 const TOOLS: ToolDefinition[] = [
   {
+    type: 'function',
     function: {
       name: 'Read',
       description: 'Read a file',
@@ -16,6 +17,7 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    type: 'function',
     function: {
       name: 'Write',
       description: 'Write a file',
