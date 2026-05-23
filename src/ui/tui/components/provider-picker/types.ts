@@ -2,17 +2,15 @@
 // component file so the per-stage render helpers can be extracted without
 // importing the orchestrator (which would create a cycle).
 
-import type { SessionErrorStatus } from '../../../../core/session/session-log.js';
 import type { ModelTier } from '../../../../providers/types.js';
+import type { ModelSelection } from '../../../../core/selection/types.js';
 
-export interface RecentPair {
-  provider: string;
-  model: string;
-  /** Optional badge (throttled/quota/permission/error). */
-  status?: SessionErrorStatus;
-  /** Set when this recent pair was tied to a specific saved key. */
-  keyId?: string;
-}
+/** Picker-side alias of the canonical ModelSelection record. Kept as a
+ *  named type for the existing call sites; new code can import
+ *  `ModelSelection` directly. The 550f093 bug was specifically that
+ *  hops between picker and agent loop re-declared this shape with
+ *  fields stripped — alias rather than redeclare. */
+export type RecentPair = ModelSelection;
 
 export interface ProviderEntry {
   /** Canonical provider name (the key in PROVIDER_ALIASES values). */

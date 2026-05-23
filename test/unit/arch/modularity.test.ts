@@ -271,6 +271,66 @@ describe('architecture: module boundaries', () => {
   // `totalTokens`, `completionTokens`, or `reasoningTokens` literally.
   // (`promptTokens` is permitted — it's the field the gauge cares
   // about, and contextFillTokens itself reads it.)
+  // ModelSelection cross-cutting field contract.
+  //
+  // Background: 550f093 fixed a bug where `keyId` was silently dropped
+  // at three intermediate hops between the picker and the agent loop.
+  // The root cause: each hop had re-declared a `{ provider, model }`-
+  // shaped DTO with a partial subset of the cross-cutting fields. Any
+  // hop whose author forgot to copy a field on assignment silently
+  // stripped it.
+  //
+  // The canonical record now lives in `src/core/selection/types.ts`
+  // as `ModelSelection`. Adding a cross-cutting field there flows
+  // through every hop automatically. To keep it that way, forbid new
+  // type declarations whose body matches the `{ provider, model,
+  // keyId? }` shape — they must alias or extend ModelSelection
+  // instead.
+  //
+  // The check is a coarse regex on the file content (no AST), so it
+  // can be fooled by creative formatting. It catches the obvious
+  // case: a line containing `provider: string` followed within a few
+  // lines by `model: string`. The selection module itself, and a few
+  // legacy declarations with deliberately-different semantics (e.g.
+  // `SessionStartMeta`, `ModelRequestMeta` — log records that
+  // happen to contain provider+model but are NOT selections), are
+  // allowlisted.
+  it('files must not re-declare the {provider, model, keyId} shape — use ModelSelection (550f093 contract)', async () => {
+    const allowlist = [
+      // The canonical declaration.
+      'src/core/selection/types.ts',
+    ];
+    const rule = projectFiles()
+      .inFolder('src/**', { except: allowlist })
+      .should()
+      .adhereTo(file => {
+        const src = file.content;
+        // Catch the DTO shape — three field declarations
+        // (`provider: string`, `model: string`, `keyId?: string` or
+        // `keyId: string`) within a 5-line window. That window is
+        // tight enough to skip false positives from positional
+        // callback signatures (`onCommit: (provider: string, model:
+        // string, keyId?: string) => void`) where `string` appears
+        // inline as the parameter type, not as a property declaration.
+        //
+        // The regex matches DECLARATIONS only — `provider: string;`
+        // at the start of a (whitespace-prefixed) line — not inline
+        // function parameter types.
+        const lines = src.split('\n');
+        const fieldDecl = (name: string): RegExp =>
+          new RegExp(`^\\s*${name}\\??\\s*:\\s*string\\s*[;,]?\\s*$`);
+        for (let i = 0; i < lines.length; i++) {
+          if (!fieldDecl('provider').test(lines[i] ?? '')) continue;
+          const window = lines.slice(i, i + 6);
+          const hasModel = window.some(l => fieldDecl('model').test(l));
+          const hasKeyId = window.some(l => fieldDecl('keyId').test(l));
+          if (hasModel && hasKeyId) return false;
+        }
+        return true;
+      }, '{provider, model, keyId} shape re-declared — alias or extend ModelSelection (550f093)');
+    await expectNoViolations(rule, 'ModelSelection re-declaration');
+  });
+
   it('status-bar.tsx must read TokenUsage only via contextFillTokens (44aeb26 contract)', async () => {
     const rule = projectFiles()
       .inFolder('src/ui/tui/components/**')
