@@ -56,7 +56,12 @@
     "test:e2e:pty": "tsc && tsc -p tsconfig.test.json && node --test --test-concurrency=1 dist-test/test/e2e/slash-commands.test.js dist-test/test/e2e/tabs.test.js dist-test/test/e2e/picker.test.js dist-test/test/e2e/plan-mode.test.js",
     "test:e2e:fast": "node --test --test-concurrency=1 dist-test/test/e2e-mocks.test.js dist-test/test/e2e-no-mocks.test.js dist-test/test/e2e/cli-flags.test.js dist-test/test/e2e/headless.test.js dist-test/test/e2e/tools.test.js dist-test/test/e2e/bash-tool.test.js dist-test/test/e2e/security.test.js dist-test/test/e2e/config-precedence.test.js dist-test/test/e2e/hooks.test.js dist-test/test/e2e/skills.test.js dist-test/test/e2e/mcp.test.js dist-test/test/e2e/webfetch.test.js dist-test/test/e2e/slash-commands.test.js dist-test/test/e2e/tabs.test.js dist-test/test/e2e/picker.test.js dist-test/test/e2e/plan-mode.test.js",
     "test:release": "npm run test:unit && npm run test:e2e",
-    "coverage": "c8 --reporter=text --reporter=html --reporter=lcov --check-coverage --lines 60 --branches 75 --functions 83 tsx --test 'test/unit/**/*.test.ts'",
+    "coverage:clean": "rm -rf coverage",
+    "coverage:providers": "c8 --reporter=none --no-clean tsx --test 'test/unit/providers/**/*.test.ts'",
+    "coverage:core": "c8 --reporter=none --no-clean tsx --test 'test/unit/core/**/*.test.ts'",
+    "coverage:rest": "c8 --reporter=none --no-clean tsx --test 'test/unit/arch/**/*.test.ts' 'test/unit/cli/**/*.test.ts' 'test/unit/mcp/**/*.test.ts' 'test/unit/security/**/*.test.ts' 'test/unit/tools/**/*.test.ts' 'test/unit/ui/**/*.test.ts' 'test/unit/utils/**/*.test.ts'",
+    "coverage:report": "c8 report --reporter=text --reporter=html --reporter=lcov --check-coverage --lines 60 --branches 75 --functions 83",
+    "coverage": "npm run coverage:clean && npm run coverage:providers && npm run coverage:core && npm run coverage:rest && npm run coverage:report",
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
     "docs:preview": "vitepress preview"
