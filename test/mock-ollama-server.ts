@@ -20,6 +20,11 @@ export interface MockResponse {
 
 let responseQueue: MockResponse[] = [];
 let modelCapabilities: string[] = ['completion', 'tools'];
+let modelInfo: Record<string, unknown> | undefined;
+
+export function setModelInfo(info: Record<string, unknown> | undefined): void {
+  modelInfo = info ? { ...info } : undefined;
+}
 
 export function setNextResponses(responses: MockResponse[]): void {
   responseQueue = [...responses];
@@ -36,16 +41,16 @@ export function setModelCapabilities(capabilities: string[]): void {
 function handleShow(req: http.IncomingMessage, res: http.ServerResponse): void {
   req.on('data', () => {});
   req.on('end', () => {
+    const body: Record<string, unknown> = {
+      modelfile: '',
+      parameters: '',
+      template: '',
+      details: { format: 'gguf', family: 'test', parameter_size: '7B' },
+      capabilities: modelCapabilities,
+    };
+    if (modelInfo) body.model_info = modelInfo;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(
-      JSON.stringify({
-        modelfile: '',
-        parameters: '',
-        template: '',
-        details: { format: 'gguf', family: 'test', parameter_size: '7B' },
-        capabilities: modelCapabilities,
-      }),
-    );
+    res.end(JSON.stringify(body));
   });
 }
 

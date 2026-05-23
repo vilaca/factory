@@ -154,6 +154,7 @@ function makeHarness(opts: {
     },
     setModel: mock.fn(),
     setProviderName: mock.fn(),
+    setContextWindow: mock.fn(),
     refreshTokenEstimate: mock.fn(),
     composeSystemPrompt: mock.fn(() => 'sp'),
   } as unknown as Parameters<typeof swapProvider>[3];

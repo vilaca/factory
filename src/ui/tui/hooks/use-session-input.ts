@@ -20,6 +20,7 @@ interface UseSessionInputArgs {
   showFullOutputRef: React.MutableRefObject<boolean>;
   setShowFullOutput: (b: boolean) => void;
   rotationPrompt: RotationPromptState | null;
+  openCompactionPicker: () => Promise<{ providerName: string; model: string } | null>;
 }
 
 interface UseSessionInputResult {
@@ -47,6 +48,7 @@ export function useSessionInput(args: UseSessionInputArgs): UseSessionInputResul
     showFullOutputRef,
     setShowFullOutput,
     rotationPrompt,
+    openCompactionPicker,
   } = args;
 
   const buildSlashCtx = (): Parameters<typeof dispatchSlashCommand>[2] => ({
@@ -62,6 +64,7 @@ export function useSessionInput(args: UseSessionInputArgs): UseSessionInputResul
       setShowFullOutput(next);
       return next;
     },
+    openCompactionPicker,
   });
 
   const dispatchSlash = (trimmed: string): void => {

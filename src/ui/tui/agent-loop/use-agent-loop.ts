@@ -50,6 +50,13 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     | undefined
   >();
   const [estimatedTokens, setEstimatedTokens] = useState<number | undefined>();
+  // Mirrors ContextManager.contextWindow so the StatusBar re-renders when an
+  // async provider prime (ollama's /api/show) widens or narrows the window
+  // after mount. Seeded from the synchronous estimate; setup.ts and swap.ts
+  // call setContextWindow when the prime resolves.
+  const [contextWindow, setContextWindow] = useState<number>(
+    () => opts.provider.getCapabilities(opts.model).contextWindow,
+  );
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequestState | undefined>();
   const [pendingToolCall, setPendingToolCall] = useState<ToolCallSummary | null>(null);
   const [queueLength, setQueueLength] = useState(0);
@@ -115,6 +122,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       refs,
       addNotice,
       setEstimatedTokens,
+      setContextWindow,
       setCwdState,
       composeSystemPrompt,
     });
@@ -231,6 +239,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       addNotice,
       setModel,
       setProviderName,
+      setContextWindow,
       refreshTokenEstimate,
       composeSystemPrompt,
     };
@@ -402,6 +411,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     sessionToolCalls,
     lastUsage,
     estimatedTokens,
+    contextWindow,
     queueLength,
     gitBranch,
     gitDirty,

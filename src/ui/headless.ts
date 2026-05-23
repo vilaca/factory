@@ -359,6 +359,14 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     permissions.setBashRules(options.bashRules);
   }
 
+  // Prime per-model caches the provider needs for an accurate
+  // getCapabilities (ollama discovers the real context window via /show).
+  // Done on the raw provider before wrapping — the instrumentation
+  // wrapper's getCapabilities binds to inner, so the populated cache is
+  // visible through the wrapped instance too.
+  if (options.provider.primeModelCache) {
+    await options.provider.primeModelCache(options.model);
+  }
   // Wrap the provider so every chat / chatNoStream call lands in the session
   // log via logModelRequest. Mirrors the TUI's createInitialRefs wiring so the
   // headless and TUI modes produce comparable JSONL streams.
