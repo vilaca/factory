@@ -10,8 +10,11 @@ import type { ToolLoopContext } from './types.js';
  *  The cache only knows the file is unchanged — it doesn't track which line
  *  ranges were returned to the model.  Serving a "refer to your earlier Read"
  *  hit for a range the model never saw produces a hallucination-inducing gap,
- *  so partial reads always bypass the cache. */
-function isPartialRead(args: Record<string, unknown> | undefined): boolean {
+ *  so partial reads always bypass the cache (5fcea6d contract).
+ *
+ *  Exported so tests can pin every edge of the partial/full boundary
+ *  directly, not just by inference from cache-hit behaviour. */
+export function isPartialRead(args: Record<string, unknown> | undefined): boolean {
   if (!args) return false;
   const offset = args.offset;
   const limit = args.limit;
