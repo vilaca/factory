@@ -193,12 +193,18 @@ export class OllamaProvider implements Provider {
     return this.contextWindowCache.get(model) ?? estimateContextWindow(model);
   }
 
-  async *chat(
+  /** Common request-builder for `chat` / `chatNoStream`. Pulls the
+   *  tool-mode resolution + sampling + thinking branches out of the
+   *  public methods so they stay under the eslint complexity cap.
+   *  Prompt-mode strips `tools` from the wire payload — the model
+   *  discovers them via the injected system preamble and emits its
+   *  call as text the agent layer's <tool_call> parser picks up. */
+  private async buildChatRequest(
     model: string,
     messages: ChatMessage[],
-    tools?: ToolDefinition[],
-    options?: ChatOptions,
-  ): AsyncGenerator<ChatChunk> {
+    tools: ToolDefinition[] | undefined,
+    options: ChatOptions | undefined,
+  ): Promise<{ base: Omit<ChatRequest, 'stream'>; think: boolean }> {
     const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
     const think = resolveThinking(model, options?.thinking);
     const hasTools = !!tools && tools.length > 0;
@@ -207,19 +213,26 @@ export class OllamaProvider implements Provider {
       toolMode === 'prompt'
         ? withPromptModeSystem(downgradeMessagesForPromptMode(messages), buildPromptModeToolPreamble(tools!))
         : (messages as Message[]);
-    const request: ChatRequest & { stream: true } = {
+    const base: Omit<ChatRequest, 'stream'> = {
       model,
       messages: messagesForWire,
-      stream: true,
-      // Prompt-mode strips `tools` from the wire payload — the model
-      // discovers them via the injected system preamble and emits its
-      // call as text the agent layer's <tool_call> parser picks up.
       ...(toolMode === 'native' && hasTools ? { tools: tools as Tool[] } : {}),
       // num_predict caps output length so degenerate repetition loops can't
       // run forever. Ollama's default is -1 (no limit).
       options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
       think,
     };
+    return { base, think };
+  }
+
+  async *chat(
+    model: string,
+    messages: ChatMessage[],
+    tools?: ToolDefinition[],
+    options?: ChatOptions,
+  ): AsyncGenerator<ChatChunk> {
+    const { base, think } = await this.buildChatRequest(model, messages, tools, options);
+    const request: ChatRequest & { stream: true } = { ...base, stream: true };
 
     const stream = await this.client.chat(request);
     // Tie the iterator's abort to our signal so cancellation propagates to the
@@ -246,35 +259,7 @@ export class OllamaProvider implements Provider {
     }
     try {
       for await (const chunk of stream) {
-        const result: ChatChunk = {};
-        if (chunk.message?.content) {
-          // Reliability stack §15: when the caller said thinking=false but
-          // the model leaks <think>...</think> tags inline anyway (Qwen3 on
-          // some serving stacks), drop them before yielding. The
-          // structured `chunk.message.thinking` field is also ignored on
-          // this path since the caller explicitly opted out.
-          result.content = think ? chunk.message.content : discardThinkTags(chunk.message.content);
-        }
-        if (chunk.message?.tool_calls) {
-          result.tool_calls = chunk.message.tool_calls.map(tc => ({
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments as Record<string, unknown>,
-            },
-          }));
-        }
-        if (chunk.done) {
-          result.done = true;
-          if (typeof chunk.done_reason === 'string') result.doneReason = chunk.done_reason;
-          if (chunk.eval_count || chunk.prompt_eval_count) {
-            result.usage = {
-              promptTokens: chunk.prompt_eval_count ?? 0,
-              completionTokens: chunk.eval_count ?? 0,
-              totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
-            };
-          }
-        }
-        yield result;
+        yield mapOllamaChunk(chunk, think);
       }
     } catch (err: unknown) {
       // The iterator throws when stream.abort() runs. Surface this as an
@@ -294,22 +279,8 @@ export class OllamaProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
-    const samplingOpts = resolveSampling(options, { model, providerName: 'ollama' });
-    const think = resolveThinking(model, options?.thinking);
-    const hasTools = !!tools && tools.length > 0;
-    const toolMode = await this.resolveToolMode(model, hasTools);
-    const messagesForWire =
-      toolMode === 'prompt'
-        ? withPromptModeSystem(downgradeMessagesForPromptMode(messages), buildPromptModeToolPreamble(tools!))
-        : (messages as Message[]);
-    const request: ChatRequest & { stream: false } = {
-      model,
-      messages: messagesForWire,
-      stream: false,
-      ...(toolMode === 'native' && hasTools ? { tools: tools as Tool[] } : {}),
-      options: ollamaOptions(this.resolveContextWindow(model), options?.maxTokens, samplingOpts),
-      think,
-    };
+    const { base, think } = await this.buildChatRequest(model, messages, tools, options);
+    const request: ChatRequest & { stream: false } = { ...base, stream: false };
 
     const signal = options?.signal;
     if (signal?.aborted) {
@@ -329,30 +300,60 @@ export class OllamaProvider implements Provider {
       throw translateOllamaError(err);
     }
 
-    // §15: same think-discard semantics on the non-streaming path.
-    const rawContent = response.message?.content;
-    const result: ChatChunk = {
-      content: think || !rawContent ? rawContent : discardThinkTags(rawContent),
-      done: true,
-    };
-    if (typeof response.done_reason === 'string') result.doneReason = response.done_reason;
-    if (response.message?.tool_calls) {
-      result.tool_calls = response.message.tool_calls.map(tc => ({
-        function: {
-          name: tc.function.name,
-          arguments: tc.function.arguments as Record<string, unknown>,
-        },
-      }));
-    }
-    if (response.eval_count || response.prompt_eval_count) {
+    // Non-streaming responses are implicitly "done"; reuse the streaming
+    // mapper with done=true forced on top.
+    return { ...mapOllamaChunk({ ...response, done: true }, think), done: true };
+  }
+}
+
+/** Shape we read off Ollama responses. Both streaming chunks and
+ *  /api/chat non-stream responses fit this — distinct fields stay
+ *  optional. Captured as an interface (rather than `any`-coerced) so
+ *  the mapper stays type-checked. */
+interface OllamaChunkLike {
+  message?: {
+    content?: string;
+    tool_calls?: ReadonlyArray<{
+      function: { name: string; arguments: unknown };
+    }>;
+  };
+  done?: boolean;
+  done_reason?: string;
+  eval_count?: number;
+  prompt_eval_count?: number;
+}
+
+/** Convert an Ollama streaming chunk (or non-stream response coerced
+ *  to the same shape) into the cross-provider ChatChunk. Extracted
+ *  from `chat`/`chatNoStream` so the per-method complexity stays
+ *  under the eslint cap. Applies the §15 think-tag discard when the
+ *  caller opted out of thinking. */
+function mapOllamaChunk(chunk: OllamaChunkLike, think: boolean): ChatChunk {
+  const result: ChatChunk = {};
+  const rawContent = chunk.message?.content;
+  if (rawContent) {
+    result.content = think ? rawContent : discardThinkTags(rawContent);
+  }
+  if (chunk.message?.tool_calls) {
+    result.tool_calls = chunk.message.tool_calls.map(tc => ({
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments as Record<string, unknown>,
+      },
+    }));
+  }
+  if (chunk.done) {
+    result.done = true;
+    if (typeof chunk.done_reason === 'string') result.doneReason = chunk.done_reason;
+    if (chunk.eval_count || chunk.prompt_eval_count) {
       result.usage = {
-        promptTokens: response.prompt_eval_count ?? 0,
-        completionTokens: response.eval_count ?? 0,
-        totalTokens: (response.prompt_eval_count ?? 0) + (response.eval_count ?? 0),
+        promptTokens: chunk.prompt_eval_count ?? 0,
+        completionTokens: chunk.eval_count ?? 0,
+        totalTokens: (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0),
       };
     }
-    return result;
   }
+  return result;
 }
 
 /**
