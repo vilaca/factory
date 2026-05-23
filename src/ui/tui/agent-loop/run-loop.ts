@@ -11,7 +11,6 @@ import { loadGlobalConfig } from '../../../core/config/index.js';
 import { tupleKey } from '../../../core/config/types.js';
 import { listKeys } from '../../../core/auth/credentials.js';
 import { getWarmthLog } from '../../../core/session/key-stats.js';
-import { defaultRegistry } from '../../../tools/index.js';
 import { handleAgentEvent } from './event-handler.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
 
@@ -194,7 +193,7 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
     model: deps.refs.current.model,
     conversation: deps.refs.current.conversation,
     permissions: deps.refs.current.permissions,
-    toolRegistry: defaultRegistry,
+    toolRegistry: deps.refs.current.toolRegistry,
     useTextToolFallback: deps.refs.current.useTextToolFallback,
     nativeToolSupport: deps.refs.current.nativeToolSupport,
     planMode: deps.refs.current.planMode,

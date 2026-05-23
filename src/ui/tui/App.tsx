@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useApp, useInput } from 'ink';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config/types.js';
+import type { ToolRegistry } from '../../tools/registry.js';
 import { Session } from './Session.js';
 import { TabsProvider } from './tabs/TabsContext.js';
 import { useTabs } from './tabs/use-tabs.js';
@@ -35,6 +36,12 @@ export interface AppProps {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Per-session tool registry. Constructed once in src/index.ts (with MCP
+   *  and subagent tools registered into it) and threaded through to every
+   *  Session. Each tab shares the same registry — they live in the same
+   *  process and the registry is the source of truth for tool definitions
+   *  the model can see. */
+  toolRegistry: ToolRegistry;
   /** Id of the multi-key-store entry the launch provider was built with.
    *  Forwarded to each Session so per-key stats attribute correctly from
    *  the first turn. */

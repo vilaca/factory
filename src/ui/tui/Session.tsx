@@ -3,6 +3,7 @@ import { Box, Text, useApp } from 'ink';
 import { TextInput } from './components/text-input.js';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config/types.js';
+import type { ToolRegistry } from '../../tools/registry.js';
 import { ConversationDisplay } from './components/conversation-display.js';
 import { Separator } from './components/separator.js';
 import { StatusBar, selectDisplayTokens } from './components/status-bar.js';
@@ -53,6 +54,8 @@ interface SessionProps {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Per-session tool registry threaded through from startup. */
+  toolRegistry: ToolRegistry;
   /** Id of the multi-key-store entry the launch provider was built with.
    *  Forwarded to useAgentLoop so the first turn's success is attributed
    *  to the right key in /keys. */

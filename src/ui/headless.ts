@@ -21,7 +21,7 @@ import { runAgent } from '../core/agent/run-agent.js';
 import type { ResponsesChain } from '../core/agent/types.js';
 import { errorMessage } from '../utils/errors.js';
 import { FileCache } from '../core/agent/cache/file-cache.js';
-import { defaultRegistry } from '../tools/index.js';
+import type { ToolRegistry } from '../tools/registry.js';
 import { createSessionLogger, type SessionLogger } from '../core/session/session-log.js';
 import { getBuildInfo } from '../utils/build-info.js';
 import { buildEnvironmentMessage } from '../core/context/system-prompt.js';
@@ -38,6 +38,12 @@ interface HeadlessOptions {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Per-session tool registry. Constructed in src/index.ts (with MCP
+   *  and subagent tools registered into it) and passed in via
+   *  appOptions. Replaces the previous process-global `defaultRegistry`
+   *  import so a future multi-session daemon can hand each headless
+   *  invocation a distinct tool set. */
+  toolRegistry: ToolRegistry;
   agentConfig?: AgentConfig;
   autoAllowTools?: string[];
   bashRules?: BashRuleConfig[];
@@ -413,7 +419,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       model: options.model,
       conversation,
       permissions,
-      toolRegistry: defaultRegistry,
+      toolRegistry: options.toolRegistry,
       contextManager,
       useTextToolFallback: options.useTextToolFallback,
       nativeToolSupport: options.nativeToolSupport,

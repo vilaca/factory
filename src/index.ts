@@ -5,7 +5,7 @@ import type { StartupProviderName } from './providers/registry.js';
 import { DESCRIPTOR_LIST } from './providers/registry.js';
 import { loadConfig } from './core/config/index.js';
 import { McpManager } from './mcp/client.js';
-import { defaultRegistry } from './tools/index.js';
+import { ToolRegistry } from './tools/registry.js';
 import { runHeadless } from './ui/headless.js';
 import { renderApp } from './ui/tui/index.js';
 import { buildSystemPrompt } from './core/context/system-prompt.js';
@@ -111,13 +111,18 @@ async function main(): Promise<void> {
   // from `config.mcp.servers` and `config.agent.hooks` on reject.
   await handleProjectTrust(config, cwd);
 
+  // Per-session tool registry. Constructed here (before MCP / subagent
+  // registration) and threaded into appOptions so every consumer reads
+  // from the same instance. No more process-global singleton.
+  const toolRegistry = new ToolRegistry();
+
   let mcpManager: McpManager | undefined;
   let mcpInfo: { servers: string[]; toolCount: number } | undefined;
   if (config.mcp?.servers?.length) {
     mcpManager = new McpManager();
     const mcpTools = await mcpManager.connectAll(config.mcp.servers);
     for (const tool of mcpTools) {
-      defaultRegistry.register(tool);
+      toolRegistry.register(tool);
     }
     mcpInfo = {
       servers: config.mcp.servers.map(s => (s as { name?: string }).name ?? '<unnamed>'),
@@ -155,7 +160,7 @@ async function main(): Promise<void> {
   // missing is the *nested* `subagent` source tag in the JSONL. Tracked as
   // a follow-up — needs per-tab tool registration to fix properly.
   if (mergedAgentConfig.experimental.subagents) {
-    await registerSubagentTool(provider, model, defaultRegistry);
+    await registerSubagentTool(provider, model, toolRegistry);
   }
 
   const welcomeText = renderWelcome(
@@ -164,7 +169,7 @@ async function main(): Promise<void> {
     mergedAgentConfig.experimental,
     cliArgs.noLog ? 'disabled' : sessionsDir(),
     gitBranch,
-    defaultRegistry.getNames(),
+    toolRegistry.getNames(),
   );
 
   // Surface any hooks that will be active this session. With hooks
@@ -207,6 +212,7 @@ async function main(): Promise<void> {
     model,
     systemPrompt,
     provider,
+    toolRegistry,
     ...(activeKeyId ? { keyId: activeKeyId } : {}),
     agentConfig: mergedAgentConfig,
     autoAllowTools: config.permissions?.allowAll,

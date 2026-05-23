@@ -10,6 +10,7 @@ import type { ContextManager } from '../../../core/context/context-manager.js';
 import type { FileCache } from '../../../core/agent/cache/file-cache.js';
 import type { PermissionManager } from '../../../security/permissions.js';
 import type { Provider } from '../../../providers/types.js';
+import type { ToolRegistry } from '../../../tools/registry.js';
 import type { PromptTokensCarrier } from '../../../providers/usage.js';
 import type { ResponsesChain } from '../../../core/agent/types.js';
 import type { SessionLogger } from '../../../core/session/session-log.js';
@@ -52,6 +53,15 @@ export interface RunRefs {
    * are stateless per call. */
   provider: Provider;
   model: string;
+  /** Per-session tool registry. Threaded in from UseAgentLoopOptions —
+   *  startup constructs it once, registers MCP and subagent tools into
+   *  it, and hands the same instance to every Session. The TUI reads
+   *  `toolRegistry.getDefinitions()` (for prompt-budget estimation) and
+   *  passes the registry to `runAgent`. Lives on RunRefs instead of as
+   *  a process-global singleton so a future multi-session daemon can
+   *  hand each session a registry with different tools without crossing
+   *  the streams. */
+  toolRegistry: ToolRegistry;
   /** The (provider, model) the user is "homed" on for this tab. Captured at
    *  session start and updated only by user-driven swaps (setProviderByName /
    *  setModelByName). Tier-2 rotation does *not* touch this — that's how
@@ -129,6 +139,11 @@ export interface UseAgentLoopOptions {
   model: string;
   systemPrompt: string;
   provider: Provider;
+  /** Per-session tool registry. Constructed once in src/index.ts (with MCP
+   *  and subagent tools registered into it) and threaded through to every
+   *  Session. Replaces the previous process-global `defaultRegistry`
+   *  singleton. */
+  toolRegistry: ToolRegistry;
   /** Id of the multi-key-store entry the launch provider was built with.
    *  Seeds RunRefs.activeKeyId so per-key stats (recordSuccess /
    *  recordFailure / recordTokenUsage) attribute correctly from turn 1.
