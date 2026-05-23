@@ -95,12 +95,6 @@ export async function loadGlobalConfig(): Promise<Config> {
   return pending;
 }
 
-/** Test/debug hook — drops the in-process cache so the next
- *  `loadGlobalConfig` re-reads from disk. */
-export function resetGlobalConfigCache(): void {
-  configCache.clear();
-}
-
 // In-process serialization for config writes. Without this, two concurrent
 // `addKey()` calls (e.g., user adds a key in one tab while another tab
 // races a credential migration) interleave: each reads the same baseline,

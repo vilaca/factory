@@ -76,7 +76,7 @@ interface ProviderAuthMeta {
   detail?: string;
 }
 
-export interface ModelRequestMeta {
+interface ModelRequestMeta {
   provider: string;
   model: string;
   /** Which caller issued the request. */
