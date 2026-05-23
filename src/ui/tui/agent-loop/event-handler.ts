@@ -5,6 +5,11 @@ import {
   recordSuccess as recordKeySuccess,
   recordTokenUsage as recordKeyTokenUsage,
 } from '../../../core/session/key-stats.js';
+import {
+  describeRotationReason,
+  fingerprintLabel,
+  formatHookDisplay,
+} from '../../agent-events/render.js';
 
 interface StreamingState {
   getStreamingBuffer: () => string;
@@ -30,14 +35,6 @@ function describeRecoverySource(source: string): string {
   if (source === 'fence') return 'a JSON code block';
   if (source === 'shell-fence') return 'a shell code block';
   return 'tagged JSON';
-}
-
-function describeRotationReason(reason: string): string {
-  return reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
-}
-
-function fingerprintLabel(entry: { label?: string; fingerprint: string }): string {
-  return entry.label ? `${entry.label} · …${entry.fingerprint}` : `…${entry.fingerprint}`;
 }
 
 const HANDLERS: EventHandlers = {
@@ -320,9 +317,7 @@ const HANDLERS: EventHandlers = {
   'hook-error': (event, deps) => deps.addNotice('warn', `⚠ Hook ${event.event}: ${event.error}`),
 
   'hook-fired': (event, deps) => {
-    const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;
-    const display = name.split('/').pop() ?? name;
-    const suffix = event.notice ? ` — ${event.notice}` : '';
+    const { display, suffix } = formatHookDisplay(event.hookCommand, event.notice);
     deps.addNotice('info', `↪ ${event.event} hook ran (${display})${suffix}`);
   },
 

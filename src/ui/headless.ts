@@ -14,12 +14,8 @@ import type { PathPolicy } from '../security/paths.js';
 import type { EnvPolicy } from '../security/env.js';
 import { Conversation } from '../core/context/conversation.js';
 import { ContextManager } from '../core/context/context-manager.js';
-import { createProvider, descriptorByAlias } from '../providers/registry.js';
-import { prime } from '../providers/prime.js';
 import { instrumentProviderRequests } from '../providers/instrument.js';
 import { logModelRequestTo } from './session-bridge.js';
-import { getKey } from '../core/auth/credentials.js';
-import { loadGlobalConfig } from '../core/config/index.js';
 import { PermissionManager } from '../security/permissions.js';
 import { runAgent } from '../core/agent/run-agent.js';
 import type { ResponsesChain } from '../core/agent/types.js';
@@ -31,6 +27,12 @@ import { getBuildInfo } from '../utils/build-info.js';
 import { buildEnvironmentMessage } from '../core/context/system-prompt.js';
 import { runHook } from '../core/hooks/index.js';
 import type { AgentEvent } from '../core/agent/types.js';
+import {
+  describeRotationReason,
+  fingerprintLabel,
+  formatHookDisplay,
+} from './agent-events/render.js';
+import { resolveCompactionTarget } from './agent-events/compaction-resolver.js';
 
 interface HeadlessOptions {
   model: string;
@@ -126,9 +128,7 @@ function handleAgentEvent(
       event.respond('deny');
       break;
     case 'hook-fired': {
-      const name = event.hookCommand.split(/\s+/)[0] ?? event.hookCommand;
-      const display = name.split('/').pop() ?? name;
-      const suffix = event.notice ? ` — ${event.notice}` : '';
+      const { display, suffix } = formatHookDisplay(event.hookCommand, event.notice);
       process.stderr.write(`  ↪ ${event.event} hook (${display})${suffix}\n`);
       break;
     }
@@ -152,32 +152,26 @@ function handleAgentEvent(
       );
       break;
     case 'key-rotation': {
-      const fromLabel = event.from
-        ? event.from.label
-          ? `${event.from.label} · …${event.from.fingerprint}`
-          : `…${event.from.fingerprint}`
-        : '<unknown>';
-      const toLabel = event.to.label
-        ? `${event.to.label} · …${event.to.fingerprint}`
-        : `…${event.to.fingerprint}`;
-      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      const fromLabel = event.from ? fingerprintLabel(event.from) : '<unknown>';
+      const toLabel = fingerprintLabel(event.to);
+      const reasonLabel = describeRotationReason(event.reason);
       process.stderr.write(`  ⟲ key ${fromLabel} ${reasonLabel}, rotating to ${toLabel}\n`);
       break;
     }
     case 'key-rotation-exhausted': {
-      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      const reasonLabel = describeRotationReason(event.reason);
       process.stderr.write(`  ⟲ no more keys for ${event.provider} (${reasonLabel})\n`);
       break;
     }
     case 'tuple-rotation': {
-      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      const reasonLabel = describeRotationReason(event.reason);
       process.stderr.write(
         `  ⟲ ${event.from.provider}/${event.from.model} ${reasonLabel}, falling back to ${event.to.provider}/${event.to.model}\n`,
       );
       break;
     }
     case 'tuple-rotation-exhausted': {
-      const reasonLabel = event.reason === 'rate-limit' ? 'rate-limited' : 'auth failed';
+      const reasonLabel = describeRotationReason(event.reason);
       process.stderr.write(`  ⟲ rotation chain exhausted (${reasonLabel})\n`);
       break;
     }
@@ -376,52 +370,14 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     : options.provider;
   const capabilities = provider.getCapabilities(options.model);
   // Headless never prompts — the resolver returns a fixed tuple every
-  // call. Honors --compaction-model when supplied (possibly
-  // cross-provider, in which case we instantiate the target provider on
-  // demand). When unset, routes the summary call to the primary
-  // (provider, model) — exact spec rule.
-  const compactionResolver = async (): Promise<{
-    provider: Provider;
-    model: string;
-  } | null> => {
-    const target = options.compactionModel;
-    if (!target || target.providerName === provider.name) {
-      return { provider, model: target?.model ?? options.model };
-    }
-    try {
-      const descriptor = descriptorByAlias(target.providerName);
-      const createOpts: Parameters<typeof createProvider>[1] = {};
-      if (descriptor) {
-        const cfg = await loadGlobalConfig();
-        const key = getKey(cfg, descriptor.name);
-        if (key) {
-          createOpts.token = key.token;
-          if (descriptor.needsAccountId && key.extras?.accountId) {
-            createOpts.accountId = key.extras.accountId;
-          }
-        }
-      }
-      const unprimed = createProvider(target.providerName, createOpts);
-      // Prime before use — same cf880ed contract as the TUI
-      // compaction resolver. Without this, an Anthropic compaction
-      // target would throw on its first getCapabilities() lookup.
-      const { provider: fresh } = await prime(unprimed, target.model);
-      const wrapped = sessionLogger
-        ? instrumentProviderRequests(
-            fresh,
-            info => logModelRequestTo(sessionLogger, info),
-            'compaction',
-          )
-        : fresh;
-      return { provider: wrapped, model: target.model };
-    } catch (err: unknown) {
-      // Same fallback shape as the TUI resolver — never block compaction
-      // on auth/registry failures; the model call will trip the
-      // mechanical-summary path.
-      sessionLogger?.logWarning('compaction-resolver', errorMessage(err));
-      return { provider, model: options.model };
-    }
-  };
+  // call. Honors --compaction-model when supplied (cross-provider builds
+  // and the error-fallback shape live in the shared resolver). When
+  // unset, routes the summary call to the primary (provider, model).
+  const compactionResolver = (): Promise<{ provider: Provider; model: string }> =>
+    resolveCompactionTarget({
+      active: { provider, model: options.model, sessionLogger },
+      target: options.compactionModel,
+    });
   const contextManager = new ContextManager(
     conversation,
     capabilities,
