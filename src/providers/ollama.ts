@@ -32,8 +32,29 @@ export class OllamaProvider implements Provider {
   // model.
   private contextWindowCache = new Map<string, number>();
 
-  constructor(host?: string) {
-    const customFetch: typeof fetch = (input, init) => {
+  /** Test-only hook: when set, customFetch awaits this barrier between
+   *  reading the ALS-scoped signal and invoking the real `fetch`. Used by
+   *  the re-entrancy contract suite to deterministically interleave two
+   *  concurrent chatNoStream calls' signal reads with each other's signal
+   *  assignments — the exact race shape that the 0b80a98 fix protects
+   *  against. Default (undefined) means no barrier; production paths are
+   *  unaffected. The hook does NOT receive or mutate the signal; it only
+   *  controls the timing of when customFetch resumes. */
+  private fetchBarrier?: () => Promise<void>;
+
+  constructor(host?: string, opts?: { fetchBarrier?: () => Promise<void> }) {
+    this.fetchBarrier = opts?.fetchBarrier;
+    const customFetch: typeof fetch = async (input, init) => {
+      // Test-only barrier (see fetchBarrier docstring). Awaited BEFORE the
+      // signal read so the test can deterministically arrange "both
+      // chatNoStream calls have assigned their signals before either
+      // customFetch reads one." With ALS, each customFetch still reads
+      // its own context's signal regardless of timing. With a shared
+      // instance field (the 0b80a98 bug), the later assignment would
+      // have overwritten the earlier one by the time the read happens.
+      if (this.fetchBarrier) {
+        await this.fetchBarrier();
+      }
       const signal = this.signalStore.getStore();
       if (signal && !init?.signal) {
         return fetch(input as RequestInfo | URL, { ...init, signal });

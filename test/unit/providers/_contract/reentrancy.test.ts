@@ -12,28 +12,26 @@
 // (`this.currentSignal`). Two overlapping calls clobbered each other's
 // slot, so the second call's signal overwrote the first's before the
 // SDK's customFetch read it. The fix routed the signal through
-// AsyncLocalStorage. This file pins that invariant.
+// AsyncLocalStorage. This file pins that invariant in three layers:
 //
-// Why the test is structured the way it is: the SDK's path to fetch is
-// mostly synchronous, so `Promise.all([A, B])` won't naturally
-// interleave the customFetch invocations — call A reads its signal
-// before B's body even starts. To deterministically reproduce the race
-// the bug created, the test uses two cooperating tools:
-//
-//   1. A barrier in the mock-Ollama server's hold mode. Both requests
-//      arrive AND are parked before either can read its server-side
-//      effect. This proves the abort wiring (signal threaded through
-//      to the actual fetch).
-//   2. A direct test against `AsyncLocalStorage` exercising the same
-//      shape the provider relies on — two concurrent `run()` contexts
-//      with an interleaving await between assignment and read. This
-//      pins the structural invariant: the signal is stored per-async-
-//      context, not on a shared instance slot.
+//   1. Mock-server smoke test: aborting one concurrent chatNoStream
+//      call doesn't abort the other and responses don't cross-talk.
+//      Covers the abort wiring at the network boundary.
+//   2. fetchBarrier deterministic test (Ollama-specific): uses the
+//      provider's test-only customFetch barrier to force both calls'
+//      signal *reads* to happen after both calls' signal
+//      *assignments*. This is the exact race shape 0b80a98 protects
+//      against — with the bug restored (signalStore replaced by a
+//      shared field), this test turns red.
+//   3. AsyncLocalStorage invariant (provider-agnostic): two
+//      interleaved `run()` contexts each observe their own store value
+//      across an awaited microtask hop. Pins the structural property
+//      the Ollama provider depends on.
 //
 // Why one file with a per-provider entry instead of one suite per
-// provider: the assertion is identical everywhere — "the wires don't
-// cross." Adding a new provider should be one entry in `adapters` plus
-// any per-provider mock-server wiring, not a copy of the harness.
+// provider: the assertion shape is identical everywhere. Adding a new
+// provider should be one entry in `adapters` plus any per-provider
+// mock-server wiring, not a copy of the harness.
 //
 // Currently only Ollama is wired (it's the one the regression came
 // from). Other providers should be added as their per-protocol mocks
@@ -196,6 +194,131 @@ for (const adapter of adapters) {
 //
 // Each addition is one entry in `adapters` above; the assertion stays
 // identical.
+
+// ─── 0b80a98 deterministic regression (Ollama-specific) ────────────────
+//
+// The smoke test above can't reliably reproduce the exact 0b80a98
+// race because the Ollama SDK's path from chat() to fetch() is
+// synchronous — call A's customFetch reads its signal before call B's
+// body ever runs. To deterministically interleave the signal *reads*
+// with the signal *assignments*, this test uses the provider's
+// test-only `fetchBarrier` hook: both customFetch invocations park
+// at the barrier BEFORE reading `signalStore.getStore()`, both
+// signalStore.run() frames become active concurrently, and only then
+// is the barrier released. Each customFetch must read its OWN
+// signal — which ALS gives us per-async-context — even though the
+// reads happen after both assignments.
+//
+// With the fix in place: ✓ A's read returns sigA, B's read returns
+// sigB. Aborting only ctrlA aborts only A.
+// With the bug restored (signalStore swapped for a shared `currentSignal`
+// instance field): ✗ both reads return whichever was assigned last;
+// aborting ctrlA aborts the wrong call (B) and A succeeds while B fails,
+// or both fail depending on timing.
+//
+// This test is Ollama-specific because it relies on the provider's
+// internal customFetch seam. Other providers would need their own
+// equivalent hook to express the same assertion.
+
+describe('Provider contract — ollama — 0b80a98 deterministic regression', () => {
+  let server: http.Server;
+  let port: number;
+
+  before(async () => {
+    const result = await startMockServer();
+    server = result.server;
+    port = result.port;
+  });
+  after(async () => {
+    await stopMockServer(server);
+  });
+
+  it('signal reads are isolated per concurrent chatNoStream call (no shared slot)', async () => {
+    // Barrier protocol:
+    //   - Each customFetch invocation increments `arrivals`. When both
+    //     calls have arrived, `bothArrived` resolves so the test knows
+    //     it's safe to abort ctrlA (after this point, the SDK's
+    //     pre-fetch `signal.aborted` guard has already run for both
+    //     calls — aborting now affects ONLY what customFetch reads from
+    //     the signal store, not the early-exit path).
+    //   - Each customFetch awaits `release` before reading the signal,
+    //     so both signal *reads* happen after both signal *assignments*
+    //     — the exact interleave the 0b80a98 bug needed to manifest.
+    let arrivals = 0;
+    let bothArrived!: () => void;
+    let release!: () => void;
+    const bothArrivedPromise = new Promise<void>(resolve => {
+      bothArrived = resolve;
+    });
+    const releasePromise = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const fetchBarrier = async (): Promise<void> => {
+      arrivals += 1;
+      if (arrivals === 2) bothArrived();
+      await releasePromise;
+    };
+
+    const provider = new OllamaProvider(`http://127.0.0.1:${port}`, { fetchBarrier });
+    setNextResponses([{ content: 'reply-A' }, { content: 'reply-B' }]);
+
+    const ctrlA = new AbortController();
+    const ctrlB = new AbortController();
+
+    const callA = provider.chatNoStream('test-model:latest', [], undefined, {
+      signal: ctrlA.signal,
+    });
+    const callB = provider.chatNoStream('test-model:latest', [], undefined, {
+      signal: ctrlB.signal,
+    });
+
+    // Wait for both customFetch frames to be parked at the barrier.
+    // At this point both signalStore.run() frames are active
+    // concurrently — the structural condition the 0b80a98 race needs.
+    await bothArrivedPromise;
+
+    // Abort A only. With ALS-scoped storage, customFetch-A will read
+    // sigA (now aborted) and customFetch-B will read sigB (live). With
+    // a shared-slot bug, both customFetches would read the same
+    // (last-written) signal — aborting A would propagate to B too.
+    ctrlA.abort();
+
+    // Release both barriers; reads happen now.
+    release();
+
+    const settled = await Promise.allSettled([callA, callB]);
+    assert.equal(
+      settled[0].status,
+      'rejected',
+      'call A must reject — ctrlA was aborted before its customFetch read the signal',
+    );
+    assert.match(
+      (settled[0] as PromiseRejectedResult).reason?.message ?? '',
+      /abort/i,
+      'call A must reject with an abort error',
+    );
+    assert.equal(
+      settled[1].status,
+      'fulfilled',
+      `call B must succeed — its signal was never aborted. If this fails, customFetch is reading from a shared slot rather than ALS (0b80a98). reason=${
+        settled[1].status === 'rejected'
+          ? String((settled[1] as PromiseRejectedResult).reason)
+          : 'n/a'
+      }`,
+    );
+    if (settled[1].status === 'fulfilled') {
+      // The queue is FIFO at the mock server and the two requests arrive
+      // in nondeterministic order, so B might receive either payload.
+      // The signal-isolation assertion above is what this test pins —
+      // payload routing is exercised by the smoke test in the
+      // adapter-driven block above.
+      assert.ok(
+        ['reply-A', 'reply-B'].includes(settled[1].value.content ?? ''),
+        `call B must receive a queued payload (got: ${settled[1].value.content})`,
+      );
+    }
+  });
+});
 
 // ─── Structural invariant ──────────────────────────────────────────────
 //
