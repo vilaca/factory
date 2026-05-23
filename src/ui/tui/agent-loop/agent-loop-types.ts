@@ -10,6 +10,7 @@ import type { ContextManager } from '../../../core/context/context-manager.js';
 import type { FileCache } from '../../../core/agent/cache/file-cache.js';
 import type { PermissionManager } from '../../../security/permissions.js';
 import type { Provider } from '../../../providers/types.js';
+import type { PromptTokensCarrier } from '../../../providers/usage.js';
 import type { ResponsesChain } from '../../../core/agent/types.js';
 import type { SessionLogger } from '../../../core/session/session-log.js';
 import type { SkillsRegistry } from '../../../core/skills/index.js';
@@ -190,7 +191,14 @@ export interface AgentLoopApi {
   model: string;
   sessionTurns: number;
   sessionToolCalls: number;
-  lastUsage: { totalTokens?: number; promptTokens?: number } | undefined;
+  /** Last model-reported usage. Only the `promptTokens` field is
+   *  exposed to consumers (via `contextFillTokens` in
+   *  src/providers/usage.ts) — the StatusBar's context-fullness gauge
+   *  is the only consumer that needs it. Other usage fields
+   *  (totalTokens, completionTokens, reasoningTokens, cache*) flow
+   *  through session-level event handlers, not through the React
+   *  prop tree. */
+  lastUsage: PromptTokensCarrier | undefined;
   /** Approximate token count from ContextManager — used to show the status
    * bar's token figure before the first model response arrives. */
   estimatedTokens: number | undefined;

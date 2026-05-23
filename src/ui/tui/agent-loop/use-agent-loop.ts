@@ -26,6 +26,7 @@ import type {
   RunState,
   UseAgentLoopOptions,
 } from './agent-loop-types.js';
+import type { PromptTokensCarrier } from '../../../providers/usage.js';
 
 export type { AgentLoopApi };
 
@@ -39,16 +40,14 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const [providerName, setProviderName] = useState(opts.provider.name);
   const [sessionTurns, setSessionTurns] = useState(0);
   const [sessionToolCalls, setSessionToolCalls] = useState(0);
-  const [lastUsage, setLastUsage] = useState<
-    | {
-        totalTokens?: number;
-        completionTokens?: number;
-        cachedPromptTokens?: number;
-        cacheCreationTokens?: number;
-        promptTokens?: number;
-      }
-    | undefined
-  >();
+  // The only consumer of this state is the status-bar context-fullness
+  // gauge, which reads it through `contextFillTokens` (see
+  // src/providers/usage.ts). Narrow the carrier to just the field that
+  // selector reads — future plucking of e.g. `totalTokens` (the 44aeb26
+  // bug shape) becomes a compile error. Other usage fields (completion,
+  // reasoning, cache*) flow through session-level event handlers, not
+  // through this React state.
+  const [lastUsage, setLastUsage] = useState<PromptTokensCarrier | undefined>();
   const [estimatedTokens, setEstimatedTokens] = useState<number | undefined>();
   // Mirrors ContextManager.contextWindow so the StatusBar re-renders when an
   // async provider prime (ollama's /api/show) widens or narrows the window
