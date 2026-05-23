@@ -95,7 +95,7 @@ async function advanceTuple(
     const firstKey = keys[0]!;
     let nextProvider: Provider;
     try {
-      nextProvider = rotation.withTuple(entry.provider, firstKey);
+      nextProvider = await rotation.withTuple(entry.provider, firstKey);
     } catch {
       continue;
     }
@@ -156,7 +156,7 @@ async function tryRotateKey(
   state.activeKeyId = next.id;
   rotation.activeKeyId = next.id;
   rotation.onActiveKeyChange?.(next.id);
-  state.provider = rotation.withKey(next);
+  state.provider = await rotation.withKey(next);
   resetAccumulators(state);
   return { rotated: true, events: [event] };
 }
@@ -239,7 +239,7 @@ async function tryPromptedFallback(
   const firstKey = promptedKeys[0]!;
   let nextProvider: Provider;
   try {
-    nextProvider = rotation.withTuple(promptedEntry.provider, firstKey);
+    nextProvider = await rotation.withTuple(promptedEntry.provider, firstKey);
   } catch {
     return { rotated: false, events: [], rethrow: err };
   }

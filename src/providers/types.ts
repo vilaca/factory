@@ -168,6 +168,30 @@ export interface ChatOptions {
   };
 }
 
+/** Narrow surface returned by `createProvider`. A freshly-minted
+ *  provider's per-model caches are empty, so the synchronous
+ *  `getCapabilities` path on Anthropic (and any future provider that
+ *  builds capabilities from cached listModels data) would throw a cache
+ *  miss. The full `Provider` surface — including `getCapabilities`,
+ *  `chat`, `chatNoStream` — is only available *after* `prime()` from
+ *  `./prime.ts` has run `listModels()` (and optionally `primeModelCache`
+ *  for the active model).
+ *
+ *  This split makes the cf880ed bug class (mint provider → call
+ *  getCapabilities → unhandled cache miss) a compile error rather than
+ *  a runtime surprise. The arch test in
+ *  test/unit/arch/modularity.test.ts adds a belt-and-braces grep check
+ *  for the same shape; the structural type here is the primary gate. */
+export interface UnprimedProvider {
+  name: string;
+  listModels(): Promise<string[]>;
+  /** Optional second priming step — providers with per-model side data
+   *  beyond the model list (Ollama's /api/show → context_length) opt in
+   *  by implementing this. `prime()` invokes it when a target model is
+   *  known at construction time. */
+  primeModelCache?(model: string): Promise<void>;
+}
+
 export interface Provider {
   name: string;
   listModels(): Promise<string[]>;

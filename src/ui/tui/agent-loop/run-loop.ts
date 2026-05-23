@@ -1,6 +1,7 @@
 import { runAgent } from '../../../core/agent/run-agent.js';
 import type { AgentOptions, RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
+import { prime } from '../../../providers/prime.js';
 import { descriptorByAlias } from '../../../providers/registry.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
 import { logModelRequestTo } from '../../session-bridge.js';
@@ -99,15 +100,19 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
   return {
     keys,
     activeKeyId: refs.activeKeyId,
-    withKey: key =>
-      wrap(
-        createProvider(refs.provider.name, {
-          token: key.token,
-          ...(descriptor.needsAccountId && key.extras?.accountId
-            ? { accountId: key.extras.accountId }
-            : {}),
-        }),
-      ),
+    withKey: async key => {
+      const unprimed = createProvider(refs.provider.name, {
+        token: key.token,
+        ...(descriptor.needsAccountId && key.extras?.accountId
+          ? { accountId: key.extras.accountId }
+          : {}),
+      });
+      // Prime the rotated provider — it will be consumed by
+      // chat()/chatNoStream() and (via onProviderChange) become the
+      // next turn's RunRefs.provider, so the cf880ed contract applies.
+      const { provider } = await prime(unprimed);
+      return wrap(provider);
+    },
     onActiveKeyChange: id => {
       if (!deps.refs.current) return;
       deps.refs.current.activeKeyId = id;
@@ -131,13 +136,15 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
       const c = await loadGlobalConfig();
       return listKeys(c, desc.name);
     },
-    withTuple: (providerName, key) => {
+    withTuple: async (providerName, key) => {
       const desc = descriptorByAlias(providerName);
       const opts: Parameters<typeof createProvider>[1] = { token: key.token };
       if (desc?.needsAccountId && key.extras?.accountId) {
         opts.accountId = key.extras.accountId;
       }
-      return wrap(createProvider(providerName, opts));
+      const unprimed = createProvider(providerName, opts);
+      const { provider } = await prime(unprimed);
+      return wrap(provider);
     },
     ...(refs.requestFallback ? { promptForFallback: refs.requestFallback } : {}),
   };

@@ -18,7 +18,8 @@ import {
 import { errorMessage } from '../../../utils/errors.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
 import { logModelRequestTo } from '../../session-bridge.js';
-import type { Provider } from '../../../providers/types.js';
+import type { Provider, UnprimedProvider } from '../../../providers/types.js';
+import { prime } from '../../../providers/prime.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 
 /** Injectable seams for swapProvider. The defaults are the real registry /
@@ -184,9 +185,9 @@ export async function swapProvider(
 
   const { createOpts, resolvedKeyId } = await resolveProviderKey(trimmed, keyId, deps);
 
-  let nextProvider: Provider;
+  let unprimed: UnprimedProvider;
   try {
-    nextProvider = deps.createProvider(trimmed, createOpts);
+    unprimed = deps.createProvider(trimmed, createOpts);
   } catch (err) {
     ctx.addNotice('danger', `Cannot switch to ${trimmed}: ${errorMessage(err)}`);
     return;
@@ -197,10 +198,12 @@ export async function swapProvider(
   // src/providers/anthropic.ts:68). Run unconditionally even when
   // `requestedModel` is supplied: a fresh createProvider() instance has
   // its own empty cache, and the picker's separate instance doesn't
-  // share state with the one we just minted.
+  // share state with the one we just minted. `prime()` is the type-
+  // level bridge from UnprimedProvider to Provider.
+  let nextProvider: Provider;
   let availableModels: string[];
   try {
-    availableModels = await nextProvider.listModels();
+    ({ provider: nextProvider, models: availableModels } = await prime(unprimed));
   } catch (err) {
     ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${errorMessage(err)}`);
     return;

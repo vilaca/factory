@@ -15,6 +15,7 @@ import type { EnvPolicy } from '../security/env.js';
 import { Conversation } from '../core/context/conversation.js';
 import { ContextManager } from '../core/context/context-manager.js';
 import { createProvider, descriptorByAlias } from '../providers/registry.js';
+import { prime } from '../providers/prime.js';
 import { instrumentProviderRequests } from '../providers/instrument.js';
 import { logModelRequestTo } from './session-bridge.js';
 import { getKey } from '../core/auth/credentials.js';
@@ -400,7 +401,11 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
           }
         }
       }
-      const fresh = createProvider(target.providerName, createOpts);
+      const unprimed = createProvider(target.providerName, createOpts);
+      // Prime before use — same cf880ed contract as the TUI
+      // compaction resolver. Without this, an Anthropic compaction
+      // target would throw on its first getCapabilities() lookup.
+      const { provider: fresh } = await prime(unprimed, target.model);
       const wrapped = sessionLogger
         ? instrumentProviderRequests(
             fresh,
