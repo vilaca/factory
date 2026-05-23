@@ -20,4 +20,6 @@ jobs:
           cache: 'npm'
       # See lint.yml for why we pin npm via npx.
       - run: npx -y npm@11.12.1 ci
-      - run: npm run test:unit
+      # `coverage` runs the unit suite under c8 and enforces the
+      # line/branch/function thresholds, so it subsumes `test:unit`.
+      - run: npm run coverage
