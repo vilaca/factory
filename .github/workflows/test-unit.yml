@@ -1,0 +1,55 @@
+name: Test (unit)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Each shard runs under c8 so the gating test run also produces V8
+  # raw coverage. Shards upload partial coverage as artifacts; the
+  # merge job below consolidates and checks thresholds advisorily.
+  shard:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [providers, core, rest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      # See lint.yml for why we pin npm via npx.
+      - run: npx -y npm@11.12.1 ci
+      - run: npm run coverage:${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: coverage/tmp
+          if-no-files-found: error
+          retention-days: 1
+
+  coverage:
+    needs: shard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npx -y npm@11.12.1 ci
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage/tmp
+          merge-multiple: true
+      # Coverage thresholds are advisory: surface drift without blocking merges.
+      - run: npm run coverage:report
+        continue-on-error: true

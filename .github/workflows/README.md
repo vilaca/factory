@@ -12,10 +12,7 @@ Validations (run on push to `main` and on PR):
 
 Tests (run on push to `main` and on PR):
 
-- `test-unit-providers.yml` — `npm run test:unit:providers` (gating).
-- `test-unit-core.yml` — `npm run test:unit:core` (gating).
-- `test-unit-rest.yml` — `npm run test:unit:rest` (gating; arch/cli/mcp/security/tools/ui/utils).
-- `test-unit-coverage.yml` — `npm run coverage` (advisory threshold check; runs the full unit suite under c8).
+- `test-unit.yml` — runs the unit suite as three parallel matrix shards (`providers`, `core`, `rest`), each gating. Each shard runs under c8, uploads its partial coverage as an artifact, and a downstream `coverage` job merges the artifacts and runs `c8 report --check-coverage` against the project thresholds (advisory; the report step is `continue-on-error`). The shard scripts and the merge step are also reproducible locally via `npm run coverage`.
 - `test-e2e-mocks.yml` — `npm run test:e2e:mocks`.
 - `test-e2e-no-mocks.yml` — `npm run test:e2e:no-mocks`.
 - `test-e2e-headless.yml` — `npm run test:e2e:headless` (headless CLI/tools/hooks/mcp/etc.).
