@@ -68,6 +68,15 @@ jobs:
             grep -E '^All files' coverage/report.txt || true;
             echo '```';
           } >> "$GITHUB_STEP_SUMMARY"
+      # Publish to Codecov so the README badge updates. Public repo,
+      # so tokenless upload works; pass the secret if/when one is
+      # configured to avoid rate-limiting.
+      - if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
       # Drop the bulky raw V8 data before archiving the report.
       - if: always()
         run: rm -rf coverage/tmp
