@@ -3,6 +3,7 @@
   "entry": ["test/**/*.test.ts"],
   "project": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts"],
   "includeEntryExports": true,
+  "ignoreBinaries": ["report"],
   "include": [
     "files",
     "dependencies",
