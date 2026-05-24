@@ -1,5 +1,5 @@
 import type { ToolCallMessage } from '../../providers/types.js';
-import type { ToolDefinition, ToolPrerequisite } from '../../utils/tool-definition.js';
+import type { ToolDefinition, ToolPrerequisite } from '../../tools/types.js';
 import { StepTracker } from './step-tracker.js';
 import { stepNudge, prerequisiteNudge, type Nudge } from './nudges.js';
 import { StepEnforcementError, PrerequisiteError } from './errors.js';

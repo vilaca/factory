@@ -1,5 +1,5 @@
 import type { ChatMessage, Provider, ToolCallMessage, TokenUsage } from '../../providers/types.js';
-import type { ToolDefinition } from '../../utils/tool-definition.js';
+import type { ToolDefinition } from '../../tools/types.js';
 import type { AgentEvent, AgentOptions, ResponsesChain } from './types.js';
 import type { Conversation } from '../context/conversation.js';
 import type { ContextManager } from '../context/context-manager.js';
@@ -12,7 +12,7 @@ import { maybeCompact } from './compaction.js';
 import { BashDedupTracker } from './tool-calls/bash-dedup.js';
 import { fireUserPromptSubmit, fireStopHook } from './hooks-runner.js';
 import { errorMessage, isError } from '../../utils/errors.js';
-import { TOOL_NAMES } from '../../utils/tool-names.js';
+import { TOOL_NAMES } from '../../tools/types.js';
 import { autoEnableForModel, logActivation } from './reliability-config.js';
 import { validateResponse } from './validator.js';
 import { StepEnforcer, collectPrereqs } from './step-enforcer.js';

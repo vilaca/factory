@@ -1,5 +1,5 @@
 import type { Provider } from '../../providers/types.js';
-import { TOOL_NAMES } from '../../utils/tool-names.js';
+import { TOOL_NAMES } from '../../tools/types.js';
 import { appendProviderLog } from '../../utils/provider-log.js';
 import { getSamplingDefaults } from '../../providers/sampling-defaults.js';
 
