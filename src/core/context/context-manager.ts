@@ -12,11 +12,7 @@ import {
   estimateToolDefinitionsTokens,
 } from '../../utils/tokens.js';
 import { runTieredCompact, type CompactionPhase } from './tiered-compact.js';
-import {
-  AGGRESSIVE_RECENCY,
-  mergeContextConfig,
-  type ContextConfig,
-} from './context-config.js';
+import { AGGRESSIVE_RECENCY, mergeContextConfig, type ContextConfig } from './context-config.js';
 import {
   buildMechanicalSummary,
   buildModelSummary,

@@ -8,11 +8,7 @@ import { renderError } from '../../ui/renderer.js';
 import { errorMessage } from '../../utils/errors.js';
 import { dbg } from '../../utils/debug.js';
 import type { CliArgs } from '../args.js';
-import {
-  ensureAuth,
-  saveCredentialsAfterModelDiscovery,
-  type AuthResult,
-} from '../auth/index.js';
+import { ensureAuth, saveCredentialsAfterModelDiscovery, type AuthResult } from '../auth/index.js';
 
 export interface ConnectedProvider {
   provider: Provider;
