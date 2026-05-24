@@ -44,10 +44,7 @@ function computeSummarizeBudget(contextWindow: number): number {
 
 /** True iff `toSummarize` is too large to feed through a single model
  *  summary call given the current context window. */
-export function shouldSkipLlmSummary(
-  toSummarize: ChatMessage[],
-  contextWindow: number,
-): boolean {
+export function shouldSkipLlmSummary(toSummarize: ChatMessage[], contextWindow: number): boolean {
   const budget = computeSummarizeBudget(contextWindow);
   if (budget <= 0) return true;
   return estimateMessagesTokens(toSummarize) > budget;
