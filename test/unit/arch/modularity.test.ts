@@ -57,6 +57,41 @@ describe('architecture: module boundaries', () => {
     }
   });
 
+  // Security primitives must read per-turn snapshots, not process state.
+  //
+  // Background: src/security/{paths,env,bash-rules,permissions}.ts are
+  // designed so callers pass policy objects (PathPolicy, EnvPolicy,
+  // BashRule[]) computed at session/turn boundaries. A security function
+  // that reaches for `process.cwd()` or `process.env` directly bypasses
+  // the snapshot it was supposed to honor — under multi-tab use, two
+  // tabs share process state, and one tab's cwd/env can leak into
+  // another tab's security check.
+  //
+  // The threat model is concrete: the per-turn snapshot is the boundary
+  // between "what this turn is allowed to see" and "what the parent
+  // process happens to have". Reading process state directly removes
+  // that boundary. Lock it structurally.
+  //
+  // Comment-only mentions (e.g. `// Threat: process.env contains every
+  // secret...`) are exempt via the strip-comments pass mirrored from
+  // the defaultRegistry contract.
+  it('src/security/** must read policy snapshots, not process.cwd() / process.env directly', async () => {
+    const banned = /\bprocess\.(cwd|env)\b/;
+    const rule = projectFiles()
+      .inFolder('src/security/**')
+      .should()
+      .adhereTo(file => {
+        const code = file.content
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|[^:])\/\/.*$/gm, '$1')
+          .replace(/"(?:\\.|[^"\\])*"/g, '""')
+          .replace(/'(?:\\.|[^'\\])*'/g, "''")
+          .replace(/`(?:\\.|[^`\\])*`/g, '``');
+        return !banned.test(code);
+      }, 'security primitives must accept PathPolicy / EnvPolicy as arguments — process.cwd() / process.env reads break the per-turn snapshot boundary');
+    await expectNoViolations(rule, 'security process-state isolation');
+  });
+
   it('src/utils/** must not depend on any sibling top-level folder', async () => {
     for (const upstream of [
       'src/core/**',

@@ -4,7 +4,7 @@ import { RecoveryState } from './recovery-state.js';
 import { runToolCalls } from './tool-calls/run-tool-calls.js';
 import type { ToolLoopContext } from './tool-calls/types.js';
 import { BashDedupTracker } from './tool-calls/bash-dedup.js';
-import { fireUserPromptSubmit, fireStopHook } from './hooks-runner.js';
+import { fireUserPromptSubmit } from './hooks-runner.js';
 import { errorMessage, isError } from '../../utils/errors.js';
 import { autoEnableForModel, logActivation } from './reliability-config.js';
 import { buildStepEnforcer } from './step-enforcer.js';
@@ -15,6 +15,7 @@ import { runEnforcement } from './phase-enforcement.js';
 import { runPostExecution } from './phase-post-execution.js';
 import { runNoToolCalls } from './phase-no-tool-calls.js';
 import { finalizeTurn } from './phase-types.js';
+import type { TurnExit } from './phase-types.js';
 
 const AUTO_RETRY_BUDGET = 3;
 const MAX_CORRECTIONS_PER_RUN = 5;
@@ -85,8 +86,10 @@ export async function* runAgent(
 
   while (true) {
     if (signal?.aborted) {
-      yield* fireStopHook(options, turnsUsed, 'user-abort');
-      yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
+      yield* finalizeTurn(options, turnsUsed, lastUsage, {
+        kind: 'done',
+        stopReason: 'user-abort',
+      });
       return;
     }
 
@@ -236,14 +239,22 @@ export async function* runAgent(
         return;
       }
     } catch (err: unknown) {
-      if (signal?.aborted || (isError(err) && err.name === 'AbortError')) {
-        yield* fireStopHook(options, turnsUsed, 'user-abort');
-        yield { type: 'turn-complete', stopReason: 'user-abort', turnsUsed, usage: lastUsage };
-        return;
-      }
-      yield { type: 'error', error: isError(err) ? err : new Error(errorMessage(err)) };
-      yield* fireStopHook(options, turnsUsed, 'error');
-      yield { type: 'turn-complete', stopReason: 'error', turnsUsed, usage: lastUsage };
+      // Construct the TurnExit here (the abort-vs-error split must run
+      // BEFORE the stop hook fires) and route the triplet — error event,
+      // stop hook, turn-complete — through `finalizeTurn`. That keeps
+      // ordering and event-shape consistent with every other exit in
+      // the loop; the only branch that legitimately can't use
+      // `finalizeTurn` is the pre-userInput abort at the very top of
+      // this function, which fires no stop hook (no turn started).
+      const outcome: TurnExit =
+        signal?.aborted || (isError(err) && err.name === 'AbortError')
+          ? { kind: 'done', stopReason: 'user-abort' }
+          : {
+              kind: 'done',
+              stopReason: 'error',
+              error: isError(err) ? err : new Error(errorMessage(err)),
+            };
+      yield* finalizeTurn(options, turnsUsed, lastUsage, outcome);
       return;
     }
   }

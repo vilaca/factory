@@ -54,8 +54,8 @@ type TurnOutcome =
 export type TurnExit = Extract<TurnOutcome, { kind: 'done' }>;
 
 /** Emit the `error` (if any) + Stop hook + `turn-complete` sequence for
- *  a `TurnOutcome` with `kind: 'done'`. The 7+ exit sites in
- *  `run-agent.ts` that yield this exact sequence collapse to:
+ *  a `TurnOutcome` with `kind: 'done'`. Every exit site in `run-agent.ts`
+ *  that has a started turn routes through this:
  *
  *  ```ts
  *  if (outcome.kind === 'done') {
@@ -64,10 +64,12 @@ export type TurnExit = Extract<TurnOutcome, { kind: 'done' }>;
  *  }
  *  ```
  *
- *  Intentionally NOT consumed by the outer try/catch at the bottom of
- *  the loop — that catch already inlines the same shape, with an
- *  abort-vs-error split that has to run BEFORE the stop hook fires.
- *  Leaving it inline keeps the catch self-contained. */
+ *  The outer try/catch in `runAgent` also routes through here — it just
+ *  constructs the `TurnExit` itself, since the abort-vs-error split has
+ *  to run before any hook fires. The only branch in `runAgent` that
+ *  legitimately doesn't call `finalizeTurn` is the pre-userInput abort
+ *  check at the very top of the function: no turn has started, so no
+ *  stop hook should fire and `turnsUsed` is 0. */
 export async function* finalizeTurn(
   options: AgentOptions,
   turnsUsed: number,
