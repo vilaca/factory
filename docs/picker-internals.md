@@ -61,7 +61,7 @@ Every provider must populate `getCapabilities(model).modelTier`. The `weak`/`med
 
 OpenAI's `/v1/models` returns only `{id, object, created, owned_by}`. Every other capability — context window, max output, vision, tools, reasoning, deprecation — has to be inferred from the model id.
 
-Rather than scatter `startsWith` chains across six functions, all per-family knowledge lives in one ordered table at the bottom of `src/providers/openai/provider.ts`:
+Rather than scatter `startsWith` chains across six functions, all per-family knowledge lives in one ordered table in `src/providers/openai/model-families.ts`:
 
 ```ts
 const OPENAI_FAMILIES: ReadonlyArray<OpenAIFamily> = [
