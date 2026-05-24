@@ -235,42 +235,194 @@ function handleEmoji(arg: string, { agent }: SlashCommandContext): void {
   else agent.toggleEmojiMode();
 }
 
-const HANDLERS: Record<string, SlashHandler> = {
-  '/exit': handleExit,
-  '/quit': handleExit,
-  '/q': handleExit,
-  '/new': handleNew,
-  '/close': handleClose,
-  '/tabs': handleTabs,
-  '/switch': handleSwitch,
-  '/clear': (_arg, { agent }) => agent.clearConversation(),
-  '/help': (_arg, { agent }) => printHelp(agent),
-  '/permissions': (_arg, { agent }) => {
-    agent.resetPermissions();
-    agent.addNotice('info', 'Permissions reset.');
+/** Single-source-of-truth declaration for every slash command. The
+ *  `HANDLERS` dispatch map and `printHelp`'s text output are both
+ *  derived from this array, so adding a command is one entry in this
+ *  table — drift between dispatch and help is no longer possible.
+ *
+ *  Field semantics:
+ *  - `name`        : canonical form, including the leading `/`. The
+ *                    synopsis shown by `/help` lists this first.
+ *  - `aliases`     : extra dispatch-only names that resolve to the same
+ *                    handler. Listed alongside `name` in the synopsis.
+ *                    Omit for commands without aliases.
+ *  - `argSpec`     : free-form arg syntax shown after the synopsis,
+ *                    e.g. `'[<name>]'`, `'<n|label>'`, `'on|off'`. Omit
+ *                    for arg-less commands.
+ *  - `description` : line shown under the command in `/help`. Omitting
+ *                    `description` makes the command an **easter egg**:
+ *                    registered in the dispatcher but invisible to
+ *                    `/help`. The legacy "/emoji is in HANDLERS but not
+ *                    printHelp" footgun is now structural — `description`
+ *                    is the one switch that controls visibility.
+ *  - `handler`     : the function called by `dispatchSlashCommand`.
+ *
+ *  Ordering matters: `/help` renders entries in this array's order.
+ *  Group commands by purpose (tabs → conversation/model → rotation /
+ *  diagnostics → per-tab → plan-mode → misc → help) to keep the output
+ *  scannable. */
+interface SlashCommandSpec {
+  name: string;
+  aliases?: readonly string[];
+  argSpec?: string;
+  description?: string;
+  handler: SlashHandler;
+}
+
+const SLASH_COMMANDS: readonly SlashCommandSpec[] = [
+  {
+    name: '/exit',
+    aliases: ['/quit', '/q'],
+    description: 'Exit (or close active tab if multiple open)',
+    handler: handleExit,
   },
-  '/plan': (_arg, ctx) => handlePlan(ctx),
-  '/queue': (_arg, { agent }) => printPlanQueue(agent),
-  '/approve': handleApprove,
-  '/cancel': (_arg, ctx) => handleCancel(ctx),
-  '/log': (_arg, ctx) => handleLog(ctx),
-  '/correct': handleCorrect,
-  '/model': handleModel,
-  '/cwd': (arg, { agent }) => agent.setCwd(arg),
-  '/exp': (arg, { agent }) => handleExpCommand(agent, arg),
-  '/pick': handlePick,
-  '/compaction-model': handleCompactionModel,
-  '/rotate': (arg, { agent }) => dispatchRotate(arg, agent),
-  '/keys': (arg, { agent }) => dispatchKeys(arg, agent),
-  '/stats': (arg, { agent }) => dispatchStats(arg, agent),
-  '/hooks': handleHooks,
-  '/full': handleFull,
-  '/skills': (_arg, { agent }) => handleSkillsList(agent),
-  '/skill': (arg, { agent }) => handleSkillShow(agent, arg),
-  // Easter egg — intentionally omitted from /help. `/emoji` toggles emoji
-  // mode; `/emoji <glyph>` overrides the user prompt icon. Do not document.
-  '/emoji': handleEmoji,
-};
+  {
+    name: '/new',
+    argSpec: '[label]',
+    description: 'Open a new tab',
+    handler: handleNew,
+  },
+  { name: '/close', description: 'Close the active tab', handler: handleClose },
+  { name: '/tabs', description: 'List open tabs', handler: handleTabs },
+  {
+    name: '/switch',
+    argSpec: '<n|label>',
+    description: 'Switch to tab by index, label, or unique prefix',
+    handler: handleSwitch,
+  },
+  {
+    name: '/clear',
+    description: 'Clear conversation history',
+    handler: (_arg, { agent }) => agent.clearConversation(),
+  },
+  {
+    name: '/model',
+    argSpec: '[<name>]',
+    description: 'Show current provider/model, or switch model. Accepts <provider>:<model>.',
+    handler: handleModel,
+  },
+  {
+    name: '/pick',
+    description: 'Open the provider/model picker (also Ctrl+K)',
+    handler: handlePick,
+  },
+  {
+    name: '/compaction-model',
+    argSpec: '[show|clear]',
+    description:
+      'Open the picker to choose a provider/model for context compaction (defaults to primary). `show` prints current; `clear` resets to primary.',
+    handler: handleCompactionModel,
+  },
+  {
+    name: '/rotate',
+    description: 'Manage the rotation chain (provider/model fallbacks)',
+    handler: (arg, { agent }) => dispatchRotate(arg, agent),
+  },
+  {
+    name: '/keys',
+    argSpec: '[<provider>]',
+    description: 'Show saved keys with usage / rate-limit / cache-hit counters',
+    handler: (arg, { agent }) => dispatchKeys(arg, agent),
+  },
+  {
+    name: '/stats',
+    description: 'Cache hit rate, compaction events, largest tool results for the current session',
+    handler: (arg, { agent }) => dispatchStats(arg, agent),
+  },
+  {
+    name: '/hooks',
+    description: 'List configured hooks from agent.hooks config',
+    handler: handleHooks,
+  },
+  {
+    name: '/full',
+    description: 'Toggle full vs preview tool output (going forward)',
+    handler: handleFull,
+  },
+  {
+    name: '/cwd',
+    argSpec: '[dir]',
+    description: "Show or change this tab's working directory",
+    handler: (arg, { agent }) => agent.setCwd(arg),
+  },
+  {
+    name: '/permissions',
+    description: 'Reset tool permissions',
+    handler: (_arg, { agent }) => {
+      agent.resetPermissions();
+      agent.addNotice('info', 'Permissions reset.');
+    },
+  },
+  {
+    name: '/plan',
+    description: 'Toggle plan mode (or show queue if one exists)',
+    handler: (_arg, ctx) => handlePlan(ctx),
+  },
+  {
+    name: '/queue',
+    description: 'Show the queued plan',
+    handler: (_arg, { agent }) => printPlanQueue(agent),
+  },
+  // `/approve, y` and `/cancel, n` — the `y` / `n` are keyboard
+  // shortcuts handled outside the slash dispatcher (plan-mode input
+  // layer). Documented in the synopsis via a manually-written argSpec
+  // so the help text reads `/approve, y` exactly as before. They are
+  // NOT aliases (no `y` / `n` HANDLERS entry).
+  {
+    name: '/approve',
+    argSpec: ', y',
+    description: 'Execute the queued plan',
+    handler: handleApprove,
+  },
+  {
+    name: '/cancel',
+    argSpec: ', n',
+    description: 'Drop the queued plan',
+    handler: (_arg, ctx) => handleCancel(ctx),
+  },
+  {
+    name: '/log',
+    description: 'Show the current session log path',
+    handler: (_arg, ctx) => handleLog(ctx),
+  },
+  {
+    name: '/correct',
+    argSpec: 'on|off',
+    description: 'Toggle the LLM tool-call corrector',
+    handler: handleCorrect,
+  },
+  {
+    name: '/exp',
+    argSpec: '[name on|off]',
+    description: 'List or toggle experimental flags',
+    handler: (arg, { agent }) => handleExpCommand(agent, arg),
+  },
+  {
+    name: '/skills',
+    description: 'List loaded skills (when experimental.skills is on)',
+    handler: (_arg, { agent }) => handleSkillsList(agent),
+  },
+  {
+    name: '/skill',
+    argSpec: '<name>',
+    description: 'Print the body of a loaded skill',
+    handler: (arg, { agent }) => handleSkillShow(agent, arg),
+  },
+  { name: '/help', description: 'Show this help', handler: (_arg, { agent }) => printHelp(agent) },
+  // Easter egg — `description` omitted, so `/emoji` is dispatched but
+  // never appears in `/help`. `/emoji` toggles emoji mode;
+  // `/emoji <glyph>` overrides the user prompt icon.
+  { name: '/emoji', handler: handleEmoji },
+];
+
+/** Dispatch map derived from `SLASH_COMMANDS`. Flattens `name` +
+ *  `aliases` so a single handler can be reached under any of its
+ *  registered forms. Built once at module load — no per-call cost. */
+const HANDLERS: Record<string, SlashHandler> = Object.fromEntries(
+  SLASH_COMMANDS.flatMap(spec =>
+    [spec.name, ...(spec.aliases ?? [])].map(n => [n, spec.handler] as const),
+  ),
+);
 
 export async function dispatchSlashCommand(
   cmd: string,
@@ -289,41 +441,17 @@ export async function dispatchSlashCommand(
   return true;
 }
 
+/** Build the `synopsis` column shown in `/help` for one command:
+ *  `name` + comma-joined aliases + (optional) argSpec separated by a
+ *  space. Kept as a free function so the format is reusable if other
+ *  contexts (e.g. a future `?` quick-help) want to render the same
+ *  shape. */
+function formatSynopsis(spec: SlashCommandSpec): string {
+  const names = [spec.name, ...(spec.aliases ?? [])].join(', ');
+  return spec.argSpec ? `${names} ${spec.argSpec}` : names;
+}
+
 function printHelp(agent: AgentLoopApi): void {
-  const lines: [string, string][] = [
-    ['/exit, /quit, /q', 'Exit (or close active tab if multiple open)'],
-    ['/new [label]', 'Open a new tab'],
-    ['/close', 'Close the active tab'],
-    ['/tabs', 'List open tabs'],
-    ['/switch <n|label>', 'Switch to tab by index, label, or unique prefix'],
-    ['/clear', 'Clear conversation history'],
-    [
-      '/model [<name>]',
-      'Show current provider/model, or switch model. Accepts <provider>:<model>.',
-    ],
-    ['/pick', 'Open the provider/model picker (also Ctrl+K)'],
-    [
-      '/compaction-model [show|clear]',
-      'Open the picker to choose a provider/model for context compaction (defaults to primary). `show` prints current; `clear` resets to primary.',
-    ],
-    ['/rotate', 'Manage the rotation chain (provider/model fallbacks)'],
-    ['/keys [<provider>]', 'Show saved keys with usage / rate-limit / cache-hit counters'],
-    ['/stats', 'Cache hit rate, compaction events, largest tool results for the current session'],
-    ['/hooks', 'List configured hooks from agent.hooks config'],
-    ['/full', 'Toggle full vs preview tool output (going forward)'],
-    ['/cwd [dir]', "Show or change this tab's working directory"],
-    ['/permissions', 'Reset tool permissions'],
-    ['/plan', 'Toggle plan mode (or show queue if one exists)'],
-    ['/queue', 'Show the queued plan'],
-    ['/approve, y', 'Execute the queued plan'],
-    ['/cancel, n', 'Drop the queued plan'],
-    ['/log', 'Show the current session log path'],
-    ['/correct on|off', 'Toggle the LLM tool-call corrector'],
-    ['/exp [name on|off]', 'List or toggle experimental flags'],
-    ['/skills', 'List loaded skills (when experimental.skills is on)'],
-    ['/skill <name>', 'Print the body of a loaded skill'],
-    ['/help', 'Show this help'],
-  ];
   const hotkeys: [string, string][] = [
     ['Ctrl+K', 'Open the provider/model picker'],
     ['Ctrl+T', 'New tab'],
@@ -336,9 +464,9 @@ function printHelp(agent: AgentLoopApi): void {
   ];
   agent.addNoticeBlock([
     { level: 'cyan', text: 'Commands:' },
-    ...lines.map(([c, desc]) => ({
+    ...SLASH_COMMANDS.filter(spec => spec.description !== undefined).map(spec => ({
       level: 'info' as const,
-      text: `  ${c.padEnd(26)} ${desc}`,
+      text: `  ${formatSynopsis(spec).padEnd(26)} ${spec.description!}`,
     })),
     { level: 'cyan', text: 'Hotkeys:' },
     ...hotkeys.map(([k, desc]) => ({

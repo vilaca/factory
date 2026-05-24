@@ -8,7 +8,7 @@
 
 ## Files
 
-- `dispatch.ts` — the dispatcher + the `HANDLERS` record + `printHelp` + the small commands inlined as arrow functions. _Known drift point:_ `HANDLERS` and `printHelp` are two parallel structures, edited in lockstep today. The lift is to define a single `SLASH_COMMANDS` array (`{ name, aliases?, help?, handler }`) and derive both views from it; until that lands, both must be updated for every command.
+- `dispatch.ts` — the dispatcher + the `SLASH_COMMANDS` table + `printHelp` + the small commands inlined as arrow functions. **Single-source contract:** `SLASH_COMMANDS: readonly SlashCommandSpec[]` is the only place command metadata lives; `HANDLERS` (the dispatch map) and `printHelp` (the `/help` output) are both derived from it. Adding a command is one entry; aliases live on the entry; the `description` field is the on/off switch for `/help` visibility (omit it for easter eggs).
 - `rotate.ts`, `rotate-helpers.ts`, `rotate-subcommands.ts` — `/rotate` family. The biggest slash subtree because rotation has subcommands (`set`, `add`, `show`, `enable`, `disable`, `refresh`, `keys-on/off`, …).
 - `keys.ts` — `/keys` (per-provider key listing / health snapshot).
 - `stats.ts` — `/stats` (per-session cache hits, compaction events, largest tool results).
@@ -19,9 +19,14 @@
 1. Decide where the handler lives. Rule of thumb:
    - Small, no subcommands → inline in `dispatch.ts` next to peers.
    - Subcommands or > ~40 LOC → new file `slash/<name>.ts` exporting `dispatch<Name>(arg, agent)`.
-2. Add an entry to `HANDLERS` in `dispatch.ts`.
-3. Add a row to `printHelp` (also in `dispatch.ts`) so `/help` lists it. (Until the `SLASH_COMMANDS` table lift lands, this is two edits in lockstep.)
-4. If the command needs context the agent doesn't have (e.g. a picker dialog), thread it via `SlashCommandContext` (set in `Session.tsx` when the API is wired).
+2. Add **one** entry to `SLASH_COMMANDS` in `dispatch.ts`:
+   ```ts
+   { name: '/foo', argSpec: '<bar>', description: 'Do foo with bar', handler: handleFoo }
+   ```
+   `HANDLERS` and `/help` update automatically. Place the entry in the array at the position where you want it to render in `/help` (the array's order is the rendered order).
+3. Aliases (extra dispatch-only names that resolve to the same handler) go in `aliases`. They appear alongside the canonical name in the synopsis but never need a separate entry.
+4. Easter eggs: omit `description`. The command will still dispatch but won't appear in `/help`. The legacy "`/emoji` is in HANDLERS but not in printHelp by convention" footgun is now structural — `description` is the single switch.
+5. If the command needs context the agent doesn't have (e.g. a picker dialog), thread it via `SlashCommandContext` (set in `Session.tsx` when the API is wired).
 
 ## What `SlashCommandContext` carries
 
@@ -40,7 +45,7 @@ Headless / test contexts can omit the optional ones; the handlers print a "not a
 
 ## Easter eggs
 
-`/emoji` is registered in `HANDLERS` but absent from `printHelp` — intentional, so `/help` doesn't list it.
+`/emoji` is registered without a `description`, so `SLASH_COMMANDS` exposes it to the dispatcher but `printHelp`'s filter (`spec.description !== undefined`) skips it. This is structural — there is no separate "hide this from /help" flag to forget; the absence of `description` IS the flag.
 
 ## Don't
 

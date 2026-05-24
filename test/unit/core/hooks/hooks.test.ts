@@ -35,9 +35,12 @@ after(async () => {
 describe('runHook', () => {
   it('is a no-op when no entries are configured', async () => {
     const result = await runHook('SessionStart', { foo: 'bar' }, { cwd: tmpDir, entries: [] });
-    assert.strictEqual(result.cancel, false);
+    // `SessionStart` is typed `HookResultWithContext` — it exposes
+    // notice / firedCommands / errors / additionalContext, NOT cancel
+    // or errorMessage. The aggregator collects them internally but the
+    // surface intentionally hides them so a SessionStart caller can't
+    // accidentally wire up veto semantics that the agent loop ignores.
     assert.strictEqual(result.errors.length, 0);
-    assert.strictEqual(result.errorMessage, undefined);
     assert.strictEqual(result.additionalContext, undefined);
     assert.deepStrictEqual(result.firedCommands, []);
   });
@@ -67,7 +70,6 @@ describe('runHook', () => {
       { aggressive: false },
       { cwd: tmpDir, entries: [entry(script)] },
     );
-    assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.additionalContext, 'synthetic summary');
   });
 
@@ -77,7 +79,6 @@ describe('runHook', () => {
       `#!/bin/sh\ncat >/dev/null\necho '{not-valid-json'\n`,
     );
     const result = await runHook('PostToolUse', {}, { cwd: tmpDir, entries: [entry(script)] });
-    assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.errors.length, 1);
     assert.match(result.errors[0], /malformed JSON/);
   });
@@ -88,7 +89,6 @@ describe('runHook', () => {
       `#!/bin/sh\ncat >/dev/null\necho 'Welcome back'\n`,
     );
     const result = await runHook('SessionStart', {}, { cwd: tmpDir, entries: [entry(script)] });
-    assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.errors.length, 0);
     assert.strictEqual(result.notice, 'Welcome back');
     assert.deepStrictEqual(result.firedCommands, [script]);
@@ -122,7 +122,6 @@ describe('runHook', () => {
       { cwd: tmpDir, entries: [entry(script, { timeoutMs: 200 })] },
     );
     const elapsed = Date.now() - start;
-    assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.errors.length, 1);
     assert.match(result.errors[0], /timed out/);
     assert.ok(elapsed < 2000, `expected fast kill, took ${elapsed}ms`);
@@ -172,7 +171,6 @@ describe('runHook', () => {
       {},
       { cwd: tmpDir, entries: [entry(hostileCommand)] },
     );
-    assert.strictEqual(result.cancel, false);
     assert.strictEqual(result.firedCommands.length, 0);
     assert.strictEqual(result.errors.length, 1);
     assert.match(result.errors[0], /blocked by built-in safety policy/);
