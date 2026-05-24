@@ -553,7 +553,8 @@ describe('architecture: module boundaries', () => {
       'src/cli/startup/phase-runtime-lifecycle.ts',
       'src/cli/startup/phase-trust-and-subagent.ts',
     ]);
-    const consoleRegex = /\bconsole\.(log|error|warn|info|debug|trace|dir|table|group|groupEnd|time|timeEnd|count|assert)\b/;
+    const consoleRegex =
+      /\bconsole\.(log|error|warn|info|debug|trace|dir|table|group|groupEnd|time|timeEnd|count|assert)\b/;
     const rule = projectFiles()
       .inFolder('src/**')
       .should()
