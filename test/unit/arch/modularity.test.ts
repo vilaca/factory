@@ -57,24 +57,36 @@ describe('architecture: module boundaries', () => {
     }
   });
 
-  // Security primitives must read per-turn snapshots, not process state.
+  // Security primitives are shaped as pure functions of (input, policy).
   //
-  // Background: src/security/{paths,env,bash-rules,permissions}.ts are
-  // designed so callers pass policy objects (PathPolicy, EnvPolicy,
-  // BashRule[]) computed at session/turn boundaries. A security function
-  // that reaches for `process.cwd()` or `process.env` directly bypasses
-  // the snapshot it was supposed to honor — under multi-tab use, two
-  // tabs share process state, and one tab's cwd/env can leak into
-  // another tab's security check.
+  // src/security/{paths,env,bash-rules,permissions}.ts take policy
+  // objects (PathPolicy, EnvPolicy, BashRule[]) as arguments. The caller
+  // computes the snapshot once at a session / turn boundary and threads
+  // it through. A security function that reads `process.cwd()` or
+  // `process.env` directly bypasses the policy it was handed and
+  // substitutes whatever the parent process happens to have — which
+  // defeats the only enforcement the boundary provides.
   //
-  // The threat model is concrete: the per-turn snapshot is the boundary
-  // between "what this turn is allowed to see" and "what the parent
-  // process happens to have". Reading process state directly removes
-  // that boundary. Lock it structurally.
+  // The case that matters most today: `env.ts` exists specifically to
+  // gate which env vars a subprocess can inherit, because process.env
+  // contains every secret in the user's shell (provider keys, GitHub
+  // tokens, AWS credentials). A security function that reads process.env
+  // directly silently makes everything visible regardless of what
+  // EnvPolicy permitted. The cwd case is the same shape but lower-
+  // impact in practice — Bash runs each command in its own subshell so
+  // `cd` inside a tool call doesn't actually mutate the parent's cwd.
   //
-  // Comment-only mentions (e.g. `// Threat: process.env contains every
-  // secret...`) are exempt via the strip-comments pass mirrored from
-  // the defaultRegistry contract.
+  // Future scenarios where the snapshot discipline starts mattering more:
+  // multi-session daemons (two sessions can hold different cwds in the
+  // same process) and parallel subagents (each scoped to a different
+  // working set). The architecture is shaped for both; the arch test
+  // keeps the security layer ready for them without requiring a future
+  // audit.
+  //
+  // Zero current violations. Comment-only mentions of process.cwd /
+  // process.env in JSDoc (e.g. the threat-model note in env.ts) are
+  // exempted via the strip-comments pass mirrored from the
+  // defaultRegistry contract above.
   it('src/security/** must read policy snapshots, not process.cwd() / process.env directly', async () => {
     const banned = /\bprocess\.(cwd|env)\b/;
     const rule = projectFiles()
@@ -88,7 +100,7 @@ describe('architecture: module boundaries', () => {
           .replace(/'(?:\\.|[^'\\])*'/g, "''")
           .replace(/`(?:\\.|[^`\\])*`/g, '``');
         return !banned.test(code);
-      }, 'security primitives must accept PathPolicy / EnvPolicy as arguments — process.cwd() / process.env reads break the per-turn snapshot boundary');
+      }, 'security primitives must accept PathPolicy / EnvPolicy as arguments — direct process.cwd() / process.env reads bypass the policy snapshot the caller passed in');
     await expectNoViolations(rule, 'security process-state isolation');
   });
 
