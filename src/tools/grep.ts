@@ -1,6 +1,6 @@
 import path from 'path';
 import { spawn } from 'child_process';
-import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolContext, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, buildDenyMatcher, PathDenied } from '../security/paths.js';
 import { errorCode, errorMessage } from '../utils/errors.js';
@@ -328,7 +328,7 @@ function filterDeniedResults(
   return { ...result, output: `${kept.join('\n')}\n${footers.join('\n')}` };
 }
 
-export const grepTool: ToolHandler = {
+export const grepTool: StandardToolHandler = {
   name: TOOL_NAMES.Grep,
   description: definition.function.description,
   category: 'read-only',

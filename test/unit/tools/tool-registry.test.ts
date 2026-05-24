@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { defaultRegistry } from '../../../src/tools/index.js';
+import { TOOL_NAMES } from '../../../src/tools/types.js';
 import type { ToolCategory } from '../../../src/tools/types.js';
 
 describe('Tool registry', () => {
@@ -103,6 +104,66 @@ describe('Tool registry', () => {
         tool.name,
         tool.definition.function.name,
         `${tool.name} handler name must match definition name`,
+      );
+    }
+  });
+
+  // TOOL_NAMES contract: the const is the single source of truth for
+  // every built-in tool's name (system prompts, permission gates, text-
+  // tool parser, agent reliability stack). A drift between TOOL_NAMES
+  // and the registry means one side has a name the other doesn't know
+  // about — silent fallthrough in every consumer that branches on the
+  // missing name.
+  //
+  // Two TOOL_NAMES entries are intentionally NOT in defaultRegistry:
+  //
+  //   - Delegate: registered by `registerSubagentTool` at production
+  //     startup (src/cli/startup/phase-trust-and-subagent.ts) because
+  //     the handler factory `createDelegateTool` needs the live
+  //     (provider, parentModel) pair to construct. defaultRegistry has
+  //     no provider context; it can't register Delegate without a
+  //     placeholder that would lie about the tool's real shape.
+  //
+  // If a new "deferred" tool joins this list, add it here and document
+  // the construction-time requirement that prevents defaultRegistry
+  // registration.
+  const REGISTERED_AT_STARTUP = new Set<string>([TOOL_NAMES.Delegate]);
+
+  // Test (a): every TOOL_NAMES entry is either in defaultRegistry or
+  // explicitly carved out as a startup-registered tool.
+  it('every TOOL_NAMES entry is either in defaultRegistry or carved out as startup-registered', () => {
+    for (const name of Object.values(TOOL_NAMES)) {
+      if (REGISTERED_AT_STARTUP.has(name)) continue;
+      const handler = defaultRegistry.get(name);
+      assert.ok(
+        handler,
+        `TOOL_NAMES.${name} has no registered handler in defaultRegistry — ` +
+          `add the registration in ToolRegistry's constructor, remove the entry from TOOL_NAMES, ` +
+          `or carve it out in REGISTERED_AT_STARTUP above with a justification.`,
+      );
+      assert.strictEqual(
+        handler!.name,
+        name,
+        `defaultRegistry.get(${JSON.stringify(name)}) returned a handler whose name is ` +
+          `${JSON.stringify(handler!.name)} — registry lookup is case-insensitive but the canonical ` +
+          `handler.name must match TOOL_NAMES exactly.`,
+      );
+    }
+  });
+
+  // Test (b): every registered handler's name is one of TOOL_NAMES.
+  // Catches the inverse drift: a handler registered under a name that
+  // isn't tracked in TOOL_NAMES would be invisible to permission gates
+  // and the text-tool parser, both of which only know names from the
+  // const.
+  it('every registered handler name appears in TOOL_NAMES', () => {
+    const known = new Set<string>(Object.values(TOOL_NAMES));
+    for (const tool of defaultRegistry.getAll()) {
+      assert.ok(
+        known.has(tool.name),
+        `Tool ${JSON.stringify(tool.name)} is registered but not in TOOL_NAMES — ` +
+          `add it to src/utils/tool-names.ts so security/permissions, the text-tool parser, ` +
+          `and the reliability stack can refer to it by constant.`,
       );
     }
   });

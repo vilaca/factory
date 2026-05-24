@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 
 const definition: ToolDefinition = {
@@ -39,7 +39,7 @@ async function execute(args: Record<string, unknown>): Promise<ToolResult> {
   return { success: true, output: message };
 }
 
-export const respondTool: ToolHandler = {
+export const respondTool: StandardToolHandler = {
   name: TOOL_NAMES.Respond,
   description: definition.function.description,
   category: 'read-only',

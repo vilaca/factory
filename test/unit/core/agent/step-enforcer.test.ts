@@ -6,7 +6,7 @@ import {
   validatePrereqReferences,
 } from '../../../../src/core/agent/step-enforcer.js';
 import { StepEnforcementError, PrerequisiteError } from '../../../../src/core/agent/errors.js';
-import type { ToolDefinition } from '../../../../src/utils/tool-definition.js';
+import type { ToolDefinition } from '../../../../src/tools/types.js';
 
 function call(name: string, args: Record<string, unknown> = {}) {
   return { function: { name, arguments: args } };

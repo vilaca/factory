@@ -7,7 +7,8 @@ import { PermissionManager } from '../../../../src/security/permissions.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
 import { runAgent } from '../../../../src/core/agent/run-agent.js';
 import { createMockProvider } from './agent-helpers.js';
-import { TOOL_NAMES } from '../../../../src/utils/tool-names.js';
+import { TOOL_NAMES } from '../../../../src/tools/types.js';
+import type { ToolResult } from '../../../../src/tools/types.js';
 import { _resetActivationLogForTests } from '../../../../src/core/agent/reliability-config.js';
 
 test('agent loop: premature terminal triggers step nudge', async () => {
@@ -62,7 +63,7 @@ test("agent loop: prerequisite_nudge fires when Edit declared a Read prereq it d
       },
       prerequisites: ['TmpRead'],
     },
-    async execute() {
+    async execute(): Promise<ToolResult> {
       return { success: true, output: 'edited' };
     },
   };
@@ -78,7 +79,7 @@ test("agent loop: prerequisite_nudge fires when Edit declared a Read prereq it d
         parameters: { type: 'object', properties: { file_path: { type: 'string' } } },
       },
     },
-    async execute() {
+    async execute(): Promise<ToolResult> {
       return { success: true, output: 'read content' };
     },
   };

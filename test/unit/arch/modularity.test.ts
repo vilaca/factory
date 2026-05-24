@@ -57,6 +57,53 @@ describe('architecture: module boundaries', () => {
     }
   });
 
+  // Security primitives are shaped as pure functions of (input, policy).
+  //
+  // src/security/{paths,env,bash-rules,permissions}.ts take policy
+  // objects (PathPolicy, EnvPolicy, BashRule[]) as arguments. The caller
+  // computes the snapshot once at a session / turn boundary and threads
+  // it through. A security function that reads `process.cwd()` or
+  // `process.env` directly bypasses the policy it was handed and
+  // substitutes whatever the parent process happens to have — which
+  // defeats the only enforcement the boundary provides.
+  //
+  // The case that matters most today: `env.ts` exists specifically to
+  // gate which env vars a subprocess can inherit, because process.env
+  // contains every secret in the user's shell (provider keys, GitHub
+  // tokens, AWS credentials). A security function that reads process.env
+  // directly silently makes everything visible regardless of what
+  // EnvPolicy permitted. The cwd case is the same shape but lower-
+  // impact in practice — Bash runs each command in its own subshell so
+  // `cd` inside a tool call doesn't actually mutate the parent's cwd.
+  //
+  // Future scenarios where the snapshot discipline starts mattering more:
+  // multi-session daemons (two sessions can hold different cwds in the
+  // same process) and parallel subagents (each scoped to a different
+  // working set). The architecture is shaped for both; the arch test
+  // keeps the security layer ready for them without requiring a future
+  // audit.
+  //
+  // Zero current violations. Comment-only mentions of process.cwd /
+  // process.env in JSDoc (e.g. the threat-model note in env.ts) are
+  // exempted via the strip-comments pass mirrored from the
+  // defaultRegistry contract above.
+  it('src/security/** must read policy snapshots, not process.cwd() / process.env directly', async () => {
+    const banned = /\bprocess\.(cwd|env)\b/;
+    const rule = projectFiles()
+      .inFolder('src/security/**')
+      .should()
+      .adhereTo(file => {
+        const code = file.content
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|[^:])\/\/.*$/gm, '$1')
+          .replace(/"(?:\\.|[^"\\])*"/g, '""')
+          .replace(/'(?:\\.|[^'\\])*'/g, "''")
+          .replace(/`(?:\\.|[^`\\])*`/g, '``');
+        return !banned.test(code);
+      }, 'security primitives must accept PathPolicy / EnvPolicy as arguments — direct process.cwd() / process.env reads bypass the policy snapshot the caller passed in');
+    await expectNoViolations(rule, 'security process-state isolation');
+  });
+
   it('src/utils/** must not depend on any sibling top-level folder', async () => {
     for (const upstream of [
       'src/core/**',
@@ -184,6 +231,35 @@ describe('architecture: module boundaries', () => {
         return true;
       }, 'UI files must not import LLM/network SDKs directly — go through src/providers/registry');
     await expectNoViolations(rule, 'ui → SDK packages');
+  });
+
+  // MCP SDK encapsulation contract.
+  //
+  // Background: the `@modelcontextprotocol/sdk` package owns the wire-
+  // level Client/Transport types. Two MCP adapter files in this repo
+  // (src/mcp/client.ts and src/mcp/adapter.ts) translate that surface
+  // into a `ToolHandler[]` the agent loop consumes. Every other file
+  // sees only `ToolHandler`/`McpManager` — the SDK types do not escape.
+  //
+  // If a future change imports `@modelcontextprotocol/sdk` from outside
+  // those two files, the rest of the codebase grows a second pathway
+  // into the SDK surface; the adapter stops being the sole boundary,
+  // and bumping the SDK becomes an N-file refactor instead of a 2-file
+  // one. Lock the boundary structurally.
+  it('@modelcontextprotocol/sdk imports must be scoped to src/mcp/{client,adapter}.ts', async () => {
+    const allowed = new Set(['src/mcp/client.ts', 'src/mcp/adapter.ts']);
+    const importRegex = /(?:from|require\()\s*['"](@modelcontextprotocol\/sdk[^'"]*)['"]/g;
+    const rule = projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(file => {
+        if (allowed.has(file.path)) return true;
+        for (const _m of file.content.matchAll(importRegex)) {
+          return false;
+        }
+        return true;
+      }, 'MCP SDK imports are confined to src/mcp/client.ts and src/mcp/adapter.ts');
+    await expectNoViolations(rule, 'MCP SDK scoping');
   });
 
   it('src/ui/** must not import node networking or child-process modules directly', async () => {
@@ -443,6 +519,110 @@ describe('architecture: module boundaries', () => {
         return !/\bdefaultRegistry\b/.test(code);
       }, 'defaultRegistry is a tests-only convenience — production must use options.toolRegistry');
     await expectNoViolations(rule, 'defaultRegistry singleton');
+  });
+
+  // console.* boundary.
+  //
+  // Background: agent output is streamed through `AgentEvent` and rendered
+  // by the TUI; rogue `console.log` calls bypass that pipeline and either
+  // corrupt the terminal (TUI mode) or appear out-of-band with no event-
+  // log record (headless / session-log mode). Two legitimate consumers
+  // exist:
+  //
+  //   - `src/cli/**` and `src/index.ts`: process startup before the TUI
+  //     mounts. Direct stdio writes are the only thing that works pre-TUI.
+  //   - `src/mcp/client.ts`: surfaces MCP connection failures during
+  //     `connectAll()`, which runs at startup before any TUI is up. The
+  //     error never has a corresponding `AgentEvent` because no agent is
+  //     running yet.
+  //
+  // Every other source file routing through console.* is drift. Add the
+  // file to the allowlist below only with the same kind of pre-TUI
+  // justification, and update the comment block above to match.
+  it('console.* writes are confined to startup files and the MCP connection surface', async () => {
+    const allowed = new Set([
+      'src/index.ts',
+      'src/mcp/client.ts',
+      'src/cli/args.ts',
+      'src/cli/auth/flows.ts',
+      'src/cli/auth/index.ts',
+      'src/cli/prompts.ts',
+      'src/cli/startup/phase-model-selection.ts',
+      'src/cli/startup/phase-provider-connect.ts',
+      'src/cli/startup/phase-rotation.ts',
+      'src/cli/startup/phase-runtime-lifecycle.ts',
+      'src/cli/startup/phase-trust-and-subagent.ts',
+    ]);
+    const consoleRegex =
+      /\bconsole\.(log|error|warn|info|debug|trace|dir|table|group|groupEnd|time|timeEnd|count|assert)\b/;
+    const rule = projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(file => {
+        if (allowed.has(file.path)) return true;
+        // Strip comments + string literals so docs that mention `console.log`
+        // in a JSDoc comment don't trip the rule. Mirrors the strip used in
+        // the defaultRegistry test above.
+        const code = file.content
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/(^|[^:])\/\/.*$/gm, '$1')
+          .replace(/"(?:\\.|[^"\\])*"/g, '""')
+          .replace(/'(?:\\.|[^'\\])*'/g, "''")
+          .replace(/`(?:\\.|[^`\\])*`/g, '``');
+        return !consoleRegex.test(code);
+      }, 'console.* must go through AgentEvent / session log — startup files and MCP client are the only allowed boundary');
+    await expectNoViolations(rule, 'console.* boundary');
+  });
+
+  // Provider registration contract.
+  //
+  // Background: src/providers/registry.ts owns the canonical list of
+  // providers — `DESCRIPTORS` plus the startup picker, alias resolution,
+  // token discovery, and `createProvider()` factory routing. A new
+  // Provider class file under src/providers/ that doesn't get added to
+  // `DESCRIPTORS` is invisible to:
+  //
+  //   - the startup picker (`listProviderNames()`)
+  //   - alias resolution (`descriptorByAlias()`)
+  //   - `createProvider()` — the only way to mint a provider through the
+  //     canonical mint → prime → use contract (cf880ed)
+  //
+  // The drift is silent: the class compiles, tests of the class itself
+  // pass, but `--provider <new-name>` returns "Unknown provider" at
+  // runtime. Lock the structural invariant: every provider class file
+  // must be referenced from registry.ts.
+  //
+  // Heuristic: a "provider class file" is any `src/providers/**/*.ts`
+  // that exports a class whose name ends in `Provider`. Sub-helpers
+  // (auth modes, capabilities tables, request shapers) are exempted by
+  // not matching the class-export pattern.
+  it('every Provider class under src/providers/** is referenced from registry.ts', async () => {
+    // Read registry.ts once for the membership check.
+    const { readFile } = await import('node:fs/promises');
+    const { resolve } = await import('node:path');
+    const registrySource = await readFile(
+      resolve(process.cwd(), 'src/providers/registry.ts'),
+      'utf8',
+    );
+    const providerClassExport = /^export\s+class\s+([A-Z][A-Za-z0-9]*Provider)\b/m;
+    const rule = projectFiles()
+      .inFolder('src/providers/**')
+      .should()
+      .adhereTo(file => {
+        // The registry itself is the membership store.
+        if (file.path === 'src/providers/registry.ts') return true;
+        const match = providerClassExport.exec(file.content);
+        if (!match) return true; // not a Provider class file
+        const className = match[1]!;
+        // Two acceptable forms: a direct `import { Foo } from './foo.js'`
+        // line, or a re-export aggregator that pulls the class in. We
+        // just check for the identifier as a token in registry.ts; the
+        // identifier is the load-bearing reference (used in the factory
+        // body) so a stale comment can't satisfy the rule.
+        const identifierRegex = new RegExp(`\\b${className}\\b`);
+        return identifierRegex.test(registrySource);
+      }, 'every Provider class file must be referenced from src/providers/registry.ts (add a DESCRIPTORS entry + import)');
+    await expectNoViolations(rule, 'provider registration');
   });
 
   it('src/** must not import a CLI argument-parsing library', async () => {
