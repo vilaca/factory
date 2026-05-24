@@ -1,6 +1,6 @@
 import { glob as fsGlob } from 'fs/promises';
 import path from 'path';
-import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolContext, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, buildDenyMatcher, PathDenied } from '../security/paths.js';
 import { errorMessage, makeAbortError } from '../utils/errors.js';
@@ -121,7 +121,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   }
 }
 
-export const globTool: ToolHandler = {
+export const globTool: StandardToolHandler = {
   name: TOOL_NAMES.Glob,
   description: definition.function.description,
   category: 'read-only',

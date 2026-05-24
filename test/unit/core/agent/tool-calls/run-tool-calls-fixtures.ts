@@ -7,7 +7,13 @@ import type {
   ProviderCapabilities,
   ToolCallMessage,
 } from '../../../../../src/providers/types.js';
-import type { ToolHandler, ToolResult, ToolCategory } from '../../../../../src/tools/types.js';
+import type {
+  BashToolHandler,
+  BashToolResult,
+  ToolHandler,
+  ToolResult,
+  ToolCategory,
+} from '../../../../../src/tools/types.js';
 import type { AgentEvent, PermissionDecision } from '../../../../../src/core/agent/types.js';
 import { ToolRegistry } from '../../../../../src/tools/registry.js';
 import { Conversation } from '../../../../../src/core/context/conversation.js';
@@ -22,6 +28,11 @@ export interface FakeToolOptions {
   execute?: (args: Record<string, unknown>) => Promise<ToolResult> | ToolResult;
 }
 
+export interface FakeBashToolOptions {
+  name?: string;
+  execute?: (args: Record<string, unknown>) => Promise<BashToolResult> | BashToolResult;
+}
+
 export function fakeTool(
   opts: FakeToolOptions,
 ): ToolHandler & { calls: Record<string, unknown>[] } {
@@ -33,6 +44,32 @@ export function fakeTool(
     definition: {
       type: 'function',
       function: { name: opts.name, description: 'fake', parameters: {} },
+    },
+    async execute(args) {
+      calls.push(args);
+      const r = await (opts.execute?.(args) ?? { success: true, output: 'ok' });
+      return r;
+    },
+  };
+  return Object.assign(handler, { calls });
+}
+
+/** Construct a Bash-shaped fake handler whose `execute` may return
+ *  `cwdAfter`. Needed because the `cwdAfter` field is forbidden by the
+ *  type system on standard `ToolHandler` and only `BashToolHandler` can
+ *  satisfy the access path in `run-tool-calls-execute.ts`. */
+export function fakeBashTool(
+  opts: FakeBashToolOptions = {},
+): BashToolHandler & { calls: Record<string, unknown>[] } {
+  const calls: Record<string, unknown>[] = [];
+  const handler: BashToolHandler = {
+    kind: 'bash',
+    name: opts.name ?? 'Bash',
+    description: 'fake',
+    category: 'execute',
+    definition: {
+      type: 'function',
+      function: { name: opts.name ?? 'Bash', description: 'fake', parameters: {} },
     },
     async execute(args) {
       calls.push(args);

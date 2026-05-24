@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Provider, ProviderCapabilities } from '../../../../src/providers/types.js';
 import { collectEvents, createMockProvider, findEvents } from './agent-helpers.js';
-import { TOOL_NAMES } from '../../../../src/utils/tool-names.js';
+import { TOOL_NAMES } from '../../../../src/tools/types.js';
 import { defaultRegistry } from '../../../../src/tools/index.js';
 import { _resetActivationLogForTests } from '../../../../src/core/agent/reliability-config.js';
 

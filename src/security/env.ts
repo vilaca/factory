@@ -81,13 +81,53 @@ const DEFAULT_DENY_PREFIXES: readonly string[] = [
   'FACTORY_', // our own debug/state vars — no reason to expose
 ];
 
-interface SanitizedEnv {
-  env: NodeJS.ProcessEnv;
-  /** Names of vars that were dropped. Kept short — names only, no values. */
+/** Phantom brand used to tag the `env` map produced by `sanitizeEnv`.
+ *
+ *  Declared as a private `unique symbol` — NOT exported. Outside this
+ *  module the only way to satisfy `SanitizedEnv` is to call
+ *  `sanitizeEnv` (or `extendSanitizedEnv`, which preserves the brand
+ *  on a known producer). A caller writing `process.env as SanitizedEnv`
+ *  works syntactically but is an explicit `as` cast — visible to any
+ *  reviewer or future arch test that wants to grep for unsafe escapes.
+ *
+ *  Brand vs. nominal type: TypeScript erases at runtime, so this is
+ *  zero-cost. The intersection makes `SanitizedEnv` assignable to every
+ *  parameter that wants `NodeJS.ProcessEnv` (e.g. `child_process.spawn`)
+ *  without any unwrap. The asymmetry is the only thing we need: every
+ *  `SanitizedEnv` IS-A `ProcessEnv`, but not every `ProcessEnv` is a
+ *  `SanitizedEnv`. */
+declare const sanitizedEnvBrand: unique symbol;
+
+/** A `NodeJS.ProcessEnv` that was produced by `sanitizeEnv` (or carried
+ *  forward via `extendSanitizedEnv`).
+ *
+ *  The point of the brand: APIs that spawn child processes can declare
+ *  their `env` parameter as `SanitizedEnv` to require — at compile time
+ *  — that the value came through the env scrubber. The legacy hazard,
+ *  documented in `core/hooks/AGENTS.md`, was passing `process.env`
+ *  directly to a hook subprocess. With the brand a caller would have
+ *  to write `spawn(..., { env: process.env as SanitizedEnv })`, which
+ *  is loud enough to catch in review (and tightenable later with an
+ *  arch test forbidding the cast outside `env.ts`).
+ *
+ *  Note that `child_process.spawn` itself accepts plain `ProcessEnv`,
+ *  so the brand only helps when our own functions opt in to require
+ *  `SanitizedEnv`. Today that's `extendSanitizedEnv`; the next lift
+ *  would be a `spawnWithSanitizedEnv` wrapper that confines
+ *  `child_process` imports to a single adapter. */
+export type SanitizedEnv = NodeJS.ProcessEnv & {
+  readonly [sanitizedEnvBrand]: never;
+};
+
+/** Return value of `sanitizeEnv`. `env` is branded; `dropped` lists the
+ *  names of vars that were filtered out (names only, no values, so it's
+ *  safe to log). */
+export interface SanitizeResult {
+  env: SanitizedEnv;
   dropped: string[];
 }
 
-export function sanitizeEnv(source: NodeJS.ProcessEnv, policy: EnvPolicy = {}): SanitizedEnv {
+export function sanitizeEnv(source: NodeJS.ProcessEnv, policy: EnvPolicy = {}): SanitizeResult {
   const allow = new Set([...DEFAULT_ALLOW, ...(policy.allow ?? [])]);
   const allowPrefixes = [...DEFAULT_ALLOW_PREFIXES, ...(policy.allowPrefixes ?? [])];
   const deny = new Set([...DEFAULT_DENY, ...(policy.deny ?? [])]);
@@ -109,5 +149,32 @@ export function sanitizeEnv(source: NodeJS.ProcessEnv, policy: EnvPolicy = {}): 
     dropped.push(name);
   }
 
-  return { env, dropped };
+  // The cast is the brand's mint site: this is the one function that
+  // promotes a freshly-scrubbed map to `SanitizedEnv`. Every other
+  // producer of the brand (`extendSanitizedEnv` below) chains off a
+  // value this function has already produced.
+  return { env: env as SanitizedEnv, dropped };
+}
+
+/** Extend a `SanitizedEnv` with additional known-safe key/value pairs
+ *  (typically per-call context like `FACTORY_PROJECT_DIR`), preserving
+ *  the brand.
+ *
+ *  Why this isn't `{ ...sanitized, ...additions }`: spread strips the
+ *  phantom brand at the type level, leaving a plain `ProcessEnv` that
+ *  the caller could then mix with `process.env` without anyone
+ *  noticing. Routing the extension through a typed function keeps the
+ *  brand in scope at every step of the path from sanitize → spawn.
+ *
+ *  `additions` is typed `Record<string, string>` rather than
+ *  `ProcessEnv` so undefined values are a type error — there's no
+ *  legitimate "add this key as undefined" case for context injection,
+ *  and accepting undefined would silently no-op rather than blow up.
+ *
+ *  Returns a NEW object — does not mutate the caller's `env`. */
+export function extendSanitizedEnv(
+  env: SanitizedEnv,
+  additions: Readonly<Record<string, string>>,
+): SanitizedEnv {
+  return { ...env, ...additions } as SanitizedEnv;
 }

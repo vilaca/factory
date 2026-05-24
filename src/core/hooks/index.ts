@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import type { HookEntry, HooksConfig } from '../config/types.js';
 import { resolveHooks, type HookEvent } from './discovery.js';
-import { sanitizeEnv } from '../../security/env.js';
+import { sanitizeEnv, extendSanitizedEnv, type SanitizedEnv } from '../../security/env.js';
 import type { EnvPolicy } from '../../security/env.js';
 import { checkForbidden } from '../../security/bash-rules.js';
 import { errorMessage } from '../../utils/errors.js';
@@ -11,8 +11,8 @@ import { errorMessage } from '../../utils/errors.js';
 // re-running sanitizeEnv on every fire is wasted work — and hook chains can
 // fire dozens of times per turn (PreToolUse + PostToolUse on every Bash
 // call, plus Pre/PostTurn).
-let sanitizedEnvCache: { policy: EnvPolicy; env: NodeJS.ProcessEnv } | null = null;
-function getSanitizedEnv(policy: EnvPolicy): NodeJS.ProcessEnv {
+let sanitizedEnvCache: { policy: EnvPolicy; env: SanitizedEnv } | null = null;
+function getSanitizedEnv(policy: EnvPolicy): SanitizedEnv {
   if (sanitizedEnvCache && sanitizedEnvCache.policy === policy) {
     return sanitizedEnvCache.env;
   }
@@ -21,38 +21,132 @@ function getSanitizedEnv(policy: EnvPolicy): NodeJS.ProcessEnv {
   return env;
 }
 
-/**
- * Result of running one or more hooks for a single event.
+/** Fields every event surfaces — bookkeeping the caller always wants to
+ *  emit observability for. Per-event docs at the top of `HookResultMap`.
  *
- * - `cancel`: at least one hook returned `cancel: true`. For PreToolUse this
- *   denies the tool call. For other events it is informational.
- * - `errorMessage`: the most recent non-empty errorMessage seen across hooks
- *   (used as the user-facing reason when `cancel` is true).
- * - `additionalContext`: the most recent non-empty additionalContext string
- *   returned by any hook. Per-event semantics:
- *     - PreCompact:        replaces the compaction summary text.
- *     - SessionStart:      appended to the conversation as a user message
- *                          before the next model call.
- *     - UserPromptSubmit:  appended to the conversation right after the
- *                          user's prompt, before the model is called.
- *     - Other events:      ignored (no defined injection point yet).
- * - `notice`: the most recent non-empty notice string returned by any hook.
- *   Surfaced as a user-visible info message at the call site so a hook can
- *   say "Welcome back" or "policy v3 active" without abusing errorMessage.
- *   Plain-text stdout (not JSON) is also captured as a notice automatically.
- * - `firedCommands`: commands that ran end-to-end without spawn/timeout/
- *   parse error. Errored runs aren't included — they're already in `errors`.
- *   Used by call sites to emit one notice per successful fire.
- * - `errors`: per-hook execution errors (timeouts, malformed JSON, non-zero
- *   exits, spawn failures). Logged to the session log; never thrown.
- */
-interface HookResult {
+ *  Not currently exported — consumers reach this type through
+ *  `HookResultFor<E>` for the relevant event (e.g. observability-only
+ *  events like `Stop` / `PostToolUse` resolve directly to this tier).
+ *  Flip to `export` when a helper needs to operate on the lowest
+ *  common denominator across events. */
+interface HookResultBase {
+  /** Plain-text notice captured from a hook's stdout when the hook
+   *  didn't return structured JSON. Capped at ~200 chars so a runaway
+   *  hook can't flood the UI. Surfaced as an info-level user notice at
+   *  the call site. */
+  notice?: string;
+  /** Commands that ran end-to-end without spawn / timeout / parse
+   *  error. Errored runs aren't included (they're in `errors`). Used by
+   *  call sites to emit one observability event per successful fire. */
+  firedCommands: string[];
+  /** Per-hook execution errors (timeouts, malformed JSON, non-zero
+   *  exits, spawn failures, forbidden-pattern denials). Logged to the
+   *  session log and surfaced as `hook-error` agent events; never
+   *  thrown. */
+  errors: string[];
+}
+
+/** Result shape for events that may inject context back into the
+ *  conversation / next model call. `additionalContext` is the most
+ *  recent non-empty string returned across all hooks for the event
+ *  (later entries override earlier ones).
+ *
+ *  Per-event injection semantics — see `HookResultMap` for the
+ *  canonical mapping:
+ *  - `SessionStart`     → appended to conversation as a user message.
+ *  - `UserPromptSubmit` → appended right after the user prompt.
+ *  - `PreCompact`       → replaces the compaction summary text.
+ *
+ *  Not currently exported — consumers reach this type through
+ *  `HookResultFor<E>` for the relevant event. Flip to `export` if you
+ *  need to write a helper whose parameter is the tier itself rather
+ *  than a specific event's result. */
+interface HookResultWithContext extends HookResultBase {
+  additionalContext?: string;
+}
+
+/** Result shape for events that may veto an action. Today this is
+ *  exclusively `PreToolUse`. `cancel: true` from any entry wins; the
+ *  most recent non-empty `errorMessage` is what the caller surfaces to
+ *  the user as the denial reason.
+ *
+ *  Not currently exported — see note on `HookResultWithContext`. */
+interface HookResultWithVeto extends HookResultBase {
+  cancel: boolean;
+  errorMessage?: string;
+}
+
+/** Per-event result surface — the **single source of truth** for what
+ *  fields a given event's caller may consume. `runHook<E>` returns
+ *  `HookResultMap[E]`, so a `Stop` caller writing `result.cancel` is a
+ *  compile error rather than a silent no-op.
+ *
+ *  When adding a new entry to `HOOK_EVENTS`, the exhaustiveness check
+ *  below (`_HookResultMapBijection`) will fail to compile until a
+ *  matching row is added here. Removing an event without removing its
+ *  row also fails. Pick the tier deliberately:
+ *  - inert / observability-only         → `HookResultBase`
+ *  - may inject context into a turn     → `HookResultWithContext`
+ *  - may veto an action                 → `HookResultWithVeto`
+ *
+ *  An event that one day needs BOTH inject + veto semantics should be
+ *  modelled as a new combined interface `HookResultWithContextAndVeto
+ *  extends HookResultWithContext, HookResultWithVeto` rather than
+ *  loosening any of the existing tiers.
+ *
+ *  Not exported — the map is an implementation detail behind
+ *  `HookResultFor<E>`, which is what callers should reach for. */
+interface HookResultMap {
+  SessionStart: HookResultWithContext;
+  UserPromptSubmit: HookResultWithContext;
+  PreToolUse: HookResultWithVeto;
+  PostToolUse: HookResultBase;
+  PostToolUseFailure: HookResultBase;
+  PreCompact: HookResultWithContext;
+  SessionEnd: HookResultBase;
+  Stop: HookResultBase;
+  StopFailure: HookResultBase;
+}
+
+/** Bidirectional compile-time bijection between `HookEvent` and the
+ *  keys of `HookResultMap`. If a new event is added to `HOOK_EVENTS`
+ *  without a matching `HookResultMap` row (or vice versa), the
+ *  assignment of `true` below fails with a string-literal error message
+ *  pointing at the missing or stale side.
+ *
+ *  The tuple pair-extends trick checks both directions in one
+ *  expression:
+ *   - `HookEvent extends keyof HookResultMap`  (forward)
+ *   - `keyof HookResultMap extends HookEvent`  (backward)
+ *  Both must hold for the result to be `true`; otherwise it's the
+ *  diagnostic string, which `true` cannot be assigned to. */
+type _HookResultMapBijection = [HookEvent, keyof HookResultMap] extends [
+  keyof HookResultMap,
+  HookEvent,
+]
+  ? true
+  : 'HookResultMap and HOOK_EVENTS are out of sync — add or remove a HookResultMap entry to match HOOK_EVENTS';
+const _hookResultMapBijection: _HookResultMapBijection = true;
+void _hookResultMapBijection;
+
+/** Public lookup: `HookResultFor<'PreToolUse'>` → `HookResultWithVeto`,
+ *  `HookResultFor<'SessionStart'>` → `HookResultWithContext`, etc. */
+export type HookResultFor<E extends HookEvent> = HookResultMap[E];
+
+/** Internal aggregate type — the runtime body collects every field a
+ *  hook might return (cancel, errorMessage, additionalContext, notice)
+ *  regardless of which event fired. The public `runHook<E>` return
+ *  narrows this to `HookResultFor<E>` via a structural-subset cast,
+ *  giving callers only the fields whose semantics are defined for
+ *  their event.
+ *
+ *  Aggregation stays full-fidelity at runtime so a future per-event
+ *  shape change is purely additive (extend `HookResultMap`, not the
+ *  parser). */
+interface HookAggregateResult extends HookResultBase {
   cancel: boolean;
   errorMessage?: string;
   additionalContext?: string;
-  notice?: string;
-  firedCommands: string[];
-  errors: string[];
 }
 
 interface RunHookOptions {
@@ -94,14 +188,19 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  * non-empty `errorMessage` / `additionalContext` / `notice`, so a later
  * entry can override an earlier one.
  */
-export async function runHook(
-  event: HookEvent,
+export async function runHook<E extends HookEvent>(
+  event: E,
   payload: unknown,
   opts: RunHookOptions,
-): Promise<HookResult> {
+): Promise<HookResultFor<E>> {
   const entries = opts.entries ?? resolveHooks(event, opts.config, opts.matchValue);
-  const aggregate: HookResult = { cancel: false, firedCommands: [], errors: [] };
-  if (entries.length === 0) return aggregate;
+  const aggregate: HookAggregateResult = { cancel: false, firedCommands: [], errors: [] };
+  // Early return: no entries means no fields aggregated; the cast is
+  // safe because `HookResultFor<E>` for every event is a structural
+  // subset of `HookAggregateResult` (every event's surface fields
+  // exist on the aggregate; the aggregate adds fields that some events
+  // don't surface, which the cast drops at the type level).
+  if (entries.length === 0) return aggregate as HookResultFor<E>;
 
   const defaultTimeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const stdinJson = JSON.stringify({ event, payload });
@@ -141,7 +240,7 @@ export async function runHook(
     if (single.stderr && opts.onStderr) opts.onStderr(entry.command, single.stderr);
   }
 
-  return aggregate;
+  return aggregate as HookResultFor<E>;
 }
 
 interface SingleHookOutcome {
@@ -169,19 +268,19 @@ function runSingleHook(
       // src/security/env.ts). Hooks are typically project-owned config a
       // user may not have audited; passing the full process.env would let a
       // hostile `.factory/config.json` exfil ANTHROPIC_API_KEY / GH_TOKEN /
-      // AWS_* on the very first session-start. Shallow-copy the cached env
-      // so the per-call FACTORY_* injections don't leak across fires.
-      const env = { ...getSanitizedEnv(opts.envPolicy ?? {}) };
-      // Inject hook-context vars on top of the scrubbed allowlist so shell
-      // scripts can read them without parsing the JSON payload. The
-      // sanitizer denies the FACTORY_ prefix on the way IN (process.env
-      // → child); we set them OUT-of-band, after sanitize, so the deny
-      // doesn't apply.
-      env.FACTORY_PROJECT_DIR = opts.cwd;
-      env.FACTORY_EVENT = event;
-      if (opts.matchValue !== undefined) {
-        env.FACTORY_TOOL_NAME = opts.matchValue;
-      }
+      // AWS_* on the very first session-start.
+      //
+      // Inject hook-context vars via `extendSanitizedEnv` so the brand
+      // survives the addition. Plain spread (`{ ...sanitized, FACTORY_X }`)
+      // would type-erase to `ProcessEnv` and let a future agent mix
+      // `process.env` keys back in without a type error. The sanitizer
+      // denies the FACTORY_ prefix on the way IN (process.env → child); we
+      // add them OUT-of-band, after sanitize, so the deny doesn't apply.
+      const env = extendSanitizedEnv(getSanitizedEnv(opts.envPolicy ?? {}), {
+        FACTORY_PROJECT_DIR: opts.cwd,
+        FACTORY_EVENT: event,
+        ...(opts.matchValue !== undefined ? { FACTORY_TOOL_NAME: opts.matchValue } : {}),
+      });
       child = spawn('sh', ['-c', command], {
         cwd: opts.cwd,
         env,

@@ -1,5 +1,5 @@
 import type { Provider } from '../providers/types.js';
-import type { ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { runSubagent } from '../core/subagent/runner.js';
 import type { runAgent } from '../core/agent/run-agent.js';
@@ -77,7 +77,7 @@ interface DelegateContext {
  * pattern keeps the tool-handler signature pure (args → result) while still
  * letting us inject the parent's provider and model selection.
  */
-export function createDelegateTool(ctx: DelegateContext): ToolHandler {
+export function createDelegateTool(ctx: DelegateContext): StandardToolHandler {
   async function execute(args: Record<string, unknown>): Promise<ToolResult> {
     const task = typeof args.task === 'string' ? args.task.trim() : '';
     if (!task) {

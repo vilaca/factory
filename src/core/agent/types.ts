@@ -1,5 +1,5 @@
 import type { Provider, TokenUsage, ToolCallMessage } from '../../providers/types.js';
-import type { ToolResult } from '../../tools/types.js';
+import type { ExecutedToolResult } from '../../tools/types.js';
 import type { ToolRegistry } from '../../tools/registry.js';
 import type { Conversation } from '../context/conversation.js';
 import type { ContextManager } from '../context/context-manager.js';
@@ -38,7 +38,7 @@ export type AgentEvent =
       type: 'tool-call-result';
       toolName: string;
       args: Record<string, unknown>;
-      result: ToolResult;
+      result: ExecutedToolResult;
     }
   | { type: 'tool-call-denied'; toolName: string; args: Record<string, unknown> }
   | {

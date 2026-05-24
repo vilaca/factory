@@ -8,6 +8,7 @@ import { ToolResolutionError } from '../../../../src/tools/errors.js';
 import { ToolExecutionError } from '../../../../src/core/agent/errors.js';
 import { createMockProvider } from './agent-helpers.js';
 import type { AgentEvent } from '../../../../src/core/agent/types.js';
+import type { ToolResult } from '../../../../src/tools/types.js';
 
 function makeResolvingTool(state: { calls: Array<Record<string, unknown>> }) {
   return {
@@ -22,7 +23,7 @@ function makeResolvingTool(state: { calls: Array<Record<string, unknown>> }) {
         parameters: { type: 'object', properties: { service: { type: 'string' } } },
       },
     },
-    async execute(args: Record<string, unknown>) {
+    async execute(args: Record<string, unknown>): Promise<ToolResult> {
       state.calls.push(args);
       const service = args.service as string;
       if (service !== 'payments-service') {
@@ -46,7 +47,7 @@ function makeHardThrowingTool() {
         parameters: { type: 'object', properties: {} },
       },
     },
-    async execute(): Promise<{ success: boolean; output: string }> {
+    async execute(): Promise<ToolResult> {
       throw new Error('catastrophic disk failure');
     },
   };

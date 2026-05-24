@@ -280,9 +280,13 @@ async function* executeAndEmit(
         }
       : undefined;
     const result = await tool.execute(args, toolCtx);
-    // Bash signals cwd changes via cwdAfter; propagate so subsequent tools in
-    // this turn (and the next turn) see the new directory.
-    if (result.cwdAfter && ctx.cwdRef) {
+    // Bash signals cwd changes via cwdAfter; propagate so subsequent tools
+    // in this turn (and the next turn) see the new directory. The
+    // `tool.kind === 'bash'` narrow is what makes `result.cwdAfter`
+    // readable here — the standard-tool branch of the discriminated
+    // union forbids the field, so this access is only well-typed once
+    // we have proved we're holding a `BashToolHandler`.
+    if (tool.kind === 'bash' && result.success && result.cwdAfter && ctx.cwdRef) {
       ctx.cwdRef.current = result.cwdAfter;
     }
     recordResult(result.output, tool.name);

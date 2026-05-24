@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolContext, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, PathDenied } from '../security/paths.js';
 import { errorMessage } from '../utils/errors.js';
@@ -254,7 +254,7 @@ function reindent(oldString: string, matched: string, newString: string): string
     .join('\n');
 }
 
-export const editTool: ToolHandler = {
+export const editTool: StandardToolHandler = {
   name: TOOL_NAMES.Edit,
   description: definition.function.description,
   category: 'write',

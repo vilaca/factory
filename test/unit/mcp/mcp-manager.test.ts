@@ -58,9 +58,12 @@ describe('McpManager — input validation', () => {
     const t0 = Date.now();
     const result = await m.disconnect(80);
     const elapsed = Date.now() - t0;
-    // Took ~80ms for the hung server (must exceed timeout, must not run
-    // the full default 2s, and must finish promptly after the cap).
-    assert.ok(elapsed >= 80 && elapsed < 1000, `disconnect took ${elapsed}ms`);
+    // Lower bound: the timeout must engage (not return instantly when a server hangs).
+    // Node's setTimeout can fire a few ms early under scheduler pressure, so allow some
+    // tolerance rather than asserting the exact configured value.
+    assert.ok(elapsed >= 70, `expected disconnect to wait for the timeout; took ${elapsed}ms`);
+    // Upper bound: must not fall back to the 2s default.
+    assert.ok(elapsed < 1000, `expected disconnect to honor the 80ms cap; took ${elapsed}ms`);
     assert.deepStrictEqual(result.pending, ['hangy']);
     assert.strictEqual(okClose.mock.callCount(), 1);
     assert.strictEqual(hangClose.mock.callCount(), 1);

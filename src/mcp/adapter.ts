@@ -1,5 +1,5 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { ToolDefinition, ToolHandler, ToolResult } from '../tools/types.js';
+import type { StandardToolHandler, ToolDefinition, ToolResult } from '../tools/types.js';
 import { errorMessage } from '../utils/errors.js';
 
 interface McpToolDescriptor {
@@ -17,7 +17,7 @@ export function adaptMcpTool(
   mcpClient: Client,
   serverName: string,
   mcpTool: McpToolDescriptor,
-): ToolHandler {
+): StandardToolHandler {
   const definition: ToolDefinition = {
     type: 'function',
     function: {
@@ -45,10 +45,12 @@ export function adaptMcpTool(
               .join('\n')
           : String(result.content);
 
-        return {
-          success: !result.isError,
-          output,
-        };
+        // Literal-narrow the success flag so it matches the discriminated
+        // union (boolean → `true` | `false`). MCP servers signal failure
+        // via `isError: true`; we surface that as a graceful failure so
+        // the agent loop's corrector can retry without bumping the
+        // hard-error counter.
+        return result.isError ? { success: false, output } : { success: true, output };
       } catch (err: unknown) {
         return {
           success: false,

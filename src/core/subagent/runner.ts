@@ -1,5 +1,5 @@
 import type { Provider } from '../../providers/types.js';
-import type { ToolContext, ToolHandler, ToolResult } from '../../tools/types.js';
+import type { BashToolHandler, BashToolResult, ToolContext } from '../../tools/types.js';
 import { TOOL_NAMES } from '../../tools/types.js';
 import type { AgentEvent } from '../agent/types.js';
 import { ToolRegistry } from '../../tools/registry.js';
@@ -28,15 +28,16 @@ Stop as soon as you have an answer. Do not chain calls past what the question re
  * allow-list is rejected before `spawn` is ever called — we never delegate
  * the trust decision to the prompt.
  */
-function makeRestrictedBashTool(): ToolHandler {
+function makeRestrictedBashTool(): BashToolHandler {
   return {
+    kind: 'bash',
     name: bashTool.name,
     description:
       bashTool.description +
       ' (Subagent: only read-only allow-listed commands run; others are rejected.)',
     category: bashTool.category,
     definition: bashTool.definition,
-    async execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<ToolResult> {
+    async execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<BashToolResult> {
       const command = typeof args.command === 'string' ? args.command : '';
       const decision = isCommandAllowed(command);
       if (!decision.allowed) {

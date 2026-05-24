@@ -1,5 +1,5 @@
 import type { ToolCallMessage } from '../../providers/types.js';
-import type { ToolDefinition, ToolPrerequisite } from '../../utils/tool-definition.js';
+import type { ToolDefinition, ToolPrerequisite } from '../../tools/types.js';
 import { StepTracker } from './step-tracker.js';
 import { stepNudge, prerequisiteNudge, type Nudge } from './nudges.js';
 import { StepEnforcementError, PrerequisiteError } from './errors.js';
@@ -152,6 +152,33 @@ export class StepEnforcer {
     }
     return missing;
   }
+}
+
+/** Per-run factory: build a `StepEnforcer` when AgentOptions opted in
+ *  to any of `requiredSteps`, `terminalTools`, or tool-declared
+ *  prerequisites. Returns `undefined` for the common case — callers
+ *  should pass that straight through to `runAgent.options.stepEnforcer`
+ *  so the enforcement phase short-circuits without allocating.
+ *
+ *  Lives here, next to `StepEnforcer` itself, because the construction
+ *  logic owns the "do we need an enforcer at all?" predicate alongside
+ *  the constructor it ultimately calls. Don't inline this back into
+ *  `run-agent.ts` — the entry point is meant to be orchestration glue,
+ *  not per-feature factory wiring. */
+export function buildStepEnforcer(opts: {
+  requiredSteps?: readonly string[];
+  terminalTools?: readonly string[];
+  toolDefinitions: readonly ToolDefinition[];
+}): StepEnforcer | undefined {
+  const hasRequired = !!opts.requiredSteps && opts.requiredSteps.length > 0;
+  const hasTerminal = !!opts.terminalTools && opts.terminalTools.length > 0;
+  const hasPrereqs = opts.toolDefinitions.some(d => d.prerequisites && d.prerequisites.length > 0);
+  if (!hasRequired && !hasTerminal && !hasPrereqs) return undefined;
+  return new StepEnforcer({
+    requiredSteps: opts.requiredSteps ?? [],
+    terminalTools: opts.terminalTools ?? [],
+    prereqs: collectPrereqs(opts.toolDefinitions),
+  });
 }
 
 /**
