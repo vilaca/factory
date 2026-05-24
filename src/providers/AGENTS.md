@@ -52,7 +52,5 @@ LLM provider adapters. If you're adding a provider, mapping a model to a capabil
 
 ## Don't
 
-- **Don't reach into `core/`, `tools/`, `ui/`, `mcp/`, or `cli/` from a provider file.** The arch test will fail. If you genuinely need a shared utility, it belongs in `utils/`.
-- **Don't read `usage.totalTokens` or `usage.completionTokens` to gauge context fullness.** That's the 44aeb26 bug shape; use `contextFillTokens(usage)` in `usage.ts`.
-- **Don't expand the `openai/` exception list in arch tests** to let UI or core code reach in. The whole point of the adapter being internal is that future SSE / stored-response changes are local.
-- **Don't fold provider-specific picker logic into `descriptors.ts`** — it's metadata, not behavior. Picker behavior lives in `cli/picker.ts` / `cli/startup/menu.tsx` and reads descriptors.
+- **Don't reach into `core/`, `tools/`, `ui/`, `mcp/`, or `cli/` from a provider file.** _Enforced by arch test:_ `providers → {ui, tools, core, mcp, cli}`. If you genuinely need a shared utility, it belongs in `utils/`.
+- **Don't read `usage.totalTokens` or `usage.completionTokens` to gauge context fullness.** _Enforced by arch test:_ the 44aeb26 contract bans those identifiers in `status-bar.tsx`. Use `contextFillTokens(usage)` in `usage.ts`.

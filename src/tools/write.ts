@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolContext, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, PathDenied } from '../security/paths.js';
 import { errorMessage } from '../utils/errors.js';
@@ -71,7 +71,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   }
 }
 
-export const writeTool: ToolHandler = {
+export const writeTool: StandardToolHandler = {
   name: TOOL_NAMES.Write,
   description: definition.function.description,
   category: 'write',

@@ -34,7 +34,8 @@ The primitive that gates every I/O-shaped tool call. Path jail, bash deny list, 
 
 ## Don't
 
-- **Don't add a way for user config to override built-ins.** Extending is allowed; weakening is not. The hard-deny posture is load-bearing — `bash-rules.ts` and `paths.ts` are the last gate before disk / shell.
-- **Don't import from `tools/`, `core/`, `providers/`, `ui/`, `mcp/`, or `cli/`** here. The arch test will fail. If a security check needs information from a sibling layer, the caller passes it in as a policy / context value.
-- **Don't quietly broaden the safe-vars env whitelist.** Each added entry is reviewed because it changes what subprocesses see.
-- **Don't bypass `PathPolicy` / `EnvPolicy` plumbing** by calling `process.cwd()` / `process.env` inside a security function. The whole point of taking the policy as an argument is that each tool call sees a frozen snapshot bound to its turn / tab.
+- **Don't add a way for user config to override built-ins.** _Folklore:_ no mechanical check. Extending is allowed; weakening is not. The hard-deny posture is load-bearing — `bash-rules.ts` and `paths.ts` are the last gate before disk / shell. Candidate for a property test on the next change here.
+- **Don't import from `tools/`, `core/`, `providers/`, `ui/`, `mcp/`, or `cli/`** here. _Enforced by arch test:_ `security/**` is a primitive — it must not depend on any sibling top-level folder. If a security check needs information from a sibling layer, the caller passes it in as a policy / context value.
+- **Don't bypass `PathPolicy` / `EnvPolicy` plumbing** by calling `process.cwd()` / `process.env` inside a security function. _Folklore:_ no mechanical check. The whole point of taking the policy as an argument is that each tool call sees a frozen snapshot bound to its turn / tab.
+
+Note on the safe-vars env whitelist: each additional entry in `env.ts`'s allow list expands what subprocesses can read. The list is intentionally short. Adding to it should come with a JSDoc rationale on the entry; reviewers (human or automated) should flag PRs that grow the list silently.

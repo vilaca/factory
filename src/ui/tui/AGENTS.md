@@ -56,8 +56,6 @@ If you find yourself wanting to bypass any of these, the right move is usually t
 
 ## Don't
 
-- **Don't `process.cwd()` in a component.** Use the per-tab `cwd` from `RunRefs` / `AgentLoopApi.cwd`. Two tabs would otherwise fight over the global.
-- **Don't subscribe to `process.stdin` outside `App.tsx`.** The F-key tap is intentional and singular; multiple subscribers race.
-- **Don't add a new top-level top-down state field.** Per-tab state goes on `RunRefs`. Per-render React state goes through `useAgentLoop` and is exposed via `AgentLoopApi`.
-- **Don't add a `useState` for something already on `RunRefs`** — `RunRefs` is the source of truth that survives a tab swap; mirrored React state goes stale.
-- **Don't bypass the arch fences** by adding to their `except` lists without a strong reason and a comment naming the rationale.
+- **Don't `process.cwd()` in a component.** _Folklore:_ no mechanical check. Use the per-tab `cwd` from `RunRefs` / `AgentLoopApi.cwd`. Two tabs would otherwise fight over the global. A lint rule banning `process.cwd` inside `ui/tui/**` would lift this.
+- **Don't subscribe to `process.stdin` outside `App.tsx`.** _Folklore:_ no mechanical check. The F-key tap is intentional and singular; multiple subscribers race. A lint rule analogous to the one above would lift this.
+- **Don't duplicate `RunRefs` fields as React state.** `RunRefs` is the source of truth that survives a tab swap; mirrored `useState` values go stale on swap. New cross-render state goes on `RunRefs`; per-render derived state goes through `useAgentLoop` and is exposed via `AgentLoopApi`. _Folklore:_ no mechanical check.

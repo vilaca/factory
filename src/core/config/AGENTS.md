@@ -21,9 +21,12 @@ Config file loading, merging, validation, and persistence. The on-disk shape is 
 
 ## RMW contract (f848472)
 
-**Any file that imports both `loadGlobalConfig` AND `saveGlobalConfig` is almost certainly racing.** The arch test in `test/unit/arch/modularity.test.ts` enforces this: pairing them in a single file fails, with the one allowlisted exception being `core/config/index.ts` itself (the migration code path).
+Two layers protect callers from racing on the on-disk config file:
 
-The pattern to use:
+1. **External callers.** Any file that imports both `loadGlobalConfig` AND `saveGlobalConfig` is almost certainly racing. The arch test in `test/unit/arch/modularity.test.ts` enforces this: pairing them in a single file fails, with the one allowlisted exception being `core/config/index.ts` itself (the migration code path).
+2. **Internal writers.** `writeMergedConfig` (this file's only physical write helper) takes a `ConfigWriteCapability` parameter. The capability has a private constructor — only `withConfigLock` can mint one. **Adding a new in-module write helper that forgets the lock is a compile error**, not a runtime race. (Lift of the prior arch-tested rule to type-level enforcement — see Pattern 5 in the agent-arch sequence.)
+
+The pattern to use externally:
 
 ```ts
 // WRONG — two concurrent callers will clobber each other
@@ -61,8 +64,8 @@ The legacy single-key credential format is migrated on first read. The migration
 
 ## Don't
 
-- **Don't call `loadGlobalConfig` + `saveGlobalConfig` in the same call site.** Use `updateGlobalConfig`. The arch test will fail and the runtime will race.
-- **Don't add a config field without a default in the zod schema.** Defaults at the schema level keep every caller free of `?? defaultValue` sprinkles.
-- **Don't write outside `withConfigLock`.** Every disk-mutating function in this file goes through it.
-- **Don't expose `configCache` to other modules** — the cache is an implementation detail. Callers should always use `loadGlobalConfig` / `updateGlobalConfig`, never poke at the cache.
-- **Don't migrate config shape silently.** A schema change that drops or renames a field needs a migration entry (see `migrateLegacyKeys` as the template).
+- **Don't call `loadGlobalConfig` + `saveGlobalConfig` in the same call site.** _Enforced by arch test_ (f848472 contract). Use `updateGlobalConfig`.
+- **Don't add a config field without a default in the zod schema.** _Folklore:_ no mechanical check. Defaults at the schema level keep every caller free of `?? defaultValue` sprinkles. Candidate for a schema-traversal test that asserts every leaf has a `.default(...)`.
+- **Don't write outside `withConfigLock`.** _Enforced by type:_ every disk-mutating function in this file accepts a `ConfigWriteCapability` whose only minting site is `withConfigLock` — calling `writeMergedConfig` outside the lock is a compile error.
+
+Note on migrations: a schema change that drops or renames a field needs a migration entry (see `core/auth/credentials.ts:migrateLegacyKeys` as the template). A "silent" rename — schema edited, no migration — leaves existing users with a config that fails validation on next launch. The migration code path itself is best-effort on write (so a read-only filesystem still boots), but the in-memory shape must always parse.

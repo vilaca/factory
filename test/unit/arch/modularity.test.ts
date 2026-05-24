@@ -186,6 +186,35 @@ describe('architecture: module boundaries', () => {
     await expectNoViolations(rule, 'ui → SDK packages');
   });
 
+  // MCP SDK encapsulation contract.
+  //
+  // Background: the `@modelcontextprotocol/sdk` package owns the wire-
+  // level Client/Transport types. Two MCP adapter files in this repo
+  // (src/mcp/client.ts and src/mcp/adapter.ts) translate that surface
+  // into a `ToolHandler[]` the agent loop consumes. Every other file
+  // sees only `ToolHandler`/`McpManager` — the SDK types do not escape.
+  //
+  // If a future change imports `@modelcontextprotocol/sdk` from outside
+  // those two files, the rest of the codebase grows a second pathway
+  // into the SDK surface; the adapter stops being the sole boundary,
+  // and bumping the SDK becomes an N-file refactor instead of a 2-file
+  // one. Lock the boundary structurally.
+  it('@modelcontextprotocol/sdk imports must be scoped to src/mcp/{client,adapter}.ts', async () => {
+    const allowed = new Set(['src/mcp/client.ts', 'src/mcp/adapter.ts']);
+    const importRegex = /(?:from|require\()\s*['"](@modelcontextprotocol\/sdk[^'"]*)['"]/g;
+    const rule = projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(file => {
+        if (allowed.has(file.path)) return true;
+        for (const _m of file.content.matchAll(importRegex)) {
+          return false;
+        }
+        return true;
+      }, 'MCP SDK imports are confined to src/mcp/client.ts and src/mcp/adapter.ts');
+    await expectNoViolations(rule, 'MCP SDK scoping');
+  });
+
   it('src/ui/** must not import node networking or child-process modules directly', async () => {
     const bannedNodeModules = [
       'node:http',

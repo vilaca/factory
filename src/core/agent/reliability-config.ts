@@ -20,7 +20,19 @@ import { getSamplingDefaults } from '../../providers/sampling-defaults.js';
  * conditional surfacing rules from `docs/reliability/next-steps.md` land, this helper
  * grows to consult those signals too.
  */
-export interface ReliabilityActivation {
+/** Per-(provider, model) reliability activation. Recomputed once per
+ *  turn in `phase-preflight.ts` because rotation can swap models
+ *  mid-run, and threaded forward into `phase-model-call.ts` (which
+ *  reads `forceToolCall` to set Anthropic `tool_choice: "any"`) and
+ *  `phase-response-emission.ts` / `phase-no-tool-calls.ts` (which read
+ *  `useRespondTool` to decide the Respond short-circuit and the
+ *  validator retry-nudge path).
+ *
+ *  Lives here, not in `phase-types.ts`, because `autoEnableForModel`
+ *  produces it — putting the type next to its producer keeps the
+ *  dependency arrow consumer → producer rather than the other way
+ *  around. */
+export interface ActivationFlags {
   /** Expose the synthetic Respond tool to the model and short-circuit a
    *  single-Respond batch as the turn's natural completion. Keeps the
    *  model in tool-calling grammar at all times — eliminates the
@@ -39,7 +51,7 @@ export interface ReliabilityActivation {
  *  loops and constructors. The logging entry point is
  *  `logActivation` below, which the agent loop calls once per turn so
  *  the user sees one INFO line per session rather than per call. */
-export function autoEnableForModel(provider: Provider, model: string): ReliabilityActivation {
+export function autoEnableForModel(provider: Provider, model: string): ActivationFlags {
   const tier = provider.getCapabilities(model).modelTier;
   // A model gets the reliability path when EITHER:
   //   - the provider tier says it's weak (small local / cheap cloud), OR
@@ -59,7 +71,7 @@ export function autoEnableForModel(provider: Provider, model: string): Reliabili
   };
 }
 
-const loggedSessions = new Map<string, ReliabilityActivation>();
+const loggedSessions = new Map<string, ActivationFlags>();
 
 /** Emit a one-shot INFO line to the provider-events log when activation
  *  changes for a given `(provider, model)` pair. Per the surfacing
@@ -70,7 +82,7 @@ const loggedSessions = new Map<string, ReliabilityActivation>();
 export function logActivation(
   provider: Provider,
   model: string,
-  activation: ReliabilityActivation,
+  activation: ActivationFlags,
 ): void {
   const key = `${provider.name}::${model}`;
   const prev = loggedSessions.get(key);
@@ -89,7 +101,7 @@ export function logActivation(
   });
 }
 
-function shallowEqualActivation(a: ReliabilityActivation, b: ReliabilityActivation): boolean {
+function shallowEqualActivation(a: ActivationFlags, b: ActivationFlags): boolean {
   return a.useRespondTool === b.useRespondTool && a.forceToolCall === b.forceToolCall;
 }
 

@@ -8,7 +8,7 @@
 
 ## Files
 
-- `dispatch.ts` — the dispatcher + the `HANDLERS` record + `printHelp` + the small commands inlined as arrow functions. **Note:** `HANDLERS` and `printHelp` are two parallel structures that can drift. When adding a new command, edit both.
+- `dispatch.ts` — the dispatcher + the `HANDLERS` record + `printHelp` + the small commands inlined as arrow functions. _Known drift point:_ `HANDLERS` and `printHelp` are two parallel structures, edited in lockstep today. The lift is to define a single `SLASH_COMMANDS` array (`{ name, aliases?, help?, handler }`) and derive both views from it; until that lands, both must be updated for every command.
 - `rotate.ts`, `rotate-helpers.ts`, `rotate-subcommands.ts` — `/rotate` family. The biggest slash subtree because rotation has subcommands (`set`, `add`, `show`, `enable`, `disable`, `refresh`, `keys-on/off`, …).
 - `keys.ts` — `/keys` (per-provider key listing / health snapshot).
 - `stats.ts` — `/stats` (per-session cache hits, compaction events, largest tool results).
@@ -20,7 +20,7 @@
    - Small, no subcommands → inline in `dispatch.ts` next to peers.
    - Subcommands or > ~40 LOC → new file `slash/<name>.ts` exporting `dispatch<Name>(arg, agent)`.
 2. Add an entry to `HANDLERS` in `dispatch.ts`.
-3. Add a row to `printHelp` (also in `dispatch.ts`) so `/help` lists it. **Easy to forget — both lists exist.**
+3. Add a row to `printHelp` (also in `dispatch.ts`) so `/help` lists it. (Until the `SLASH_COMMANDS` table lift lands, this is two edits in lockstep.)
 4. If the command needs context the agent doesn't have (e.g. a picker dialog), thread it via `SlashCommandContext` (set in `Session.tsx` when the API is wired).
 
 ## What `SlashCommandContext` carries
@@ -40,11 +40,9 @@ Headless / test contexts can omit the optional ones; the handlers print a "not a
 
 ## Easter eggs
 
-`/emoji` is intentionally omitted from `/help`. Don't document it.
+`/emoji` is registered in `HANDLERS` but absent from `printHelp` — intentional, so `/help` doesn't list it.
 
 ## Don't
 
-- **Don't fire model calls from a slash command.** Slash handlers mutate state, surface notices, or open dialogs. Anything that should trigger a turn goes through `agent.submitPrompt`.
-- **Don't reach into `core/agent/` directly.** Slash handlers talk to the runtime through `agent.refs.current` (`RunRefs`) and `AgentLoopApi` actions only. New behaviour the agent loop needs to know about should be a new action on `AgentLoopApi`.
-- **Don't add an alias by registering the same handler twice.** Use the existing pattern (`'/exit'`, `'/quit'`, `'/q'` all point to `handleExit`) — one function, multiple keys.
-- **Don't forget to update `printHelp`** when adding a command. This is one of the places the codebase is most likely to drift; treat the duplication as a known limitation until the registry is unified.
+- **Don't fire model calls from a slash command.** _Folklore:_ no mechanical check. Slash handlers mutate state, surface notices, or open dialogs. Anything that should trigger a turn goes through `agent.submitPrompt`. Candidate for an arch test forbidding `provider.chat` / `runAgent` imports inside `slash/**`.
+- **Don't reach into `core/agent/` directly.** _Folklore:_ no mechanical check. Slash handlers talk to the runtime through `agent.refs.current` (`RunRefs`) and `AgentLoopApi` actions only. New behaviour the agent loop needs to know about should be a new action on `AgentLoopApi`. Same arch-test candidate as above.

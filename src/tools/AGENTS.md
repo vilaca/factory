@@ -12,30 +12,49 @@ Built-in tools the model can call (Read, Write, Edit, Bash, Glob, Grep, WebFetch
 - `types.ts` — `ToolHandler`, `ToolResult`, `ToolContext`, `ToolCategory`; re-exports `ToolDefinition`, `ToolPrerequisite`, `TOOL_NAMES`.
 - `registry.ts` — `ToolRegistry` class with the built-in registration list. Auto-registers Read/Write/Edit/Bash/Glob/Grep/WebFetch/Respond on construction; pass `{ empty: true }` for the subagent runner's curated set.
 - `errors.ts` — `ToolResolutionError` (the only "soft error" the executor recognizes; pairs with `softError: true` + `skipCorrector: true` on the result).
-- `respond.ts` — synthetic terminal tool. Always registered; visibility on the wire is decided per-turn by `core/agent/run-agent.ts` via `getDefinitions({ exclude })`. Don't make Respond visibility a config flag — the reliability rationale lives in `run-agent.ts` and `reliability-config.ts`.
-- `read.ts`, `write.ts`, `edit.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `delegate.ts` — one file per built-in. Each exports a `ToolHandler` constant. Keep tool-specific logic local; don't introduce a tools-internal "framework" beyond what `types.ts` already provides.
+- `respond.ts` — synthetic terminal tool. Always registered; visibility on the wire is decided per-turn by `core/agent/run-agent.ts` via `getDefinitions({ exclude })`.
+- `read.ts`, `write.ts`, `edit.ts`, `bash.ts`, `glob.ts`, `grep.ts`, `delegate.ts` — one file per built-in. Each exports a handler constant typed as `StandardToolHandler` (or `BashToolHandler` for Bash).
 - `web/` — WebFetch and its HTML rendering pipeline: `fetch.ts` → `html-tokenize.ts` → `html-render.ts` → `html-to-markdown.ts`, with the tool handler in `index.ts`.
 
 ## Tool-author contract
 
-Every tool implements:
+Every tool implements one of two handler shapes, declared in `types.ts`:
 
 ```ts
-interface ToolHandler {
+// Standard tool — forbids `cwdAfter` on the success branch.
+interface StandardToolHandler {
+  kind?: 'standard';
   name: string; // must match a TOOL_NAMES.* value if it's a built-in
   description: string;
   category: 'read-only' | 'write' | 'execute';
   definition: ToolDefinition; // JSON schema sent to the LLM
   execute(args, ctx?: ToolContext): Promise<ToolResult>;
 }
+
+// Bash-only handler. The `kind: 'bash'` discriminator is what allows
+// `execute` to return `cwdAfter`; the executor narrows on it to read
+// the field. Currently the in-tree `bashTool` plus the subagent's
+// hardened wrapper are the only two values of this type.
+interface BashToolHandler {
+  kind: 'bash';
+  // …same other fields…
+  execute(args, ctx?: ToolContext): Promise<BashToolResult>;
+}
 ```
 
-Return-shape rules are documented in the `ToolResult` table in `types.ts` (the matrix is exhaustive — read it before adding a new flag combination). Key invariants:
+Declare new tools with the narrow type (`StandardToolHandler` for everything except Bash). Annotating as the union `ToolHandler` widens the shape and defeats the `cwdAfter` check.
 
-- `success: true` never carries `softError`, `hardError`, or `skipCorrector`.
-- `softError` ⇔ executor caught a `ToolResolutionError`; always paired with `skipCorrector: true`.
-- `hardError` ⇔ executor caught any other exception. This is the only failure mode that bumps the consecutive-hard-error counter.
-- `cwdAfter` is Bash-only.
+Return shapes are enforced by the discriminated union — the prose matrix that used to live in this file (and in `types.ts`'s JSDoc) is now a type:
+
+- `success: true` ⇒ `softError`/`hardError`/`skipCorrector` typed as `?: never`. Setting any of them is a compile error. **Enforced by type.**
+- `softError: true` ⇒ `skipCorrector: true` required. **Enforced by type** (`ToolFailureSoft`).
+- `softError` and `hardError` are mutually exclusive — they live in separate variants of the union, so satisfying both is impossible. **Enforced by type.**
+- `cwdAfter` ⇒ only available on `BashSuccess`. Setting it on a `StandardToolHandler`'s result is a compile error. **Enforced by type** (`?: never` on `ToolSuccess`).
+
+Wrapping rules the executor (not the tool author) is responsible for:
+
+- `softError` ⇔ executor caught a `ToolResolutionError`. The shape is enforced by type; the _thrown-vs-shaped_ mapping is verified by `test/unit/core/agent/tool-resolution-error.test.ts`.
+- `hardError` ⇔ executor caught any other exception. Same split: type guarantees the shape, tests guarantee the catch pathway.
 
 ## Adding a tool — checklist
 
@@ -65,6 +84,6 @@ Built-in security rules cannot be overridden by user config — only extended.
 
 ## Don't
 
-- **Don't add tool-name string literals anywhere.** Use `TOOL_NAMES.*`. The const exists exactly so a typo becomes a compile error.
-- **Don't fan-out reads of `ToolDefinition` shape** — every consumer should accept it as a JSON schema and not introspect its fields.
-- **Don't put cross-cutting tool state on a module-level variable.** Per-tool state lives on the handler closure or in `ToolContext`; per-session state goes through the registry or `ToolLoopContext`.
+- **Don't add tool-name string literals anywhere.** _Enforced by type:_ APIs that take a tool name require `keyof typeof TOOL_NAMES`; a plain string is a compile error.
+- **Don't put cross-cutting tool state on a module-level variable.** _Folklore:_ no mechanical check. Per-tool state lives on the handler closure or in `ToolContext`; per-session state goes through the registry or `ToolLoopContext`. The next regression on this rule should land an arch test.
+- **Don't widen a handler's annotation to `ToolHandler`** when you mean `StandardToolHandler`. The union accepts either branch, which loses the Bash-only `cwdAfter` guarantee at the declaration site. _Folklore:_ no mechanical check yet — typing as the union compiles. The pattern is enforced by review until a lint rule lands.

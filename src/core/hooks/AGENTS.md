@@ -41,7 +41,7 @@ When you wire a new firing site, the call goes through one of: `runHooks` direct
 
 ## Performance / caching
 
-`getSanitizedEnv(policy)` caches the scrubbed env keyed on the policy _identity_ (object reference, not value). Callers should snapshot the policy once at session start and reuse the same object — re-running `sanitizeEnv` on every fire matters because hook chains can fire dozens of times per turn (`PreToolUse` + `PostToolUse` on every Bash call, plus `Pre/PostTurn`).
+`getSanitizedEnv(policy)` caches the scrubbed env keyed on the policy _identity_ (object reference, not value). Snapshot the policy once at session start and reuse the same object — re-running `sanitizeEnv` on every fire matters because hook chains can fire dozens of times per turn (`PreToolUse` + `PostToolUse` on every Bash call, plus `Pre/PostTurn`). The session bootstrap in `agent-loop/init.ts` is the canonical snapshot site.
 
 ## Security
 
@@ -59,8 +59,9 @@ When you wire a new firing site, the call goes through one of: `runHooks` direct
 
 ## Don't
 
-- **Don't add a hook event without documenting `additionalContext` semantics** in this file and in `HookResult`'s JSDoc. The default is "ignored", but unclear semantics breed config bugs.
-- **Don't bypass `checkForbidden` for hook commands.** The built-in deny list applies to hooks too — they spawn with the user's shell.
-- **Don't make `runHooks` throw.** Every per-hook failure goes into the `errors` array; the agent loop must not crash on a misconfigured hook.
-- **Don't pass `process.env` directly to a hook subprocess.** Always go through `getSanitizedEnv(policy)`.
-- **Don't add a synchronous "wait for user confirmation" inside a hook fire.** Trust prompts go through `trust.ts`, which integrates with the UI's permission flow.
+- **Don't add a hook event without documenting `additionalContext` semantics** in this file and in `HookResult`'s JSDoc. _Folklore:_ no mechanical check today. The default is "ignored", but unclear semantics breed config bugs. The lift is the event-keyed result type (Pattern 3) — until it lands, the prose matrix above is the spec.
+- **Don't bypass `checkForbidden` for hook commands.** _Folklore:_ no mechanical check today. The built-in deny list applies to hooks too — they spawn with the user's shell. Candidate for a unit test that exercises `runHooks` against a `FORBIDDEN_PATTERNS` sample.
+- **Don't make `runHooks` throw.** _Folklore:_ no mechanical check today. Every per-hook failure goes into the `errors` array; the agent loop must not crash on a misconfigured hook. A property test fuzzing hook configs and asserting "never throws" would lift this to E.
+- **Don't pass `process.env` directly to a hook subprocess.** _Folklore:_ no mechanical check today. Always go through `getSanitizedEnv(policy)`. The lift is the `SanitizedEnv` brand (Pattern 4) — the subprocess spawn would then require a `SanitizedEnv`, making raw `process.env` a compile error.
+
+Note on trust-and-confirm: trust prompts go through `trust.ts`, which integrates with the UI's permission flow. Adding a synchronous "wait for user confirmation" inside a hook fire blocks the agent loop's event pump; the established pattern is to gate trust _before_ the hook fires (at session start or first-use), not during.

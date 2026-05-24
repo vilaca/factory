@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import readline from 'readline';
 import path from 'path';
-import type { ToolContext, ToolDefinition, ToolHandler, ToolResult } from './types.js';
+import type { StandardToolHandler, ToolContext, ToolDefinition, ToolResult } from './types.js';
 import { TOOL_NAMES } from './types.js';
 import { assertPathAllowed, PathDenied } from '../security/paths.js';
 import { errorMessage } from '../utils/errors.js';
@@ -181,7 +181,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
 // the allowed roots even when permitted, so traversal attempts are
 // visible in the session log.
 
-export const readTool: ToolHandler = {
+export const readTool: StandardToolHandler = {
   name: TOOL_NAMES.Read,
   description: definition.function.description,
   category: 'read-only',

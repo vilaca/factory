@@ -9,7 +9,7 @@ The React-hook orchestrator (`useAgentLoop`) and the pure helpers it delegates t
 
 ## Files
 
-- `use-agent-loop.ts` — the hook. Wires React state + actions + the run loop into `AgentLoopApi`. Tagged with a TODO to extract action handlers; if you're adding a new action and the file already feels large, consider extracting alongside that change rather than after.
+- `use-agent-loop.ts` — the hook. Wires React state + actions + the run loop into `AgentLoopApi`.
 - `agent-loop-types.ts` — `RunRefs`, `AgentLoopApi`, `AgentLoopDeps`, `UseAgentLoopOptions`, `PermissionRequestState`, `RunState`. Read this first when touching anything here.
 - `init.ts` — pre-mount work: instantiate Conversation, PermissionManager, ContextManager, SessionLogger, FileCache, SkillsRegistry. Returns the seeded `RunRefs`.
 - `setup.ts` — post-mount work: prime the provider, wire the responses-chain ref, install the rotation prompt bridge.
@@ -38,22 +38,20 @@ When you're editing `use-agent-loop.ts` or its helpers, you'll see these names o
 | `cwd`                              | Bash `cd`, `/cwd` slash                                             | every tool execution + status bar                         |
 | `compactionTarget`                 | `/compaction-model` slash                                           | `compaction-resolver.ts`                                  |
 
-Don't introduce new ambient state at the hook level. If something needs to survive a render, put it on `RunRefs`.
+If something needs to survive a render, put it on `RunRefs`, not on a fresh `useRef` or `useState`. Re-deriving from `RunRefs` is fine; mirroring is not.
 
 ## Why two `compaction-resolver.ts` files
 
-There are two: `src/ui/agent-events/compaction-resolver.ts` (shared between headless + TUI) and `src/ui/tui/agent-loop/compaction-resolver.ts` (TUI-specific picker). This split is technical debt; if you touch either, consider whether they can be merged behind a single API.
+There are two: `src/ui/agent-events/compaction-resolver.ts` (shared between headless + TUI) and `src/ui/tui/agent-loop/compaction-resolver.ts` (TUI-specific picker). The split is a known seam — the shared file holds the pure resolution logic, the TUI file holds the picker wiring. A future cleanup can unify them behind one API.
 
 ## Invariants enforced in `test/unit/arch/modularity.test.ts`
 
-Inherits everything in `ui/tui/AGENTS.md`. The two relevant ones to keep in mind while editing here:
+Inherits everything in `ui/tui/AGENTS.md`. The most relevant rule when editing here:
 
-- `RunRefs` is the seat of all cross-render mutable state. Don't shadow it with a `useRef`.
-- Provider mint + capability read MUST be paired with `prime()` (cf880ed contract). `swap.ts` is the canonical site; if you mint a Provider elsewhere, route through `prime()`.
+- Provider mint + capability read MUST be paired with `prime()` — _enforced by arch test_ (cf880ed contract). `swap.ts` is the canonical site; if you mint a Provider elsewhere, route through `prime()`.
 
 ## Don't
 
-- **Don't call `runAgent` directly from a component or slash command.** Route through `processInput` / `runAgentLoopInternal` so the event-handler wiring is consistent.
-- **Don't mutate `RunRefs` from a React render.** Mutations happen in event handlers, action handlers, or post-render effects — never inside the render body.
-- **Don't add per-turn config knobs to `useAgentLoop` signatures.** Add them to `UseAgentLoopOptions` (seeded from `appOptions` in `src/index.ts`) so they flow through the same plumbing as everything else.
-- **Don't observe events by polling `RunRefs`.** New UI behavior on an `AgentEvent` belongs in `event-handler.ts`. New transient activity labels go through `setActivity` so the status bar surfaces them.
+- **Don't call `runAgent` directly from a component or slash command.** _Folklore:_ no mechanical check. Route through `processInput` / `runAgentLoopInternal` so the event-handler wiring is consistent. Candidate for an arch test forbidding `runAgent` imports outside `agent-loop/run-loop.ts`.
+- **Don't mutate `RunRefs` from a React render.** _Folklore:_ no mechanical check — TypeScript permits it. Mutations happen in event handlers, action handlers, or post-render effects, never inside the render body. The next regression on this is a hint that a lint rule on `RunRefs` writes inside render bodies would be worth the cost.
+- **Don't observe events by polling `RunRefs`.** _Folklore:_ no mechanical check. New UI behaviour on an `AgentEvent` belongs in `event-handler.ts`. New transient activity labels go through `setActivity` so the status bar surfaces them.

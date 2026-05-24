@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolHandler, ToolResult, ToolContext } from '../types.js';
+import type { StandardToolHandler, ToolDefinition, ToolResult, ToolContext } from '../types.js';
 import { TOOL_NAMES } from '../types.js';
 import { fetchUrl, isHtmlType, isPlainTextType } from './fetch.js';
 import { htmlToMarkdown } from './html-to-markdown.js';
@@ -109,7 +109,7 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   };
 }
 
-export const webFetchTool: ToolHandler = {
+export const webFetchTool: StandardToolHandler = {
   name: TOOL_NAMES.WebFetch,
   description: definition.function.description,
   category: 'read-only',

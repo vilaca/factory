@@ -105,8 +105,37 @@ export async function loadGlobalConfig(): Promise<Config> {
 // the dominant one (multiple TUI tabs, background promises).
 let configMutex: Promise<unknown> = Promise.resolve();
 
-function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
-  const next = configMutex.then(fn, fn);
+/**
+ * Type-level proof that the holder is executing inside `withConfigLock`.
+ * The constructor is private, so the only way to obtain one is to be
+ * invoked by `withConfigLock` (which mints one per critical section).
+ *
+ * Every writer that touches the on-disk config file must accept a
+ * `ConfigWriteCapability` parameter. A future helper added inside
+ * this file that forgets to go through `withConfigLock` cannot obtain
+ * a capability and so cannot call any writer — the omission becomes a
+ * compile error, not a runtime race.
+ *
+ * Lifts the f848472 contract from a load+save arch test pattern to a
+ * type-level guarantee for in-module writers.
+ */
+class ConfigWriteCapability {
+  // The constructor is intentionally private so other code in this
+  // module cannot mint one directly — only `withConfigLock` can.
+  private constructor() {}
+  /**
+   * Internal factory used solely by `withConfigLock`. Not exported.
+   * The double-underscore naming is a reader hint; the access gate
+   * is the private constructor + module scope.
+   */
+  static __mint(): ConfigWriteCapability {
+    return new (ConfigWriteCapability as unknown as { new (): ConfigWriteCapability })();
+  }
+}
+
+function withConfigLock<T>(fn: (cap: ConfigWriteCapability) => Promise<T>): Promise<T> {
+  const run = (): Promise<T> => fn(ConfigWriteCapability.__mint());
+  const next = configMutex.then(run, run);
   // Swallow rejections on the chain so one failed write doesn't poison
   // every subsequent call. Each caller still observes its own rejection
   // through the returned promise.
@@ -115,6 +144,7 @@ function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function writeMergedConfig(
+  _cap: ConfigWriteCapability,
   filePath: string,
   merged: Record<string, unknown>,
 ): Promise<Config> {
@@ -152,14 +182,14 @@ async function writeMergedConfig(
  * experimental flags, …).
  */
 export async function saveGlobalConfig(config: Partial<Config>): Promise<Config> {
-  return withConfigLock(async () => {
+  return withConfigLock(async cap => {
     const filePath = getGlobalConfigFile();
     const existingRaw = (await readJsonFile(filePath)) ?? {};
     // Spread order: existingRaw first (preserves unknown/future keys), then config
     // (applies our updates). Validate only to catch type errors, then write the
     // merged raw object so unknown keys are not silently dropped.
     const merged = { ...existingRaw, ...config };
-    return writeMergedConfig(filePath, merged);
+    return writeMergedConfig(cap, filePath, merged);
   });
 }
 
@@ -178,13 +208,13 @@ export async function saveGlobalConfig(config: Partial<Config>): Promise<Config>
 export async function updateGlobalConfig(
   mutate: (current: Config) => Partial<Config> | Promise<Partial<Config>>,
 ): Promise<Config> {
-  return withConfigLock(async () => {
+  return withConfigLock(async cap => {
     const filePath = getGlobalConfigFile();
     const existingRaw = (await readJsonFile(filePath)) ?? {};
     const validated = validateConfig(existingRaw, filePath);
     const updates = await mutate(validated);
     const merged = { ...existingRaw, ...updates };
-    return writeMergedConfig(filePath, merged);
+    return writeMergedConfig(cap, filePath, merged);
   });
 }
 

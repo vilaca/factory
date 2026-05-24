@@ -1,10 +1,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import type { ToolCallMessage } from '../../../../../src/providers/types.js';
+import type { ToolResult } from '../../../../../src/tools/types.js';
 import { Conversation } from '../../../../../src/core/context/conversation.js';
 import { PermissionManager } from '../../../../../src/security/permissions.js';
 import { executeToolCall } from '../../../../../src/core/agent/tool-calls/run-tool-calls-execute.js';
-import { callOf, collect, fakeTool, makeCtx, makeRegistry } from './run-tool-calls-fixtures.js';
+import {
+  callOf,
+  collect,
+  fakeBashTool,
+  fakeTool,
+  makeCtx,
+  makeRegistry,
+} from './run-tool-calls-fixtures.js';
 
 const tc = (name: string, args: Record<string, unknown> = {}, id = 'tc'): ToolCallMessage =>
   callOf(name, args, id);
@@ -58,7 +66,7 @@ describe('executeToolCall — schema validation', () => {
           },
         },
       },
-      async execute(args: Record<string, unknown>) {
+      async execute(args: Record<string, unknown>): Promise<ToolResult> {
         calls.push(args);
         return { success: true, output: 'ok' };
       },
@@ -287,8 +295,10 @@ describe('executeToolCall — execution', () => {
   });
 
   it('propagates cwdAfter from Bash into ctx.cwdRef', async () => {
-    const tool = fakeTool({
-      name: 'Bash',
+    // Uses fakeBashTool — the type system forbids non-Bash handlers
+    // from returning `cwdAfter`, so a plain fakeTool would not compile
+    // here. That compile-time guarantee is the Pattern 2 lift.
+    const tool = fakeBashTool({
       execute: () => ({ success: true, output: 'ok', cwdAfter: '/tmp/new' }),
     });
     const permissions = new PermissionManager();

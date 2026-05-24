@@ -24,10 +24,13 @@ Model Context Protocol client. Connects to external MCP servers as child process
 
 - `mcp/**` must not depend on `ui/**`. The renderer talks to MCP tools through the same `ToolHandler` surface as built-in tools.
 - `ui/**` must not depend on `mcp/**` either. The arch test is symmetric — neither side knows about the other.
+- **`@modelcontextprotocol/sdk` imports are scoped to `mcp/client.ts` and `mcp/adapter.ts`.** Any other file in `src/**` that imports the SDK fails the `MCP SDK scoping` arch test. The SDK surface stops at the adapter boundary; the rest of the codebase only sees `ToolHandler`/`McpManager`. Bumping the SDK is then a 2-file change instead of an N-file refactor.
 
 ## Don't
 
-- **Don't bypass `adaptMcpTool`** by exposing the raw `Client` to other layers. The wrapper is the boundary where MCP-specific failure modes (transport errors, malformed tool responses) become `ToolResult` failures the agent loop already knows how to handle.
-- **Don't import `@modelcontextprotocol/sdk` outside `client.ts` / `adapter.ts`.** It's a network-shaped dependency; the UI arch test bans it from `ui/**` explicitly.
-- **Don't move `McpManager` construction into a global singleton.** Each session is meant to potentially have its own MCP scope; the per-session registry pattern from `tools/` extends naturally to MCP servers.
-- **Don't add an `http` / `sse` transport without first wiring sandboxing.** stdio is the only transport today because the spawned process inherits the path/env policy via `sanitizeEnv` (eventually). An HTTP transport bypasses that gate by definition.
+- **Don't bypass `adaptMcpTool`** by exposing the raw `Client` to other layers. _Enforced by arch test:_ the SDK-scoping rule above means `Client` cannot escape `mcp/` because no other file may import it. The wrapper is the boundary where MCP-specific failure modes (transport errors, malformed tool responses) become `ToolResult` failures the agent loop already knows how to handle.
+
+## Notes on future changes
+
+- **Keep `McpManager` per-session, not global.** The class is constructed in `src/index.ts` and threaded through `appOptions`. Each session can potentially have its own MCP scope (different servers per project, per profile, etc.); a process-global singleton forecloses that. No mechanical check enforces this today — if a singleton pattern starts to creep in, an arch test forbidding `McpManager` construction outside `src/index.ts` is cheap to add.
+- **A non-stdio transport needs sandboxing first.** stdio is the only transport today because the spawned process inherits the path/env policy via `sanitizeEnv`. An HTTP / SSE transport reaches over the network from the host process directly, bypassing that gate. Wire the appropriate sandbox (outbound-host allowlist, request body inspection) before adding a transport whose endpoint isn't a child process under our control.
