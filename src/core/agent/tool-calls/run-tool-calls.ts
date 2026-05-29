@@ -12,10 +12,7 @@ import { executeToolCall } from './run-tool-calls-execute.js';
 import { mergeAsyncGenerators } from './merge-async-generators.js';
 import { AsyncMutex } from './async-mutex.js';
 import type { ToolLoopContext } from './types.js';
-import {
-  CORRECTOR_ERROR_SNIPPET_CHARS,
-  CORRECTOR_REASON_PREVIEW_CHARS,
-} from './constants.js';
+import { CORRECTOR_ERROR_SNIPPET_CHARS, CORRECTOR_REASON_PREVIEW_CHARS } from './constants.js';
 
 export type { ToolLoopContext };
 
