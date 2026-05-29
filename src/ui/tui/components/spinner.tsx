@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text } from 'ink';
+import { ELAPSED_SHOW_AFTER_MS, ELAPSED_TICK_MS, SPINNER_FRAME_MS } from './constants.js';
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -18,10 +19,10 @@ export function Spinner({ label, color }: { label: string; color: string }): Rea
   useEffect(() => {
     const frameId = setInterval(() => {
       setFrame(f => (f + 1) % SPINNER_FRAMES.length);
-    }, 80);
+    }, SPINNER_FRAME_MS);
     const elapsedId = setInterval(() => {
       setElapsed(Date.now() - startedAt.current);
-    }, 1000);
+    }, ELAPSED_TICK_MS);
     return () => {
       clearInterval(frameId);
       clearInterval(elapsedId);
@@ -31,7 +32,7 @@ export function Spinner({ label, color }: { label: string; color: string }): Rea
     <Box>
       <Text color={color}>{SPINNER_FRAMES[frame]} </Text>
       <Text dimColor>{label}</Text>
-      {elapsed >= 1000 && <Text dimColor>{` ${formatElapsed(elapsed)}`}</Text>}
+      {elapsed >= ELAPSED_SHOW_AFTER_MS && <Text dimColor>{` ${formatElapsed(elapsed)}`}</Text>}
     </Box>
   );
 }
