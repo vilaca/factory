@@ -6,6 +6,7 @@ import type { ToolRegistry } from '../../tools/registry.js';
 import { Session } from './Session.js';
 import { TabsProvider } from './tabs/TabsContext.js';
 import { useTabs } from './tabs/use-tabs.js';
+import { EXIT_GRACE_MS } from './constants.js';
 
 // F1–F12 escape sequences. Most terminals send xterm-style for F1-F4
 // (ESC O letter) and CSI for F5+; the bracket-style F1-F4 forms
@@ -105,7 +106,7 @@ function TabbedApp(props: AppProps): React.ReactElement {
         const api = registry.get(activeId);
         api?.abort();
         exit();
-        setTimeout(() => process.exit(0), 1000).unref();
+        setTimeout(() => process.exit(0), EXIT_GRACE_MS).unref();
         return;
       }
       const api = registry.get(activeId);

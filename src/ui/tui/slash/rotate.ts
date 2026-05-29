@@ -8,6 +8,7 @@ import {
   handleRefresh,
   handleRemove,
 } from './rotate-subcommands.js';
+import { ROTATE_KEY_PAD } from '../constants.js';
 
 /** No-arg `/rotate` — show the chain that would fire for the active selection. */
 function showChain(agent: AgentLoopApi): void {
@@ -50,7 +51,7 @@ function showChain(agent: AgentLoopApi): void {
       const list = refs.rotation.overrides[k] ?? [];
       lines.push({
         level: 'info',
-        text: `  ${k.padEnd(40)} (${list.length} entr${list.length === 1 ? 'y' : 'ies'})`,
+        text: `  ${k.padEnd(ROTATE_KEY_PAD)} (${list.length} entr${list.length === 1 ? 'y' : 'ies'})`,
       });
     }
   }

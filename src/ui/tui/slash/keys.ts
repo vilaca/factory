@@ -3,6 +3,7 @@ import { listStatsForProvider } from '../../../core/session/key-stats.js';
 import { keyFingerprint, listKeys } from '../../../core/auth/credentials.js';
 import { descriptorByAlias } from '../../../providers/registry.js';
 import { loadGlobalConfig } from '../../../core/config/index.js';
+import { KEYS_LABEL_PAD, KEYS_USAGE_PAD } from '../constants.js';
 
 function relativeAge(ts: string | undefined): string {
   if (!ts) return 'never';
@@ -75,7 +76,7 @@ export async function dispatchKeys(arg: string, agent: AgentLoopApi): Promise<vo
     const lastOk = s?.lastSuccessAt ? `last ok: ${relativeAge(s.lastSuccessAt)}` : '';
     const lastFail = s?.lastFailureAt ? `last ⚠: ${relativeAge(s.lastFailureAt)}` : '';
     const tail = [cachePart, lastOk, lastFail].filter(Boolean).join('  ');
-    const text = `  ${labelPart.padEnd(40)}  ${usagePart.padEnd(18)}${tail ? '  ' + tail : ''}`;
+    const text = `  ${labelPart.padEnd(KEYS_LABEL_PAD)}  ${usagePart.padEnd(KEYS_USAGE_PAD)}${tail ? '  ' + tail : ''}`;
     lines.push({ level: warnCount > 0 ? 'warn' : 'info', text });
   }
   lines.push({ level: 'info', text: '' });
