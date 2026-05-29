@@ -2,6 +2,12 @@ import fs from 'fs/promises';
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { formatTokenCount } from '../../../utils/format-tokens.js';
+import {
+  LOW_CACHE_HIT_WARN_PCT,
+  LOW_CACHE_MIN_TURNS,
+  MAX_LARGEST_TOOL_RESULTS,
+  TOKENS_PER_CHAR_ESTIMATE,
+} from './stats-constants.js';
 
 interface SessionStats {
   turns: number;
@@ -32,7 +38,6 @@ interface SessionLogEntry {
   event?: AgentEvent;
 }
 
-const TOKENS_PER_CHAR = 0.25;
 
 /** /stats — read the current session JSONL and report cache + cost
  *  diagnostics. Lives next to /keys: the JSONL is already on disk
@@ -105,13 +110,13 @@ function parseSession(raw: string): SessionStats {
       const output: string = ev.result?.output ?? '';
       toolResults.push({
         tool: ev.toolName ?? '<unknown>',
-        tokens: Math.round(output.length * TOKENS_PER_CHAR),
+        tokens: Math.round(output.length * TOKENS_PER_CHAR_ESTIMATE),
       });
     }
   }
 
   toolResults.sort((a, b) => b.tokens - a.tokens);
-  stats.largestToolResults = toolResults.slice(0, 5);
+  stats.largestToolResults = toolResults.slice(0, MAX_LARGEST_TOOL_RESULTS);
   return stats;
 }
 
@@ -161,7 +166,7 @@ function formatStats(
 
   if (totalInput === 0) {
     lines.push({ level: 'warn', text: '  No usage recorded yet — run a turn first.' });
-  } else if (overallHit < 30 && s.turns >= 3) {
+  } else if (overallHit < LOW_CACHE_HIT_WARN_PCT && s.turns >= LOW_CACHE_MIN_TURNS) {
     lines.push({
       level: 'warn',
       text: '  ⚠ Low cache hit rate — provider may not support caching, or prefix is volatile.',
