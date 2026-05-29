@@ -3,6 +3,10 @@ import type { ToolRegistry } from '../../../tools/registry.js';
 import { parseFirstJsonObject } from '../../../utils/json-extract.js';
 import { errorMessage, isError } from '../../../utils/errors.js';
 import * as fs from 'fs/promises';
+import {
+  CORRECTOR_FILE_READ_CAP_BYTES,
+  CORRECTOR_FILE_SNIPPET_CHARS,
+} from './constants.js';
 
 const SYSTEM_PROMPT = `You are a tool-call corrector. The main coding agent attempted a tool call that failed. Given the original call, the error, and any relevant context, produce a single corrected tool call.
 
@@ -124,8 +128,8 @@ function buildUserMessage(request: CorrectionRequest, toolDescriptions: string):
 
   if (request.fileContent) {
     const truncated =
-      request.fileContent.content.length > 8000
-        ? request.fileContent.content.slice(0, 8000) + '\n...(truncated)'
+      request.fileContent.content.length > CORRECTOR_FILE_SNIPPET_CHARS
+        ? request.fileContent.content.slice(0, CORRECTOR_FILE_SNIPPET_CHARS) + '\n...(truncated)'
         : request.fileContent.content;
     parts.push(`\n## Current content of ${request.fileContent.path}`);
     parts.push('```');
@@ -158,12 +162,11 @@ export async function readFileForCorrector(
   const args = call.function?.arguments as Record<string, unknown> | undefined;
   const path = typeof args?.file_path === 'string' ? args.file_path : null;
   if (!path) return undefined;
-  const READ_CAP_BYTES = 32 * 1024;
   let handle: fs.FileHandle | undefined;
   try {
     handle = await fs.open(path, 'r');
-    const buf = Buffer.alloc(READ_CAP_BYTES);
-    const { bytesRead } = await handle.read(buf, 0, READ_CAP_BYTES, 0);
+    const buf = Buffer.alloc(CORRECTOR_FILE_READ_CAP_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, CORRECTOR_FILE_READ_CAP_BYTES, 0);
     return { path, content: buf.toString('utf-8', 0, bytesRead) };
   } catch {
     return undefined;
