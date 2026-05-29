@@ -4,10 +4,7 @@ import type { Provider, ProviderCapabilities, ChatChunk } from '../../../src/pro
 import type { AgentEvent } from '../../../src/core/agent/types.js';
 import { createDelegateTool } from '../../../src/tools/delegate.js';
 import type { runAgent } from '../../../src/core/agent/run-agent.js';
-import {
-  runSubagent,
-  SUBAGENT_SYSTEM_PROMPT,
-} from '../../../src/core/subagent/runner.js';
+import { runSubagent, SUBAGENT_SYSTEM_PROMPT } from '../../../src/core/subagent/runner.js';
 import { buildSubagentRegistry } from '../../../src/tools/index.js';
 
 type RunAgentFn = typeof runAgent;
@@ -119,7 +116,13 @@ describe('Delegate tool', () => {
 
     return Promise.resolve().then(async () => {
       // Explicit override wins
-      await runSubagent({ provider: stubProvider(), model: 'override', task: 't', runner, registry: buildSubagentRegistry() });
+      await runSubagent({
+        provider: stubProvider(),
+        model: 'override',
+        task: 't',
+        runner,
+        registry: buildSubagentRegistry(),
+      });
       assert.strictEqual(calls[0], 'override');
     });
   });

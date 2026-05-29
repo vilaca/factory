@@ -38,7 +38,6 @@ interface SessionLogEntry {
   event?: AgentEvent;
 }
 
-
 /** /stats — read the current session JSONL and report cache + cost
  *  diagnostics. Lives next to /keys: the JSONL is already on disk
  *  (see `core/session/session-log.ts`), so we don't need any new persistence. */
