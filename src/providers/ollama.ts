@@ -179,18 +179,8 @@ export class OllamaProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const tier = estimateOllamaModelTier(model);
-    const cachedContextWindow = this.contextWindowCache.get(model);
-    const contextWindow = cachedContextWindow ?? estimateContextWindow(model);
-    if (cachedContextWindow === undefined) {
-      warnHardcodedEstimateFallback({
-        provider: 'Ollama',
-        model,
-        fields: ['contextWindow'],
-        reason: 'model metadata cache miss (primeModelCache/getModelInfo not available)',
-      });
-    }
     return {
-      contextWindow,
+      contextWindow: this.contextWindowCache.get(model) ?? estimateContextWindow(model),
       maxOutputTokens: 4096,
       toolSupport: tier === 'weak' ? 'basic' : 'native',
       parallelToolCalls: false,
