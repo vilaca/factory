@@ -14,7 +14,7 @@ import { appendProviderLog } from '../../utils/provider-log.js';
 import { GoogleAiStudioAuthManager } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 import { filterChatModels } from '../list-models-filter.js';
-import { normalizeBaseUrl } from '../shared.js';
+import { normalizeBaseUrl, warnHardcodedEstimateFallback } from '../shared.js';
 
 const DEFAULT_OPENAI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const PROVIDER_NAME = 'Google AI Studio';
@@ -87,10 +87,32 @@ export class GoogleAiStudioProvider implements Provider {
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
     const cached = this.modelsCache?.find(item => item.baseModelId === model);
+    const fallbackFields: string[] = [];
+
+    const contextWindow = cached?.inputTokenLimit ?? estimateGoogleAiStudioContextWindow(lower);
+    if (typeof cached?.inputTokenLimit !== 'number') {
+      fallbackFields.push('contextWindow');
+    }
+
+    const maxOutputTokens = cached?.outputTokenLimit ?? estimateGoogleAiStudioMaxOutput(lower);
+    if (typeof cached?.outputTokenLimit !== 'number') {
+      fallbackFields.push('maxOutputTokens');
+    }
+
+    if (fallbackFields.length > 0) {
+      warnHardcodedEstimateFallback({
+        provider: PROVIDER_NAME,
+        model,
+        fields: fallbackFields,
+        reason: cached
+          ? 'catalog metadata did not include full token limits'
+          : 'model not found in cached catalog',
+      });
+    }
 
     return {
-      contextWindow: cached?.inputTokenLimit ?? estimateGoogleAiStudioContextWindow(lower),
-      maxOutputTokens: cached?.outputTokenLimit ?? estimateGoogleAiStudioMaxOutput(lower),
+      contextWindow,
+      maxOutputTokens,
       toolSupport: 'native',
       parallelToolCalls: true,
       streaming: true,

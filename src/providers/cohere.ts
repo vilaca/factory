@@ -9,7 +9,13 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from './types.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl, parseToolArgs } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  parseToolArgs,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.cohere.com';
 const MISSING_TOKEN_ERROR =
@@ -61,8 +67,20 @@ export class CohereProvider implements Provider {
     const match = this.modelsCache?.find(item => item.name === model);
     const supportsTools = supportsToolsByName(lower);
 
+    const contextWindow = match?.context_length ?? estimateCohereContextWindow(lower);
+    if (typeof match?.context_length !== 'number') {
+      warnHardcodedEstimateFallback({
+        provider: 'Cohere',
+        model,
+        fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+        reason: match
+          ? 'catalog metadata did not include context length; remaining capabilities use model-name heuristics'
+          : 'model not found in cached catalog; capabilities use model-name heuristics',
+      });
+    }
+
     return {
-      contextWindow: match?.context_length ?? estimateCohereContextWindow(lower),
+      contextWindow,
       maxOutputTokens: estimateCohereMaxOutput(lower),
       toolSupport: supportsTools ? 'native' : 'none',
       parallelToolCalls: supportsTools,

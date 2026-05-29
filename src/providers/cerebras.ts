@@ -15,7 +15,12 @@ import {
   sendOpenAiChat,
   streamOpenAiChat,
 } from './openai/index.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.cerebras.ai/v1';
 const MISSING_TOKEN_ERROR =
@@ -61,6 +66,12 @@ export class CerebrasProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
+    warnHardcodedEstimateFallback({
+      provider: 'Cerebras',
+      model,
+      fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+      reason: 'catalog does not publish full capability limits; using model-name heuristics',
+    });
     return {
       contextWindow: estimateContextWindow(lower),
       maxOutputTokens: estimateMaxOutput(lower),

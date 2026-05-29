@@ -11,7 +11,7 @@ import type {
 import { CopilotAuthManager, inferCopilotCredentialKind } from './auth.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
 import { filterChatModels } from '../list-models-filter.js';
-import { formatTokenCount } from '../shared.js';
+import { formatTokenCount, warnHardcodedEstimateFallback } from '../shared.js';
 
 const PROVIDER_NAME = 'GitHub Copilot';
 const FALLBACK_MODELS = ['gpt-4.1', 'gpt-4o', 'claude-sonnet-4', 'gemini-2.5-pro', 'o4-mini'];
@@ -65,6 +65,12 @@ export class CopilotProvider implements Provider {
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
     const tier = estimateCopilotModelTier(lower);
+    warnHardcodedEstimateFallback({
+      provider: PROVIDER_NAME,
+      model,
+      fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+      reason: 'Copilot model API does not expose token limits or tier metadata',
+    });
     return {
       contextWindow: estimateCopilotContextWindow(lower),
       maxOutputTokens: lower.includes('mini') || lower.includes('haiku') ? 8192 : 16384,

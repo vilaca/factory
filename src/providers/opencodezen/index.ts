@@ -24,7 +24,7 @@ import {
   unsupportedOpenCodeZenRouteError,
 } from './models.js';
 import { filterChatModels } from '../list-models-filter.js';
-import { bearerAuth } from '../shared.js';
+import { bearerAuth, warnHardcodedEstimateFallback } from '../shared.js';
 import { chatAnthropicNoStream, chatAnthropicStream } from './anthropic.js';
 import { chatGoogleNoStream, chatGoogleStream } from './google.js';
 
@@ -65,9 +65,18 @@ export class OpenCodeZenProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
-    const route =
-      this.modelsCache?.find(item => item.id === model)?.route ?? detectOpenCodeZenRoute(model);
+    const cached = this.modelsCache?.find(item => item.id === model);
+    const route = cached?.route ?? detectOpenCodeZenRoute(model);
     const supportsTools = route !== 'openai-responses' && supportsToolsByName(lower);
+
+    if (!cached) {
+      warnHardcodedEstimateFallback({
+        provider: PROVIDER_NAME,
+        model,
+        fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+        reason: 'model not found in cached catalog',
+      });
+    }
 
     return {
       contextWindow: estimateContextWindow(lower),
