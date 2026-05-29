@@ -6,6 +6,7 @@ import { dispatchRotate } from './rotate.js';
 import { dispatchKeys } from './keys.js';
 import { dispatchStats } from './stats.js';
 import { dispatchHooks } from './hooks.js';
+import { EXIT_GRACE_MS } from '../constants.js';
 
 interface SlashCommandContext {
   agent: AgentLoopApi;
@@ -37,7 +38,7 @@ function handleExit(_arg: string, ctx: SlashCommandContext): void {
   // If anything (an unflushed stream, a stubborn provider HTTP request, a
   // still-running tool subprocess) keeps the event loop alive past a grace
   // period, force the exit.
-  setTimeout(() => process.exit(0), 1000).unref();
+  setTimeout(() => process.exit(0), EXIT_GRACE_MS).unref();
 }
 
 function handleNew(arg: string, { agent, tabs }: SlashCommandContext): void {
