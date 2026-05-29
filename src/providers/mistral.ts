@@ -16,7 +16,12 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels, matchedPattern } from './list-models-filter.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.mistral.ai/v1';
 const CODESTRAL_BASE_URL = 'https://codestral.mistral.ai/v1';
@@ -94,8 +99,20 @@ export class MistralProvider implements Provider {
     const toolSupport = cached?.capabilities?.function_calling ?? supportsToolsByName(lower);
     const vision = cached?.capabilities?.vision ?? supportsVisionByName(lower);
 
+    const contextWindow = cached?.max_context_length ?? estimateMistralContextWindow(lower);
+    if (typeof cached?.max_context_length !== 'number') {
+      warnHardcodedEstimateFallback({
+        provider: this.displayName,
+        model,
+        fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+        reason: cached
+          ? 'catalog metadata did not include context length; remaining capabilities use model-name heuristics'
+          : 'model not found in cached catalog; capabilities use model-name heuristics',
+      });
+    }
+
     return {
-      contextWindow: cached?.max_context_length ?? estimateMistralContextWindow(lower),
+      contextWindow,
       maxOutputTokens: estimateMistralMaxOutput(lower),
       toolSupport: toolSupport ? 'native' : 'none',
       parallelToolCalls: toolSupport,

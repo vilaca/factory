@@ -16,7 +16,12 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 const PROVIDER_NAME = 'OpenRouter';
@@ -89,12 +94,35 @@ export class OpenRouterProvider implements Provider {
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
     const cached = this.modelsCache?.find(item => item.id === model);
+    const fallbackFields: string[] = [];
+
     const contextWindow =
       cached?.top_provider?.context_length ??
       cached?.context_length ??
       estimateOpenRouterContextWindow(lower);
+    if (
+      typeof cached?.top_provider?.context_length !== 'number' &&
+      typeof cached?.context_length !== 'number'
+    ) {
+      fallbackFields.push('contextWindow');
+    }
+
     const maxOutputTokens =
       cached?.top_provider?.max_completion_tokens ?? estimateOpenRouterMaxOutput(lower);
+    if (typeof cached?.top_provider?.max_completion_tokens !== 'number') {
+      fallbackFields.push('maxOutputTokens');
+    }
+
+    if (fallbackFields.length > 0) {
+      warnHardcodedEstimateFallback({
+        provider: PROVIDER_NAME,
+        model,
+        fields: fallbackFields,
+        reason: cached
+          ? 'catalog metadata did not include full token limits'
+          : 'model not found in cached catalog',
+      });
+    }
 
     return {
       contextWindow,

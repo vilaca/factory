@@ -16,7 +16,12 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
 const PROVIDER_NAME = 'Vercel AI Gateway';
@@ -64,9 +69,32 @@ export class VercelProvider implements Provider {
     const lower = model.toLowerCase();
     const cached = this.modelsCache?.find(item => item.id === model);
     const supportsTools = cached?.tags?.includes('tool-use') ?? true;
+    const fallbackFields: string[] = [];
+
+    const contextWindow = cached?.context_window ?? estimateContextWindow(lower);
+    if (typeof cached?.context_window !== 'number') {
+      fallbackFields.push('contextWindow');
+    }
+
+    const maxOutputTokens = cached?.max_tokens ?? estimateMaxOutput(lower);
+    if (typeof cached?.max_tokens !== 'number') {
+      fallbackFields.push('maxOutputTokens');
+    }
+
+    if (fallbackFields.length > 0) {
+      warnHardcodedEstimateFallback({
+        provider: PROVIDER_NAME,
+        model,
+        fields: fallbackFields,
+        reason: cached
+          ? 'catalog metadata did not include full token limits'
+          : 'model not found in cached catalog',
+      });
+    }
+
     return {
-      contextWindow: cached?.context_window ?? estimateContextWindow(lower),
-      maxOutputTokens: cached?.max_tokens ?? estimateMaxOutput(lower),
+      contextWindow,
+      maxOutputTokens,
       toolSupport: supportsTools ? 'native' : 'none',
       parallelToolCalls: supportsTools,
       streaming: true,

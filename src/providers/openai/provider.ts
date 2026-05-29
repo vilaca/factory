@@ -17,7 +17,7 @@ import {
   streamOpenAiChat,
   streamOpenAiResponses,
 } from './index.js';
-import { bearerAuth, normalizeBaseUrl } from '../shared.js';
+import { bearerAuth, normalizeBaseUrl, warnHardcodedEstimateFallback } from '../shared.js';
 import { filterOpenAiCatalog, type OpenAiModel } from './catalog-filter.js';
 import { buildCapabilities, buildModelDetail, buildModelWarning } from './model-metadata.js';
 import {
@@ -27,6 +27,7 @@ import {
   estimateModelTier,
   isReasoningModel,
   isResponsesApiOnly,
+  lookupFamily,
   supportsParallelToolCalls,
   supportsToolsByName,
 } from './model-families.js';
@@ -65,6 +66,14 @@ export class OpenAIProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
+    if (!lookupFamily(lower)) {
+      warnHardcodedEstimateFallback({
+        provider: PROVIDER_NAME,
+        model,
+        fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+        reason: 'model family not recognized; using generic defaults',
+      });
+    }
     return {
       contextWindow: estimateContextWindow(lower),
       maxOutputTokens: estimateMaxOutput(lower),

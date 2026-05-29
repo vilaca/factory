@@ -11,7 +11,12 @@ import type {
 } from './types.js';
 import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_API_ROOT = 'https://api.cloudflare.com/client/v4';
 const PROVIDER_NAME = 'Cloudflare Workers AI';
@@ -79,8 +84,20 @@ export class WorkersAiProvider implements Provider {
     const supportsVision = match?.supportsVision ?? supportsVisionByName(lower);
     const supportsReasoning = match?.supportsReasoning ?? supportsReasoningByName(lower);
 
+    const contextWindow = match?.contextWindow ?? estimateWorkersAiContextWindow(lower);
+    if (typeof match?.contextWindow !== 'number') {
+      warnHardcodedEstimateFallback({
+        provider: PROVIDER_NAME,
+        model,
+        fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+        reason: match
+          ? 'catalog metadata did not include context length; remaining capabilities use model-name heuristics'
+          : 'model not found in cached catalog; capabilities use model-name heuristics',
+      });
+    }
+
     return {
-      contextWindow: match?.contextWindow ?? estimateWorkersAiContextWindow(lower),
+      contextWindow,
       maxOutputTokens: estimateWorkersAiMaxOutput(lower),
       toolSupport: supportsTools ? 'native' : 'none',
       parallelToolCalls: supportsTools,

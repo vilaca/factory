@@ -9,7 +9,7 @@ import type {
   ModelTier,
 } from './types.js';
 import { errorMessage, makeAbortError } from '../utils/errors.js';
-import { parseToolArgs } from './shared.js';
+import { parseToolArgs, warnHardcodedEstimateFallback } from './shared.js';
 import {
   mergeStreamedToolCalls,
   finalizeToolCalls,
@@ -81,6 +81,12 @@ export class HuggingFaceProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const tier = estimateHfModelTier(model);
+    warnHardcodedEstimateFallback({
+      provider: 'HuggingFace',
+      model,
+      fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+      reason: 'capabilities are inferred from model-name heuristics',
+    });
     return {
       contextWindow: estimateHfContextWindow(model),
       maxOutputTokens: 4096,

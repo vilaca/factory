@@ -16,7 +16,12 @@ import {
   streamOpenAiChat,
 } from './openai/index.js';
 import { filterChatModels, matchedPattern } from './list-models-filter.js';
-import { bearerAuth, formatTokenCount, normalizeBaseUrl } from './shared.js';
+import {
+  bearerAuth,
+  formatTokenCount,
+  normalizeBaseUrl,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 const PROVIDER_NAME = 'Groq';
@@ -58,6 +63,12 @@ export class GroqProvider implements Provider {
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
     const supportsTools = supportsToolsByName(lower);
+    warnHardcodedEstimateFallback({
+      provider: PROVIDER_NAME,
+      model,
+      fields: ['contextWindow', 'maxOutputTokens', 'modelTier'],
+      reason: 'catalog does not publish token limits; using model-name heuristics',
+    });
     return {
       contextWindow: estimateContextWindow(lower),
       maxOutputTokens: estimateMaxOutput(lower),

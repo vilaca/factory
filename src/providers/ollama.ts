@@ -11,7 +11,12 @@ import type {
   ModelInfo,
 } from './types.js';
 import { errorCode, errorMessage, isError, makeAbortError } from '../utils/errors.js';
-import { resolveSampling, resolveThinking, type ResolvedSampling } from './shared.js';
+import {
+  resolveSampling,
+  resolveThinking,
+  type ResolvedSampling,
+  warnHardcodedEstimateFallback,
+} from './shared.js';
 import { discardThinkTags } from '../utils/think-tags.js';
 import {
   buildPromptModeToolPreamble,
@@ -174,8 +179,18 @@ export class OllamaProvider implements Provider {
 
   getCapabilities(model: string): ProviderCapabilities {
     const tier = estimateOllamaModelTier(model);
+    const cachedContextWindow = this.contextWindowCache.get(model);
+    const contextWindow = cachedContextWindow ?? estimateContextWindow(model);
+    if (cachedContextWindow === undefined) {
+      warnHardcodedEstimateFallback({
+        provider: 'Ollama',
+        model,
+        fields: ['contextWindow'],
+        reason: 'model metadata cache miss (primeModelCache/getModelInfo not available)',
+      });
+    }
     return {
-      contextWindow: this.contextWindowCache.get(model) ?? estimateContextWindow(model),
+      contextWindow,
       maxOutputTokens: 4096,
       toolSupport: tier === 'weak' ? 'basic' : 'native',
       parallelToolCalls: false,
@@ -190,7 +205,15 @@ export class OllamaProvider implements Provider {
    *  primeModelCache failed). Sending a `num_ctx` larger than the model's
    *  configured context overflows ollama server-side. */
   private resolveContextWindow(model: string): number {
-    return this.contextWindowCache.get(model) ?? estimateContextWindow(model);
+    const cachedContextWindow = this.contextWindowCache.get(model);
+    if (cachedContextWindow !== undefined) return cachedContextWindow;
+    warnHardcodedEstimateFallback({
+      provider: 'Ollama',
+      model,
+      fields: ['contextWindow'],
+      reason: 'model metadata cache miss (primeModelCache/getModelInfo not available)',
+    });
+    return estimateContextWindow(model);
   }
 
   /** Common request-builder for `chat` / `chatNoStream`. Pulls the

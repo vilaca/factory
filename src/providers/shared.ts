@@ -1,5 +1,6 @@
 import type { ChatOptions } from './types.js';
 import { applySamplingDefaults, getSamplingDefaults } from './sampling-defaults.js';
+import { appendProviderLog } from '../utils/provider-log.js';
 
 /** Strip trailing slashes from a base URL so callers can append paths
  * without worrying about double slashes. */
@@ -26,6 +27,38 @@ export function parseToolArgs(raw?: string): Record<string, unknown> {
 }
 
 export { formatTokenCount } from '../utils/format-tokens.js';
+
+const emittedHardcodedEstimateWarnings = new Set<string>();
+
+export function warnHardcodedEstimateFallback(opts: {
+  provider: string;
+  model: string;
+  fields: readonly string[];
+  reason: string;
+}): void {
+  const model = opts.model;
+  const fields = [...opts.fields].sort();
+  if (fields.length === 0) return;
+  const key = `${opts.provider}::${model.toLowerCase()}::${fields.join(',')}::${opts.reason}`;
+  if (emittedHardcodedEstimateWarnings.has(key)) return;
+  emittedHardcodedEstimateWarnings.add(key);
+
+  const detail = JSON.stringify({ model, fields, reason: opts.reason });
+  appendProviderLog({
+    provider: opts.provider.toLowerCase().replace(/\s+/g, ''),
+    category: 'diagnostic',
+    action: 'hardcoded-estimate-fallback',
+    detail,
+  });
+
+  try {
+    process.stderr.write(
+      `warning: ${opts.provider} is using hardcoded capability estimates for model "${model}" (${fields.join(', ')}) — ${opts.reason}.\n`,
+    );
+  } catch {
+    // Warnings are best-effort and must never break chat/model selection.
+  }
+}
 
 /**
  * Reliability stack (Phase 10): resolve final sampling values for one
