@@ -1,0 +1,4 @@
+export const MIN_WRAP_AVAILABLE_WIDTH = 20;
+export const DEFAULT_LOGO_FRAME_MS = 220;
+export const DEFAULT_TERMINAL_COLS = 80;
+export const WELCOME_RULE_WIDTH = 60;

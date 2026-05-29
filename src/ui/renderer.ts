@@ -4,6 +4,12 @@ import { Marked } from 'marked';
 import { markedTerminal } from 'marked-terminal';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlags } from '../core/config/types.js';
 import { getBuildInfo } from '../utils/build-info.js';
+import {
+  DEFAULT_LOGO_FRAME_MS,
+  DEFAULT_TERMINAL_COLS,
+  MIN_WRAP_AVAILABLE_WIDTH,
+  WELCOME_RULE_WIDTH,
+} from './constants.js';
 
 /** Minimal shape of the marked-terminal extension we patch. The package's
  *  exported types don't expose the `renderer` object directly, so we declare
@@ -86,7 +92,7 @@ function wrapCommaList(value: string, labelWidth: number, terminalWidth: number)
   const tokens = value.split(', ');
   if (tokens.length <= 1) return value;
   const sep = ', ';
-  const available = Math.max(20, terminalWidth - labelWidth);
+  const available = Math.max(MIN_WRAP_AVAILABLE_WIDTH, terminalWidth - labelWidth);
   const indent = ' '.repeat(labelWidth);
   const lines: string[] = [];
   let current = '';
@@ -182,7 +188,7 @@ function renderLogoFrame(shift: number): string {
   return lines.join('\n');
 }
 
-export async function animateLogo(frameMs = 220): Promise<void> {
+export async function animateLogo(frameMs = DEFAULT_LOGO_FRAME_MS): Promise<void> {
   const rowCount = LOGO_LETTERS[0]!.rows.length;
   const logoWidth = LOGO_LETTERS[0]!.rows.reduce((max, _, rowIndex) => {
     const rowWidth = LOGO_LETTERS.reduce((sum, letter) => sum + letter.rows[rowIndex]!.length, 2);
@@ -227,7 +233,7 @@ export function renderWelcome(
   // overflow narrow terminals; wrap them so continuation lines align under
   // the value column instead of the left margin.
   const labelWidth = '  Tools: '.length;
-  const cols = process.stdout.columns ?? 80;
+  const cols = process.stdout.columns ?? DEFAULT_TERMINAL_COLS;
   const expValue = wrapCommaList(formatExperimentalFlags(experimental), labelWidth, cols);
   const toolsValue = wrapCommaList(tools.join(', '), labelWidth, cols);
   const lines = [
@@ -242,7 +248,7 @@ export function renderWelcome(
     chalk.dim('  Tools: ') + chalk.white(toolsValue),
     chalk.dim('  Type /help for commands, /exit to quit'),
     '',
-    chalk.dim('─'.repeat(60)),
+    chalk.dim('─'.repeat(WELCOME_RULE_WIDTH)),
     '',
   ];
   return lines.join('\n');
