@@ -12,6 +12,10 @@ import { executeToolCall } from './run-tool-calls-execute.js';
 import { mergeAsyncGenerators } from './merge-async-generators.js';
 import { AsyncMutex } from './async-mutex.js';
 import type { ToolLoopContext } from './types.js';
+import {
+  CORRECTOR_ERROR_SNIPPET_CHARS,
+  CORRECTOR_REASON_PREVIEW_CHARS,
+} from './constants.js';
 
 export type { ToolLoopContext };
 
@@ -457,7 +461,7 @@ async function* runCorrectorIfNeeded(
     type: 'tool-call-corrected',
     original: toolCall,
     corrected: correction.call,
-    reason: lastFailedResult.output.slice(0, 200),
+    reason: lastFailedResult.output.slice(0, CORRECTOR_REASON_PREVIEW_CHARS),
   };
 
   // Forward the original tool_use id onto the corrected call. The corrected
@@ -468,7 +472,7 @@ async function* runCorrectorIfNeeded(
   const correctedCall: ToolCallMessage = { ...correction.call, id: toolCall.id };
   const origName = toolCall.function?.name ?? 'unknown';
   const newName = correction.call.function?.name ?? 'unknown';
-  const errSnippet = lastFailedResult.output.slice(0, 500);
+  const errSnippet = lastFailedResult.output.slice(0, CORRECTOR_ERROR_SNIPPET_CHARS);
   const prefix =
     `[Tool corrector: original ${origName} call failed (${errSnippet}). ` +
     `Substituted with ${newName}; output below.]\n\n`;

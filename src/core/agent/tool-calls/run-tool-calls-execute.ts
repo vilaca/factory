@@ -8,6 +8,7 @@ import { errorMessage } from '../../../utils/errors.js';
 import { ToolResolutionError } from '../../../tools/errors.js';
 import { validateAgainstSchema } from '../../../utils/json-schema-validate.js';
 import type { ToolLoopContext } from './types.js';
+import { PLAN_ARGS_PREVIEW_CHARS } from './constants.js';
 
 export interface ExecuteToolCallOptions {
   /**
@@ -75,7 +76,7 @@ export async function* executeToolCall(
   }
 
   if (ctx.planMode && tool.category !== 'read-only') {
-    const planSummary = `[PLAN] Queued ${tool.name} call: ${JSON.stringify(args).slice(0, 200)}`;
+    const planSummary = `[PLAN] Queued ${tool.name} call: ${JSON.stringify(args).slice(0, PLAN_ARGS_PREVIEW_CHARS)}`;
     recordResult(planSummary, tool.name);
     yield { type: 'tool-call-planned', toolName: tool.name, args };
     return;
