@@ -39,6 +39,72 @@ describe('architecture: module boundaries', () => {
     await expectNoViolations(rule, 'core → cli');
   });
 
+  // core → providers boundary.
+  //
+  // src/core/ houses the agent loop and all orchestration logic. It must
+  // depend on providers only through declared contracts:
+  //
+  //   - types.ts    : Provider interface + shared value types (permanent)
+  //   - prime.ts    : UnprimedProvider → Provider bridge (permanent)
+  //   - usage.ts    : contextFillTokens selector (permanent)
+  //   - sampling-defaults.ts : model sampling table shared by both layers (permanent)
+  //
+  // Remaining entries are TODOs — each allowlist entry is a tracked
+  // violation to be removed as the corresponding fix lands:
+  //
+  //   - auth-modes.ts  : TODO inline GoogleAiStudioAuthMode as 'oauth'|'api-key'
+  //                      literal in core/config/types.ts
+  //   - registry.ts    : TODO hardcode LEGACY_TOKEN_KEY in core/auth/credentials.ts
+  //                      (remove DESCRIPTOR_LIST import) and move ProviderDescriptor
+  //                      type from registry.ts → providers/types.ts
+  it('src/core/** must not depend on src/providers/** (except permitted contracts)', async () => {
+    const rule = projectFiles()
+      .inFolder('src/core/**')
+      .shouldNot()
+      .dependOnFiles()
+      .inFolder('src/providers/**', {
+        except: [
+          'src/providers/types.ts',
+          'src/providers/prime.ts',
+          'src/providers/usage.ts',
+          'src/providers/sampling-defaults.ts',
+        ],
+      });
+    await expectNoViolations(rule, 'core → providers concrete impls');
+  });
+
+  // core → tools boundary.
+  //
+  // src/core/ must not reach into concrete tool handler files. The only
+  // permanent allowance is the interface module:
+  //
+  //   - types.ts : ToolHandler, ToolResult, ToolContext, BashToolHandler (permanent)
+  //
+  // Remaining entries are TODOs:
+  //
+  //   - registry.ts / read.ts / glob.ts / grep.ts / bash.ts :
+  //     TODO move buildSubagentRegistry() out of core/subagent/runner.ts
+  //     into src/tools/index.ts; make `registry` param required in
+  //     runSubagent(); update src/tools/delegate.ts to pass it.
+  //   - errors.ts : TODO move ToolResolutionError to tools/types.ts or a
+  //     boundary-safe location so core/ needn't import a concrete module.
+  it('src/core/** must not depend on src/tools/** concrete implementations', async () => {
+    const rule = projectFiles()
+      .inFolder('src/core/**')
+      .shouldNot()
+      .dependOnFiles()
+      .inFolder('src/tools/**', {
+        except: [
+          'src/tools/types.ts',
+          // type-only import of ToolRegistry in core/subagent/runner.ts
+          'src/tools/registry.ts',
+          // TODO: move ToolResolutionError to tools/types.ts
+          'src/tools/errors.ts',
+        ],
+      });
+    await expectNoViolations(rule, 'core → tools concrete impls');
+  });
+
   it('src/security/** is a primitive — must not depend on any sibling top-level folder', async () => {
     for (const upstream of [
       'src/providers/**',

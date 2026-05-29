@@ -1,4 +1,10 @@
+import type { BashToolHandler, BashToolResult, ToolContext } from './types.js';
 import { ToolRegistry } from './registry.js';
+import { readTool } from './read.js';
+import { globTool } from './glob.js';
+import { grepTool } from './grep.js';
+import { bashTool } from './bash.js';
+import { isCommandAllowed } from './bash-allowlist.js';
 
 /**
  * Pre-built registry with all built-in tools — kept ONLY as a convenience
@@ -17,3 +23,45 @@ import { ToolRegistry } from './registry.js';
  * @deprecated for production; tests only.
  */
 export const defaultRegistry = new ToolRegistry();
+
+/**
+ * Wraps the real Bash tool with the subagent allow-list. Anything outside the
+ * allow-list is rejected before `spawn` is ever called — we never delegate
+ * the trust decision to the prompt.
+ */
+function makeRestrictedBashTool(): BashToolHandler {
+  return {
+    kind: 'bash',
+    name: bashTool.name,
+    description:
+      bashTool.description +
+      ' (Subagent: only read-only allow-listed commands run; others are rejected.)',
+    category: bashTool.category,
+    definition: bashTool.definition,
+    async execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<BashToolResult> {
+      const command = typeof args.command === 'string' ? args.command : '';
+      const decision = isCommandAllowed(command);
+      if (!decision.allowed) {
+        return {
+          success: false,
+          output: `Subagent Bash rejected: ${decision.reason}. Use Read/Glob/Grep, or one of the allow-listed shell commands.`,
+        };
+      }
+      return bashTool.execute(args, ctx);
+    },
+  };
+}
+
+/**
+ * Builds a fresh registry containing only the read-only tools plus a
+ * hardened Bash. Edit/Write are intentionally absent — the subagent has
+ * literally no way to call them, regardless of what its prompt says.
+ */
+export function buildSubagentRegistry(): ToolRegistry {
+  const registry = new ToolRegistry({ empty: true });
+  registry.register(readTool);
+  registry.register(globTool);
+  registry.register(grepTool);
+  registry.register(makeRestrictedBashTool());
+  return registry;
+}

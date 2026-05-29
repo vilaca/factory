@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { Config, ProviderKey } from '../config/types.js';
 import { updateGlobalConfig } from '../config/index.js';
-import { DESCRIPTOR_LIST } from '../../providers/registry.js';
 
 /**
  * Helpers over the multi-key credential store. The store lives at
@@ -13,14 +12,25 @@ import { DESCRIPTOR_LIST } from '../../providers/registry.js';
 
 const LEGACY_KEY_ID = 'legacy';
 
-/** Provider name → legacy `<provider>Token` config field. */
-const LEGACY_TOKEN_KEY: Record<string, keyof Config> = (() => {
-  const map: Record<string, keyof Config> = {};
-  for (const d of DESCRIPTOR_LIST) {
-    if (d.configTokenKey) map[d.name] = d.configTokenKey;
-  }
-  return map;
-})();
+/** Provider name → legacy `<provider>Token` config field.
+ *  Hardcoded to avoid a core → providers/registry dependency. When adding a
+ *  new provider with a legacy token field, add an entry here too. */
+const LEGACY_TOKEN_KEY: Record<string, keyof Config> = {
+  huggingface: 'huggingfaceToken',
+  anthropic: 'anthropicToken',
+  copilot: 'copilotToken',
+  openrouter: 'openrouterToken',
+  vercel: 'vercelToken',
+  opencodezen: 'opencodeZenToken',
+  googleaistudio: 'googleAiStudioToken',
+  mistral: 'mistralToken',
+  codestral: 'codestralToken',
+  cerebras: 'cerebrasToken',
+  groq: 'groqToken',
+  cohere: 'cohereToken',
+  openai: 'openaiToken',
+  workersai: 'workersAiToken',
+};
 
 /** Last 4 chars of the token. Always returned even for short tokens. */
 export function keyFingerprint(token: string): string {

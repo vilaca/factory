@@ -1,16 +1,10 @@
 import type { Provider } from '../../providers/types.js';
-import type { BashToolHandler, BashToolResult, ToolContext } from '../../tools/types.js';
+import type { ToolRegistry } from '../../tools/registry.js';
 import { TOOL_NAMES } from '../../tools/types.js';
 import type { AgentEvent } from '../agent/types.js';
-import { ToolRegistry } from '../../tools/registry.js';
-import { readTool } from '../../tools/read.js';
-import { globTool } from '../../tools/glob.js';
-import { grepTool } from '../../tools/grep.js';
-import { bashTool } from '../../tools/bash.js';
 import { Conversation } from '../context/conversation.js';
 import { PermissionManager } from '../../security/permissions.js';
 import { runAgent } from '../agent/run-agent.js';
-import { isCommandAllowed } from './bash-allowlist.js';
 
 /**
  * The subagent's system prompt. Deliberately terse — the parent's task
@@ -22,51 +16,6 @@ export const SUBAGENT_SYSTEM_PROMPT = `You are a read-only research subagent. In
 Available tools: Read, Glob, Grep, Bash (allow-listed read-only commands only).
 
 Stop as soon as you have an answer. Do not chain calls past what the question requires.`;
-
-/**
- * Wraps the real Bash tool with the subagent allow-list. Anything outside the
- * allow-list is rejected before `spawn` is ever called — we never delegate
- * the trust decision to the prompt.
- */
-function makeRestrictedBashTool(): BashToolHandler {
-  return {
-    kind: 'bash',
-    name: bashTool.name,
-    description:
-      bashTool.description +
-      ' (Subagent: only read-only allow-listed commands run; others are rejected.)',
-    category: bashTool.category,
-    definition: bashTool.definition,
-    async execute(args: Record<string, unknown>, ctx?: ToolContext): Promise<BashToolResult> {
-      const command = typeof args.command === 'string' ? args.command : '';
-      const decision = isCommandAllowed(command);
-      if (!decision.allowed) {
-        return {
-          success: false,
-          output: `Subagent Bash rejected: ${decision.reason}. Use Read/Glob/Grep, or one of the allow-listed shell commands.`,
-        };
-      }
-      // Forward ctx so the inner Bash sees the same env policy the parent
-      // agent loop computed — the wrapper exists to gate commands, not to
-      // erase the per-call security context.
-      return bashTool.execute(args, ctx);
-    },
-  };
-}
-
-/**
- * Builds a fresh registry containing only the read-only tools plus a
- * hardened Bash. Edit/Write are intentionally absent — the subagent has
- * literally no way to call them, regardless of what its prompt says.
- */
-export function buildSubagentRegistry(): ToolRegistry {
-  const registry = new ToolRegistry({ empty: true });
-  registry.register(readTool);
-  registry.register(globTool);
-  registry.register(grepTool);
-  registry.register(makeRestrictedBashTool());
-  return registry;
-}
 
 interface SubagentResult {
   /** The final assistant text the subagent produced before stopping. */
@@ -97,9 +46,11 @@ interface SubagentRunOptions {
   signal?: AbortSignal;
   /** Override the tool-call ceiling for this run. Mostly for tests. */
   toolCallLimit?: number;
-  /** Allows tests to inject a registry / runner pair. Production code uses
-   *  the defaults. */
-  registry?: ToolRegistry;
+  /** The registry of tools available to the subagent. Callers must provide
+   *  this — use buildSubagentRegistry() from src/tools/index.ts for the
+   *  standard read-only set (Read, Glob, Grep, allow-listed Bash). */
+  registry: ToolRegistry;
+  /** Allows tests to inject a runner. Production code uses the default. */
   runner?: typeof runAgent;
 }
 
@@ -109,7 +60,7 @@ interface SubagentRunOptions {
  * the raw event stream for logging.
  */
 export async function runSubagent(options: SubagentRunOptions): Promise<SubagentResult> {
-  const registry = options.registry ?? buildSubagentRegistry();
+  const registry = options.registry;
   const runner = options.runner ?? runAgent;
 
   const conversation = new Conversation(SUBAGENT_SYSTEM_PROMPT);
