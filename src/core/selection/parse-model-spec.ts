@@ -17,12 +17,12 @@
 //     can answer, so the resolver is injected — this keeps the parser
 //     free of registry imports and trivially testable.
 
-import type { ProviderDescriptor } from '../../providers/registry.js';
-
 /** Resolves a candidate prefix to a provider descriptor, or undefined if
  *  the prefix is not a known alias. Matches the signature of
- *  `registry.descriptorByAlias` so callers can pass it directly. */
-export type DescriptorResolver = (alias: string) => ProviderDescriptor | undefined;
+ *  `registry.descriptorByAlias` so callers can pass it directly.
+ *  The parser only checks presence (truthy/falsy), so the return shape
+ *  is left intentionally wide. */
+export type DescriptorResolver = (alias: string) => object | undefined;
 
 /** Parsed form of a user-supplied model spec.
  *

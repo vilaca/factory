@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isCommandAllowed, tokenizeCommand } from '../../../../src/core/subagent/bash-allowlist.js';
+import { isCommandAllowed, tokenizeCommand } from '../../../../src/tools/bash-allowlist.js';
 
 describe('subagent bash allow-list', () => {
   describe('positive cases', () => {

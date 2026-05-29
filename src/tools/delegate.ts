@@ -5,6 +5,7 @@ import { runSubagent } from '../core/subagent/runner.js';
 import type { runAgent } from '../core/agent/run-agent.js';
 import type { SessionLogger } from '../core/session/session-log.js';
 import { errorMessage } from '../utils/errors.js';
+import { buildSubagentRegistry } from './index.js';
 
 /*
  * Future improvements (not blocking this branch's merge):
@@ -97,6 +98,7 @@ export function createDelegateTool(ctx: DelegateContext): StandardToolHandler {
         task,
         signal: ctx.signal,
         runner: ctx.runner,
+        registry: buildSubagentRegistry(),
       });
 
       // Mirror the subagent's full event stream into the parent session log

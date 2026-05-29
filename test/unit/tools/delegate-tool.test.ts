@@ -6,9 +6,9 @@ import { createDelegateTool } from '../../../src/tools/delegate.js';
 import type { runAgent } from '../../../src/core/agent/run-agent.js';
 import {
   runSubagent,
-  buildSubagentRegistry,
   SUBAGENT_SYSTEM_PROMPT,
 } from '../../../src/core/subagent/runner.js';
+import { buildSubagentRegistry } from '../../../src/tools/index.js';
 
 type RunAgentFn = typeof runAgent;
 
@@ -67,6 +67,7 @@ describe('Delegate tool', () => {
       model: 'm',
       task: 't',
       runner: makeFakeRunner(fakeEvents),
+      registry: buildSubagentRegistry(),
     });
     assert.strictEqual(directly.finalText, 'The answer is 42.');
     assert.strictEqual(directly.stopReason, 'completed');
@@ -86,6 +87,7 @@ describe('Delegate tool', () => {
       model: 'm',
       task: 't',
       runner: makeFakeRunner(fakeEvents),
+      registry: buildSubagentRegistry(),
     });
     assert.strictEqual(result.finalText, '');
     assert.strictEqual(result.stopReason, 'turn-limit');
@@ -117,7 +119,7 @@ describe('Delegate tool', () => {
 
     return Promise.resolve().then(async () => {
       // Explicit override wins
-      await runSubagent({ provider: stubProvider(), model: 'override', task: 't', runner });
+      await runSubagent({ provider: stubProvider(), model: 'override', task: 't', runner, registry: buildSubagentRegistry() });
       assert.strictEqual(calls[0], 'override');
     });
   });
@@ -139,6 +141,7 @@ describe('Delegate tool', () => {
       model: 'm',
       task: 't',
       runner: cappedRunner,
+      registry: buildSubagentRegistry(),
     });
     assert.strictEqual(result.stopReason, 'turn-limit');
     assert.strictEqual(result.turnsUsed, 3);
