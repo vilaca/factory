@@ -33,7 +33,8 @@ Top-level `main()`. Parses argv, applies `--debug`, branches on `--version` / `-
 - `startup/` — startup orchestration:
   - `phases.ts` — per-phase functions called from `main()`.
   - `config.ts` — pure helpers for rotation/experimental/source decisions.
-  - `menu.tsx` — Ink-rendered startup picker.
+  - `menu.tsx` — Ink-rendered startup picker host (display + commit/cancel wiring).
+  - `picker-data.ts` — startup picker data source (fetch models/keys, validate key, persist key).
   - `parse-rotation.ts` — parses the `--rotate <p:m,p:m>` chain syntax.
 
 ### `src/core/`
@@ -161,6 +162,13 @@ Two render targets: the React + Ink TUI under `tui/`, and the non-TTY `headless.
   - `compose-system-prompt.ts` — per-turn system prompt composition.
   - `agent-loop-types.ts` — `RunRefs`, `AgentLoopApi`, `AgentLoopDeps` shapes.
 - `components/` — Ink components (status bar, conversation display, permission panel, plan-approval panel, rotation prompt, etc.).
+  - `provider-picker/` — shared picker used at startup and mid-session (`/pick`, `Ctrl+K`) with explicit layer split:
+    - `index.tsx` — top-level component state + hook wiring.
+    - `render-body.tsx` + `stages.tsx` — display layer (stage-specific rendering).
+    - `prepare.ts` — preparation layer (model ranking/sorting for display).
+    - `data-actions.ts` — data/controller layer (async key/model fetch + stage transitions).
+    - `stage-key-handlers.ts` — keyboard behavior layer (per-stage key dispatch).
+    - `keys.ts` — input hook wiring that delegates to the above layers.
 - `slash/` — user-typed slash commands; `dispatch.ts` is the entry, individual handlers live alongside (`hooks.ts`, `keys.ts`, `rotate.ts`, `rotate-helpers.ts`, `rotate-subcommands.ts`, `stats.ts`).
 - `hooks/` — small React hooks (`use-rotation-fallback.ts`, `use-session-input.ts`).
 - `tabs/` — tab registry/context (`tabs-registry.ts`, `TabsContext.tsx`, `use-tabs.ts`).
