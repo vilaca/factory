@@ -73,7 +73,7 @@
     "chalk": "^5.4.1",
     "cli-highlight": "^2.1.11",
     "google-auth-library": "^10.6.2",
-    "ink": "^7.0.3",
+    "ink": "^7.0.5",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "ollama": "^0.6.3",
@@ -82,7 +82,7 @@
   "devDependencies": {
     "@lydell/node-pty": "^1.2.0-beta.12",
     "@types/node": "^22.19.19",
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.15",
     "@typescript-eslint/eslint-plugin": "^8.59.4",
     "@typescript-eslint/parser": "^8.59.1",
     "archunit": "^2.3.0",
