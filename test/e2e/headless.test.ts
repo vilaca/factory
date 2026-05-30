@@ -150,4 +150,86 @@ describe('Headless mode', () => {
       `model text leaked onto stderr: ${r.stderr}`,
     );
   });
+
+  it('surfaces a hook warning to stderr and logs it to the session JSONL', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-headless-hookwarn-'));
+    const cfgDir = path.join(home, '.config', 'factory');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    const hookCommand = "echo 'warn-from-hook' >&2; echo '{}'";
+    fs.writeFileSync(
+      path.join(cfgDir, 'config.json'),
+      JSON.stringify(
+        {
+          agent: {
+            experimental: { hooks: true },
+            hooks: { SessionStart: [{ command: hookCommand }] },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    setNextResponse({ content: 'ok' });
+    const r = await spawnCliHeadless(baseArgs(), { stdin: 'hi\n', home });
+    assert.strictEqual(r.exitCode, 0, r.stderr);
+    assert.match(r.stderr, /warn-from-hook/);
+
+    const sessionsDir = path.join(home, '.factory', 'sessions');
+    const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'));
+    assert.ok(files.length >= 1, `no session log file under ${sessionsDir}`);
+
+    const raw = fs.readFileSync(path.join(sessionsDir, files[0]!), 'utf8');
+    const rows = raw
+      .split('\n')
+      .filter(Boolean)
+      .map(line => JSON.parse(line) as { type?: string; source?: string; message?: string });
+
+    const hookWarning = rows.find(
+      row =>
+        row.type === 'warning' &&
+        row.source === 'hook-stderr' &&
+        typeof row.message === 'string' &&
+        row.message.includes('warn-from-hook'),
+    );
+    assert.ok(hookWarning, 'expected hook-stderr warning row in session log');
+  });
+
+  it('surfaces an agent error to stderr and logs it as source=agent-error', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-headless-agenterr-'));
+    setNextResponses([
+      {
+        content: '',
+        tool_calls: [
+          {
+            function: { name: 'DefinitelyNotATool', arguments: {} },
+          },
+        ],
+      },
+    ]);
+
+    const r = await spawnCliHeadless(baseArgs(), { stdin: 'hi\n', home });
+
+    assert.strictEqual(r.exitCode, 1, `expected exit 1, got ${r.exitCode}; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /factory: Error: unknown tool "DefinitelyNotATool"/);
+
+    const sessionsDir = path.join(home, '.factory', 'sessions');
+    const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'));
+    assert.ok(files.length >= 1, `no session log file under ${sessionsDir}`);
+
+    const raw = fs.readFileSync(path.join(sessionsDir, files[0]!), 'utf8');
+    const rows = raw
+      .split('\n')
+      .filter(Boolean)
+      .map(line => JSON.parse(line) as { type?: string; source?: string; message?: string });
+
+    const agentError = rows.find(
+      row =>
+        row.type === 'warning' &&
+        row.source === 'agent-error' &&
+        typeof row.message === 'string' &&
+        row.message.includes('unknown tool "DefinitelyNotATool"'),
+    );
+    assert.ok(agentError, 'expected agent-error warning row in session log');
+  });
 });
