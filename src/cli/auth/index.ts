@@ -8,7 +8,7 @@ import {
   saveSuccessMessageFor,
 } from '../../providers/registry.js';
 import { createProvider, type CreateProviderOptions } from '../../providers/registry.js';
-import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
+import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../../core/config/index.js';
 import { addKey, getKey } from '../../core/auth/credentials.js';
 import { appendProviderLog } from '../../utils/provider-log.js';
 import { promptText } from '../prompts.js';
@@ -148,7 +148,18 @@ async function ensureSimplePromptAuth(
   cliToken?: string,
   keyId?: string,
 ): Promise<AuthResult> {
-  const existing = resolveCredentialsFor(descriptor, config, cliToken, keyId);
+  let existing = resolveCredentialsFor(descriptor, config, cliToken, keyId);
+
+  // Startup picker can persist a brand-new key moments before this phase runs.
+  // The caller may still hold a pre-picker config snapshot, so a targeted
+  // key lookup by id can miss even though the key is now on disk. When a
+  // specific keyId was requested and the current snapshot can't resolve it,
+  // re-read global config once and retry before falling back to prompting.
+  if (keyId && !cliToken && !existing.token) {
+    const fresh = await loadConfig(process.cwd());
+    existing = resolveCredentialsFor(descriptor, { ...config, ...fresh }, cliToken, keyId);
+  }
+
   const haveToken = Boolean(existing.token);
   const needAccountId = Boolean(descriptor.needsAccountId);
   const haveAccountId = Boolean(existing.accountId);

@@ -14,6 +14,7 @@ import {
 } from '../../../src/cli/auth/index.js';
 import { DESCRIPTORS } from '../../../src/providers/registry.js';
 import type { Config } from '../../../src/core/config/types.js';
+import { saveGlobalConfig } from '../../../src/core/config/index.js';
 
 let originalHome: string | undefined;
 let originalLog: typeof console.log;
@@ -232,6 +233,19 @@ describe('ensureAuth — non-interactive paths', () => {
     const result = await ensureAuth(DESCRIPTORS.anthropic, config);
     assert.strictEqual(result.token, 'pre-saved');
     assert.strictEqual(result.keyId, 'k1');
+    assert.strictEqual(result.shouldSave, false);
+  });
+
+  it('re-reads global config when a requested keyId is missing from a stale snapshot', async () => {
+    await saveGlobalConfig({
+      keys: {
+        anthropic: [{ id: 'new-key', token: 'fresh-token', createdAt: '2026-01-01T00:00:00Z' }],
+      },
+    });
+    const staleConfig: Config = {};
+    const result = await ensureAuth(DESCRIPTORS.anthropic, staleConfig, undefined, 'new-key');
+    assert.strictEqual(result.token, 'fresh-token');
+    assert.strictEqual(result.keyId, 'new-key');
     assert.strictEqual(result.shouldSave, false);
   });
 
