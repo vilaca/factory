@@ -1,9 +1,13 @@
 import React from 'react';
 import { useApp, render } from 'ink';
 import type { RecentSession } from '../../core/session/session-log.js';
+import { createProvider, DESCRIPTOR_LIST, descriptorByAlias } from '../../providers/registry.js';
 import type { StartupProviderName } from '../../providers/registry.js';
 import type { Provider } from '../../providers/types.js';
 import type { PickerOption } from '../picker.js';
+import { loadGlobalConfig } from '../../core/config/index.js';
+import { addKey, keyFingerprint, listKeys } from '../../core/auth/credentials.js';
+import { errorMessage } from '../../utils/errors.js';
 import { exitStartupSelection } from '../prompts.js';
 import {
   ProviderPicker,
@@ -22,6 +26,82 @@ import type { ModelSelection } from '../../core/selection/types.js';
 interface StartupSelection extends Omit<ModelSelection, 'provider' | 'model'> {
   provider: StartupProviderName;
   model?: string;
+}
+
+const SIMPLE_PROMPT_PROVIDERS = new Set(
+  DESCRIPTOR_LIST.filter(d => d.authFlow === 'simple-prompt').map(d => d.name),
+);
+
+export function createStartupPickerKeyProps(): {
+  multiKeyProviders: ReadonlySet<string>;
+  loadModels: (name: string, keyId?: string) => Promise<string[]>;
+  loadKeysForProvider: (
+    name: string,
+  ) => Promise<Array<{ id: string; label?: string; fingerprint: string }>>;
+  validateKey: (
+    name: string,
+    token: string,
+  ) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
+  saveKey: (name: string, token: string) => Promise<string>;
+} {
+  return {
+    multiKeyProviders: SIMPLE_PROMPT_PROVIDERS,
+    loadModels: async (name, keyId) => {
+      const cfg = keyId ? await loadGlobalConfig() : null;
+      const descriptor = descriptorByAlias(name);
+      const opts: Parameters<typeof createProvider>[1] = {};
+      if (cfg && descriptor && keyId) {
+        const list = listKeys(cfg, descriptor.name);
+        const key = list.find(k => k.id === keyId);
+        if (key) {
+          opts.token = key.token;
+          if (descriptor.needsAccountId && key.extras?.accountId) {
+            opts.accountId = key.extras.accountId;
+          }
+        }
+      }
+      const p = createProvider(name, opts);
+      return await p.listModels();
+    },
+    loadKeysForProvider: async name => {
+      const cfg = await loadGlobalConfig();
+      const descriptor = descriptorByAlias(name);
+      if (!descriptor) return [];
+      return listKeys(cfg, descriptor.name).map(k => ({
+        id: k.id,
+        ...(k.label ? { label: k.label } : {}),
+        fingerprint: keyFingerprint(k.token),
+      }));
+    },
+    validateKey: async (name, token) => {
+      try {
+        const descriptor = descriptorByAlias(name);
+        const opts: Parameters<typeof createProvider>[1] = { token };
+        if (descriptor?.needsAccountId) {
+          const cfg = await loadGlobalConfig();
+          opts.accountId = cfg.workersAiAccountId;
+        }
+        const p = createProvider(name, opts);
+        const models = await p.listModels();
+        return { ok: true, models };
+      } catch (err) {
+        return { ok: false, error: errorMessage(err) };
+      }
+    },
+    saveKey: async (name, token) => {
+      const descriptor = descriptorByAlias(name);
+      if (!descriptor) throw new Error(`Unknown provider: ${name}`);
+      const cfg = descriptor.needsAccountId ? await loadGlobalConfig() : null;
+      const extras =
+        descriptor.needsAccountId && cfg?.workersAiAccountId
+          ? { accountId: cfg.workersAiAccountId }
+          : undefined;
+      const entry = await addKey(descriptor.name, token, {
+        ...(extras ? { extras } : {}),
+      });
+      return entry.id;
+    },
+  };
 }
 
 export async function selectStartupSession(
@@ -46,11 +126,10 @@ export async function selectStartupSession(
     offline: o.offline,
   }));
 
-  // The unified picker drives provider → loadModels → model. At startup
-  // we want to commit after the provider stage (so the main flow can
-  // run ensureAuth before model selection). The shim does that by
-  // converting the loadModels invocation into an immediate
-  // `{ provider, model: undefined }` resolution.
+  // The startup shim uses the same picker as the in-session flow, including
+  // key management for simple-prompt providers. The result can therefore be
+  // either a provider-only choice (user backed out before model selection)
+  // or a full provider/key/model tuple.
   let result: StartupSelection | null = null;
   const inkApp = render(
     <StartupShim
@@ -97,25 +176,16 @@ function StartupShim({
     onResolve(sel);
     exit();
   };
+  const keyProps = createStartupPickerKeyProps();
   return (
     <ProviderPicker
       providers={providers}
       recents={recents}
       initialProvider={initialProvider}
       initialModel={initialModel}
-      loadModels={name => {
-        // The picker only invokes loadModels after a provider-stage
-        // Enter — that's our cue to commit and hand off to the main
-        // flow's ensureAuth + selectModelInk. Use a never-resolving
-        // promise so we don't race with Ink's unmount and trigger a
-        // setState on the loading stage after exit.
-        finish({ provider: name as StartupProviderName });
-        return new Promise<string[]>(() => {
-          /* unmounted */
-        });
-      }}
+      {...keyProps}
       onCommit={(provider, model, keyId) => {
-        // Reachable only when the user picked from the recent list.
+        // Reached from recent picks and from the full provider→key→model flow.
         finish({
           provider: provider as StartupProviderName,
           model,
