@@ -18,6 +18,7 @@
 - **Bring your own model.** Pick what fits your privacy, cost, and latency. 16 providers on equal footing — local-first ([Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://mistral.ai/news/codestral), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenAI](https://platform.openai.com), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)).
 - **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a frontier LLM on a refactor in one tab while a local LLM explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
 - **Two-tier rotation.** When a key hits a rate limit or auth failure, factory swaps to the next saved key for the same model; when keys for a model are exhausted, it walks a configurable chain of `<provider>:<model>` fallbacks — frontier → fast → free, automatic.
+- **Picker with key management.** Startup and in-session pickers support provider → key → model selection, key validation, and saved-key reuse for providers that support multiple API keys.
 - **Built for models that don't behave.** Text-tool fallback recovers tool calls from prose; an LLM corrector retries malformed calls; an imitation guard strips fabricated tool-result blocks; Bash dedup nudges the model out of spinning loops.
 - **Plan mode.** Read-only tools execute freely; writes are queued for review. Approve, cancel, or refine before anything touches disk.
 - **Cache-aware.** Surfaces prompt-cache hit rate per turn and per key for providers that report it. `/stats` reports session totals, per-turn hit-rate sparkline, compaction events, and the largest tool results.
@@ -37,7 +38,7 @@ npm install && npm run build && npm link
 factory
 ```
 
-That's it. `factory` opens a picker for provider, model, and API key the first time. Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
+That's it. `factory` opens a picker for provider, key, and model the first time (for simple-key providers, it can validate and save keys during the flow). Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
 
 > **`npm link` permission errors?** It writes a symlink into your npm global prefix; if that's a system path it needs sudo. Either set a user-writable prefix once (`npm config set prefix "$HOME/.npm-global"` and add `$HOME/.npm-global/bin` to your `PATH`), skip linking and run `npx factory` from the repo, or invoke directly with `node /path/to/factory/dist/index.js`.
 
