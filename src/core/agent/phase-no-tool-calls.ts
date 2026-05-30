@@ -29,6 +29,13 @@ export type NoToolCallsResult = { kind: 'continue' } | { kind: 'done'; stopReaso
  *
  *  Also yields the silent-turn warning when the model burned 100+
  *  completion tokens with no visible content. */
+function isNonRetriableToolFailure(message: string): boolean {
+  // Security hard-deny failures are deterministic: retries cannot succeed
+  // until the caller changes strategy (different path / external inspection).
+  // Don't burn auto-retry budget on them.
+  return /Path denied by security policy:/i.test(message);
+}
+
 export async function* runNoToolCalls(
   options: AgentOptions,
   input: NoToolCallsInput,
@@ -63,19 +70,25 @@ export async function* runNoToolCalls(
   }
 
   if (recovery.lastFailureMessage && recovery.autoRetryBudget > 0) {
-    recovery.autoRetryBudget--;
-    conversation.addUser(
-      `Your last tool call failed with: "${recovery.lastFailureMessage}". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.`,
-    );
-    yield {
-      type: 'auto-retry-injected',
-      remainingBudget: recovery.autoRetryBudget,
-      reason: recovery.lastFailureMessage,
-    };
-    return { kind: 'continue' };
+    if (!isNonRetriableToolFailure(recovery.lastFailureMessage)) {
+      recovery.autoRetryBudget--;
+      conversation.addUser(
+        `Your last tool call failed with: "${recovery.lastFailureMessage}". Diagnose the cause and emit a corrected tool call now. Do not reply with prose.`,
+      );
+      yield {
+        type: 'auto-retry-injected',
+        remainingBudget: recovery.autoRetryBudget,
+        reason: recovery.lastFailureMessage,
+      };
+      return { kind: 'continue' };
+    }
   }
 
-  if (recovery.lastFailureMessage) {
+  if (
+    recovery.lastFailureMessage &&
+    !isNonRetriableToolFailure(recovery.lastFailureMessage) &&
+    recovery.autoRetryBudget === 0
+  ) {
     yield { type: 'auto-retry-exhausted' };
   }
   return { kind: 'done', stopReason: 'completed' };
