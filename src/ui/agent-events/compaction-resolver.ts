@@ -15,6 +15,7 @@ import { instrumentProviderRequests } from '../../providers/instrument.js';
 import { logModelRequestTo } from '../session-bridge.js';
 import type { Provider } from '../../providers/types.js';
 import type { SessionLogger } from '../../core/session/session-log.js';
+import { createDiagnosticEmitter, sessionLogDiagnosticSink } from '../diagnostics.js';
 
 export interface CompactionResolverInputs {
   /** Active session state. The resolver falls back to this when no
@@ -75,9 +76,12 @@ export async function resolveCompactionTarget(
       : fresh;
     return { provider: wrapped, model: target.model };
   } catch (err) {
-    active.sessionLogger?.logWarning(
-      'compaction-resolver',
+    const diagnostics = createDiagnosticEmitter(
+      sessionLogDiagnosticSink(() => active.sessionLogger),
+    );
+    diagnostics.warning(
       `${target.providerName}:${target.model} — ${err instanceof Error ? err.message : String(err)}`,
+      'compaction-resolver',
     );
     return { provider: active.provider, model: active.model };
   }

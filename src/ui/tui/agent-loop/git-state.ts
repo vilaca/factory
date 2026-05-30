@@ -1,6 +1,7 @@
 import { getGitBranch, isGitDirty } from '../../../utils/git.js';
 import { errorMessage } from '../../../utils/errors.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
+import { createDiagnosticEmitter, sessionLogDiagnosticSink } from '../../diagnostics.js';
 
 export async function refreshGitState(
   deps: AgentLoopDeps,
@@ -29,6 +30,9 @@ export async function refreshGitState(
   } catch (err) {
     const msg = errorMessage(err);
     deps.addNotice('warn', `⚠ Could not refresh git state: ${msg}`);
-    deps.refs.current.sessionLogger?.logWarning('git-refresh', msg);
+    const diagnostics = createDiagnosticEmitter(
+      sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
+    );
+    diagnostics.warning(msg, 'git-refresh');
   }
 }

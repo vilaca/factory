@@ -13,6 +13,7 @@ import {
   historyDown as historyDownPure,
 } from './history.js';
 import { errorMessage } from '../../../utils/errors.js';
+import { createDiagnosticEmitter, sessionLogDiagnosticSink } from '../../diagnostics.js';
 import { mountSession } from './setup.js';
 import { swapModel, swapProvider } from './swap.js';
 import type {
@@ -72,21 +73,28 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
   const idCounter = useRef(0);
   const nextId = useCallback(() => ++idCounter.current, []);
   const refs = useRef<RunRefs | null>(null);
+  const noticeDiagnostics = createDiagnosticEmitter(
+    sessionLogDiagnosticSink(() => refs.current?.sessionLogger),
+  );
 
   function addItem(item: DisplayItem): void {
     setItems(prev => [...prev, item]);
   }
   function addNotice(level: NoticeLevel, text: string): void {
     addItem({ kind: 'notice', id: nextId(), text, level });
-    if (level === 'danger' || level === 'warn') {
-      refs.current?.sessionLogger?.logWarning(`notice:${level}`, text);
+    if (level === 'warn') {
+      noticeDiagnostics.warning(text, `notice:${level}`);
+    } else if (level === 'danger') {
+      noticeDiagnostics.error(text, `notice:${level}`);
     }
   }
   function addNoticeBlock(lines: { level: NoticeLevel; text: string; bold?: boolean }[]): void {
     addItem({ kind: 'notice-block', id: nextId(), lines });
     for (const line of lines) {
-      if (line.level === 'danger' || line.level === 'warn') {
-        refs.current?.sessionLogger?.logWarning(`notice:${line.level}`, line.text);
+      if (line.level === 'warn') {
+        noticeDiagnostics.warning(line.text, `notice:${line.level}`);
+      } else if (line.level === 'danger') {
+        noticeDiagnostics.error(line.text, `notice:${line.level}`);
       }
     }
   }

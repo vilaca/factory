@@ -15,6 +15,11 @@ import {
   startSessionLogger,
 } from './init.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
+import {
+  createDiagnosticEmitter,
+  sessionLogDiagnosticSink,
+  tuiDiagnosticSink,
+} from '../../diagnostics.js';
 
 export interface MountContext {
   refs: MutableRefObject<RunRefs | null>;
@@ -31,7 +36,13 @@ export interface MountContext {
  *  to the UI and injecting any additionalContext as a user message. */
 function fireSessionStartHook(opts: UseAgentLoopOptions, ctx: MountContext): void {
   const cwd = process.cwd();
-  const sessionLogger = ctx.refs.current?.sessionLogger;
+  const diagnostics = createDiagnosticEmitter(
+    tuiDiagnosticSink((level, text) => ctx.addNotice(level, text)),
+    sessionLogDiagnosticSink(() => ctx.refs.current?.sessionLogger),
+  );
+  const logDiagnostics = createDiagnosticEmitter(
+    sessionLogDiagnosticSink(() => ctx.refs.current?.sessionLogger),
+  );
   void runHook(
     'SessionStart',
     { provider: opts.provider.name, model: opts.model, cwd },
@@ -40,22 +51,21 @@ function fireSessionStartHook(opts: UseAgentLoopOptions, ctx: MountContext): voi
       config: opts.agentConfig?.hooks,
       envPolicy: opts.envPolicy,
       onStderr: (command, chunk) =>
-        sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
+        diagnostics.warning(`${command}: ${chunk.trim()}`, 'hook-stderr'),
     },
   )
     .then(r => {
       for (const e of r.errors) {
-        ctx.addNotice('warn', `⚠ SessionStart hook: ${e}`);
-        sessionLogger?.logWarning('hook-error', `SessionStart: ${e}`);
+        diagnostics.warning(`⚠ SessionStart hook: ${e}`, 'hook-error');
       }
       for (const hookCommand of r.firedCommands) {
         const exe = hookCommand.split(/\s+/)[0] ?? hookCommand;
         const name = exe.split('/').pop() ?? exe;
         const suffix = r.notice ? ` — ${r.notice}` : '';
         ctx.addNotice('info', `↪ SessionStart hook ran (${name})${suffix}`);
-        sessionLogger?.logWarning(
-          'hook-fired',
+        logDiagnostics.warning(
           `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
+          'hook-fired',
         );
       }
       // Inject SessionStart additionalContext as a user message so the
@@ -67,8 +77,7 @@ function fireSessionStartHook(opts: UseAgentLoopOptions, ctx: MountContext): voi
     })
     .catch(err => {
       const msg = err?.message ?? String(err);
-      ctx.addNotice('warn', `⚠ SessionStart hook: ${msg}`);
-      sessionLogger?.logWarning('hook-error', `SessionStart: ${msg}`);
+      diagnostics.warning(`⚠ SessionStart hook: ${msg}`, 'hook-error');
     });
 }
 
@@ -77,7 +86,9 @@ function fireSessionStartHook(opts: UseAgentLoopOptions, ctx: MountContext): voi
  *  survives. */
 function fireSessionEndHook(opts: UseAgentLoopOptions, ctx: MountContext): void {
   const cwd = process.cwd();
-  const sessionLogger = ctx.refs.current?.sessionLogger;
+  const diagnostics = createDiagnosticEmitter(
+    sessionLogDiagnosticSink(() => ctx.refs.current?.sessionLogger),
+  );
   void runHook(
     'SessionEnd',
     { provider: opts.provider.name, model: opts.model, cwd },
@@ -86,15 +97,15 @@ function fireSessionEndHook(opts: UseAgentLoopOptions, ctx: MountContext): void 
       config: opts.agentConfig?.hooks,
       envPolicy: opts.envPolicy,
       onStderr: (command, chunk) =>
-        sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
+        diagnostics.warning(`${command}: ${chunk.trim()}`, 'hook-stderr'),
     },
   )
     .then(r => {
-      for (const e of r.errors) sessionLogger?.logWarning('hook-error', `SessionEnd: ${e}`);
+      for (const e of r.errors) diagnostics.warning(`SessionEnd: ${e}`, 'hook-error');
       for (const hookCommand of r.firedCommands) {
-        sessionLogger?.logWarning(
-          'hook-fired',
+        diagnostics.warning(
           `SessionEnd: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
+          'hook-fired',
         );
       }
     })

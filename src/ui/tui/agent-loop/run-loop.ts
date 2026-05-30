@@ -13,6 +13,7 @@ import { listKeys } from '../../../core/auth/credentials.js';
 import { getWarmthLog } from '../../../core/session/key-stats.js';
 import { handleAgentEvent } from './event-handler.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
+import { createDiagnosticEmitter, sessionLogDiagnosticSink } from '../../diagnostics.js';
 
 /** Anthropic's default ephemeral cache TTL. The rotation tiebreaker uses
  *  the same window so a key that hit cache "recently" by Anthropic's
@@ -188,6 +189,10 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
   // user may have added one via /pick mid-session).
   const rotation = await buildRotationOptions(deps);
 
+  const hookDiagnostics = createDiagnosticEmitter(
+    sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
+  );
+
   const agent = runAgent(userInput, {
     provider: deps.refs.current.provider,
     model: deps.refs.current.model,
@@ -214,9 +219,8 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
     envPolicy: deps.refs.current.envPolicy,
     hooksConfig: deps.agentConfig?.hooks,
     onHookStderr: (command, chunk) =>
-      deps.refs.current?.sessionLogger?.logWarning('hook-stderr', `${command}: ${chunk.trim()}`),
-    onHookError: (event, error) =>
-      deps.refs.current?.sessionLogger?.logWarning('hook-error', `${event}: ${error}`),
+      hookDiagnostics.warning(`${command}: ${chunk.trim()}`, 'hook-stderr'),
+    onHookError: (event, error) => hookDiagnostics.warning(`${event}: ${error}`, 'hook-error'),
     responsesChainRef,
     ...(rotation ? { rotation } : {}),
   });
@@ -319,10 +323,10 @@ export async function processInput(trimmed: string, deps: AgentLoopDeps): Promis
     const text = skills.formatInjection(matches);
     if (text) {
       deps.refs.current.conversation.addUser(`[System: ${text}]`);
-      deps.refs.current.sessionLogger?.logWarning(
-        'skills',
-        `injected: ${matches.map(m => m.skill.name).join(', ')}`,
+      const skillDiagnostics = createDiagnosticEmitter(
+        sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
       );
+      skillDiagnostics.warning(`injected: ${matches.map(m => m.skill.name).join(', ')}`, 'skills');
     }
   }
 

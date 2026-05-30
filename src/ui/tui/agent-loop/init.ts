@@ -17,6 +17,12 @@ import { errorMessage } from '../../../utils/errors.js';
 import { buildEnvironmentMessage } from '../../../core/context/system-prompt.js';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
+import {
+  createDiagnosticEmitter,
+  sessionLogDiagnosticSink,
+  stderrDiagnosticSink,
+  tuiDiagnosticSink,
+} from '../../diagnostics.js';
 
 // Dedicated exit code for log failures so callers can distinguish from
 // generic errors (1). Mirrors src/ui/headless.ts.
@@ -27,6 +33,9 @@ export function startSessionLogger(
   addNotice: (level: NoticeLevel, text: string) => void,
 ): SessionLogger | undefined {
   if (opts.enableSessionLog === false) return undefined;
+  const diagnostics = createDiagnosticEmitter(
+    tuiDiagnosticSink((level, text) => addNotice(level, text)),
+  );
   try {
     const sessionLogger = createSessionLogger({
       onWriteError: opts.strictLogging
@@ -52,9 +61,10 @@ export function startSessionLogger(
     return sessionLogger;
   } catch (err) {
     const msg = errorMessage(err);
-    addNotice('warn', `(session logging disabled: ${msg})`);
+    diagnostics.warning(`(session logging disabled: ${msg})`, 'session-log-init');
     if (opts.strictLogging) {
-      process.stderr.write(`factory: session log unavailable — ${msg}\n`);
+      const strictDiagnostics = createDiagnosticEmitter(stderrDiagnosticSink());
+      strictDiagnostics.error(`factory: session log unavailable — ${msg}`, 'session-log-init');
       process.exit(STRICT_LOG_EXIT);
     }
     return undefined;
@@ -182,11 +192,14 @@ export async function initSkillsRegistry(
   addNotice: (level: NoticeLevel, text: string) => void,
 ): Promise<SkillsRegistry | undefined> {
   if (!enabled) return undefined;
+  const diagnostics = createDiagnosticEmitter(
+    tuiDiagnosticSink((level, text) => addNotice(level, text)),
+    sessionLogDiagnosticSink(() => sessionLogger),
+  );
   try {
     const { skills, warnings } = await loadSkills(cwd);
     for (const w of warnings) {
-      sessionLogger?.logWarning('skills', w);
-      addNotice('warn', `skill skipped: ${w}`);
+      diagnostics.warning(`skill skipped: ${w}`, 'skills');
     }
     if (skills.length > 0) {
       const alwaysOn = skills.filter(s => s.alwaysOn).length;
@@ -197,7 +210,7 @@ export async function initSkillsRegistry(
     }
     return new SkillsRegistry(skills);
   } catch (err) {
-    addNotice('warn', `skills disabled: ${errorMessage(err)}`);
+    diagnostics.warning(`skills disabled: ${errorMessage(err)}`, 'skills');
     return new SkillsRegistry([]);
   }
 }

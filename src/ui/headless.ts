@@ -33,6 +33,12 @@ import {
   formatHookDisplay,
 } from './agent-events/render.js';
 import { resolveCompactionTarget } from './agent-events/compaction-resolver.js';
+import {
+  createDiagnosticEmitter,
+  sessionLogDiagnosticSink,
+  stderrDiagnosticSink,
+  type DiagnosticEmitter,
+} from './diagnostics.js';
 
 interface HeadlessOptions {
   model: string;
@@ -100,6 +106,7 @@ function formatArgsBrief(args: Record<string, unknown>): string {
 function handleAgentEvent(
   event: AgentEvent,
   state: { exitCode: number; permissionDeniedTool: string | undefined },
+  diagnostics: DiagnosticEmitter,
 ): void {
   switch (event.type) {
     case 'text-chunk':
@@ -140,11 +147,14 @@ function handleAgentEvent(
     }
     case 'hook-veto': {
       const reason = event.errorMessage ? ` — ${event.errorMessage}` : '';
-      process.stderr.write(`  ⛔ ${event.event} hook vetoed ${event.toolName}${reason}\n`);
+      diagnostics.warning(
+        `  ⛔ ${event.event} hook vetoed ${event.toolName}${reason}`,
+        'hook-veto',
+      );
       break;
     }
     case 'hook-error':
-      process.stderr.write(`  ⚠ Hook ${event.event}: ${event.error}\n`);
+      diagnostics.warning(`  ⚠ Hook ${event.event}: ${event.error}`, 'hook-error');
       break;
     case 'compaction-start':
       process.stderr.write(
@@ -195,19 +205,24 @@ function handleAgentEvent(
       // Model bailed after a tool failure and couldn't recover. Piped
       // output may be truncated mid-task — surface so CI doesn't treat
       // a partial response as a successful one.
-      process.stderr.write("  ⚠ auto-retry exhausted — model couldn't recover\n");
+      diagnostics.warning(
+        "  ⚠ auto-retry exhausted — model couldn't recover",
+        'auto-retry-exhausted',
+      );
       break;
     case 'all-denied-halt':
-      process.stderr.write(
-        `  ⏸ all ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting\n`,
+      diagnostics.warning(
+        `  ⏸ all ${event.count} tool call${event.count === 1 ? '' : 's'} this turn were denied — halting`,
+        'all-denied-halt',
       );
       break;
     case 'output-cap-reached':
       // Response was truncated at the provider's completion-token cap.
       // The caller's piped stdout is incomplete — flag it so `factory <
       // prompt > out.md` doesn't silently produce a half-document.
-      process.stderr.write(
-        `  ⚠ output cap reached (${event.completionTokens} tokens) — response truncated\n`,
+      diagnostics.warning(
+        `  ⚠ output cap reached (${event.completionTokens} tokens) — response truncated`,
+        'output-cap-reached',
       );
       break;
     case 'output-blocked':
@@ -215,30 +230,34 @@ function handleAgentEvent(
       // content_filter) or the model refused mid-turn (Anthropic
       // refusal). Distinct from a natural stop — surface so scripted
       // callers don't treat the partial output as authoritative.
-      process.stderr.write(
-        `  ⚠ output blocked by provider (${event.reason}) — partial response only\n`,
+      diagnostics.warning(
+        `  ⚠ output blocked by provider (${event.reason}) — partial response only`,
+        'output-blocked',
       );
       break;
     case 'empty-turn-warning':
-      process.stderr.write(
-        `  ⚠ ${event.completionTokens} tokens of internal reasoning, no visible output\n`,
+      diagnostics.warning(
+        `  ⚠ ${event.completionTokens} tokens of internal reasoning, no visible output`,
+        'empty-turn-warning',
       );
       break;
     case 'repetition-detected':
-      process.stderr.write(
-        `  ⚠ runaway repetition (${event.streak} identical lines) — turn aborted\n`,
+      diagnostics.warning(
+        `  ⚠ runaway repetition (${event.streak} identical lines) — turn aborted`,
+        'repetition-detected',
       );
       break;
     case 'tool-result-imitation-stripped':
       // Security signal: the model fabricated tool result blocks in the
       // stream. The fakes are stripped before storing, but a piped run
       // shouldn't trust the output without knowing this happened.
-      process.stderr.write(
-        `  ⚠ stripped ${event.count} fabricated tool-result block${event.count === 1 ? '' : 's'} from response\n`,
+      diagnostics.warning(
+        `  ⚠ stripped ${event.count} fabricated tool-result block${event.count === 1 ? '' : 's'} from response`,
+        'tool-result-imitation-stripped',
       );
       break;
     case 'error':
-      process.stderr.write(`factory: ${event.error.message}\n`);
+      diagnostics.error(`factory: ${event.error.message}`, 'agent-error');
       state.exitCode = 1;
       break;
     case 'turn-complete':
@@ -300,11 +319,15 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
 
   const hooksEnabled = options.agentConfig?.experimental?.hooks ?? false;
   const cwd = process.cwd();
+  const diagnostics = createDiagnosticEmitter(
+    stderrDiagnosticSink(),
+    sessionLogDiagnosticSink(() => sessionLogger),
+  );
   const onHookStderr = (hookCommand: string, chunk: string): void => {
-    sessionLogger?.logWarning('hook-stderr', `${hookCommand}: ${chunk.trim()}`);
+    diagnostics.warning(`${hookCommand}: ${chunk.trim()}`, 'hook-stderr');
   };
   const onHookError = (event: string, error: string): void => {
-    sessionLogger?.logWarning('hook-error', `${event}: ${error}`);
+    diagnostics.warning(`${event}: ${error}`, 'hook-error');
   };
 
   let sessionStartContext: string | undefined;
@@ -322,9 +345,9 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       );
       for (const e of r.errors) onHookError('SessionStart', e);
       for (const hookCommand of r.firedCommands) {
-        sessionLogger?.logWarning(
-          'hook-fired',
+        diagnostics.warning(
           `SessionStart: ${hookCommand}${r.notice ? ` (${r.notice})` : ''}`,
+          'hook-fired',
         );
       }
       sessionStartContext = r.additionalContext;
@@ -447,7 +470,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       responsesChainRef,
     })) {
       sessionLogger?.logAgentEvent(event);
-      handleAgentEvent(event, state);
+      handleAgentEvent(event, state, diagnostics);
     }
   } finally {
     process.stdout.write('\n');
