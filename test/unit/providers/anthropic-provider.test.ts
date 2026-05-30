@@ -246,6 +246,56 @@ describe('buildAnthropicTools', () => {
   });
 });
 
+describe('AnthropicProvider — output token cap defaults', () => {
+  it('uses cached model max_tokens when options.maxTokens is unset', async () => {
+    const provider = new AnthropicProvider('test-key');
+    (provider as any).modelInfoCache.set('claude-sonnet-4-6', {
+      id: 'claude-sonnet-4-6',
+      max_input_tokens: 200000,
+      max_tokens: 16384,
+      created_at: '2024-01-01T00:00:00Z',
+      display_name: 'Claude Sonnet 4.6',
+      type: 'model',
+    });
+
+    let capturedParams: any;
+    (provider as any).client = {
+      messages: {
+        create: async (params: any) => {
+          capturedParams = params;
+          return {
+            content: [{ type: 'text', text: 'ok' }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          };
+        },
+      },
+    };
+
+    await provider.chatNoStream('claude-sonnet-4-6', [{ role: 'user', content: 'hi' }]);
+    assert.strictEqual(capturedParams.max_tokens, 16384);
+  });
+
+  it('falls back to 8192 when model cache is cold and options.maxTokens is unset', async () => {
+    const provider = new AnthropicProvider('test-key');
+
+    let capturedParams: any;
+    (provider as any).client = {
+      messages: {
+        create: async (params: any) => {
+          capturedParams = params;
+          return {
+            content: [{ type: 'text', text: 'ok' }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          };
+        },
+      },
+    };
+
+    await provider.chatNoStream('claude-sonnet-4-6', [{ role: 'user', content: 'hi' }]);
+    assert.strictEqual(capturedParams.max_tokens, 8192);
+  });
+});
+
 describe('AnthropicProvider — cache token plumbing', () => {
   it('populates cachedPromptTokens and cacheCreationTokens from chatNoStream response', async () => {
     const provider = new AnthropicProvider('test-key');
