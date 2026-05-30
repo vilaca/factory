@@ -87,7 +87,7 @@ export async function* streamOpenAiChat(req: OpenAiChatRequest): AsyncGenerator<
     // openai-node and openai-python surface it on every response; today we
     // discard it. Attach to apiError on the !res.ok path below as well.
     if (!res.ok) {
-      throw apiError(req.providerName, res.status, await res.text());
+      throw apiError(req.providerName, res.status, await res.text(), res.headers);
     }
 
     const reader = res.body?.getReader();
@@ -159,7 +159,7 @@ export async function sendOpenAiChat(req: OpenAiChatRequest): Promise<ChatChunk>
   });
 
   if (!res.ok) {
-    throw apiError(req.providerName, res.status, await res.text());
+    throw apiError(req.providerName, res.status, await res.text(), res.headers);
   }
 
   const data = (await res.json()) as OpenAiNonStreamResponse;

@@ -101,6 +101,39 @@ describe('callModel — retry policy', () => {
     assert.strictEqual((result as { fullContent: string }).fullContent, 'after-throttle');
   });
 
+  it('honors retryAfterMs on 429 and retries up to 3 times before any key rotation', async () => {
+    const provider = sequencedProvider('p', [
+      Object.assign(new Error('429 #1'), { status: 429, retryAfterMs: 1 }),
+      Object.assign(new Error('429 #2'), { status: 429, retryAfterMs: 1 }),
+      Object.assign(new Error('429 #3'), { status: 429, retryAfterMs: 1 }),
+      [{ content: 'after-retry-after', usage: undefined }],
+    ]);
+
+    const { events, result } = await collect(
+      callModel(provider, 'm', messages, tools, {
+        rotation: {
+          keys: [
+            { id: 'a', token: 'tok-a', createdAt: new Date(0).toISOString() },
+            { id: 'b', token: 'tok-b', createdAt: new Date(0).toISOString() },
+          ],
+          activeKeyId: 'a',
+          withKey: async () => {
+            throw new Error('unexpected key rotation');
+          },
+        },
+      }),
+    );
+
+    const retries = events.filter(e => e.type === 'provider-retry');
+    assert.strictEqual(retries.length, 3);
+    assert.deepStrictEqual(
+      retries.map(r => (r as { delayMs: number }).delayMs),
+      [1, 1, 1],
+    );
+    assert.strictEqual(events.filter(e => e.type === 'key-rotation').length, 0);
+    assert.strictEqual((result as { fullContent: string }).fullContent, 'after-retry-after');
+  });
+
   it('does NOT retry a 401 (rotation-eligible) — leaves it for the rotation tier', async () => {
     // 401 with no rotation options should propagate as a regular failure.
     // The call-model loop currently passes 401 through to streamish then to

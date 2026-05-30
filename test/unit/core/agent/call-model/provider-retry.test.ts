@@ -73,6 +73,14 @@ describe('classifyForRetry', () => {
   it('also reads statusCode (some SDKs use that name)', () => {
     assert.strictEqual(classifyForRetry({ statusCode: 503 }).retry, true);
   });
+
+  it('propagates provider-requested retryAfterMs on throttling errors', () => {
+    assert.deepStrictEqual(classifyForRetry({ status: 429, retryAfterMs: 1500 }), {
+      retry: true,
+      reason: 'rate-limit',
+      retryAfterMs: 1500,
+    });
+  });
 });
 
 describe('nextDelayMs', () => {

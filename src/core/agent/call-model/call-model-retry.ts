@@ -20,11 +20,10 @@ export interface RetryOutcome {
  * `provider-retry` event if so, and sleep the backoff. Extracted to keep
  * the main `callModel` body under the cognitive-complexity cap.
  *
- * Rate-limits (429) defer to rotation when rotation is configured because
- * a different saved key on the same provider almost always has its own
- * quota window — that gets through faster than waiting out backoff. With
- * no rotation configured, we retry 429 too because retry is the only
- * option left.
+ * For rate limits carrying a provider-specified wait (`retryAfterMs` from
+ * Retry-After headers), we honor that delay before considering rotation.
+ * This matches OpenAI throttling guidance and avoids burning keys when the
+ * server has already told us exactly when to retry.
  */
 export async function* tryRetry(
   err: unknown,
@@ -33,20 +32,32 @@ export async function* tryRetry(
   hasRotation: boolean,
   alreadyStreamed: boolean,
 ): AsyncGenerator<AgentEvent, RetryOutcome> {
-  if (alreadyStreamed || attempt + 1 >= policy.maxAttempts) {
+  if (alreadyStreamed) {
     return { retried: false, nextAttempt: attempt };
   }
+
   const decision = classifyForRetry(err);
-  const deferToRotation = decision.reason === 'rate-limit' && hasRotation;
-  if (!decision.retry || deferToRotation) {
+  if (!decision.retry) {
     return { retried: false, nextAttempt: attempt };
   }
-  const delayMs = nextDelayMs(attempt, policy);
+
+  const hasServerWait = decision.reason === 'rate-limit' && decision.retryAfterMs !== undefined;
+  const maxRetries = hasServerWait ? 3 : Math.max(0, policy.maxAttempts - 1);
+  if (attempt >= maxRetries) {
+    return { retried: false, nextAttempt: attempt };
+  }
+
+  const deferToRotation = decision.reason === 'rate-limit' && hasRotation && !hasServerWait;
+  if (deferToRotation) {
+    return { retried: false, nextAttempt: attempt };
+  }
+
+  const delayMs = hasServerWait ? (decision.retryAfterMs ?? 0) : nextDelayMs(attempt, policy);
   const nextAttempt = attempt + 1;
   yield {
     type: 'provider-retry',
     attempt: nextAttempt,
-    maxAttempts: policy.maxAttempts,
+    maxAttempts: hasServerWait ? maxRetries + 1 : policy.maxAttempts,
     delayMs,
     reason: decision.reason ?? 'server-error',
   };
