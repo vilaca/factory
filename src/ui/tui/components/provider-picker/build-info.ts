@@ -6,7 +6,9 @@ import type { ModelDisplayInfo } from './types.js';
  *  generically rather than per-provider so any future coding-specialist
  *  family is correctly boosted in the picker without code changes. */
 function isCodingSpecialistName(model: string): boolean {
-  return /(?:^|[-/])(?:codex|coder)\b/i.test(model);
+  return /(?:^|[-/])(?:codex|coder)\b/i.test(model) ||
+         /(?:^|[-/])codestral\b/i.test(model) ||
+         /(?:^|[-/])devstral\b/i.test(model);
 }
 
 /**
@@ -22,12 +24,14 @@ export function buildPickerInfo(source: Provider, model: string): ModelDisplayIn
   let contextWindow;
   let maxOutputTokens;
   let codingSpecialist;
+  let toolSupport;
   try {
     const caps = source.getCapabilities(model);
     tier = caps.modelTier;
     contextWindow = caps.contextWindow;
     maxOutputTokens = caps.maxOutputTokens;
     codingSpecialist = caps.codingSpecialist ?? isCodingSpecialistName(model);
+    toolSupport = caps.toolSupport;
   } catch {
     // Unknown model — capabilities estimator may throw; sort puts it last.
   }
@@ -43,5 +47,6 @@ export function buildPickerInfo(source: Provider, model: string): ModelDisplayIn
     contextWindow,
     maxOutputTokens,
     codingSpecialist,
+    toolSupport,
   };
 }

@@ -32,13 +32,15 @@ export interface ModelDisplayInfo {
   warning?: string;
   /** Coding-suitability tier — primary picker sort key. */
   tier?: ModelTier;
-  /** Coding-specialist fine-tune (codex/coder). Floats above non-specialists
+  /** Coding-specialist fine-tune (codex/coder/codestral/devstral). Floats above non-specialists
    *  within the same tier since this CLI is a coding agent. */
   codingSpecialist?: boolean;
   /** Context window size in tokens — sort key (descending). */
   contextWindow?: number;
   /** Max output tokens — sort key (descending). */
   maxOutputTokens?: number;
+  /** Tool support level — sort key (native > basic > none). */
+  toolSupport?: 'native' | 'basic' | 'none';
 }
 
 /** Subset of ProviderKey shown to the picker — token never crosses this surface. */
