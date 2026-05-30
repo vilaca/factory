@@ -6,9 +6,11 @@ import type { ModelDisplayInfo } from './types.js';
  *  generically rather than per-provider so any future coding-specialist
  *  family is correctly boosted in the picker without code changes. */
 function isCodingSpecialistName(model: string): boolean {
-  return /(?:^|[-/])(?:codex|coder)\b/i.test(model) ||
-         /(?:^|[-/])codestral\b/i.test(model) ||
-         /(?:^|[-/])devstral\b/i.test(model);
+  return (
+    /(?:^|[-/])(?:codex|coder)\b/i.test(model) ||
+    /(?:^|[-/])codestral\b/i.test(model) ||
+    /(?:^|[-/])devstral\b/i.test(model)
+  );
 }
 
 /**
