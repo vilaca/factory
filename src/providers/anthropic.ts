@@ -131,7 +131,7 @@ export class AnthropicProvider implements Provider {
     const extras = anthropicExtras(sampling, options?.forceToolCall ?? false, hasTools);
     const params: StreamingParams = {
       model,
-      max_tokens: options?.maxTokens ?? 8192,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens(model),
       messages: msgs,
       stream: true,
       ...(system !== null ? { system } : {}),
@@ -192,7 +192,7 @@ export class AnthropicProvider implements Provider {
     const extras = anthropicExtras(sampling, options?.forceToolCall ?? false, hasTools);
     const params: NonStreamingParams = {
       model,
-      max_tokens: options?.maxTokens ?? 8192,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens(model),
       messages: msgs,
       ...(system !== null ? { system } : {}),
       ...(hasTools ? { tools: buildAnthropicTools(tools!, options?.cacheTools) } : {}),
@@ -234,6 +234,19 @@ export class AnthropicProvider implements Provider {
     msgs: MessageParam[];
   } {
     return splitMessagesForAnthropic(messages);
+  }
+
+  /** Default output cap for Anthropic calls when the caller does not set
+   *  `options.maxTokens`.
+   *
+   *  Prefer the model's advertised `max_tokens` from Models API metadata so we
+   *  don't under-cap newer models (e.g. Opus/Sonnet variants) with a static
+   *  constant. Keep an 8192 fallback for cache-cold paths.
+   *
+   *  TODO(config): make this user-configurable (global/provider/model-level)
+   *  so users can trade off latency/cost vs verbosity without patching code. */
+  private defaultMaxTokens(model: string): number {
+    return this.modelInfoCache.get(model)?.max_tokens ?? 8192;
   }
 
   /** Per-request options layered on top of the SDK client defaults.
