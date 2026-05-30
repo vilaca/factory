@@ -61,6 +61,32 @@ describe('Agent loop — auto-retry on tool failure', () => {
     assert.strictEqual(injected.length, 0);
   });
 
+  it('does NOT auto-retry on hard-denied security path failures', async () => {
+    const permissions = new PermissionManager();
+    permissions.allowAll('Read');
+
+    const deniedPath = path.join(os.homedir(), '.factory', 'sessions', 'blocked.jsonl');
+    const provider = createMockProvider([
+      {
+        content: '',
+        tool_calls: [{ function: { name: 'Read', arguments: { file_path: deniedPath } } }],
+      },
+      { content: 'retrying in prose' },
+    ]);
+
+    const events = await collectEvents('check that path', provider, { permissions });
+
+    const injected = findEvents(events, 'auto-retry-injected');
+    assert.strictEqual(injected.length, 0, 'hard-denied path failures should not auto-retry');
+
+    const exhausted = findEvents(events, 'auto-retry-exhausted');
+    assert.strictEqual(exhausted.length, 0, 'non-retriable failures should not emit exhausted');
+
+    const complete = findEvents(events, 'turn-complete');
+    assert.strictEqual(complete.length, 1);
+    assert.strictEqual((complete[0] as any).stopReason, 'completed');
+  });
+
   it('exhausts the retry budget when model never recovers', async () => {
     const permissions = new PermissionManager();
     permissions.allowAll('Read');
