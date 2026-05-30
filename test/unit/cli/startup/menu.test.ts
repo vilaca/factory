@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { createStartupPickerKeyProps } from '../../../../src/cli/startup/menu.js';
+import { createStartupPickerDataSource } from '../../../../src/cli/startup/picker-data.js';
 
 let originalHome: string | undefined;
 let originalXdg: string | undefined;
@@ -27,9 +27,9 @@ afterEach(() => {
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 
-describe('createStartupPickerKeyProps', () => {
+describe('createStartupPickerDataSource', () => {
   it('allows adding the first key for a simple-prompt provider', async () => {
-    const props = createStartupPickerKeyProps();
+    const props = createStartupPickerDataSource();
 
     assert.strictEqual(props.multiKeyProviders.has('anthropic'), true);
     assert.strictEqual(props.multiKeyProviders.has('copilot'), false);
