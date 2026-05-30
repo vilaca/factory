@@ -21,10 +21,41 @@
 
 export interface ApiError extends Error {
   status: number;
+  /** Server-requested wait (ms) for throttling responses (429/503). */
+  retryAfterMs?: number;
 }
 
-export function apiError(providerName: string, status: number, body: string): ApiError {
+function parseRetryAfterMs(headers: Headers | undefined): number | undefined {
+  if (!headers) return undefined;
+
+  const retryAfterMsRaw = headers.get('retry-after-ms');
+  if (retryAfterMsRaw) {
+    const ms = Number.parseFloat(retryAfterMsRaw);
+    if (Number.isFinite(ms) && ms > 0) return Math.ceil(ms);
+  }
+
+  const retryAfterRaw = headers.get('retry-after');
+  if (!retryAfterRaw) return undefined;
+
+  const seconds = Number.parseFloat(retryAfterRaw);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.ceil(seconds * 1000);
+  }
+
+  const at = Date.parse(retryAfterRaw);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, at - Date.now());
+}
+
+export function apiError(
+  providerName: string,
+  status: number,
+  body: string,
+  headers?: Headers,
+): ApiError {
   const err = new Error(`${providerName} API error ${status}: ${body}`) as ApiError;
   err.status = status;
+  const retryAfterMs = parseRetryAfterMs(headers);
+  if (retryAfterMs !== undefined) err.retryAfterMs = retryAfterMs;
   return err;
 }

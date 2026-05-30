@@ -38,6 +38,9 @@ export interface RetryDecision {
   /** When `retry` is true, the human-readable reason classified from the
    *  error. Used for telemetry and the status-bar activity label. */
   reason?: 'network' | 'server-error' | 'rate-limit' | 'timeout';
+  /** Provider-specified backoff window (ms), when present (e.g. Retry-After
+   *  on a 429). Caller should honor this over local jitter. */
+  retryAfterMs?: number;
 }
 
 // Match connection-establishment errors only. Mid-stream errors like
@@ -67,6 +70,15 @@ function messageOf(err: unknown): string {
     return (err as { message: string }).message;
   }
   return String(err ?? '');
+}
+
+function retryAfterMsOf(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const value = (err as { retryAfterMs?: unknown }).retryAfterMs;
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return Math.ceil(value);
+  }
+  return undefined;
 }
 
 /**
@@ -99,19 +111,20 @@ function messageOf(err: unknown): string {
  * land in the 5xx-retry bucket. Cheap fix is a regex on the body in
  * `apiError` returning status=429 for the Slow Down variant.
  */
-// TODO(retry/retry-after): honor the `Retry-After` header on 429/503
-// responses. Today we apply jittered exponential backoff and ignore what
-// the server tells us to wait — OpenAI's error-codes guide says to honor
-// it. Requires the provider boundary (apiError in providers/openai/errors.ts)
-// to attach the header value to the thrown error, and nextDelayMs to take
-// an optional `minDelayMs` floor that clamps the jitter window upward.
 export function classifyForRetry(err: unknown): RetryDecision {
   const status = statusOf(err);
+  const retryAfterMs = retryAfterMsOf(err);
   if (status !== undefined) {
     if (status === 408) return { retry: true, reason: 'timeout' };
-    if (status === 429) return { retry: true, reason: 'rate-limit' };
+    if (status === 429) {
+      return retryAfterMs !== undefined
+        ? { retry: true, reason: 'rate-limit', retryAfterMs }
+        : { retry: true, reason: 'rate-limit' };
+    }
     if (status >= 500 && status < 600 && status !== 501 && status !== 505) {
-      return { retry: true, reason: 'server-error' };
+      return retryAfterMs !== undefined
+        ? { retry: true, reason: 'server-error', retryAfterMs }
+        : { retry: true, reason: 'server-error' };
     }
     return { retry: false };
   }
