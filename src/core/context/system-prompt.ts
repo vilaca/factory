@@ -103,7 +103,7 @@ Rules:
 const TERMINAL_TOOL_BULLETS = `- **Read**: Read file contents with line numbers. Use this instead of cat/head/tail. For large files, pass \`limit\` and \`offset\` to read a window instead of the whole file.
 - **Write**: Create or overwrite files. Creates parent directories as needed. Use this instead of echo/cat redirects.
 - **Edit**: Replace exact strings in files. Use this instead of sed/awk. The old_string must be unique in the file, or pass replace_all=true to replace every occurrence in one call (preferred over multiple Edits or Bash sed for bulk renames).
-- **Bash**: Execute shell commands. Use for git, builds, tests, system operations. Bash output can easily overwhelm context, so default to bounded commands: narrow paths and add caps like \`-n\`, \`--max-count\`, \`--stat\`, or \`| head -n 200\`. Do not run unbounded high-volume Bash output unless the user explicitly asks for full output.
+- **Bash**: Execute shell commands. Use for git, builds, tests, system operations. Bash output can easily overwhelm context, so default to bounded commands: narrow paths and add caps like \`-n\`, \`--max-count\`, \`--stat\`, \`| head -n 200\`, or \`| tail -n 200\`. Assume output is unbounded unless the command is naturally small (e.g. \`pwd\`, \`git status --short\`). Do not run unbounded high-volume Bash output unless the user explicitly asks for full output.
 - **Glob**: Find files by pattern (e.g. "**/*.ts"). Use instead of find/ls.
 - **Grep**: Search file contents with regex. Use instead of grep/rg. Keep searches scoped with \`glob\` and only request matching-line content when needed.
 - **WebFetch**: Fetch an http(s) URL and return page content as readable text; HTML is simplified to markdown. Use for public docs, release notes, or specs not in the repo. Unfamiliar hosts may require user approval; responses are size- and time-bounded.`;
@@ -138,7 +138,8 @@ Avoid flooding the context window with noisy command output.
 - Prefer first-party tools over shell equivalents (Read over cat/head/tail, Grep over grep/rg).
 - Scope commands to specific files/directories whenever possible; avoid repo-wide dumps by default.
 - Be especially strict with Bash: treat unbounded Bash output as a last resort.
-- For potentially large Bash output (e.g. \`git diff\`, \`git log\`, \`ls -R\`, \`grep/rg\`, \`cat\`), always add bounds first (for example \`--stat\`, \`--max-count\`, \`-n\`, \`| head -n 200\`).
+- For any Bash command that could exceed ~200 lines, add bounds first (for example \`--stat\`, \`--max-count\`, \`-n\`, \`| head -n 200\`, or \`| tail -n 200\`).
+- For potentially large Bash output (e.g. \`git diff\`, \`git log\`, \`ls -R\`, \`grep/rg\`, \`cat\`), you must use a bounded form first.
 - Only run an unbounded Bash output command when the user explicitly requests full/raw output.
 - For large files, use Read with \`offset\`/\`limit\` and only inspect the relevant window.`;
 
@@ -207,7 +208,7 @@ function getBasePrompt(modelTier: ModelTier, provider?: string): string {
 - If you don't know where a file is, search for it with Glob or Grep. Do not guess paths.
 - Read files before changing them.
 - Use Edit for small changes, Write for new files.
-- Keep Bash output bounded by default: avoid unscoped high-volume commands; use narrower paths and limits (e.g. \`| head\`, \`-n\`, \`--max-count\`). Only show full raw output if the user explicitly asks for it.
+- Keep Bash output bounded by default: avoid unscoped high-volume commands; use narrower paths and limits (e.g. \`| head -n 200\`, \`| tail -n 200\`, \`-n\`, \`--max-count\`). If a command might produce large output, run a bounded form first. Only show full raw output if the user explicitly asks for it.
 - Keep responses short.
 - Think step by step.`;
   }
