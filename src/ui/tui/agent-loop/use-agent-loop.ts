@@ -219,6 +219,15 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     setLastUsage(undefined);
     setSessionTurns(() => 0);
     setSessionToolCalls(() => 0);
+    setEstimatedTokens(undefined);
+
+    // Reset the context manager's prompt-token floor so the status bar's
+    // ctx gauge starts fresh after /clear. Without this, the floor from
+    // the last model response persists and the gauge shows stale fill.
+    refs.current.contextManager.recordPromptUsage(undefined);
+    
+    // Clear fired threshold warnings so they can fire again in the new conversation
+    refs.current.contextManager.resetThresholds();
 
     // Restore the text-tool fallback flag to whatever the model's validated
     // tool support says. The event-handler auto-flips useTextToolFallback to

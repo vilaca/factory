@@ -71,6 +71,9 @@ export class ContextManager {
   recordPromptUsage(usage: TokenUsage | undefined): void {
     if (usage && usage.promptTokens > 0) {
       this.lastPromptTokensFromApi = usage.promptTokens;
+    } else {
+      // Reset to 0 when usage is undefined or promptTokens is 0
+      this.lastPromptTokensFromApi = 0;
     }
   }
 
@@ -193,6 +196,13 @@ export class ContextManager {
   /** Test-only — clear the fired-threshold set so each test starts
    *  clean. Production callers shouldn't need this. */
   _resetThresholdsForTests(): void {
+    this.firedThresholds.clear();
+  }
+
+  /** Clear the fired-threshold set. Called when the conversation is
+   *  explicitly cleared to ensure threshold warnings can fire again
+   *  in the new conversation. */
+  resetThresholds(): void {
     this.firedThresholds.clear();
   }
 
