@@ -225,7 +225,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     // ctx gauge starts fresh after /clear. Without this, the floor from
     // the last model response persists and the gauge shows stale fill.
     refs.current.contextManager.recordPromptUsage(undefined);
-    
+
     // Clear fired threshold warnings so they can fire again in the new conversation
     refs.current.contextManager.resetThresholds();
 
