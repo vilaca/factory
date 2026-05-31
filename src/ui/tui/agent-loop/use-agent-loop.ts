@@ -217,6 +217,8 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     setItems([]);
     setStreamingText('');
     setLastUsage(undefined);
+    setSessionTurns(() => 0);
+    setSessionToolCalls(() => 0);
 
     // Restore the text-tool fallback flag to whatever the model's validated
     // tool support says. The event-handler auto-flips useTextToolFallback to
