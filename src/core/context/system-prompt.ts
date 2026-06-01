@@ -37,10 +37,10 @@ export function buildEnvironmentMessage(cwd: string): string {
 export async function buildSystemPrompt(
   cwd: string,
   modelTier: ModelTier = 'strong',
-  context?: { provider?: string },
+  context?: { provider?: string; onFileLoaded?: (filePath: string) => void },
 ): Promise<string> {
   const [projectInstructions, projectFacts] = await Promise.all([
-    loadProjectInstructions(cwd),
+    loadProjectInstructions(cwd, context?.onFileLoaded),
     extractProjectFacts(cwd),
   ]);
 
