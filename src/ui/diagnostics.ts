@@ -62,7 +62,8 @@ export function tuiDiagnosticSink(
 ): DiagnosticSink {
   return {
     emit(diagnostic) {
-      const noticeLevel = diagnostic.level === 'warning' ? 'warn' : diagnostic.level === 'error' ? 'danger' : 'info';
+      const noticeLevel =
+        diagnostic.level === 'warning' ? 'warn' : diagnostic.level === 'error' ? 'danger' : 'info';
       addNotice(noticeLevel, diagnostic.message);
     },
   };

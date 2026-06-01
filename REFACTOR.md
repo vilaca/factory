@@ -28,11 +28,11 @@ Core owns no tools. Not even Read or Bash. Core owns no concrete provider. Core 
 
 ```ts
 interface CoreOptions {
-  provider: Provider          // who to call
-  tools: ToolRegistry         // what tools are available (can be empty)
-  systemPrompt: string        // composed by layers above before the loop starts
-  conversation: Conversation  // initial history
-  events: EventBus            // where to broadcast facts
+  provider: Provider; // who to call
+  tools: ToolRegistry; // what tools are available (can be empty)
+  systemPrompt: string; // composed by layers above before the loop starts
+  conversation: Conversation; // initial history
+  events: EventBus; // where to broadcast facts
 }
 ```
 
@@ -104,14 +104,14 @@ events  →  read-only broadcast for cross-cutting observers only, never affect 
 
 Plugins don't all live at the same level. Each plugin belongs to a specific layer and can only extend that layer's contract.
 
-| Plugin | Layer | What it adds |
-|---|---|---|
-| provider-anthropic, provider-openai, … | Provider | Implements the `Provider` interface |
-| filesystem, shell, web, delegate | Tools | Adds handlers to the tool registry |
-| security | Security | Adds policies the security layer enforces |
-| mcp | Tools | Adapts remote MCP tools into the registry |
-| tui, headless | UI | Adds a rendering surface and slash commands |
-| context-skills, session | Agent | Contributes to system prompt, logs turns |
+| Plugin                                 | Layer    | What it adds                                |
+| -------------------------------------- | -------- | ------------------------------------------- |
+| provider-anthropic, provider-openai, … | Provider | Implements the `Provider` interface         |
+| filesystem, shell, web, delegate       | Tools    | Adds handlers to the tool registry          |
+| security                               | Security | Adds policies the security layer enforces   |
+| mcp                                    | Tools    | Adapts remote MCP tools into the registry   |
+| tui, headless                          | UI       | Adds a rendering surface and slash commands |
+| context-skills, session                | Agent    | Contributes to system prompt, logs turns    |
 
 ---
 
@@ -146,22 +146,22 @@ Plugins register slash commands at startup via a reducer: each plugin declares a
 
 ```ts
 interface SlashCommand {
-  name: string
-  description: string        // shown in /help
-  handler: (args: string, ctx: SlashContext) => SlashResult
+  name: string;
+  description: string; // shown in /help
+  handler: (args: string, ctx: SlashContext) => SlashResult;
 }
 
 interface SlashContext {
-  conversation: ConversationHandle
-  agentConfig: AgentConfigHandle
-  session: SessionHandle
-  display: DisplayHandle
+  conversation: ConversationHandle;
+  agentConfig: AgentConfigHandle;
+  session: SessionHandle;
+  display: DisplayHandle;
 }
 
 type SlashResult =
-  | { type: "handled" }
-  | { type: "prompt"; text: string }   // forward as agent input
-  | { type: "error"; message: string }
+  | { type: 'handled' }
+  | { type: 'prompt'; text: string } // forward as agent input
+  | { type: 'error'; message: string };
 ```
 
 `/help` is driven by the same registry plugins write into — if `/help` is correct, the registry is correct.
@@ -175,20 +175,21 @@ Many providers share the OpenAI-compatible API. The preference is **duplication 
 Shared code between plugins creates hidden coupling. If a common `openai-api-client` is extracted and both the OpenAI and Groq plugins depend on it, those two plugins are no longer independent. A change to the shared code affects both.
 
 The duplication is the lesser evil:
+
 - Each plugin can evolve independently
 - Each plugin can be removed cleanly
 - The shared HTTP + JSON shape is thin enough that the coupling cost exceeds the deduplication benefit
 
 ### Where to draw the line
 
-| Thing | Verdict | Reason |
-|---|---|---|
-| HTTP calls to `/v1/chat/completions` | Duplicate | Belongs to each provider plugin |
-| JSON schema for OpenAI message format | Duplicate | Each plugin owns its wire format |
-| Streaming SSE parser | Duplicate | Each provider's stream has quirks |
-| `Provider` interface | Core | It's the contract, not an implementation |
-| Retry/backoff logic | Duplicate | Each provider has different rate limit behavior |
-| `ToolResult` / `ToolCall` types | Core | Seam types, not provider-specific |
+| Thing                                 | Verdict   | Reason                                          |
+| ------------------------------------- | --------- | ----------------------------------------------- |
+| HTTP calls to `/v1/chat/completions`  | Duplicate | Belongs to each provider plugin                 |
+| JSON schema for OpenAI message format | Duplicate | Each plugin owns its wire format                |
+| Streaming SSE parser                  | Duplicate | Each provider's stream has quirks               |
+| `Provider` interface                  | Core      | It's the contract, not an implementation        |
+| Retry/backoff logic                   | Duplicate | Each provider has different rate limit behavior |
+| `ToolResult` / `ToolCall` types       | Core      | Seam types, not provider-specific               |
 
 **The one exception:** test utilities. A shared mock server for the OpenAI API is reasonable in `devDependencies` — test infrastructure coupling is much cheaper than production coupling.
 
@@ -234,11 +235,7 @@ A standard monorepo with workspaces:
 {
   "name": "factory-monorepo",
   "private": true,
-  "workspaces": [
-    "packages/core",
-    "packages/plugins/*",
-    "packages/factory"
-  ]
+  "workspaces": ["packages/core", "packages/plugins/*", "packages/factory"]
 }
 ```
 
@@ -272,7 +269,7 @@ A `shared` or `utils` package is where coupling hides. If two plugins need the s
 
 Plugins are grouped by **feature/domain**, not by what kind of thing they are.
 
-Type-based grouping (`tools-fs/`, `tools-shell/`) tells you what a plugin *is*, not what it is *for*. It creates artificial boundaries. `delegate` is a tool, but it also needs a provider, manages its own conversation, and has security implications — which type folder does it go in?
+Type-based grouping (`tools-fs/`, `tools-shell/`) tells you what a plugin _is_, not what it is _for_. It creates artificial boundaries. `delegate` is a tool, but it also needs a provider, manages its own conversation, and has security implications — which type folder does it go in?
 
 Domain grouping is more honest. `filesystem/` collects Read, Write, Edit, Glob, and Grep because they share a security surface (path jail), share test fixtures, and evolve together. `shell/` is alone not because it is a different type from filesystem tools, but because it has a completely different security story and a different evolution path. The domain boundary is meaningful.
 
