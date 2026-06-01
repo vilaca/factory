@@ -235,7 +235,10 @@ export async function loadProjectConfig(cwd: string): Promise<Config> {
  * permission glitch never crashes startup. Total size is capped at
  * ~16KB; sources that don't fit are dropped with a truncation note.
  */
-export async function loadProjectInstructions(cwd: string): Promise<string | null> {
+export async function loadProjectInstructions(
+  cwd: string,
+  onFileLoaded?: (filePath: string) => void,
+): Promise<string | null> {
   const contents = await Promise.all(
     PROJECT_INSTRUCTION_SOURCES.map(rel => readTextFile(path.join(cwd, rel))),
   );
@@ -257,6 +260,11 @@ export async function loadProjectInstructions(cwd: string): Promise<string | nul
     }
     parts.push(block);
     totalBytes += blockBytes;
+    
+    // Notify that this file was loaded
+    if (onFileLoaded) {
+      onFileLoaded(path.join(cwd, rel));
+    }
   }
 
   if (parts.length === 0) return null;

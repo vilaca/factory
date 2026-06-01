@@ -1,6 +1,6 @@
 import type { SessionLogger } from '../core/session/session-log.js';
 
-type DiagnosticLevel = 'warning' | 'error';
+type DiagnosticLevel = 'warning' | 'error' | 'info';
 
 interface Diagnostic {
   level: DiagnosticLevel;
@@ -17,6 +17,7 @@ export interface DiagnosticEmitter {
   emit(diagnostic: Diagnostic): void;
   warning(message: string, source?: string): void;
   error(message: string, source?: string): void;
+  info(message: string, source?: string): void;
 }
 
 export function createDiagnosticEmitter(
@@ -33,6 +34,9 @@ export function createDiagnosticEmitter(
     },
     error(message, source) {
       emit({ level: 'error', message, source });
+    },
+    info(message, source) {
+      emit({ level: 'info', message, source });
     },
   };
 }
@@ -54,11 +58,12 @@ export function sessionLogDiagnosticSink(
 
 /** Maps diagnostics to TUI notice levels. */
 export function tuiDiagnosticSink(
-  addNotice: (level: 'warn' | 'danger', text: string) => void,
+  addNotice: (level: 'info' | 'warn' | 'danger', text: string) => void,
 ): DiagnosticSink {
   return {
     emit(diagnostic) {
-      addNotice(diagnostic.level === 'warning' ? 'warn' : 'danger', diagnostic.message);
+      const noticeLevel = diagnostic.level === 'warning' ? 'warn' : diagnostic.level === 'error' ? 'danger' : 'info';
+      addNotice(noticeLevel, diagnostic.message);
     },
   };
 }
@@ -69,7 +74,9 @@ export function stderrDiagnosticSink(
 ): DiagnosticSink {
   return {
     emit(diagnostic) {
-      writeLine(diagnostic.message);
+      // Prefix info messages with [info] to distinguish them from warnings/errors
+      const prefix = diagnostic.level === 'info' ? '[info] ' : '';
+      writeLine(`${prefix}${diagnostic.message}`);
     },
   };
 }

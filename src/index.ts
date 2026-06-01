@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import chalk from 'chalk';
+import path from 'path';
 import type { StartupProviderName } from './providers/registry.js';
 import { DESCRIPTOR_LIST } from './providers/registry.js';
 import { loadConfig } from './core/config/index.js';
@@ -12,6 +13,10 @@ import { buildSystemPrompt } from './core/context/system-prompt.js';
 import { getLastSessionSelection, sessionsDir } from './core/session/session-log.js';
 import { renderWelcome, renderError, animateLogo } from './ui/renderer.js';
 import { errorMessage } from './utils/errors.js';
+import {
+  createDiagnosticEmitter,
+  stderrDiagnosticSink,
+} from './ui/diagnostics.js';
 import { parseArgs, printUsage, printVersion } from './cli/args.js';
 import {
   probeAllProviders,
@@ -59,6 +64,9 @@ async function main(): Promise<void> {
     token: cliArgs.token,
   });
 
+  // Create early diagnostics emitter for startup info messages
+  const startupDiagnostics = createDiagnosticEmitter(stderrDiagnosticSink());
+
   await applyRotationPhase(config, cliArgs);
 
   // Hold security policies as locals; they're threaded into appOptions /
@@ -100,8 +108,15 @@ async function main(): Promise<void> {
     );
 
   const modelTier = provider.getCapabilities(model).modelTier;
+  
+  // Track loaded files for info messages
+  const loadedFiles: string[] = [];
   const systemPrompt = await buildSystemPrompt(cwd, modelTier, {
     provider: providerName,
+    onFileLoaded: (filePath) => {
+      loadedFiles.push(filePath);
+      startupDiagnostics.info(`Loaded project instructions from ${path.basename(filePath)}`);
+    },
   });
 
   // Project-config trust check runs BEFORE we spawn any MCP server or
