@@ -1,6 +1,22 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import path from 'node:path';
+import { Project } from 'ts-morph';
 import { projectFiles } from 'archunit';
+
+// Lazily initialized ts-morph project for import-declaration checks.
+// Shared across all three ts-morph rules so parsing happens once.
+let _morphProject: Project | undefined;
+function getMorphProject(): Project {
+  if (!_morphProject) {
+    _morphProject = new Project({ tsConfigFilePath: 'tsconfig.json' });
+  }
+  return _morphProject;
+}
+
+function relPath(absolute: string): string {
+  return path.relative(process.cwd(), absolute);
+}
 
 // Architectural safeguards for the module boundaries documented in
 // ARCHITECTURE.md. Each rule is run through ArchUnitTS's framework-agnostic
@@ -312,18 +328,15 @@ describe('architecture: module boundaries', () => {
   // one. Lock the boundary structurally.
   it('@modelcontextprotocol/sdk imports must be scoped to src/mcp/{client,adapter}.ts', async () => {
     const allowed = new Set(['src/mcp/client.ts', 'src/mcp/adapter.ts']);
-    const importRegex = /(?:from|require\()\s*['"](@modelcontextprotocol\/sdk[^'"]*)['"]/g;
-    const rule = projectFiles()
-      .inFolder('src/**')
-      .should()
-      .adhereTo(file => {
-        if (allowed.has(file.path)) return true;
-        for (const _m of file.content.matchAll(importRegex)) {
-          return false;
-        }
-        return true;
-      }, 'MCP SDK imports are confined to src/mcp/client.ts and src/mcp/adapter.ts');
-    await expectNoViolations(rule, 'MCP SDK scoping');
+    const violations: string[] = [];
+    for (const sf of getMorphProject().getSourceFiles()) {
+      const rel = relPath(sf.getFilePath());
+      if (!rel.startsWith('src/') || allowed.has(rel)) continue;
+      if (sf.getImportDeclarations().some(d => d.getModuleSpecifierValue().startsWith('@modelcontextprotocol/sdk'))) {
+        violations.push(rel);
+      }
+    }
+    assert.deepStrictEqual(violations, [], `MCP SDK scoping — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`);
   });
 
   it('src/ui/** must not import node networking or child-process modules directly', async () => {
@@ -501,16 +514,16 @@ describe('architecture: module boundaries', () => {
   });
 
   it('files must not pair loadGlobalConfig with saveGlobalConfig — use updateGlobalConfig (f848472 contract)', async () => {
-    const rule = projectFiles()
-      .inFolder('src/**', { except: ['src/core/config/index.ts'] })
-      .should()
-      .adhereTo(file => {
-        const src = file.content;
-        const loads = /\bloadGlobalConfig\b/.test(src);
-        const saves = /\bsaveGlobalConfig\b/.test(src);
-        return !(loads && saves);
-      }, 'loadGlobalConfig + saveGlobalConfig in the same file is RMW — use updateGlobalConfig');
-    await expectNoViolations(rule, 'config RMW via load+save');
+    const violations: string[] = [];
+    for (const sf of getMorphProject().getSourceFiles()) {
+      const rel = relPath(sf.getFilePath());
+      if (!rel.startsWith('src/') || rel === 'src/core/config/index.ts') continue;
+      const imported = new Set(
+        sf.getImportDeclarations().flatMap(d => d.getNamedImports().map(n => n.getName())),
+      );
+      if (imported.has('loadGlobalConfig') && imported.has('saveGlobalConfig')) violations.push(rel);
+    }
+    assert.deepStrictEqual(violations, [], `config RMW via load+save — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`);
   });
 
   it('files that mint a provider AND read capabilities must also prime via prime / listModels / primeModelCache', async () => {
@@ -565,24 +578,15 @@ describe('architecture: module boundaries', () => {
   // is kept ONLY as a tests convenience. Enforce: no source file under
   // src/** (other than the file that defines it) imports defaultRegistry.
   it('production code outside src/tools/index.ts must not import defaultRegistry', async () => {
-    const rule = projectFiles()
-      .inFolder('src/**', { except: ['src/tools/index.ts'] })
-      .should()
-      .adhereTo(file => {
-        // Strip comments + string literals — doc comments that mention
-        // the deprecated name (e.g. "@deprecated; use toolRegistry not
-        // defaultRegistry") are legitimate and shouldn't trip the rule.
-        // Mirrors the comment-stripper used in the status-bar contract
-        // above. The remaining match is on bare identifier usage —
-        // imports, references, anywhere in actual code.
-        const code = file.content
-          .replace(/\/\*[\s\S]*?\*\//g, '')
-          .replace(/(^|[^:])\/\/.*$/gm, '$1')
-          .replace(/"(?:\\.|[^"\\])*"/g, '""')
-          .replace(/'(?:\\.|[^'\\])*'/g, "''");
-        return !/\bdefaultRegistry\b/.test(code);
-      }, 'defaultRegistry is a tests-only convenience — production must use options.toolRegistry');
-    await expectNoViolations(rule, 'defaultRegistry singleton');
+    const violations: string[] = [];
+    for (const sf of getMorphProject().getSourceFiles()) {
+      const rel = relPath(sf.getFilePath());
+      if (!rel.startsWith('src/') || rel === 'src/tools/index.ts') continue;
+      if (sf.getImportDeclarations().some(d => d.getNamedImports().some(n => n.getName() === 'defaultRegistry'))) {
+        violations.push(rel);
+      }
+    }
+    assert.deepStrictEqual(violations, [], `defaultRegistry singleton — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`);
   });
 
   // console.* boundary.

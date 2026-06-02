@@ -60,8 +60,14 @@
     "coverage:providers": "c8 --reporter=none --no-clean tsx --test 'test/unit/providers/**/*.test.ts'",
     "coverage:core": "c8 --reporter=none --no-clean tsx --test 'test/unit/core/**/*.test.ts'",
     "coverage:rest": "c8 --reporter=none --no-clean tsx --test 'test/unit/arch/**/*.test.ts' 'test/unit/cli/**/*.test.ts' 'test/unit/mcp/**/*.test.ts' 'test/unit/security/**/*.test.ts' 'test/unit/tools/**/*.test.ts' 'test/unit/ui/**/*.test.ts' 'test/unit/utils/**/*.test.ts'",
+    "coverage:check:providers": "c8 report --include='src/providers/**' --reporter=none --check-coverage --lines 60 --branches 75 --functions 83",
+    "coverage:check:core": "c8 report --include='src/core/**' --reporter=none --check-coverage --lines 60 --branches 75 --functions 83",
+    "coverage:check:tools": "c8 report --include='src/tools/**' --reporter=none --check-coverage --lines 60 --branches 75 --functions 83",
+    "coverage:check:security": "c8 report --include='src/security/**' --reporter=none --check-coverage --lines 60 --branches 75 --functions 83",
+    "coverage:check:ui": "c8 report --include='src/ui/**' --reporter=none --check-coverage --lines 60 --branches 75 --functions 83",
+    "coverage:check:modules": "npm run coverage:check:providers && npm run coverage:check:core && npm run coverage:check:tools && npm run coverage:check:security && npm run coverage:check:ui",
     "coverage:report": "c8 report --reporter=text --reporter=html --reporter=lcov --check-coverage --lines 60 --branches 75 --functions 83",
-    "coverage": "npm run coverage:clean && npm run coverage:providers && npm run coverage:core && npm run coverage:rest && npm run coverage:report",
+    "coverage": "npm run coverage:clean && npm run coverage:providers && npm run coverage:core && npm run coverage:rest && npm run coverage:check:modules && npm run coverage:report",
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
     "docs:preview": "vitepress preview"
@@ -91,6 +97,7 @@
     "eslint-plugin-sonarjs": "^4.0.3",
     "knip": "^6.15.0",
     "prettier": "^3.8.3",
+    "ts-morph": "^28.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitepress": "^1.6.4"
