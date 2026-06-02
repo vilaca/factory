@@ -1,7 +1,6 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
-import { getGlobalConfigDir, saveGlobalConfig } from '../../core/config/index.js';
 import { bearerAuth, normalizeBaseUrl } from '../shared.js';
 import { makeAbortError } from '../../utils/errors.js';
 
@@ -34,6 +33,7 @@ interface CopilotAuthOptions {
   githubToken?: string;
   copilotToken?: string;
   host?: string;
+  onGithubTokenPersist?: (token: string) => Promise<void> | void;
 }
 
 interface DeviceCodeResponse {
@@ -79,12 +79,14 @@ export class CopilotAuthManager {
   private githubToken?: string;
   private directCopilotToken?: string;
   private hostOverride?: string;
+  private onGithubTokenPersist?: (token: string) => Promise<void> | void;
   private session: CopilotSession | null = null;
 
   constructor(options: CopilotAuthOptions = {}) {
     this.githubToken = options.githubToken;
     this.directCopilotToken = options.copilotToken;
     this.hostOverride = options.host;
+    this.onGithubTokenPersist = options.onGithubTokenPersist;
   }
 
   async authenticateWithDeviceFlow(
@@ -99,7 +101,7 @@ export class CopilotAuthManager {
     });
 
     this.githubToken = await this.pollForAccessToken(device, signal);
-    await saveGlobalConfig({ githubToken: this.githubToken });
+    await this.onGithubTokenPersist?.(this.githubToken);
   }
 
   async getSession(signal?: AbortSignal): Promise<CopilotSession> {
@@ -286,8 +288,4 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
       signal.addEventListener('abort', onAbort, { once: true });
     }
   });
-}
-
-export function getCopilotAuthStorageNote(): string {
-  return `GitHub authentication is stored in ${getGlobalConfigDir()}/config.json`;
 }

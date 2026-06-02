@@ -198,9 +198,7 @@ describe('architecture: module boundaries', () => {
       'src/cli/**',
     ]) {
       const rule = projectFiles()
-        .inFolder('src/providers/**', {
-          except: ['src/providers/registry.ts', 'src/providers/copilot/auth.ts'],
-        })
+        .inFolder('src/providers/**')
         .shouldNot()
         .dependOnFiles()
         .inFolder(upstream);

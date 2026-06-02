@@ -42,8 +42,7 @@ type MessageParam = Anthropic.Messages.MessageParam;
 type ToolUnion = Anthropic.Messages.ToolUnion;
 type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
 type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
-type AnthropicStream = ReturnType<Anthropic['messages']['stream']>;
-type AnthropicStreamEvent = AnthropicStream extends AsyncIterable<infer E> ? E : never;
+type AnthropicStreamEvent = Anthropic.Messages.RawMessageStreamEvent;
 
 interface AnthropicStreamToolCall {
   id: string;
