@@ -260,7 +260,7 @@ export async function loadProjectInstructions(
     }
     parts.push(block);
     totalBytes += blockBytes;
-    
+
     // Notify that this file was loaded
     if (onFileLoaded) {
       onFileLoaded(path.join(cwd, rel));
