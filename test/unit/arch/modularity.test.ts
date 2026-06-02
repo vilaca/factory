@@ -8,9 +8,7 @@ import { projectFiles } from 'archunit';
 // Shared across all three ts-morph rules so parsing happens once.
 let _morphProject: Project | undefined;
 function getMorphProject(): Project {
-  if (!_morphProject) {
-    _morphProject = new Project({ tsConfigFilePath: 'tsconfig.json' });
-  }
+  _morphProject ??= new Project({ tsConfigFilePath: 'tsconfig.json' });
   return _morphProject;
 }
 
@@ -332,11 +330,19 @@ describe('architecture: module boundaries', () => {
     for (const sf of getMorphProject().getSourceFiles()) {
       const rel = relPath(sf.getFilePath());
       if (!rel.startsWith('src/') || allowed.has(rel)) continue;
-      if (sf.getImportDeclarations().some(d => d.getModuleSpecifierValue().startsWith('@modelcontextprotocol/sdk'))) {
+      if (
+        sf
+          .getImportDeclarations()
+          .some(d => d.getModuleSpecifierValue().startsWith('@modelcontextprotocol/sdk'))
+      ) {
         violations.push(rel);
       }
     }
-    assert.deepStrictEqual(violations, [], `MCP SDK scoping — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`);
+    assert.deepStrictEqual(
+      violations,
+      [],
+      `MCP SDK scoping — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`,
+    );
   });
 
   it('src/ui/** must not import node networking or child-process modules directly', async () => {
@@ -521,9 +527,14 @@ describe('architecture: module boundaries', () => {
       const imported = new Set(
         sf.getImportDeclarations().flatMap(d => d.getNamedImports().map(n => n.getName())),
       );
-      if (imported.has('loadGlobalConfig') && imported.has('saveGlobalConfig')) violations.push(rel);
+      if (imported.has('loadGlobalConfig') && imported.has('saveGlobalConfig'))
+        violations.push(rel);
     }
-    assert.deepStrictEqual(violations, [], `config RMW via load+save — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`);
+    assert.deepStrictEqual(
+      violations,
+      [],
+      `config RMW via load+save — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`,
+    );
   });
 
   it('files that mint a provider AND read capabilities must also prime via prime / listModels / primeModelCache', async () => {
@@ -582,11 +593,19 @@ describe('architecture: module boundaries', () => {
     for (const sf of getMorphProject().getSourceFiles()) {
       const rel = relPath(sf.getFilePath());
       if (!rel.startsWith('src/') || rel === 'src/tools/index.ts') continue;
-      if (sf.getImportDeclarations().some(d => d.getNamedImports().some(n => n.getName() === 'defaultRegistry'))) {
+      if (
+        sf
+          .getImportDeclarations()
+          .some(d => d.getNamedImports().some(n => n.getName() === 'defaultRegistry'))
+      ) {
         violations.push(rel);
       }
     }
-    assert.deepStrictEqual(violations, [], `defaultRegistry singleton — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`);
+    assert.deepStrictEqual(
+      violations,
+      [],
+      `defaultRegistry singleton — ${violations.length} violation(s):\n${JSON.stringify(violations, null, 2)}`,
+    );
   });
 
   // console.* boundary.
