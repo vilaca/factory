@@ -496,14 +496,14 @@ function mapAnthropicStopReason(raw: string | null | undefined): string | undefi
   return undefined;
 }
 
-interface AnthropicUsageLike {
+export interface AnthropicUsageLike {
   input_tokens?: number | null;
   output_tokens?: number | null;
   cache_read_input_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
 }
 
-function mergeAnthropicUsage(
+export function mergeAnthropicUsage(
   prev: AnthropicUsageLike | undefined,
   next: AnthropicUsageLike | undefined,
 ): AnthropicUsageLike | undefined {
@@ -521,7 +521,7 @@ function mergeAnthropicUsage(
   };
 }
 
-function mapAnthropicUsage(u: AnthropicUsageLike): TokenUsage {
+export function mapAnthropicUsage(u: AnthropicUsageLike): TokenUsage {
   const input = u.input_tokens ?? 0;
   const output = u.output_tokens ?? 0;
   return {
