@@ -142,9 +142,13 @@ export class AnthropicProvider implements Provider {
     const stream = this.client.messages.stream(params, this.requestOptionsFor(model));
 
     let currentToolCall: { id: string; name: string; rawArgs: string } | null = null;
+    let usageSnapshot: AnthropicUsageLike | undefined;
+    let sawTerminalChunk = false;
 
     for await (const event of stream) {
-      if (event.type === 'content_block_start') {
+      if (event.type === 'message_start') {
+        usageSnapshot = mergeAnthropicUsage(usageSnapshot, event.message.usage);
+      } else if (event.type === 'content_block_start') {
         const block = event.content_block;
         if (block.type === 'tool_use') {
           currentToolCall = { id: block.id, name: block.name, rawArgs: '' };
@@ -169,12 +173,18 @@ export class AnthropicProvider implements Provider {
           };
           currentToolCall = null;
         }
-      } else if (event.type === 'message_stop') {
-        yield { done: true };
       } else if (event.type === 'message_delta') {
-        const usage = mapAnthropicUsage(event.usage);
+        usageSnapshot = mergeAnthropicUsage(usageSnapshot, event.usage);
         const doneReason = mapAnthropicStopReason(event.delta?.stop_reason);
-        yield { done: true, usage, ...(doneReason ? { doneReason } : {}) };
+        sawTerminalChunk = true;
+        yield {
+          done: true,
+          ...(usageSnapshot ? { usage: mapAnthropicUsage(usageSnapshot) } : {}),
+          ...(doneReason ? { doneReason } : {}),
+        };
+      } else if (event.type === 'message_stop') {
+        if (sawTerminalChunk) continue;
+        yield { done: true, ...(usageSnapshot ? { usage: mapAnthropicUsage(usageSnapshot) } : {}) };
       }
     }
   }
@@ -491,6 +501,24 @@ interface AnthropicUsageLike {
   output_tokens?: number | null;
   cache_read_input_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
+}
+
+function mergeAnthropicUsage(
+  prev: AnthropicUsageLike | undefined,
+  next: AnthropicUsageLike | undefined,
+): AnthropicUsageLike | undefined {
+  if (!next) return prev;
+  return {
+    ...(prev ?? {}),
+    ...(next.input_tokens !== undefined ? { input_tokens: next.input_tokens } : {}),
+    ...(next.output_tokens !== undefined ? { output_tokens: next.output_tokens } : {}),
+    ...(next.cache_read_input_tokens !== undefined
+      ? { cache_read_input_tokens: next.cache_read_input_tokens }
+      : {}),
+    ...(next.cache_creation_input_tokens !== undefined
+      ? { cache_creation_input_tokens: next.cache_creation_input_tokens }
+      : {}),
+  };
 }
 
 function mapAnthropicUsage(u: AnthropicUsageLike): TokenUsage {

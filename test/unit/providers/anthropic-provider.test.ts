@@ -408,4 +408,47 @@ describe('AnthropicProvider — cache token plumbing', () => {
     assert.strictEqual(withUsage.usage.cachedPromptTokens, undefined);
     assert.strictEqual(withUsage.usage.cacheCreationTokens, undefined);
   });
+
+  it('merges message_start input tokens with message_delta output-only usage', async () => {
+    const provider = new AnthropicProvider('test-key');
+
+    async function* mockEvents(): AsyncGenerator<any> {
+      yield {
+        type: 'message_start',
+        message: {
+          usage: {
+            input_tokens: 123,
+            cache_read_input_tokens: 80,
+          },
+        },
+      };
+      yield { type: 'content_block_start', content_block: { type: 'text' } };
+      yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } };
+      yield { type: 'content_block_stop' };
+      yield {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn' },
+        usage: { output_tokens: 17 },
+      };
+      yield { type: 'message_stop' };
+    }
+
+    (provider as any).client = {
+      messages: { stream: () => mockEvents() },
+    };
+
+    const chunks: any[] = [];
+    for await (const chunk of provider.chat('claude-sonnet-4-6', [
+      { role: 'user', content: 'hi' },
+    ])) {
+      chunks.push(chunk);
+    }
+
+    const withUsage = chunks.find(c => c.usage);
+    assert.ok(withUsage, 'expected a terminal usage chunk');
+    assert.strictEqual(withUsage.usage.promptTokens, 123);
+    assert.strictEqual(withUsage.usage.completionTokens, 17);
+    assert.strictEqual(withUsage.usage.totalTokens, 140);
+    assert.strictEqual(withUsage.usage.cachedPromptTokens, 80);
+  });
 });

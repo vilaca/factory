@@ -45,6 +45,28 @@ describe('selectDisplayTokens — fix 44aeb26', () => {
     assert.equal(r.tokensAreEstimate, true);
   });
 
+  it('advances ctx from estimate to Anthropic promptTokens once the terminal usage lands', () => {
+    // Mirrors the streaming shape we now normalize in anthropic.ts:
+    // message_start carries input_tokens; message_delta can carry only
+    // output_tokens. After merge, the status bar must switch from the local
+    // estimate to model-reported promptTokens (not totalTokens).
+    const before = selectDisplayTokens(undefined, 80);
+    assert.equal(before.totalTokens, 80);
+    assert.equal(before.tokensAreEstimate, true);
+
+    const after = selectDisplayTokens(
+      {
+        promptTokens: 123,
+        completionTokens: 17,
+        totalTokens: 140,
+      } as { promptTokens?: number; completionTokens?: number; totalTokens?: number },
+      80,
+    );
+    assert.equal(after.totalTokens, 123);
+    assert.equal(after.tokensAreEstimate, false);
+    assert.ok((after.totalTokens ?? 0) > (before.totalTokens ?? 0));
+  });
+
   it('returns undefined for both fields when nothing is known', () => {
     const r = selectDisplayTokens(undefined, undefined);
     assert.equal(r.totalTokens, undefined);
