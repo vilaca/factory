@@ -122,9 +122,24 @@ export async function* chatAnthropicStream(
   const stream = client.messages.stream(params, { signal: options?.signal });
 
   let currentToolCall: { id: string; name: string; rawArgs: string } | null = null;
+  let usageSnapshot: {
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+  } | null = null;
+  let sawTerminalChunk = false;
 
   for await (const event of stream) {
-    if (event.type === 'content_block_start') {
+    if (event.type === 'message_start') {
+      usageSnapshot = {
+        ...(usageSnapshot ?? {}),
+        ...(event.message.usage.input_tokens !== undefined
+          ? { input_tokens: event.message.usage.input_tokens }
+          : {}),
+        ...(event.message.usage.output_tokens !== undefined
+          ? { output_tokens: event.message.usage.output_tokens }
+          : {}),
+      };
+    } else if (event.type === 'content_block_start') {
       const block = event.content_block;
       if (block.type === 'tool_use') {
         currentToolCall = { id: block.id, name: block.name, rawArgs: '' };
@@ -151,17 +166,39 @@ export async function* chatAnthropicStream(
         };
         currentToolCall = null;
       }
-    } else if (event.type === 'message_stop') {
-      yield { done: true };
     } else if (event.type === 'message_delta') {
       const u = event.usage;
+      usageSnapshot = {
+        ...(usageSnapshot ?? {}),
+        ...(u.input_tokens !== undefined ? { input_tokens: u.input_tokens } : {}),
+        ...(u.output_tokens !== undefined ? { output_tokens: u.output_tokens } : {}),
+      };
+      sawTerminalChunk = true;
       yield {
         done: true,
-        usage: {
-          promptTokens: u.input_tokens ?? 0,
-          completionTokens: u.output_tokens ?? 0,
-          totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-        },
+        ...(usageSnapshot
+          ? {
+              usage: {
+                promptTokens: usageSnapshot.input_tokens ?? 0,
+                completionTokens: usageSnapshot.output_tokens ?? 0,
+                totalTokens: (usageSnapshot.input_tokens ?? 0) + (usageSnapshot.output_tokens ?? 0),
+              },
+            }
+          : {}),
+      };
+    } else if (event.type === 'message_stop') {
+      if (sawTerminalChunk) continue;
+      yield {
+        done: true,
+        ...(usageSnapshot
+          ? {
+              usage: {
+                promptTokens: usageSnapshot.input_tokens ?? 0,
+                completionTokens: usageSnapshot.output_tokens ?? 0,
+                totalTokens: (usageSnapshot.input_tokens ?? 0) + (usageSnapshot.output_tokens ?? 0),
+              },
+            }
+          : {}),
       };
     }
   }
