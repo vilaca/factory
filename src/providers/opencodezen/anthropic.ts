@@ -15,11 +15,7 @@ import type {
   ToolCallMessage,
   ToolDefinition,
 } from '../types.js';
-import {
-  type AnthropicUsageLike,
-  mergeAnthropicUsage,
-  mapAnthropicUsage,
-} from '../anthropic.js';
+import { type AnthropicUsageLike, mergeAnthropicUsage, mapAnthropicUsage } from '../anthropic.js';
 import { estimateMaxOutput, parseToolArgs } from './models.js';
 
 type AnthropicStreamingParams = Anthropic.Messages.MessageCreateParamsStreaming;
