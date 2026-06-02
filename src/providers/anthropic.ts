@@ -123,6 +123,21 @@ function handleAnthropicStreamEvent(
   }
 }
 
+/** Suffix appended to a model ID to indicate the user wants the 200k
+ *  context cap rather than the full 1M window. The real model ID is
+ *  obtained by stripping this suffix before any API call or cache
+ *  lookup; `requestOptionsFor` skips the beta header when it is present. */
+const CTX_200K_SUFFIX = '+200k';
+const CTX_200K_LIMIT = 200_000;
+
+function stripCtxSuffix(model: string): string {
+  return model.endsWith(CTX_200K_SUFFIX) ? model.slice(0, -CTX_200K_SUFFIX.length) : model;
+}
+
+function hasCappedCtx(model: string): boolean {
+  return model.endsWith(CTX_200K_SUFFIX);
+}
+
 export class AnthropicProvider implements Provider {
   name = 'anthropic';
   private client: Anthropic;
@@ -155,37 +170,46 @@ export class AnthropicProvider implements Provider {
     for await (const model of this.client.models.list({ limit: 1000 })) {
       models.push(model.id);
       this.modelInfoCache.set(model.id, model);
+      // Emit a capped-context variant for models that support >200k so the
+      // picker shows both options and the user can pick the cheaper/faster one.
+      if (typeof model.max_input_tokens === 'number' && model.max_input_tokens > CTX_200K_LIMIT) {
+        models.push(model.id + CTX_200K_SUFFIX);
+      }
     }
     return models;
   }
 
   getModelPickerInfo(model: string): ModelPickerInfo {
-    const lower = model.toLowerCase();
+    const capped = hasCappedCtx(model);
+    const realId = stripCtxSuffix(model);
+    const lower = realId.toLowerCase();
     const caps = this.getCapabilities(model);
-    const info = this.modelInfoCache.get(model);
+    const info = this.modelInfoCache.get(realId);
     return {
-      label: model,
+      label: capped ? `${realId} (200k)` : realId,
       detail: buildModelDetail(caps, info?.capabilities ?? null),
       warning: buildModelWarning(lower),
     };
   }
 
   getCapabilities(model: string): ProviderCapabilities {
-    const info = this.modelInfoCache.get(model);
+    const capped = hasCappedCtx(model);
+    const realId = stripCtxSuffix(model);
+    const info = this.modelInfoCache.get(realId);
     if (!info) {
       throw new Error(
-        `Anthropic model ${model} has no cached ModelInfo — listModels() must run before getCapabilities(). ` +
+        `Anthropic model ${realId} has no cached ModelInfo — listModels() must run before getCapabilities(). ` +
           `This indicates a code-path that resolves a model without going through the picker / startup listing.`,
       );
     }
     if (typeof info.max_input_tokens !== 'number' || typeof info.max_tokens !== 'number') {
       throw new Error(
-        `Anthropic model ${model} is missing max_input_tokens / max_tokens in the SDK response — ` +
+        `Anthropic model ${realId} is missing max_input_tokens / max_tokens in the SDK response — ` +
           `cannot derive capabilities without inventing numbers.`,
       );
     }
     return {
-      contextWindow: info.max_input_tokens,
+      contextWindow: capped ? CTX_200K_LIMIT : info.max_input_tokens,
       maxOutputTokens: info.max_tokens,
       toolSupport: 'native',
       parallelToolCalls: true,
@@ -194,7 +218,7 @@ export class AnthropicProvider implements Provider {
       // Tier isn't on Anthropic's ModelInfo; derived from the id as a UX hint
       // for system-prompt selection and weak-tier routing. Not a hard fact —
       // see the cross-provider capabilities reshape follow-up.
-      modelTier: anthropicTierFromId(model.toLowerCase()),
+      modelTier: anthropicTierFromId(realId.toLowerCase()),
     };
   }
 
@@ -205,12 +229,13 @@ export class AnthropicProvider implements Provider {
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
+    const apiModel = stripCtxSuffix(model);
 
     const hasTools = !!tools && tools.length > 0;
-    const sampling = resolveSampling(options, { model, providerName: 'anthropic' });
+    const sampling = resolveSampling(options, { model: apiModel, providerName: 'anthropic' });
     const extras = anthropicExtras(sampling, options?.forceToolCall ?? false, hasTools);
     const params: StreamingParams = {
-      model,
+      model: apiModel,
       max_tokens: options?.maxTokens ?? this.defaultMaxTokens(model),
       messages: msgs,
       stream: true,
@@ -241,12 +266,13 @@ export class AnthropicProvider implements Provider {
     options?: ChatOptions,
   ): Promise<ChatChunk> {
     const { system, msgs } = this.splitMessages(messages);
+    const apiModel = stripCtxSuffix(model);
 
     const hasTools = !!tools && tools.length > 0;
-    const sampling = resolveSampling(options, { model, providerName: 'anthropic' });
+    const sampling = resolveSampling(options, { model: apiModel, providerName: 'anthropic' });
     const extras = anthropicExtras(sampling, options?.forceToolCall ?? false, hasTools);
     const params: NonStreamingParams = {
-      model,
+      model: apiModel,
       max_tokens: options?.maxTokens ?? this.defaultMaxTokens(model),
       messages: msgs,
       ...(system !== null ? { system } : {}),
@@ -301,7 +327,7 @@ export class AnthropicProvider implements Provider {
    *  TODO(config): make this user-configurable (global/provider/model-level)
    *  so users can trade off latency/cost vs verbosity without patching code. */
   private defaultMaxTokens(model: string): number {
-    return this.modelInfoCache.get(model)?.max_tokens ?? 8192;
+    return this.modelInfoCache.get(stripCtxSuffix(model))?.max_tokens ?? 8192;
   }
 
   /** Per-request options layered on top of the SDK client defaults.
@@ -312,14 +338,18 @@ export class AnthropicProvider implements Provider {
    *  (= no extra options) otherwise so the common path stays a plain
    *  default-headers request.
    *
+   *  Skips the beta header when the caller selected the +200k capped
+   *  variant (CTX_200K_SUFFIX), which is the cheaper/faster option.
+   *
    *  Reads from the same modelInfoCache the picker uses, so what the
    *  picker shows ("1M ctx") and what the request actually sends (1M
    *  beta header) come from the same source — the SDK. If the cache is
    *  cold the user couldn't have selected the model through the picker
    *  in the first place, so undefined here is the right behavior. */
   private requestOptionsFor(model: string): { headers: Record<string, string> } | undefined {
+    if (hasCappedCtx(model)) return undefined;
     const info = this.modelInfoCache.get(model);
-    if (!info?.max_input_tokens || info.max_input_tokens <= 200000) return undefined;
+    if (!info?.max_input_tokens || info.max_input_tokens <= CTX_200K_LIMIT) return undefined;
     return { headers: { 'anthropic-beta': 'context-1m-2025-08-07' } };
   }
 }
