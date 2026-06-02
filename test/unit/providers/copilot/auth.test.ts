@@ -1,14 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import http from 'node:http';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
 import {
   CopilotAuthManager,
   inferCopilotCredentialKind,
 } from '../../../../src/providers/copilot/auth.js';
-import { loadGlobalConfig } from '../../../../src/core/config/index.js';
 
 function withServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
@@ -74,7 +70,7 @@ describe('CopilotAuthManager', () => {
     );
   });
 
-  it('runs device flow and saves the GitHub token', async () => {
+  it('runs device flow and forwards the GitHub token to persistence callback', async () => {
     let deviceRequested = false;
     let tokenPolled = false;
 
@@ -110,30 +106,28 @@ describe('CopilotAuthManager', () => {
       },
       async baseUrl => {
         const prevLogin = process.env.FACTORY_GITHUB_LOGIN_BASE_URL;
-        const prevConfigHome = process.env.XDG_CONFIG_HOME;
-        const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-device-flow-'));
         process.env.FACTORY_GITHUB_LOGIN_BASE_URL = baseUrl;
-        process.env.XDG_CONFIG_HOME = configHome;
 
+        let persistedToken: string | undefined;
         try {
-          const auth = new CopilotAuthManager();
+          const auth = new CopilotAuthManager({
+            onGithubTokenPersist: token => {
+              persistedToken = token;
+            },
+          });
           let promptSeen = false;
           await auth.authenticateWithDeviceFlow(async ({ userCode, verificationUri }) => {
             promptSeen = true;
             assert.strictEqual(userCode, 'ABCD-EFGH');
             assert.strictEqual(verificationUri, 'https://example.test/device');
           });
-          const config = await loadGlobalConfig();
           assert.ok(deviceRequested);
           assert.ok(tokenPolled);
           assert.ok(promptSeen);
-          assert.strictEqual(config.githubToken, 'gho_saved_token');
+          assert.strictEqual(persistedToken, 'gho_saved_token');
         } finally {
           if (prevLogin === undefined) delete process.env.FACTORY_GITHUB_LOGIN_BASE_URL;
           else process.env.FACTORY_GITHUB_LOGIN_BASE_URL = prevLogin;
-          if (prevConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
-          else process.env.XDG_CONFIG_HOME = prevConfigHome;
-          await fs.rm(configHome, { recursive: true, force: true });
         }
       },
     );

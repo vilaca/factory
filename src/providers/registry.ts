@@ -1,4 +1,3 @@
-import type { Config } from '../core/config/types.js';
 import type { GoogleAiStudioAuthMode } from './auth-modes.js';
 import type { Provider, UnprimedProvider } from './types.js';
 import { OllamaProvider } from './ollama.js';
@@ -39,6 +38,30 @@ export type StartupProviderName =
 
 type AuthFlow = 'none' | 'simple-prompt' | 'device-flow' | 'oauth-or-key';
 
+type ProviderConfigTokenKey =
+  | 'huggingfaceToken'
+  | 'anthropicToken'
+  | 'copilotToken'
+  | 'githubToken'
+  | 'openrouterToken'
+  | 'vercelToken'
+  | 'opencodeZenToken'
+  | 'googleAiStudioToken'
+  | 'mistralToken'
+  | 'codestralToken'
+  | 'cerebrasToken'
+  | 'groqToken'
+  | 'cohereToken'
+  | 'openaiToken'
+  | 'workersAiToken';
+
+type ProviderConfigAuthModeKey = 'googleAiStudioAuthMode';
+
+type ProviderConfigView = {
+  token?: string;
+  googleAiStudioAuthMode?: GoogleAiStudioAuthMode;
+} & Partial<Record<ProviderConfigTokenKey, string>>;
+
 export interface CreateProviderOptions {
   host?: string;
   token?: string;
@@ -56,9 +79,9 @@ export interface ProviderDescriptor {
   label: string;
   aliases: string[];
 
-  configTokenKey?: keyof Config;
-  altConfigTokenKey?: keyof Config;
-  configAuthModeKey?: keyof Config;
+  configTokenKey?: ProviderConfigTokenKey;
+  altConfigTokenKey?: ProviderConfigTokenKey;
+  configAuthModeKey?: ProviderConfigAuthModeKey;
   envVars?: string[];
   acceptsGenericToken?: boolean;
   envPrecedesConfig?: boolean;
@@ -378,7 +401,7 @@ export function createProvider(
 
 export function resolveToken(
   descriptor: ProviderDescriptor,
-  config: Config,
+  config: ProviderConfigView,
   cliToken?: string,
 ): string | undefined {
   if (cliToken) return cliToken;

@@ -4,7 +4,7 @@ import type { ProviderDescriptor } from '../../providers/registry.js';
 import { resolveToken } from '../../providers/registry.js';
 import { getGlobalConfigDir, loadConfig, saveGlobalConfig } from '../../core/config/index.js';
 import { appendProviderLog } from '../../utils/provider-log.js';
-import { getCopilotAuthStorageNote, CopilotAuthManager } from '../../providers/copilot/auth.js';
+import { CopilotAuthManager } from '../../providers/copilot/auth.js';
 import {
   GoogleAiStudioAuthManager,
   getGoogleAiStudioOAuthErrorMessage,
@@ -62,7 +62,11 @@ export async function ensureCopilotAuth(config: Config, cliToken?: string): Prom
     detail: 'starting device flow',
   });
   console.log(chalk.cyan('  GitHub Copilot sign-in required.'));
-  const auth = new CopilotAuthManager();
+  const auth = new CopilotAuthManager({
+    onGithubTokenPersist: async githubToken => {
+      await saveGlobalConfig({ githubToken });
+    },
+  });
   await auth.authenticateWithDeviceFlow(async ({ verificationUri, userCode, expiresIn }) => {
     appendProviderLog({
       provider: 'copilot',
@@ -74,7 +78,9 @@ export async function ensureCopilotAuth(config: Config, cliToken?: string): Prom
     console.log(chalk.dim(`  Open ${verificationUri}`));
     console.log(chalk.dim(`  Enter code: ${chalk.bold(userCode)}`));
     console.log(chalk.dim(`  Code expires in ${Math.ceil(expiresIn / 60)} minute(s).`));
-    console.log(chalk.dim(`  ${getCopilotAuthStorageNote()}`));
+    console.log(
+      chalk.dim(`  GitHub authentication is stored in ${getGlobalConfigDir()}/config.json`),
+    );
   });
   appendProviderLog({
     provider: 'copilot',
