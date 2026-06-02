@@ -42,6 +42,87 @@ type MessageParam = Anthropic.Messages.MessageParam;
 type ToolUnion = Anthropic.Messages.ToolUnion;
 type ContentBlockParam = Anthropic.Messages.ContentBlockParam;
 type ToolResultBlockParam = Anthropic.Messages.ToolResultBlockParam;
+type AnthropicStream = ReturnType<Anthropic['messages']['stream']>;
+type AnthropicStreamEvent = AnthropicStream extends AsyncIterable<infer E> ? E : never;
+
+interface AnthropicStreamToolCall {
+  id: string;
+  name: string;
+  rawArgs: string;
+}
+
+interface AnthropicStreamState {
+  currentToolCall: AnthropicStreamToolCall | null;
+  usageSnapshot: AnthropicUsageLike | undefined;
+  sawTerminalChunk: boolean;
+}
+
+function makeTerminalChunk(state: AnthropicStreamState, doneReason?: string): ChatChunk {
+  return {
+    done: true,
+    ...(state.usageSnapshot ? { usage: mapAnthropicUsage(state.usageSnapshot) } : {}),
+    ...(doneReason ? { doneReason } : {}),
+  };
+}
+
+function handleAnthropicStreamEvent(
+  event: AnthropicStreamEvent,
+  state: AnthropicStreamState,
+): ChatChunk[] {
+  switch (event.type) {
+    case 'message_start':
+      state.usageSnapshot = mergeAnthropicUsage(state.usageSnapshot, event.message.usage);
+      return [];
+
+    case 'content_block_start':
+      if (event.content_block.type === 'tool_use') {
+        state.currentToolCall = {
+          id: event.content_block.id,
+          name: event.content_block.name,
+          rawArgs: '',
+        };
+      }
+      return [];
+
+    case 'content_block_delta':
+      if (event.delta.type === 'text_delta') {
+        return [{ content: event.delta.text }];
+      }
+      if (event.delta.type === 'input_json_delta' && state.currentToolCall) {
+        state.currentToolCall.rawArgs += event.delta.partial_json;
+      }
+      return [];
+
+    case 'content_block_stop': {
+      if (!state.currentToolCall) return [];
+      const args = parseToolArgs(state.currentToolCall.rawArgs);
+      const toolChunk: ChatChunk = {
+        tool_calls: [
+          {
+            id: state.currentToolCall.id,
+            function: { name: state.currentToolCall.name, arguments: args },
+          },
+        ],
+      };
+      state.currentToolCall = null;
+      return [toolChunk];
+    }
+
+    case 'message_delta': {
+      state.usageSnapshot = mergeAnthropicUsage(state.usageSnapshot, event.usage);
+      const doneReason = mapAnthropicStopReason(event.delta?.stop_reason);
+      state.sawTerminalChunk = true;
+      return [makeTerminalChunk(state, doneReason)];
+    }
+
+    case 'message_stop':
+      if (state.sawTerminalChunk) return [];
+      return [makeTerminalChunk(state)];
+
+    default:
+      return [];
+  }
+}
 
 export class AnthropicProvider implements Provider {
   name = 'anthropic';
@@ -140,51 +221,16 @@ export class AnthropicProvider implements Provider {
     };
 
     const stream = this.client.messages.stream(params, this.requestOptionsFor(model));
-
-    let currentToolCall: { id: string; name: string; rawArgs: string } | null = null;
-    let usageSnapshot: AnthropicUsageLike | undefined;
-    let sawTerminalChunk = false;
+    const state: AnthropicStreamState = {
+      currentToolCall: null,
+      usageSnapshot: undefined,
+      sawTerminalChunk: false,
+    };
 
     for await (const event of stream) {
-      if (event.type === 'message_start') {
-        usageSnapshot = mergeAnthropicUsage(usageSnapshot, event.message.usage);
-      } else if (event.type === 'content_block_start') {
-        const block = event.content_block;
-        if (block.type === 'tool_use') {
-          currentToolCall = { id: block.id, name: block.name, rawArgs: '' };
-        }
-      } else if (event.type === 'content_block_delta') {
-        const delta = event.delta;
-        if (delta.type === 'text_delta') {
-          yield { content: delta.text };
-        } else if (delta.type === 'input_json_delta' && currentToolCall) {
-          currentToolCall.rawArgs += delta.partial_json;
-        }
-      } else if (event.type === 'content_block_stop') {
-        if (currentToolCall) {
-          const args = parseToolArgs(currentToolCall.rawArgs);
-          yield {
-            tool_calls: [
-              {
-                id: currentToolCall.id,
-                function: { name: currentToolCall.name, arguments: args },
-              },
-            ],
-          };
-          currentToolCall = null;
-        }
-      } else if (event.type === 'message_delta') {
-        usageSnapshot = mergeAnthropicUsage(usageSnapshot, event.usage);
-        const doneReason = mapAnthropicStopReason(event.delta?.stop_reason);
-        sawTerminalChunk = true;
-        yield {
-          done: true,
-          ...(usageSnapshot ? { usage: mapAnthropicUsage(usageSnapshot) } : {}),
-          ...(doneReason ? { doneReason } : {}),
-        };
-      } else if (event.type === 'message_stop') {
-        if (sawTerminalChunk) continue;
-        yield { done: true, ...(usageSnapshot ? { usage: mapAnthropicUsage(usageSnapshot) } : {}) };
+      const chunks = handleAnthropicStreamEvent(event, state);
+      for (const chunk of chunks) {
+        yield chunk;
       }
     }
   }
