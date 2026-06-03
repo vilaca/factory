@@ -142,6 +142,19 @@ async function* runSingleToolCall(
   recovery: RecoveryState,
   callSignature: string,
 ): AsyncGenerator<AgentEvent, number> {
+  const fnName = toolCall.function?.name ?? '';
+  const fnArgs = (toolCall.function?.arguments as Record<string, unknown> | undefined) ?? {};
+  const cwd = ctx.cwdRef?.current ?? process.cwd();
+
+  const startRefresh = await ctx.onToolCallStart?.({
+    toolName: fnName,
+    args: fnArgs,
+    cwd,
+  });
+  if (startRefresh?.changed) {
+    yield { type: 'scoped-project-instructions-updated', files: startRefresh.newFiles };
+  }
+
   if (ctx.fileCache && toolCall.function?.name === TOOL_NAMES.Read) {
     const synthetic = yield* tryReadCacheHit(toolCall, ctx);
     if (synthetic) return 0;
@@ -204,6 +217,15 @@ async function* executeAndTrack(
         tracking.lastFailedResult = null;
         // Update or invalidate the file cache after successful Read/Edit/Write.
         if (ctx.fileCache) await maintainFileCache(toolCall, ctx.fileCache);
+        const cwd = ctx.cwdRef?.current ?? process.cwd();
+        const refresh = await ctx.onSuccessfulToolCall?.({
+          toolName: event.toolName,
+          args: event.args,
+          cwd,
+        });
+        if (refresh?.changed) {
+          yield { type: 'scoped-project-instructions-updated', files: refresh.newFiles };
+        }
       } else {
         tracking.lastFailedResult = {
           toolName: event.toolName,

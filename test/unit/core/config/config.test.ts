@@ -7,6 +7,7 @@ import {
   loadGlobalConfig,
   loadProjectConfig,
   loadProjectInstructions,
+  loadScopedProjectInstructions,
   saveGlobalConfig,
 } from '../../../../src/core/config/index.js';
 
@@ -190,6 +191,19 @@ describe('loadProjectInstructions', () => {
     }
   });
 
+  it('reads .factory/AGENTS.md at startup', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
+    try {
+      await fs.mkdir(path.join(cwd, '.factory'), { recursive: true });
+      await fs.writeFile(path.join(cwd, '.factory/AGENTS.md'), 'agent-rules');
+      const out = await loadProjectInstructions(cwd);
+      assert.ok(out !== null);
+      assert.match(out, /^## From \.factory\/AGENTS\.md\n\nagent-rules/);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('reads .factory/INSTRUCTIONS.md with a path-prefixed header', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
     try {
@@ -203,39 +217,80 @@ describe('loadProjectInstructions', () => {
     }
   });
 
-  it('concatenates AGENTS.md, CLAUDE.md, .cursorrules in priority order', async () => {
+  it('does not load AGENTS.md/CLAUDE.md/.cursorrules at startup', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
     try {
       await fs.writeFile(path.join(cwd, 'AGENTS.md'), 'agents-body');
       await fs.writeFile(path.join(cwd, 'CLAUDE.md'), 'claude-body');
       await fs.writeFile(path.join(cwd, '.cursorrules'), 'cursor-body');
       const out = await loadProjectInstructions(cwd);
-      assert.ok(out !== null);
-      const idxA = out.indexOf('## From AGENTS.md');
-      const idxC = out.indexOf('## From CLAUDE.md');
-      const idxR = out.indexOf('## From .cursorrules');
-      assert.ok(idxA >= 0 && idxC > idxA && idxR > idxC, 'sources concatenated in expected order');
-      assert.match(out, /agents-body/);
-      assert.match(out, /claude-body/);
-      assert.match(out, /cursor-body/);
+      assert.strictEqual(out, null);
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
   });
 
-  it('truncates with a note once the size cap is exceeded', async () => {
+  it('returns null when startup instruction file alone exceeds the size cap', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
     try {
-      // First two sources together exceed 16 KB; later sources should be skipped.
-      const big = 'x'.repeat(10 * 1024);
+      const big = 'x'.repeat(20 * 1024);
       await fs.mkdir(path.join(cwd, '.factory'), { recursive: true });
       await fs.writeFile(path.join(cwd, '.factory/INSTRUCTIONS.md'), big);
-      await fs.writeFile(path.join(cwd, 'AGENTS.md'), big);
-      await fs.writeFile(path.join(cwd, 'CLAUDE.md'), 'should-not-appear');
       const out = await loadProjectInstructions(cwd);
+      assert.strictEqual(out, null);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('loadScopedProjectInstructions', () => {
+  it('walks touched dirs to project root and orders root → child', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-'));
+    try {
+      const nested = path.join(cwd, 'src', 'feature');
+      await fs.mkdir(nested, { recursive: true });
+      await fs.writeFile(path.join(cwd, 'AGENTS.md'), 'root-agents');
+      await fs.writeFile(path.join(cwd, 'src', 'CLAUDE.md'), 'src-claude');
+      await fs.writeFile(path.join(nested, '.cursorrules'), 'feature-cursor');
+
+      const out = await loadScopedProjectInstructions(cwd, [nested]);
+      assert.ok(out !== null);
+      const idxRoot = out.indexOf('## From AGENTS.md');
+      const idxSrc = out.indexOf(`## From src${path.sep}CLAUDE.md`);
+      const idxFeature = out.indexOf(`## From src${path.sep}feature${path.sep}.cursorrules`);
+      assert.ok(idxRoot >= 0 && idxSrc > idxRoot && idxFeature > idxSrc);
+      assert.match(out, /root-agents/);
+      assert.match(out, /src-claude/);
+      assert.match(out, /feature-cursor/);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('does not climb above project root', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-root-'));
+    const outside = path.join(path.dirname(root), 'outside-sentinel');
+    try {
+      await fs.writeFile(path.join(path.dirname(root), 'AGENTS.md'), 'outside');
+      const out = await loadScopedProjectInstructions(root, [outside]);
+      assert.strictEqual(out, null);
+    } finally {
+      await fs.rm(path.join(path.dirname(root), 'AGENTS.md'), { force: true });
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('truncates scoped instructions with a cap note', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-cap-'));
+    try {
+      const nested = path.join(cwd, 'pkg');
+      await fs.mkdir(nested, { recursive: true });
+      await fs.writeFile(path.join(cwd, 'AGENTS.md'), 'root');
+      await fs.writeFile(path.join(nested, 'CLAUDE.md'), 'x'.repeat(20 * 1024));
+      const out = await loadScopedProjectInstructions(cwd, [nested]);
       assert.ok(out !== null);
       assert.match(out, /truncated at 16384 bytes/);
-      assert.ok(!out.includes('should-not-appear'), 'over-cap source is dropped');
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }

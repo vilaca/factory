@@ -34,6 +34,11 @@ export function buildEnvironmentMessage(cwd: string): string {
 - Shell: ${shell}`;
 }
 
+export function getScopedProjectInstructionsPrompt(scopedInstructions: string | null): string {
+  if (!scopedInstructions) return '';
+  return `## Directory-Scoped Instructions\n${scopedInstructions}`;
+}
+
 export async function buildSystemPrompt(
   cwd: string,
   modelTier: ModelTier = 'strong',

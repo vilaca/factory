@@ -1,5 +1,11 @@
+import path from 'path';
 import type { AgentEvent } from '../../../core/agent/types.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
+import {
+  createDiagnosticEmitter,
+  sessionLogDiagnosticSink,
+  tuiDiagnosticSink,
+} from '../../diagnostics.js';
 import {
   recordFailure as recordKeyFailure,
   recordSuccess as recordKeySuccess,
@@ -35,6 +41,17 @@ function describeRecoverySource(source: string): string {
   if (source === 'fence') return 'a JSON code block';
   if (source === 'shell-fence') return 'a shell code block';
   return 'tagged JSON';
+}
+
+function formatScopedInstructionFiles(files: string[], projectRoot: string | undefined): string {
+  return files
+    .map(file => {
+      if (!projectRoot) return path.basename(file);
+      const rel = path.relative(projectRoot, file);
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return file;
+      return rel;
+    })
+    .join(', ');
 }
 
 const HANDLERS: EventHandlers = {
@@ -363,6 +380,26 @@ const HANDLERS: EventHandlers = {
     if (event.usage) {
       void recordKeyTokenUsage(refs.provider.name, refs.activeKeyId, event.usage);
     }
+  },
+
+  'scoped-project-instructions-updated': (event, deps) => {
+    const diagnostics = createDiagnosticEmitter(
+      tuiDiagnosticSink((level, text) => deps.addNotice(level, text)),
+      sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
+    );
+    const count = event.files.length;
+    if (count === 0) {
+      diagnostics.info(
+        'Loaded additional scoped project instructions.',
+        'project-instructions-scoped',
+      );
+      return;
+    }
+    const names = formatScopedInstructionFiles(event.files, deps.refs.current?.projectRoot);
+    diagnostics.info(
+      `Loaded scoped project instructions from ${count} file${count === 1 ? '' : 's'}: ${names}`,
+      'project-instructions-scoped',
+    );
   },
 
   'pre-turn-stats': () => {

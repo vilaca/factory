@@ -8,6 +8,7 @@
  * pointer to permissions.allowAll in config.
  */
 
+import path from 'path';
 import type { Provider } from '../providers/types.js';
 import type { AgentConfig, BashRuleConfig } from '../core/config/types.js';
 import type { PathPolicy } from '../security/paths.js';
@@ -24,7 +25,14 @@ import { FileCache } from '../core/agent/cache/file-cache.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import { createSessionLogger, type SessionLogger } from '../core/session/session-log.js';
 import { getBuildInfo } from '../utils/build-info.js';
-import { buildEnvironmentMessage } from '../core/context/system-prompt.js';
+import {
+  buildEnvironmentMessage,
+  getScopedProjectInstructionsPrompt,
+} from '../core/context/system-prompt.js';
+import {
+  createScopedProjectInstructionsState,
+  refreshScopedProjectInstructionsFromToolCall,
+} from '../core/context/scoped-project-instructions.js';
 import { runHook } from '../core/hooks/index.js';
 import type { AgentEvent } from '../core/agent/types.js';
 import {
@@ -65,6 +73,8 @@ interface HeadlessOptions {
   mcpInfo?: { servers: string[]; toolCount: number };
   gitBranch?: string;
   gitDirty?: boolean | null;
+  /** Startup instruction files loaded into the base prompt (currently .factory/INSTRUCTIONS.md). */
+  loadedFiles?: Set<string>;
   /** Path / env security policies. Threaded in from index.ts (which loads
    *  them from config). Snapshotting them here means tests and parallel
    *  callers can vary policy per run instead of mutating process state. */
@@ -98,6 +108,16 @@ function formatArgsBrief(args: Record<string, unknown>): string {
   return parts.join(' ');
 }
 
+function formatScopedInstructionFiles(files: string[], projectRoot: string): string {
+  return files
+    .map(file => {
+      const rel = path.relative(projectRoot, file);
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return file;
+      return rel;
+    })
+    .join(', ');
+}
+
 /** Side-effect log of one agent event to stdout/stderr for the headless
  *  runner. Returns the (possibly updated) {exitCode, permissionDeniedTool}
  *  so the caller can thread state through the for-await loop without
@@ -107,6 +127,7 @@ function handleAgentEvent(
   event: AgentEvent,
   state: { exitCode: number; permissionDeniedTool: string | undefined },
   diagnostics: DiagnosticEmitter,
+  projectRoot: string,
 ): void {
   switch (event.type) {
     case 'text-chunk':
@@ -216,6 +237,15 @@ function handleAgentEvent(
         'all-denied-halt',
       );
       break;
+    case 'scoped-project-instructions-updated': {
+      const names = formatScopedInstructionFiles(event.files, projectRoot);
+      const suffix = names.length > 0 ? `: ${names}` : '';
+      diagnostics.info(
+        `loaded scoped project instructions${suffix}`,
+        'project-instructions-scoped',
+      );
+      break;
+    }
     case 'output-cap-reached':
       // Response was truncated at the provider's completion-token cap.
       // The caller's piped stdout is incomplete — flag it so `factory <
@@ -278,8 +308,13 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   // Dedicated exit code for log failures so callers can distinguish "agent
   // ran fine but log was unavailable" from generic errors (1).
   const STRICT_LOG_EXIT = 6;
+  const cwd = process.cwd();
 
   let sessionLogger: SessionLogger | undefined;
+  const diagnostics = createDiagnosticEmitter(
+    stderrDiagnosticSink(),
+    sessionLogDiagnosticSink(() => sessionLogger),
+  );
   if (options.enableSessionLog !== false) {
     try {
       sessionLogger = createSessionLogger({
@@ -303,6 +338,19 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
         gitBranch: options.gitBranch,
         gitDirty: options.gitDirty,
       });
+
+      // Emit startup instruction load via the shared diagnostics path so it
+      // lands uniformly in stderr + session log.
+      if (options.loadedFiles && options.loadedFiles.size > 0) {
+        const fileNames = Array.from(options.loadedFiles)
+          .map(f => path.relative(cwd, f))
+          .join(', ');
+        diagnostics.info(
+          `Loaded startup project instructions from: ${fileNames}`,
+          'project-instructions',
+        );
+      }
+
       sessionLogger.logUserInput(userInput);
     } catch (err: unknown) {
       // Logger init may fail (e.g. ~/.factory/sessions not writable, disk
@@ -318,11 +366,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   }
 
   const hooksEnabled = options.agentConfig?.experimental?.hooks ?? false;
-  const cwd = process.cwd();
-  const diagnostics = createDiagnosticEmitter(
-    stderrDiagnosticSink(),
-    sessionLogDiagnosticSink(() => sessionLogger),
-  );
+  const scopedInstructionState = createScopedProjectInstructionsState(cwd);
   const onHookStderr = (hookCommand: string, chunk: string): void => {
     diagnostics.warning(`${hookCommand}: ${chunk.trim()}`, 'hook-stderr');
   };
@@ -436,6 +480,35 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
     },
   };
 
+  const refreshScopedInstructions = async (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    cwd: string;
+  }): Promise<{ changed: boolean; newFiles: string[] } | null> => {
+    const refresh = await refreshScopedProjectInstructionsFromToolCall(
+      scopedInstructionState,
+      { toolName: info.toolName, args: info.args, result: { success: true } },
+      info.cwd,
+    );
+    if (refresh.changed) {
+      const scoped = getScopedProjectInstructionsPrompt(scopedInstructionState.scopedInstructions);
+      const next = scoped ? `${options.systemPrompt}\n\n${scoped}` : options.systemPrompt;
+      conversation.updateSystemPrompt(next);
+    }
+    return refresh;
+  };
+
+  const preTurnRefresh = await refreshScopedInstructions({
+    toolName: 'TurnStart',
+    args: {},
+    cwd,
+  });
+  if (preTurnRefresh?.changed) {
+    const names = formatScopedInstructionFiles(preTurnRefresh.newFiles, cwd);
+    const suffix = names.length > 0 ? `: ${names}` : '';
+    diagnostics.info(`loaded scoped project instructions${suffix}`, 'project-instructions-scoped');
+  }
+
   try {
     for await (const event of runAgent(userInput, {
       provider,
@@ -468,9 +541,11 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
       onHookStderr,
       onHookError,
       responsesChainRef,
+      onToolCallStart: refreshScopedInstructions,
+      onSuccessfulToolCall: refreshScopedInstructions,
     })) {
       sessionLogger?.logAgentEvent(event);
-      handleAgentEvent(event, state, diagnostics);
+      handleAgentEvent(event, state, diagnostics, cwd);
     }
   } finally {
     process.stdout.write('\n');

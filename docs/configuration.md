@@ -158,14 +158,19 @@ Path policy for `Read`/`Write`/`Edit`. The built-in deny list covers `~/.ssh`, `
 
 ## Project instructions
 
-Create `.factory/INSTRUCTIONS.md` in your repository root for project-specific guidelines that get appended verbatim to the system prompt. factory also picks up agent-guidance files from other tools, in this order, concatenated under per-source `## From <path>` headers:
+Create `.factory/AGENTS.md` (or `.factory/INSTRUCTIONS.md`) in your repository root for startup project guidelines; these files are loaded at session init and appended under `## Project Instructions`.
 
-1. `.factory/INSTRUCTIONS.md` (canonical)
-2. `AGENTS.md` (cross-tool convention)
-3. `CLAUDE.md` (Claude Code)
-4. `.cursorrules` (Cursor)
+factory also supports directory-scoped guidance from other tools:
 
-Total size is capped at ~16 KB; sources past the cap are dropped with a truncation note. Only repo-root files are checked — nested instruction files are ignored.
+- `AGENTS.md` (cross-tool convention)
+- `CLAUDE.md` (Claude Code)
+- `.cursorrules` (Cursor)
+
+These scoped files are **not** loaded at startup. They are discovered lazily when the agent successfully uses file/search tools (`Read`, `Edit`, `Write`, `Glob`, `Grep`) and then scanned from each touched directory up through its parents to the startup cwd (project root boundary).
+
+When multiple scoped files are found, they are concatenated in **root → child** order so deeper/local rules appear later.
+
+Total instruction size is capped at ~16 KB; sources past the cap are dropped with a truncation note.
 
 ## Experimental flags
 

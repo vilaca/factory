@@ -115,6 +115,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
       subagents: refs.current.experimental.subagents ?? false,
       gitDirty: refs.current.gitDirty,
       alwaysOnSkills: refs.current.skills?.alwaysOnSection() ?? '',
+      scopedProjectInstructions: refs.current.scopedProjectInstructions,
     });
   }
 

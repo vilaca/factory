@@ -14,6 +14,7 @@ interface FakeRefs {
   useTextToolFallback?: boolean;
   activeKeyId?: string;
   provider?: { name: string };
+  projectRoot?: string;
   experimental?: { toolPreview?: boolean };
   skills?: { recordToolUsed: ReturnType<typeof mock.fn> };
   sessionLogger?: {
@@ -528,6 +529,22 @@ describe('event-handler — corrector + retry notices', () => {
     handleAgentEvent({ type: 'all-denied-halt', count: 4 }, deps, ss);
     assert.match(calls.addNotice.mock.calls[0]!.arguments[1] as string, /All 1 tool call /);
     assert.match(calls.addNotice.mock.calls[1]!.arguments[1] as string, /All 4 tool calls /);
+  });
+
+  it('surfaces scoped-project-instructions-updated with project-relative paths', () => {
+    const { deps, calls } = fakeDeps({ projectRoot: '/tmp/demo' });
+    const { ss } = makeSs();
+    handleAgentEvent(
+      {
+        type: 'scoped-project-instructions-updated',
+        files: ['/tmp/demo/AGENTS.md', '/tmp/demo/src/CLAUDE.md'],
+      },
+      deps,
+      ss,
+    );
+    const [, msg] = calls.addNotice.mock.calls[0]!.arguments as [string, string];
+    assert.match(msg, /AGENTS\.md/);
+    assert.match(msg, /src\/CLAUDE\.md/);
   });
 
   it('tool-call-corrected and tool-call-corrector-aborted truncate long reason strings', () => {

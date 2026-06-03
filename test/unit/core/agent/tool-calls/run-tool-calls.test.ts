@@ -34,6 +34,31 @@ describe('runToolCalls — abort handling', () => {
   });
 });
 
+describe('runToolCalls — scoped instruction refresh timing', () => {
+  it('emits scoped-project-instructions-updated before tool-call-start', async () => {
+    const readTool = fakeTool({ name: 'Read' });
+    const permissions = new PermissionManager();
+    permissions.allowAll('Read');
+    const ctx = makeCtx({
+      permissions,
+      toolRegistry: makeRegistry([readTool]),
+      onToolCallStart: async () => ({
+        changed: true,
+        newFiles: ['/repo/AGENTS.md'],
+      }),
+    });
+
+    const { events } = await collect(
+      runToolCalls([callOf('Read', { file_path: '/repo/file.ts' })], ctx, 'sig', makeRecovery()),
+    );
+    const types = events.map(e => e.type);
+    assert.deepStrictEqual(types.slice(0, 2), [
+      'scoped-project-instructions-updated',
+      'tool-call-start',
+    ]);
+  });
+});
+
 describe('runToolCalls — read-cache short-circuit', () => {
   it('returns a synthetic hit instead of executing Read when fingerprint matches', async () => {
     const fp = tmp();

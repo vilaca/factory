@@ -232,4 +232,46 @@ describe('Headless mode', () => {
     );
     assert.ok(agentError, 'expected agent-error warning row in session log');
   });
+
+  it('prints a scoped-instructions notice after touching a directory with AGENTS/CLAUDE files', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-headless-scoped-instr-'));
+    fs.mkdirSync(path.join(cwd, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), 'root guidance');
+    fs.writeFileSync(path.join(cwd, 'src', 'CLAUDE.md'), 'nested guidance');
+    fs.writeFileSync(path.join(cwd, 'src', 'hello.txt'), 'hello');
+
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'factory-headless-scoped-home-'));
+    fs.mkdirSync(path.join(home, '.config', 'factory'), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, '.config', 'factory', 'config.json'),
+      JSON.stringify({ permissions: { allowAll: ['Read'] } }),
+    );
+
+    try {
+      setNextResponses([
+        {
+          content: '',
+          tool_calls: [
+            {
+              function: { name: 'Read', arguments: { file_path: 'src/hello.txt' } },
+            },
+          ],
+        },
+        { content: 'done' },
+      ]);
+
+      const r = await spawnCliHeadless(baseArgs(), {
+        stdin: 'inspect src/hello.txt\n',
+        cwd,
+        home,
+      });
+      assert.strictEqual(r.exitCode, 0, r.stderr);
+      assert.match(r.stderr, /loaded scoped project instructions/i);
+      assert.match(r.stderr, /AGENTS\.md/);
+      assert.match(r.stderr, /CLAUDE\.md/);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

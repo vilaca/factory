@@ -4,6 +4,7 @@
 // teardown — all of which used to live inline in a 150-line useEffect.
 
 import type { MutableRefObject } from 'react';
+import path from 'path';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import { runHook } from '../../../core/hooks/index.js';
 import { composeSystemPrompt as composeSystemPromptPure } from './compose-system-prompt.js';
@@ -128,6 +129,11 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   const initialPlanMode = opts.planMode ?? false;
   const initialExperimental: ExperimentalFlags = { ...(opts.agentConfig?.experimental ?? {}) };
   const initialGitDirty = opts.gitDirty ?? null;
+  const loadedFiles = new Set(opts.loadedFiles);
+  const startupDiagnostics = createDiagnosticEmitter(
+    tuiDiagnosticSink((level, text) => ctx.addNotice(level, text)),
+    sessionLogDiagnosticSink(() => ctx.refs.current?.sessionLogger),
+  );
 
   const initialSystemPrompt = composeSystemPromptPure({
     baseSystemPrompt,
@@ -194,6 +200,18 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
   if (sessionLogger) {
     sessionLogger.logSystemPrompt(initialSystemPrompt);
     ctx.addNotice('info', `Session log: ${sessionLogger.filePath}`);
+
+    // Emit startup instruction load via the shared diagnostics path so it
+    // lands uniformly in TUI + session log.
+    if (loadedFiles.size > 0) {
+      const fileNames = Array.from(loadedFiles)
+        .map(f => path.relative(process.cwd(), f))
+        .join(', ');
+      startupDiagnostics.info(
+        `Loaded startup project instructions from: ${fileNames}`,
+        'project-instructions',
+      );
+    }
   }
 
   if (opts.validationWarning) {

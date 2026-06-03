@@ -1,3 +1,4 @@
+import path from 'path';
 import { runAgent } from '../../../core/agent/run-agent.js';
 import type { AgentOptions, RotationOptions } from '../../../core/agent/types.js';
 import { createProvider } from '../../../providers/registry.js';
@@ -13,7 +14,12 @@ import { listKeys } from '../../../core/auth/credentials.js';
 import { getWarmthLog } from '../../../core/session/key-stats.js';
 import { handleAgentEvent } from './event-handler.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
-import { createDiagnosticEmitter, sessionLogDiagnosticSink } from '../../diagnostics.js';
+import {
+  createDiagnosticEmitter,
+  sessionLogDiagnosticSink,
+  tuiDiagnosticSink,
+} from '../../diagnostics.js';
+import { refreshScopedProjectInstructionsFromToolCall } from '../../../core/context/scoped-project-instructions.js';
 
 /** Anthropic's default ephemeral cache TTL. The rotation tiebreaker uses
  *  the same window so a key that hit cache "recently" by Anthropic's
@@ -41,6 +47,16 @@ const MAX_REPLAYS_PER_PROMPT = 2;
 function isSubstantivePrompt(s: string): boolean {
   if (s.length >= 25) return true;
   return !TRIVIAL_PROMPTS.has(s.toLowerCase());
+}
+
+function formatScopedInstructionFiles(files: string[], projectRoot: string): string {
+  return files
+    .map(file => {
+      const rel = path.relative(projectRoot, file);
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return file;
+      return rel;
+    })
+    .join(', ');
 }
 
 /**
@@ -150,8 +166,10 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
   };
 }
 
+// eslint-disable-next-line complexity -- TODO(complexity): split pre-turn refresh/rotation setup from event pump.
 export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDeps): Promise<void> {
   if (!deps.refs.current) return;
+  const projectRoot = deps.refs.current.projectRoot;
   deps.refs.current.abort = new AbortController();
   deps.setThinking(true);
 
@@ -193,6 +211,53 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
     sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
   );
 
+  const refreshScopedInstructions = async (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    cwd: string;
+  }): Promise<{ changed: boolean; newFiles: string[] } | null> => {
+    if (!deps.refs.current) return null;
+    const refs = deps.refs.current;
+    const scopedState = {
+      projectRoot: refs.projectRoot,
+      touchedDirs: refs.instructionTouchedDirs,
+      scopedInstructions: refs.scopedProjectInstructions,
+      loadedFiles: refs.scopedInstructionFiles,
+    };
+    const refresh = await refreshScopedProjectInstructionsFromToolCall(
+      scopedState,
+      { toolName: info.toolName, args: info.args, result: { success: true } },
+      info.cwd,
+    );
+    refs.scopedProjectInstructions = scopedState.scopedInstructions;
+    refs.scopedInstructionFiles = scopedState.loadedFiles;
+    if (refresh.changed) {
+      refs.conversation.updateSystemPrompt(deps.composeSystemPrompt());
+      deps.refreshTokenEstimate();
+    }
+    return refresh;
+  };
+
+  const preTurnRefresh = await refreshScopedInstructions({
+    toolName: 'TurnStart',
+    args: {},
+    cwd: cwdRef.current,
+  });
+  if (preTurnRefresh?.changed) {
+    const diagnostics = createDiagnosticEmitter(
+      tuiDiagnosticSink((level, text) => deps.addNotice(level, text)),
+      sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
+    );
+    const count = preTurnRefresh.newFiles.length;
+    const names = formatScopedInstructionFiles(preTurnRefresh.newFiles, projectRoot);
+    diagnostics.info(
+      count > 0
+        ? `Loaded scoped project instructions from ${count} file${count === 1 ? '' : 's'}: ${names}`
+        : 'Loaded additional scoped project instructions.',
+      'project-instructions-scoped',
+    );
+  }
+
   const agent = runAgent(userInput, {
     provider: deps.refs.current.provider,
     model: deps.refs.current.model,
@@ -222,6 +287,8 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
       hookDiagnostics.warning(`${command}: ${chunk.trim()}`, 'hook-stderr'),
     onHookError: (event, error) => hookDiagnostics.warning(`${event}: ${error}`, 'hook-error'),
     responsesChainRef,
+    onToolCallStart: refreshScopedInstructions,
+    onSuccessfulToolCall: refreshScopedInstructions,
     ...(rotation ? { rotation } : {}),
   });
 
