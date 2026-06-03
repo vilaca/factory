@@ -22,22 +22,22 @@ Coverage is gated at 60% lines / 75% branches / 83% functions. If you add new co
 
 ## Task routing
 
-| Task | Start here |
-|------|------------|
-| Add a provider | `src/providers/AGENTS.md` |
-| Add or modify a tool | `src/tools/AGENTS.md` |
-| Change the agent loop (turn handling, tool execution, compaction) | `src/core/agent/AGENTS.md` |
-| Change context / conversation / system prompt | `src/core/context/AGENTS.md` |
-| Add a `/slash` command | `src/ui/tui/slash/AGENTS.md` |
-| Change TUI components or React state | `src/ui/tui/AGENTS.md` |
-| Change how the agent loop drives the TUI | `src/ui/tui/agent-loop/AGENTS.md` |
-| Change config loading or schema | `src/core/config/AGENTS.md` |
-| Change security rules (path jail, bash deny list, permissions) | `src/security/AGENTS.md` |
-| Change MCP client or adapter | `src/mcp/AGENTS.md` |
-| Change hooks (user shell hooks) | `src/core/hooks/AGENTS.md` |
-| Change session logging or key stats | `src/core/session/AGENTS.md` |
-| Change startup / auth / CLI flags | `src/cli/startup/AGENTS.md` |
-| Change utils or shared types | `src/utils/AGENTS.md` |
+| Task                                                              | Start here                        |
+| ----------------------------------------------------------------- | --------------------------------- |
+| Add a provider                                                    | `src/providers/AGENTS.md`         |
+| Add or modify a tool                                              | `src/tools/AGENTS.md`             |
+| Change the agent loop (turn handling, tool execution, compaction) | `src/core/agent/AGENTS.md`        |
+| Change context / conversation / system prompt                     | `src/core/context/AGENTS.md`      |
+| Add a `/slash` command                                            | `src/ui/tui/slash/AGENTS.md`      |
+| Change TUI components or React state                              | `src/ui/tui/AGENTS.md`            |
+| Change how the agent loop drives the TUI                          | `src/ui/tui/agent-loop/AGENTS.md` |
+| Change config loading or schema                                   | `src/core/config/AGENTS.md`       |
+| Change security rules (path jail, bash deny list, permissions)    | `src/security/AGENTS.md`          |
+| Change MCP client or adapter                                      | `src/mcp/AGENTS.md`               |
+| Change hooks (user shell hooks)                                   | `src/core/hooks/AGENTS.md`        |
+| Change session logging or key stats                               | `src/core/session/AGENTS.md`      |
+| Change startup / auth / CLI flags                                 | `src/cli/startup/AGENTS.md`       |
+| Change utils or shared types                                      | `src/utils/AGENTS.md`             |
 
 ## Module map (one-liner each)
 
