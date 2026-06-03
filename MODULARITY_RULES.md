@@ -25,68 +25,82 @@ The goal is to enforce architecture continuously through tests/CI, instead of re
 
 ## 3) Rule Categories
 
-## A. Layer Dependency Rules
+### A. Layer Dependency Rules
 
 Enforce one-way dependency flow and prohibit layer skipping.
 
-### Required constraints
+#### Required constraints
 
 - `src/core/**` must not depend on `src/ui/**` or `src/cli/**`.
-- `src/core/**` must not depend on concrete provider/tool implementations.
+- `src/core/**` must not depend on concrete provider/tool implementations (only seam files — see B).
 - `src/security/**` must stay primitive (no dependency on sibling top-level layers).
 - `src/providers/**` must not depend on `src/ui/**`, `src/tools/**`, `src/core/**`, `src/mcp/**`, `src/cli/**`.
 - `src/ui/**` must not depend on `src/mcp/**`.
+- `src/ui/**` must not import concrete provider implementations (only seam files — see B).
+- `src/ui/**` must not import concrete tool handler files (only seam files — see B).
+- `src/ui/headless.ts` must not depend on `src/ui/tui/**`.
+- `src/utils/**` must not depend on any sibling top-level folder.
 
 These are currently enforced in `modularity.test.ts` and should remain enforced.
 
 ---
 
-## B. Boundary Surface Rules
+### B. Boundary Surface Rules
 
 Only stable seams are allowed across boundaries.
 
-### Required constraints
+#### Required constraints
 
-- Cross-layer imports must go through seam files (`types.ts`, `registry.ts`, etc.).
-- Internal adapters stay internal (e.g., `src/providers/openai/**`).
-- MCP SDK imports are confined to adapter boundary files.
+- Cross-layer imports must go through declared seam files. The canonical seam sets per boundary are defined in `modularity.test.ts` (the `except:` arrays in the relevant rules). Changing a seam set is an architecture change; update both the test and this section together.
+- `src/providers/openai/**` is an internal adapter — only files within `src/providers/**` may import from it.
+- `@modelcontextprotocol/sdk` imports are confined to `src/mcp/client.ts` and `src/mcp/adapter.ts`.
 
 ---
 
-## C. Runtime Safety/Policy Rules
+### C. Runtime Safety/Policy Rules
 
 Architectural correctness includes key runtime invariants.
 
-### Required constraints
+#### Required constraints
 
-- Provider mint + capability read must include priming.
-- Config read-modify-write must use atomic update API.
 - Security must use policy snapshots, not ambient `process.cwd()` / `process.env`.
-- Production code must not use mutable global singleton tool registry.
+- Production code must not use mutable global singleton tool registry (`defaultRegistry`).
 
 ---
 
-## D. IO/Integration Boundary Rules
+### D. IO/Integration Boundary Rules
 
 Keep side effects behind intended layers.
 
-### Required constraints
+#### Required constraints
 
 - UI must not import network SDKs directly.
 - UI must not import Node networking/child-process modules directly.
-- `console.*` usage is restricted to explicit startup/bootstrapping boundaries.
+- `console.*` usage is restricted to files that run before the TUI mounts (startup and MCP connection surface). The canonical allowlist is in the `console.*` rule in `modularity.test.ts`; additions require the same pre-TUI justification documented there.
 
 ---
 
-## E. Structural Hygiene Rules
+### E. Structural Hygiene Rules
 
 Prevent long-term drift.
 
-### Required constraints
+#### Required constraints
 
 - No cycles in `src/**`.
 - Provider classes must be registered in `src/providers/registry.ts`.
 - Do not introduce external CLI argument parser libraries.
+
+### F. Regression Contracts
+
+Rules that encode a specific past bug. Each names the commit that motivated it. Removing a regression contract requires demonstrating that the structural fix it guards is now enforced by the type system or a stronger rule.
+
+#### Required constraints
+
+- **cf880ed** — Provider mint + capability read must include priming (`prime` / `listModels` / `primeModelCache`). The primary gate is the `UnprimedProvider` return type from `createProvider`; this rule is belt-and-braces.
+- **f848472** — Config read-modify-write must use `updateGlobalConfig`, not a bare `loadGlobalConfig` + `saveGlobalConfig` pair.
+- **44aeb26** — `status-bar.tsx` must read context fullness only via `contextFillTokens`; direct `.totalTokens` / `.completionTokens` / `.reasoningTokens` field access is forbidden.
+- **550f093** — The `{ provider, model, keyId }` DTO shape must not be re-declared outside `src/core/selection/types.ts`; alias or extend `ModelSelection`.
+- Shared event-render helpers (`describeRotationReason`, `fingerprintLabel`, `formatHookDisplay`) must live only in `src/ui/agent-events/render.ts`.
 
 ---
 
@@ -146,6 +160,7 @@ When fixing a violation:
 - [ ] If yes, is it through an approved seam file?
 - [ ] Did any architecture allowlist grow?
 - [ ] If allowlist grew, is there a tracked removal plan + owner?
+- [ ] If allowlist grew, is it mentioned in the PR description under an "Architecture Exception" heading?
 - [ ] Do architecture tests still pass locally?
 - [ ] Are docs (`ARCHITECTURE.md` / this file) updated if behavior changed?
 
