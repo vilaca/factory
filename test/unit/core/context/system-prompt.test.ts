@@ -166,10 +166,11 @@ describe('buildSystemPrompt — model tiers', () => {
     }
   });
 
-  it('appends Project Instructions when CLAUDE.md exists in cwd', async () => {
+  it('appends Project Instructions when .factory/INSTRUCTIONS.md exists in cwd', async () => {
     const dir = tmpDir();
     try {
-      fs.writeFileSync(path.join(dir, 'CLAUDE.md'), 'project rule: use 4 spaces.');
+      fs.mkdirSync(path.join(dir, '.factory'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.factory/INSTRUCTIONS.md'), 'project rule: use 4 spaces.');
       const prompt = await buildSystemPrompt(dir);
       assert.ok(prompt.includes('## Project Instructions'));
       assert.ok(prompt.includes('project rule: use 4 spaces.'));
@@ -178,7 +179,7 @@ describe('buildSystemPrompt — model tiers', () => {
     }
   });
 
-  it('omits Project Instructions when no CLAUDE.md exists', async () => {
+  it('omits Project Instructions when no .factory/INSTRUCTIONS.md exists', async () => {
     const dir = tmpDir();
     try {
       const prompt = await buildSystemPrompt(dir);

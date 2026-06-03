@@ -104,6 +104,8 @@ export interface ContextOverrides {
   hooksConfig?: ToolLoopContext['hooksConfig'];
   onHookStderr?: ToolLoopContext['onHookStderr'];
   onHookError?: ToolLoopContext['onHookError'];
+  onToolCallStart?: ToolLoopContext['onToolCallStart'];
+  onSuccessfulToolCall?: ToolLoopContext['onSuccessfulToolCall'];
   stepEnforcer?: StepEnforcer;
 }
 
@@ -126,6 +128,8 @@ export function makeCtx(overrides: ContextOverrides = {}): ToolLoopContext {
     hooksConfig: overrides.hooksConfig,
     onHookStderr: overrides.onHookStderr,
     onHookError: overrides.onHookError,
+    onToolCallStart: overrides.onToolCallStart,
+    onSuccessfulToolCall: overrides.onSuccessfulToolCall,
     ...(overrides.stepEnforcer ? { stepEnforcer: overrides.stepEnforcer } : {}),
   };
 }

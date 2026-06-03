@@ -52,4 +52,20 @@ export interface ToolLoopContext {
    *  Optional — callers without `requiredSteps` / `terminalTools` /
    *  prereqs leave this undefined and the recording is a no-op. */
   stepEnforcer?: StepEnforcer;
+  /** Host callback for runtime refresh of scoped project instructions.
+   * Called before each tool action so newly-entered scopes can influence
+   * subsequent model calls in the same run. */
+  onToolCallStart?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    cwd: string;
+  }) => Promise<{ changed: boolean; newFiles: string[] } | null>;
+  /** Host callback for runtime refresh of scoped project instructions.
+   * Called after successful tool results to pick up instruction-file edits
+   * made by the tool itself. */
+  onSuccessfulToolCall?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    cwd: string;
+  }) => Promise<{ changed: boolean; newFiles: string[] } | null>;
 }

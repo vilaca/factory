@@ -221,6 +221,8 @@ export async function* runAgent(
         onHookStderr: options.onHookStderr,
         onHookError: options.onHookError,
         ...(stepEnforcer ? { stepEnforcer } : {}),
+        onToolCallStart: options.onToolCallStart,
+        onSuccessfulToolCall: options.onSuccessfulToolCall,
       };
       const { deniedCount } = yield* runToolCalls(toolCalls, toolLoopCtx, callSignature, recovery);
 

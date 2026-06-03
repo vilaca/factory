@@ -15,6 +15,7 @@ import { logModelRequestTo } from '../../session-bridge.js';
 import { getBuildInfo } from '../../../utils/build-info.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { buildEnvironmentMessage } from '../../../core/context/system-prompt.js';
+import { createScopedProjectInstructionsState } from '../../../core/context/scoped-project-instructions.js';
 import type { ExperimentalFlags } from '../../../core/config/types.js';
 import type { NoticeLevel, RunRefs, UseAgentLoopOptions } from './agent-loop-types.js';
 import {
@@ -102,6 +103,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   // would have shifted in the prefix.
   conversation.addUser(buildEnvironmentMessage(cwd));
   conversation.addAssistant('Got it.');
+  const scopedInstructions = createScopedProjectInstructionsState(cwd);
   const permissions = new PermissionManager();
   if (opts.autoAllowTools) {
     for (const t of opts.autoAllowTools) permissions.allowAll(t);
@@ -169,6 +171,10 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     gitBranch: opts.gitBranch,
     gitDirty: input.initialGitDirty,
     cwd,
+    projectRoot: scopedInstructions.projectRoot,
+    scopedProjectInstructions: scopedInstructions.scopedInstructions,
+    instructionTouchedDirs: scopedInstructions.touchedDirs,
+    scopedInstructionFiles: scopedInstructions.loadedFiles,
     lastSubstantivePrompt: null,
     replayCounts: new Map(),
     tokenLimitReplayCounts: new Map(),

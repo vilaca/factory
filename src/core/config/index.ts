@@ -11,16 +11,15 @@ const PROJECT_CONFIG_DIR = '.factory';
 const PROJECT_CONFIG_FILE = 'config.json';
 const PROJECT_INSTRUCTIONS_FILE = 'INSTRUCTIONS.md';
 
-// Repo-root files we'll pick up as project instructions, in priority order.
-// `.factory/INSTRUCTIONS.md` is the canonical source; the others are
-// cross-tool conventions (AGENTS.md, Claude Code, Cursor) that we read so
-// users don't need to duplicate guidance.
-const PROJECT_INSTRUCTION_SOURCES = [
+// Startup instruction files loaded at session init, in priority order.
+// Keep these under `.factory/` so startup guidance is explicit and local
+// to this tool, while root-level cross-tool files remain scoped/lazy.
+const PROJECT_STARTUP_INSTRUCTION_SOURCES = [
+  `${PROJECT_CONFIG_DIR}/AGENTS.md`,
   `${PROJECT_CONFIG_DIR}/${PROJECT_INSTRUCTIONS_FILE}`,
-  'AGENTS.md',
-  'CLAUDE.md',
-  '.cursorrules',
 ] as const;
+
+const PROJECT_SCOPED_INSTRUCTION_SOURCES = ['AGENTS.md', 'CLAUDE.md', '.cursorrules'] as const;
 
 // Cap on the total injected size to keep the system prompt bounded. Sources
 // past the cap are dropped with a truncation note rather than streamed in.
@@ -225,30 +224,38 @@ export async function loadProjectConfig(cwd: string): Promise<Config> {
   return validateConfig(data, configPath);
 }
 
-/**
- * Loads project instructions from the repo root. Reads
- * `.factory/INSTRUCTIONS.md` plus the cross-tool conventions
- * (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`) in priority order, concatenating
- * everything that exists with a `## From <relative-path>` header per source.
- *
- * Read errors are swallowed (treated as "not present") so a transient
- * permission glitch never crashes startup. Total size is capped at
- * ~16KB; sources that don't fit are dropped with a truncation note.
- */
-export async function loadProjectInstructions(
-  cwd: string,
+function isWithinRoot(target: string, root: string): boolean {
+  const rel = path.relative(root, target);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function ancestorsToRoot(start: string, root: string): string[] {
+  const out: string[] = [];
+  let cur = path.resolve(start);
+  const absRoot = path.resolve(root);
+  while (isWithinRoot(cur, absRoot)) {
+    out.push(cur);
+    if (cur === absRoot) break;
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return out;
+}
+
+async function loadInstructionBlocks(
+  root: string,
+  relPaths: readonly string[],
   onFileLoaded?: (filePath: string) => void,
 ): Promise<string | null> {
-  const contents = await Promise.all(
-    PROJECT_INSTRUCTION_SOURCES.map(rel => readTextFile(path.join(cwd, rel))),
-  );
+  const contents = await Promise.all(relPaths.map(rel => readTextFile(path.join(root, rel))));
 
   const parts: string[] = [];
   let totalBytes = 0;
   let truncated = false;
 
-  for (let i = 0; i < PROJECT_INSTRUCTION_SOURCES.length; i++) {
-    const rel = PROJECT_INSTRUCTION_SOURCES[i]!;
+  for (let i = 0; i < relPaths.length; i++) {
+    const rel = relPaths[i]!;
     const content = contents[i];
     if (content === null || content === undefined || content.length === 0) continue;
 
@@ -260,11 +267,7 @@ export async function loadProjectInstructions(
     }
     parts.push(block);
     totalBytes += blockBytes;
-
-    // Notify that this file was loaded
-    if (onFileLoaded) {
-      onFileLoaded(path.join(cwd, rel));
-    }
+    onFileLoaded?.(path.join(root, rel));
   }
 
   if (parts.length === 0) return null;
@@ -274,6 +277,59 @@ export async function loadProjectInstructions(
     result += `\n\n_(Project instructions truncated at ${PROJECT_INSTRUCTIONS_MAX_BYTES} bytes; remaining sources were skipped.)_`;
   }
   return result;
+}
+
+/**
+ * Loads startup project instructions from the project root.
+ *
+ * Startup reads `.factory/AGENTS.md` and `.factory/INSTRUCTIONS.md`.
+ * Root-level scoped cross-tool files (`AGENTS.md`, `CLAUDE.md`,
+ * `.cursorrules`) are loaded lazily based on touched directories during
+ * tool execution.
+ */
+export async function loadProjectInstructions(
+  cwd: string,
+  onFileLoaded?: (filePath: string) => void,
+): Promise<string | null> {
+  return loadInstructionBlocks(cwd, PROJECT_STARTUP_INSTRUCTION_SOURCES, onFileLoaded);
+}
+
+/**
+ * Loads directory-scoped instruction files for the union of:
+ * - each touched directory
+ * - its parents up to and including `projectRoot`
+ *
+ * Directories are traversed root → child, so deeper instructions appear later.
+ */
+export async function loadScopedProjectInstructions(
+  projectRoot: string,
+  touchedDirs: Iterable<string>,
+  onFileLoaded?: (filePath: string) => void,
+): Promise<string | null> {
+  const root = path.resolve(projectRoot);
+  const dirs = new Set<string>();
+  for (const dir of touchedDirs) {
+    for (const ancestor of ancestorsToRoot(path.resolve(dir), root)) {
+      dirs.add(ancestor);
+    }
+  }
+
+  const sortedDirs = [...dirs].sort((a, b) => {
+    const aDepth = path.relative(root, a).split(path.sep).filter(Boolean).length;
+    const bDepth = path.relative(root, b).split(path.sep).filter(Boolean).length;
+    if (aDepth !== bDepth) return aDepth - bDepth;
+    return a.localeCompare(b);
+  });
+
+  const relPaths: string[] = [];
+  for (const dir of sortedDirs) {
+    const relDir = path.relative(root, dir);
+    for (const name of PROJECT_SCOPED_INSTRUCTION_SOURCES) {
+      relPaths.push(relDir ? path.join(relDir, name) : name);
+    }
+  }
+
+  return loadInstructionBlocks(root, relPaths, onFileLoaded);
 }
 
 interface CliOverrides {

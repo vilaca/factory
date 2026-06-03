@@ -115,6 +115,7 @@ export type AgentEvent =
   | { type: 'hook-error'; event: string; error: string }
   | { type: 'hook-fired'; event: string; hookCommand: string; notice?: string }
   | { type: 'read-cache-hit'; path: string; afterCompaction: boolean }
+  | { type: 'scoped-project-instructions-updated'; files: string[] }
   | { type: 'repetition-detected'; line: string; streak: number }
   | { type: 'empty-turn-warning'; completionTokens: number }
   | { type: 'output-cap-reached'; completionTokens: number }
@@ -215,6 +216,24 @@ export interface AgentOptions {
   /** Resolved hook config; absent or empty when no hooks are configured.
    *  Read from `config.agent.hooks` at session start. */
   hooksConfig?: HooksConfig;
+  /** Optional callback fired before each tool action so hosts can refresh
+   *  runtime-scoped project instructions (AGENTS.md/CLAUDE.md/etc) for the
+   *  directory being worked. Returning `changed=true` emits a
+   *  `scoped-project-instructions-updated` event. */
+  onToolCallStart?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    cwd: string;
+  }) => Promise<{ changed: boolean; newFiles: string[] } | null>;
+  /** Optional callback fired after successful tool-call results so hosts can
+   *  pick up instruction-file edits created by that tool execution.
+   *  Returning `changed=true` emits a
+   *  `scoped-project-instructions-updated` event. */
+  onSuccessfulToolCall?: (info: {
+    toolName: string;
+    args: Record<string, unknown>;
+    cwd: string;
+  }) => Promise<{ changed: boolean; newFiles: string[] } | null>;
   /** Reliability-stack step enforcement (Phase 5). When `requiredSteps`
    *  is non-empty, the agent loop installs a StepEnforcer that blocks
    *  premature terminal calls with a 3-tier escalating nudge and

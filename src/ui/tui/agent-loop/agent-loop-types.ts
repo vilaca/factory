@@ -121,6 +121,14 @@ export interface RunRefs {
    * concurrent tabs would race the global cwd. Updated by `cd` in Bash and by
    * the `/cwd` slash command. */
   cwd: string;
+  /** Fixed startup cwd; parent walk for scoped instructions never climbs above this. */
+  projectRoot: string;
+  /** Runtime-discovered scoped instruction block injected into the prompt. */
+  scopedProjectInstructions: string | null;
+  /** Probe dirs touched by file/search tools this session. */
+  instructionTouchedDirs: Set<string>;
+  /** Scoped instruction files currently loaded (absolute paths). */
+  scopedInstructionFiles: Set<string>;
   lastSubstantivePrompt: string | null;
   replayCounts: Map<string, number>;
   tokenLimitReplayCounts: Map<string, number>;
@@ -165,6 +173,8 @@ export interface UseAgentLoopOptions {
   gitBranch?: string;
   gitDirty?: boolean | null;
   validationWarning?: string;
+  /** Startup instruction files loaded into the base prompt (currently .factory/INSTRUCTIONS.md). */
+  loadedFiles?: string[];
   /** Per-process security policies. Threaded in from index.ts; the loop
    *  snapshots them onto each tab's RunRefs. */
   pathPolicy?: PathPolicy;
