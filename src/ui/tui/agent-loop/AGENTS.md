@@ -50,6 +50,13 @@ Key state containers:
 - React state (ephemeral, per-render) — UI control surface + derived view of RunRefs + input trigger channel
 - `event-handler.ts` — the sole mutation sink for AgentEvents
 
+## Priming Behavior
+
+Priming can happen independently of swap operations:
+- **Mount-time prime**: Runs during setup.ts to initialize the context window
+- **Swap-time prime**: May be immediate (sync) or deferred (async) depending on provider capabilities
+- **Context window reuse**: The same context window may be reused across multiple swaps when providers share compatible windows
+
 ## Shared mutable state cheatsheet
 
 When you're editing `use-agent-loop.ts` or its helpers, you'll see these names on `RunRefs`. They are explicit, not magic:
