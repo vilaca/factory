@@ -223,10 +223,11 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
       touchedDirs: refs.instructionTouchedDirs,
       scopedInstructions: refs.scopedProjectInstructions,
       loadedFiles: refs.scopedInstructionFiles,
+      virtualRootDirs: refs.instructionVirtualRootDirs,
     };
     const refresh = await refreshScopedProjectInstructionsFromToolCall(
       scopedState,
-      { toolName: info.toolName, args: info.args, result: { success: true } },
+      { toolName: info.toolName, args: info.args },
       info.cwd,
     );
     refs.scopedProjectInstructions = scopedState.scopedInstructions;

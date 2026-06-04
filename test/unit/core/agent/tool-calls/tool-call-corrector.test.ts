@@ -6,6 +6,7 @@ import type {
   ProviderCapabilities,
 } from '../../../../../src/providers/types.js';
 import { defaultRegistry } from '../../../../../src/tools/index.js';
+import { normalizeToolArguments } from '../../../../../src/utils/tool-call-args.js';
 import { correctToolCall } from '../../../../../src/core/agent/tool-calls/tool-call-corrector.js';
 
 function providerReturning(content: string): Provider {
@@ -77,7 +78,8 @@ describe('correctToolCall', () => {
     assert.strictEqual(result.kind, 'corrected');
     if (result.kind === 'corrected') {
       assert.strictEqual(result.call.function.name, 'Read');
-      assert.strictEqual(result.call.function.arguments.file_path, '/correct/path');
+      const args = normalizeToolArguments(result.call.function.arguments);
+      assert.strictEqual(args.file_path, '/correct/path');
     }
   });
 

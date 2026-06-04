@@ -2,7 +2,10 @@ export interface ToolCallMessage {
   id?: string;
   function: {
     name: string;
-    arguments: Record<string, unknown>;
+    // Providers are allowed to emit either an object (structured tool-call
+    // arguments) or a JSON-stringified blob. The agent sanitizes/normalizes
+    // both shapes before execution.
+    arguments: Record<string, unknown> | string;
   };
 }
 

@@ -5,6 +5,7 @@ import type { TurnExit } from './phase-types.js';
 import type { StepEnforcer } from './step-enforcer.js';
 import type { ActivationFlags } from './reliability-config.js';
 import { TOOL_NAMES } from '../../tools/types.js';
+import { normalizeToolArguments } from '../../utils/tool-call-args.js';
 
 export interface ResponseEmissionInput {
   responseId: string | undefined;
@@ -138,9 +139,8 @@ function detectRespondShortCircuit(input: RespondShortCircuitInput): string | nu
   ) {
     return null;
   }
-  return typeof tc.function?.arguments?.message === 'string'
-    ? (tc.function.arguments.message as string)
-    : '';
+  const args = normalizeToolArguments(tc.function?.arguments);
+  return typeof args.message === 'string' ? args.message : '';
 }
 
 /** Persist a Responses-API chain pointer onto the caller's mutable ref.

@@ -1,5 +1,6 @@
 import type { ToolCallMessage } from '../../providers/types.js';
 import type { ToolDefinition, ToolPrerequisite } from '../../tools/types.js';
+import { normalizeToolArguments } from '../../utils/tool-call-args.js';
 import { StepTracker } from './step-tracker.js';
 import { stepNudge, prerequisiteNudge, type Nudge } from './nudges.js';
 import { StepEnforcementError, PrerequisiteError } from './errors.js';
@@ -95,7 +96,8 @@ export class StepEnforcer {
       if (!name) continue;
       const declared = this.prereqs.get(name);
       if (!declared || declared.length === 0) continue;
-      const missing = this.findMissingPrereqs(declared, tc.function!.arguments ?? {});
+      const args = normalizeToolArguments(tc.function!.arguments);
+      const missing = this.findMissingPrereqs(declared, args);
       if (missing.length === 0) continue;
       this.prereqViolations++;
       if (this.prereqViolations > this.maxPrereqViolations) {

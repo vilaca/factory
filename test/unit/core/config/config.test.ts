@@ -230,14 +230,15 @@ describe('loadProjectInstructions', () => {
     }
   });
 
-  it('returns null when startup instruction file alone exceeds the size cap', async () => {
+  it('returns content when startup instruction file is large (no cap)', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-instr-'));
     try {
       const big = 'x'.repeat(20 * 1024);
       await fs.mkdir(path.join(cwd, '.factory'), { recursive: true });
       await fs.writeFile(path.join(cwd, '.factory/INSTRUCTIONS.md'), big);
       const out = await loadProjectInstructions(cwd);
-      assert.strictEqual(out, null);
+      assert.ok(out !== null);
+      assert.ok(!out.includes('truncated'), 'no truncation notice should appear');
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }
@@ -245,7 +246,7 @@ describe('loadProjectInstructions', () => {
 });
 
 describe('loadScopedProjectInstructions', () => {
-  it('walks touched dirs to project root and orders root → child', async () => {
+  it('walks touched dirs to project root and orders child → root (deepest first)', async () => {
     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-'));
     try {
       const nested = path.join(cwd, 'src', 'feature');
@@ -259,7 +260,8 @@ describe('loadScopedProjectInstructions', () => {
       const idxRoot = out.indexOf('## From AGENTS.md');
       const idxSrc = out.indexOf(`## From src${path.sep}CLAUDE.md`);
       const idxFeature = out.indexOf(`## From src${path.sep}feature${path.sep}.cursorrules`);
-      assert.ok(idxRoot >= 0 && idxSrc > idxRoot && idxFeature > idxSrc);
+      // deepest (feature) first, then src, then root
+      assert.ok(idxFeature >= 0 && idxSrc > idxFeature && idxRoot > idxSrc);
       assert.match(out, /root-agents/);
       assert.match(out, /src-claude/);
       assert.match(out, /feature-cursor/);
@@ -281,16 +283,18 @@ describe('loadScopedProjectInstructions', () => {
     }
   });
 
-  it('truncates scoped instructions with a cap note', async () => {
-    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-cap-'));
+  it('includes all files without a byte cap', async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-nocap-'));
     try {
       const nested = path.join(cwd, 'pkg');
       await fs.mkdir(nested, { recursive: true });
       await fs.writeFile(path.join(cwd, 'AGENTS.md'), 'root');
+      // Write a file large enough to have previously exceeded the old 16 KiB cap
       await fs.writeFile(path.join(nested, 'CLAUDE.md'), 'x'.repeat(20 * 1024));
       const out = await loadScopedProjectInstructions(cwd, [nested]);
       assert.ok(out !== null);
-      assert.match(out, /truncated at 16384 bytes/);
+      assert.match(out, /root/);
+      assert.ok(!out.includes('truncated'), 'no truncation notice should appear');
     } finally {
       await fs.rm(cwd, { recursive: true, force: true });
     }

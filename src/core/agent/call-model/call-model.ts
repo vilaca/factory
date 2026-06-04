@@ -12,6 +12,7 @@ import { resolveRetryPolicy } from './provider-retry.js';
 import { RepeatDetector } from './repeat-detector.js';
 import { applyCacheBoundaries } from '../cache/cache-boundaries.js';
 import { errorMessage, isError, makeAbortError } from '../../../utils/errors.js';
+import { normalizeToolArguments } from '../../../utils/tool-call-args.js';
 import { tryRotation, type RotationState } from './call-model-rotation.js';
 import { tryRetry } from './call-model-retry.js';
 
@@ -129,13 +130,13 @@ function sanitizeToolCalls(
       return [];
     }
 
-    const args = toolCall.function.arguments;
+    const args = normalizeToolArguments(toolCall.function.arguments);
     return [
       {
         id: toolCall.id,
         function: {
           name: toolCall.function.name,
-          arguments: args && typeof args === 'object' && !Array.isArray(args) ? args : {},
+          arguments: args,
         },
       },
     ];

@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { parseTextToolCalls } from '../../../../../src/core/agent/tool-calls/text-tool-parser.js';
+import { normalizeToolArguments } from '../../../../../src/utils/tool-call-args.js';
+
+const argsOf = (tc: { function: { arguments: unknown } }) =>
+  normalizeToolArguments(tc.function.arguments);
 
 describe('parseTextToolCalls', () => {
   it('returns no calls and original content when no tags present', () => {
@@ -27,8 +31,8 @@ describe('parseTextToolCalls', () => {
       '<tool_call>{"name": "Read", "arguments": {"file_path": "/b"}}</tool_call>';
     const result = parseTextToolCalls(content);
     assert.strictEqual(result.toolCalls.length, 2);
-    assert.strictEqual(result.toolCalls[0].function.arguments.file_path, '/a');
-    assert.strictEqual(result.toolCalls[1].function.arguments.file_path, '/b');
+    assert.strictEqual(argsOf(result.toolCalls[0]).file_path, '/a');
+    assert.strictEqual(argsOf(result.toolCalls[1]).file_path, '/b');
     assert.strictEqual(result.malformedCount, 0);
   });
 
@@ -88,10 +92,8 @@ describe('parseTextToolCalls', () => {
     const result = parseTextToolCalls(content, new Set(['Bash', 'Read', 'Edit']));
     assert.strictEqual(result.toolCalls.length, 1);
     assert.strictEqual(result.toolCalls[0].function.name, 'Bash');
-    assert.strictEqual(
-      result.toolCalls[0].function.arguments.command,
-      'npm install eslint --save-dev',
-    );
+    const args = argsOf(result.toolCalls[0]);
+    assert.strictEqual(args.command, 'npm install eslint --save-dev');
     assert.deepStrictEqual(result.sources, ['shell-fence']);
   });
 
@@ -100,11 +102,9 @@ describe('parseTextToolCalls', () => {
       '```bash\nnpx eslint --init \\\n  --module-type commonjs \\\n  --typescript false\n```';
     const result = parseTextToolCalls(content, new Set(['Bash']));
     assert.strictEqual(result.toolCalls.length, 1);
-    assert.match(
-      result.toolCalls[0].function.arguments.command as string,
-      /--module-type commonjs/,
-    );
-    assert.match(result.toolCalls[0].function.arguments.command as string, /--typescript false/);
+    const args = argsOf(result.toolCalls[0]);
+    assert.match(args.command as string, /--module-type commonjs/);
+    assert.match(args.command as string, /--typescript false/);
   });
 
   it('does NOT use shell-fence fallback when prose surrounds the fence', () => {
@@ -170,7 +170,7 @@ Now I will run another:
       'I will read the file:\n```json\n{"name": "Read", "arguments": {"file_path": "/bar"}}\n```';
     const result = parseTextToolCalls(content);
     assert.strictEqual(result.toolCalls.length, 1);
-    assert.strictEqual(result.toolCalls[0].function.arguments.file_path, '/bar');
+    assert.strictEqual(argsOf(result.toolCalls[0]).file_path, '/bar');
     assert.deepStrictEqual(result.sources, ['fence']);
     assert.match(result.cleanedContent, /I will read the file/);
   });
@@ -194,7 +194,7 @@ Now I will run another:
     const result = parseTextToolCalls(content);
     assert.strictEqual(result.toolCalls.length, 1);
     assert.strictEqual(result.toolCalls[0].function.name, 'Bash');
-    assert.strictEqual(result.toolCalls[0].function.arguments.command, 'ls -la');
+    assert.strictEqual(argsOf(result.toolCalls[0]).command, 'ls -la');
   });
 
   // Case-insensitive matching. Small models routinely lowercase tool names
@@ -238,7 +238,7 @@ Now I will run another:
       );
       assert.strictEqual(result.toolCalls.length, 1);
       assert.strictEqual(result.toolCalls[0].function.name, 'Read');
-      assert.strictEqual(result.toolCalls[0].function.arguments.file_path, '/x');
+      assert.strictEqual(argsOf(result.toolCalls[0]).file_path, '/x');
     });
 
     it('still rejects a name that does not match any tool, even case-insensitively', () => {

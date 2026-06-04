@@ -487,7 +487,7 @@ export async function runHeadless(options: HeadlessOptions): Promise<void> {
   }): Promise<{ changed: boolean; newFiles: string[] } | null> => {
     const refresh = await refreshScopedProjectInstructionsFromToolCall(
       scopedInstructionState,
-      { toolName: info.toolName, args: info.args, result: { success: true } },
+      { toolName: info.toolName, args: info.args },
       info.cwd,
     );
     if (refresh.changed) {
