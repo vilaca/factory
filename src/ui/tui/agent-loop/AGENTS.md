@@ -39,16 +39,16 @@ use-agent-loop.ts (React state + actions)
   ↓
 init.ts → setup.ts (bootstrap sequence)
   ↓
-run-loop.ts ←→ event-handler.ts (turn execution)
-  ↓
-swap.ts (provider/model changes)
-  ↓
-prime-context-window.ts (context window updates)
+run-loop.ts → event-handler.ts (turn execution → mutation sink)
+  │
+  ├─ swap.ts (provider/model changes, independent path)
+  └─ prime-context-window.ts (async context window updates, mount/swap-time)
 ```
 
 Key state containers:
 - `RunRefs` (mutable, survives renders) — the source of truth
 - React state (ephemeral, per-render) — derived from RunRefs events
+- `event-handler.ts` — the sole mutation sink for AgentEvents
 
 ## Shared mutable state cheatsheet
 
