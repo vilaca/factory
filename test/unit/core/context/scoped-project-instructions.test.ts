@@ -54,7 +54,10 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
     try {
       await fs.mkdir(path.join(root, 'src', 'ui', 'tui', 'agent-loop'), { recursive: true });
       await fs.writeFile(path.join(root, 'AGENTS.md'), 'root-guidance');
-      await fs.writeFile(path.join(root, 'src', 'ui', 'tui', 'agent-loop', 'AGENTS.md'), 'specific-guidance');
+      await fs.writeFile(
+        path.join(root, 'src', 'ui', 'tui', 'agent-loop', 'AGENTS.md'),
+        'specific-guidance',
+      );
 
       const state = createScopedProjectInstructionsState(root);
       const event = {
@@ -70,7 +73,10 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
       const rootIdx = instructions.indexOf('root-guidance');
       assert.ok(specificIdx !== -1, 'specific-guidance should be present');
       assert.ok(rootIdx !== -1, 'root-guidance should be present');
-      assert.ok(specificIdx < rootIdx, 'deeper (child) instructions should appear before shallower (root) ones');
+      assert.ok(
+        specificIdx < rootIdx,
+        'deeper (child) instructions should appear before shallower (root) ones',
+      );
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

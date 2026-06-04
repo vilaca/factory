@@ -35,7 +35,10 @@ function extractPathsFromCommand(command: string, cwd: string): string[] {
   for (const rawToken of tokens) {
     let token = rawToken.trim();
     if (!token || token.startsWith('-')) continue;
-    if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+    if (
+      (token.startsWith('"') && token.endsWith('"')) ||
+      (token.startsWith("'") && token.endsWith("'"))
+    ) {
       token = token.slice(1, -1);
     }
     if (!token.includes('/') && !token.startsWith('.')) continue;
