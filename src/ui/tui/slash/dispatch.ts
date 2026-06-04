@@ -156,8 +156,6 @@ function handleCorrect(arg: string, { agent }: SlashCommandContext): void {
   agent.setCorrector(next);
 }
 
-
-
 async function handleModel(arg: string, ctx: SlashCommandContext): Promise<void> {
   if (arg) {
     // Power user syntax: /model <provider>:<model>
