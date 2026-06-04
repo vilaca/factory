@@ -71,9 +71,81 @@ ext.renderer.code = function (token: unknown): string {
 
 const marked = new Marked(ext as unknown as Parameters<typeof Marked.prototype.use>[0]);
 
+function listIndent(line: string): number | null {
+  const match = line.match(/^(\s*)(?:[-*+]\s+|\d+[.)]\s+)/);
+  if (!match) return null;
+  return match[1]?.length ?? 0;
+}
+
+function isFenceDelimiter(line: string): boolean {
+  return /^\s*(?:```|~~~)/.test(line);
+}
+
+/**
+ * Heuristic normalizer for occasionally malformed LLM list output:
+ * - Removes blank lines between a list item and an immediate nested list.
+ * - Removes blank lines between nested sibling list items.
+ *
+ * It intentionally leaves top-level loose lists untouched and skips fenced code
+ * blocks entirely.
+ */
+export function normalizeMarkdownLists(text: string): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+
+  for (let i = 0; i < lines.length; ) {
+    const line = lines[i] ?? '';
+    out.push(line);
+
+    if (isFenceDelimiter(line)) {
+      inFence = !inFence;
+      i += 1;
+      continue;
+    }
+
+    if (inFence) {
+      i += 1;
+      continue;
+    }
+
+    const currentIndent = listIndent(line);
+    if (currentIndent === null) {
+      i += 1;
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < lines.length && (lines[j] ?? '').trim() === '') j += 1;
+
+    if (j === i + 1) {
+      i += 1;
+      continue;
+    }
+
+    const nextLine = lines[j] ?? '';
+    const nextIndent = listIndent(nextLine);
+    const shouldTighten =
+      nextIndent !== null &&
+      (nextIndent > currentIndent || (currentIndent > 0 && nextIndent === currentIndent));
+
+    if (!shouldTighten) {
+      for (let k = i + 1; k < j; k++) out.push(lines[k] ?? '');
+      i = j;
+      continue;
+    }
+
+    // Skip the blank run and continue from the next non-empty line.
+    i = j;
+  }
+
+  return out.join('\n');
+}
+
 export function renderMarkdown(text: string): string {
   if (!text.trim()) return text;
-  const rendered = marked.parse(text);
+  const normalized = normalizeMarkdownLists(text);
+  const rendered = marked.parse(normalized);
   if (typeof rendered === 'string') {
     return rendered.replace(/^\n+/, '').replace(/\n+$/, '');
   }
