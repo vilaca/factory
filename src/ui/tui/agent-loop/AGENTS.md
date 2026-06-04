@@ -46,8 +46,8 @@ run-loop.ts → event-handler.ts (turn execution → mutation sink)
 ```
 
 Key state containers:
-- `RunRefs` (mutable, survives renders) — the source of truth
-- React state (ephemeral, per-render) — derived from RunRefs events
+- `RunRefs` (mutable, survives renders) — the source of truth for everything the runtime needs between turns
+- React state (ephemeral, per-render) — UI control surface + derived view of RunRefs + input trigger channel
 - `event-handler.ts` — the sole mutation sink for AgentEvents
 
 ## Shared mutable state cheatsheet
