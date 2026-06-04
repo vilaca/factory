@@ -39,6 +39,22 @@ export function getScopedProjectInstructionsPrompt(scopedInstructions: string | 
   return `## Directory-Scoped Instructions\n${scopedInstructions}`;
 }
 
+function getProjectFactsGuidance(projectFacts: string): string {
+  const lines = [
+    'When changing version-like or configuration values, treat the source-of-truth above as authoritative — do not guess.',
+  ];
+
+  if (projectFacts.includes('### tsconfig.json')) {
+    const outDir = projectFacts.match(/^- outDir: (.+)$/m)?.[1]?.trim();
+    const outputDirs = outDir ? `the configured outDir (\`${outDir}/\`)` : 'compiled output dirs';
+    lines.push(
+      `TypeScript detected: source usually lives in \`src/**/*.ts\`; edit source, not compiled JavaScript, declaration files, or ${outputDirs}.`,
+    );
+  }
+
+  return lines.join('\n');
+}
+
 export async function buildSystemPrompt(
   cwd: string,
   modelTier: ModelTier = 'strong',
@@ -55,7 +71,7 @@ export async function buildSystemPrompt(
 
   if (projectFacts) {
     sections.push(
-      `## Project Facts (auto-detected)\n${projectFacts}\n\nWhen changing version-like or configuration values, treat the source-of-truth above as authoritative — do not guess.`,
+      `## Project Facts (auto-detected)\n${projectFacts}\n\n${getProjectFactsGuidance(projectFacts)}`,
     );
   }
 
@@ -108,7 +124,7 @@ Rules:
 const TERMINAL_TOOL_BULLETS = `- **Read**: Read file contents with line numbers. Use this instead of cat/head/tail. For large files, pass \`limit\` and \`offset\` to read a window instead of the whole file.
 - **Write**: Create or overwrite files. Creates parent directories as needed. Use this instead of echo/cat redirects.
 - **Edit**: Replace exact strings in files. Use this instead of sed/awk. The old_string must be unique in the file, or pass replace_all=true to replace every occurrence in one call (preferred over multiple Edits or Bash sed for bulk renames).
-- **Bash**: Execute shell commands. Use for git, builds, tests, system operations. Bash output can easily overwhelm context, so default to bounded commands: narrow paths and add caps like \`-n\`, \`--max-count\`, \`--stat\`, \`| head -n 200\`, or \`| tail -n 200\`. Assume output is unbounded unless the command is naturally small (e.g. \`pwd\`, \`git status --short\`). Do not run unbounded high-volume Bash output unless the user explicitly asks for full output.
+- **Bash**: Execute shell commands. Use for git, builds, tests, and system operations. Assume output is unbounded unless the command is naturally small (e.g. \`pwd\`, \`git status --short\`).
 - **Glob**: Find files by pattern (e.g. "**/*.ts"). Use instead of find/ls.
 - **Grep**: Search file contents with regex. Use instead of grep/rg. Keep searches scoped with \`glob\` and only request matching-line content when needed.
 - **WebFetch**: Fetch an http(s) URL and return page content as readable text; HTML is simplified to markdown. Use for public docs, release notes, or specs not in the repo. Unfamiliar hosts may require user approval; responses are size- and time-bounded.`;
@@ -131,22 +147,20 @@ function getAgenticPersistence(provider?: string): string {
   return AGENTIC_PERSISTENCE_BY_PROVIDER[provider.toLowerCase()] ?? '';
 }
 
-const ACTION_OVER_DESCRIPTION_SHARED = `## Action over description
+const OPERATING_LOOP_BLOCK = `## Operating loop
 When the user asks for a code change, you MUST emit at least one tool call in your response. Replying with prose only is failure for code-change requests. Do not describe what the change would look like — that is not the assignment.
 
 "Code change" means modifying source files in this project. If the user asks you to *propose*, *analyze*, *explain*, *summarize*, *compare*, or otherwise produce reviewable text — reply in chat. Do not materialize the answer as a file (e.g. don't Write to /tmp/proposal.md) unless they explicitly ask for one.
 
-The standard pattern: locate the file (Glob/Grep) → Read it → Edit/Write → Verify (for non-trivial edits, read back the changed region or run the relevant test) → confirm briefly. After each tool result, immediately decide the next tool call — do not stop and ask permission to continue. Chain calls until the task is done or you genuinely need user input.`;
+Use this loop: locate with Glob/Grep → Read the relevant file window → Edit/Write → Verify (read back the changed region or run a focused test for non-trivial edits) → confirm briefly. After each tool result, immediately decide the next tool call — do not stop and ask permission to continue. Chain calls until the task is done or you genuinely need user input.
 
-const TOOL_OUTPUT_DISCIPLINE_BLOCK = `## Tool output discipline
-Avoid flooding the context window with noisy command output.
-- Prefer first-party tools over shell equivalents (Read over cat/head/tail, Grep over grep/rg).
-- Scope commands to specific files/directories whenever possible; avoid repo-wide dumps by default.
-- Be especially strict with Bash: treat unbounded Bash output as a last resort.
-- For any Bash command that could exceed ~200 lines, add bounds first (for example \`--stat\`, \`--max-count\`, \`-n\`, \`| head -n 200\`, or \`| tail -n 200\`).
-- For potentially large Bash output (e.g. \`git diff\`, \`git log\`, \`ls -R\`, \`grep/rg\`, \`cat\`), you must use a bounded form first.
-- Only run an unbounded Bash output command when the user explicitly requests full/raw output.
-- For large files, use Read with \`offset\`/\`limit\` and only inspect the relevant window.`;
+Keep tool output bounded. Prefer first-party tools over shell equivalents; scope searches and commands to specific files/directories. For any Bash command that could exceed ~200 lines, add bounds first (for example \`--stat\`, \`--max-count\`, \`-n\`, \`| head -n 200\`, or \`| tail -n 200\`). Only run unbounded Bash output when the user explicitly requests full/raw output.`;
+
+const ASK_VS_ACT_BLOCK = `## Ask vs act
+Ask the user only when required information is missing and cannot be discovered from the repo, or when the choice is genuinely product-level or destructive. Otherwise, inspect the project, make a conservative decision consistent with existing patterns, and act. If the user asks a direct question, answer it directly; do not make code changes unless the request implies implementation.`;
+
+const REVIEW_MODE_BLOCK = `## Review mode
+When the user asks for a review, default to a code-review response: find bugs, regressions, missing tests, and security or reliability risks. Lead with findings ordered by severity, include file/line references when available, then note open questions or residual risk. Do not edit files during a review unless the user explicitly asks for fixes.`;
 
 const FAILURE_RECOVERY_BLOCK = `## Failure recovery
 A failed or errored tool call is NOT the end of the turn. Diagnose and retry — try 2-3 corrective tool calls before giving up and asking the user. Common recoveries:
@@ -158,7 +172,10 @@ A failed or errored tool call is NOT the end of the turn. Diagnose and retry —
 Never claim "the file was edited" or any other success when no tool call actually succeeded — that is fabrication.`;
 
 const SOURCE_VS_BUILD_BLOCK = `## Source vs build output
-Edit source files, never build artifacts. In a TypeScript project, source lives in src/**/*.ts. The dist/, build/, out/, dist-test/ directories contain compiled output that is regenerated on every build — editing them is wasted work. When Glob returns paths in those directories, ignore them and search again with a tighter pattern (e.g. "src/**/*.ts").`;
+Edit source files, never generated or build artifacts. When Glob/Grep returns paths in output directories, ignore them and search again for the corresponding source files.`;
+
+const USER_CHANGES_BLOCK = `## User changes
+You may be working in a dirty worktree. Do not overwrite, revert, remove, or clean up changes you did not make unless the user explicitly asks. If unrelated user changes are present, leave them alone. If they overlap with your task, inspect them and work with them instead of discarding them.`;
 
 const ANTI_FABRICATION_BLOCK = `## Anti-fabrication
 Never write text that pretends a tool ran when it didn't. Specifically: never claim "I ran X and it returned Y", never produce <<TOOL_RESULT>> blocks, never describe imaginary file contents. The runtime detects and strips such fabrications and surfaces a critical-error warning to the user. If you don't have real data, call a tool to get it.`;
@@ -177,14 +194,18 @@ function buildTerminalMediumStrongPrompt(opts: {
 ${persistenceBlock}${opts.toolsSectionHeader}
 ${TERMINAL_TOOL_BULLETS}
 
-${ACTION_OVER_DESCRIPTION_SHARED}
+${OPERATING_LOOP_BLOCK}
 ${opts.deniedToolRecoveryLine}
 
-${TOOL_OUTPUT_DISCIPLINE_BLOCK}
+${ASK_VS_ACT_BLOCK}
+
+${REVIEW_MODE_BLOCK}
 
 ${FAILURE_RECOVERY_BLOCK}
 
 ${SOURCE_VS_BUILD_BLOCK}
+
+${USER_CHANGES_BLOCK}
 
 ## Scope
 ${opts.scopeLine}
@@ -212,6 +233,7 @@ function getBasePrompt(modelTier: ModelTier, provider?: string): string {
 - For questions that only need explanation, comparison, or review with no file edits, answer in chat; use tools when you need to read the repo or run commands.
 - If you don't know where a file is, search for it with Glob or Grep. Do not guess paths.
 - Read files before changing them.
+- Do not overwrite, revert, remove, or clean up user changes unless explicitly asked.
 - Use Edit for small changes, Write for new files.
 - Keep Bash output bounded by default: avoid unscoped high-volume commands; use narrower paths and limits (e.g. \`| head -n 200\`, \`| tail -n 200\`, \`-n\`, \`--max-count\`). If a command might produce large output, run a bounded form first. Only show full raw output if the user explicitly asks for it.
 - Keep responses short.
@@ -226,9 +248,6 @@ function getBasePrompt(modelTier: ModelTier, provider?: string): string {
       scopeLine:
         'Look for the relevant file inside the current project before assuming it\'s elsewhere. Do not modify shell config (~/.zshrc, ~/.bashrc), system files, or other repos unless the user explicitly asks. "Add a /q command to the REPL" means edit this project\'s REPL source, not create a shell alias.',
       guidelinesSection: `## Guidelines
-- Read files before modifying them.
-- Use Edit for targeted changes, Write only for new files or complete rewrites.
-- Prefer Glob/Grep over Bash for file finding and searching.
 - Keep responses short and direct.
 - Do not add features beyond what was asked.`,
       provider,
@@ -242,9 +261,6 @@ function getBasePrompt(modelTier: ModelTier, provider?: string): string {
     scopeLine:
       'Look for the relevant file inside the current project before assuming it lives elsewhere. Do not modify shell config (~/.zshrc, ~/.bashrc), system files, or other repos unless the user explicitly asks. "Add a /q command to the REPL" means edit this project\'s REPL source, not create a shell alias.',
     guidelinesSection: `## Guidelines
-- Read files before modifying them to understand existing code.
-- Use Edit for targeted changes to existing files, Write only for new files or complete rewrites.
-- Prefer Glob/Grep over Bash for file finding and searching.
 - Keep responses short and direct. Lead with the answer, not the reasoning.
 - Do not add features, refactoring, or improvements beyond what was asked.
 - Be careful not to introduce security vulnerabilities.
