@@ -2,6 +2,14 @@
 
 The React-hook orchestrator (`useAgentLoop`) and the pure helpers it delegates to. This is the seam between the TUI render layer and `core/agent/runAgent`. The hook owns the React state; the helpers own the work.
 
+## Getting Started
+
+New to this module? Start here:
+1. Read `agent-loop-types.ts` to understand `RunRefs` (the shared state shape)
+2. Look at `use-agent-loop.ts` to see how React state connects to the agent loop
+3. Check `run-loop.ts` to see how turns are driven
+4. Browse tests in `test/unit/ui/tui/agent-loop/` for usage examples
+
 ## Public entry
 
 - `useAgentLoop(opts)` (`use-agent-loop.ts`) — returns `AgentLoopApi`. `Session.tsx` mounts exactly one of these per tab.
@@ -21,6 +29,26 @@ The React-hook orchestrator (`useAgentLoop`) and the pure helpers it delegates t
 - `prime-context-window.ts` — async prime of `ContextManager.contextWindow` (e.g. ollama's `/api/show`).
 - `history.ts` — prompt input-history stack. Pure.
 - `git-state.ts` — branch + dirty refresh.
+
+## Data Flow
+
+```
+Session.tsx (mounts hook)
+  ↓
+use-agent-loop.ts (React state + actions)
+  ↓
+init.ts → setup.ts (bootstrap sequence)
+  ↓
+run-loop.ts ←→ event-handler.ts (turn execution)
+  ↓
+swap.ts (provider/model changes)
+  ↓
+prime-context-window.ts (context window updates)
+```
+
+Key state containers:
+- `RunRefs` (mutable, survives renders) — the source of truth
+- React state (ephemeral, per-render) — derived from RunRefs events
 
 ## Shared mutable state cheatsheet
 
@@ -49,6 +77,25 @@ There are two: `src/ui/agent-events/compaction-resolver.ts` (shared between head
 Inherits everything in `ui/tui/AGENTS.md`. The most relevant rule when editing here:
 
 - Provider mint + capability read MUST be paired with `prime()` — _enforced by arch test_ (cf880ed contract). `swap.ts` is the canonical site; if you mint a Provider elsewhere, route through `prime()`.
+
+## Tests
+
+Unit tests live in `test/unit/ui/tui/agent-loop/`:
+- `event-handler.test.ts` — event → state mutation wiring
+- `swap.test.ts` — provider/model swap flows
+- `event-handler-activity.test.ts` — activity label transitions
+- `prime-context-window.test.ts` — context-window priming
+- `rotation-wrap.test.ts` — rotation prompt integration
+
+## Initialization Sequence
+
+```
+1. Session.tsx mounts useAgentLoop(opts)
+2. useAgentLoop calls init.ts functions to create RunRefs
+3. setup.ts runs mount-time wiring (session logger, skills, hooks)
+4. prime-context-window.ts async primes ContextManager.contextWindow
+5. Hook returns AgentLoopApi to Session.tsx
+```
 
 ## Don't
 
