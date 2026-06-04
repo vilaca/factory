@@ -141,7 +141,7 @@ export function ConversationDisplay({
         })()}
       {spinner && (
         <>
-          {items.length > 0 && !streamingText && !pendingToolCall && <Separator />}
+          {(items.length > 0 || pendingToolCall) && !streamingText && <Separator />}
           <PanelLine>
             <Spinner label={spinner.label} color={spinner.color} />
           </PanelLine>
