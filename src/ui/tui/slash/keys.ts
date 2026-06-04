@@ -80,6 +80,6 @@ export async function dispatchKeys(arg: string, agent: AgentLoopApi): Promise<vo
     lines.push({ level: warnCount > 0 ? 'warn' : 'info', text });
   }
   lines.push({ level: 'info', text: '' });
-  lines.push({ level: 'info', text: '  Manage keys via /pick (or Ctrl+K).' });
+  lines.push({ level: 'info', text: '  Manage keys via /model (or Ctrl+K).' });
   agent.addNoticeBlock(lines);
 }
