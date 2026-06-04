@@ -6,7 +6,7 @@ import type { SlashCommandSpec } from './types.js';
  *  space. Kept as a free function so the format is reusable if other
  *  contexts (e.g. a future `?` quick-help) want to render the same
  *  shape. */
-export function formatSynopsis(spec: SlashCommandSpec): string {
+function formatSynopsis(spec: SlashCommandSpec): string {
   const names = [spec.name, ...(spec.aliases ?? [])].join(', ');
   return spec.argSpec ? `${names} ${spec.argSpec}` : names;
 }
@@ -24,10 +24,12 @@ export function printHelp(agent: AgentLoopApi, slashCommands: readonly SlashComm
   ];
   agent.addNoticeBlock([
     { level: 'cyan', text: 'Commands:' },
-    ...slashCommands.filter(spec => spec.description !== undefined).map(spec => ({
-      level: 'info' as const,
-      text: `  ${formatSynopsis(spec).padEnd(26)} ${spec.description!}`,
-    })),
+    ...slashCommands
+      .filter(spec => spec.description !== undefined)
+      .map(spec => ({
+        level: 'info' as const,
+        text: `  ${formatSynopsis(spec).padEnd(26)} ${spec.description!}`,
+      })),
     { level: 'cyan', text: 'Hotkeys:' },
     ...hotkeys.map(([k, desc]) => ({
       level: 'info' as const,

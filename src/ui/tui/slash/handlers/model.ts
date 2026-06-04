@@ -22,7 +22,10 @@ export async function handleCompactionModel(arg: string, ctx: SlashCommandContex
         `Compaction model: ${refs.compactionTarget.providerName} / ${refs.compactionTarget.model}`,
       );
     } else {
-      ctx.agent.addNotice('info', `Compaction model: primary (${refs.provider.name} / ${refs.model})`);
+      ctx.agent.addNotice(
+        'info',
+        `Compaction model: primary (${refs.provider.name} / ${refs.model})`,
+      );
     }
     return;
   }
