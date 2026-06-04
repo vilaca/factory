@@ -135,7 +135,7 @@ export function parseIndex(arg: string): number | null {
 /** Quick provider-name validation. Doesn't probe models — that's deferred to the runtime. */
 export function validateEntry(entry: RotationEntry): string | null {
   if (!descriptorByAlias(entry.provider)) {
-    return `Unknown provider "${entry.provider}". Try /pick to see options.`;
+    return `Unknown provider "${entry.provider}". Try /model to see options.`;
   }
   return null;
 }

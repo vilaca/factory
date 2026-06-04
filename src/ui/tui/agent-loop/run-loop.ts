@@ -65,7 +65,7 @@ function formatScopedInstructionFiles(files: string[], projectRoot: string): str
  *  - the active provider has no descriptor (off-the-rails state),
  *  - or the provider has fewer than two saved keys (nothing to rotate to).
  *
- * Reads the live config so newly-added keys (via /pick mid-session) take
+ * Reads the live config so newly-added keys (via /model mid-session) take
  * effect on the next turn without a restart.
  */
 /**
@@ -204,7 +204,7 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
 
   // Build the rotation context for this turn. Loading global config here is
   // a few-ms fs read and lets the runtime see the latest saved keys (the
-  // user may have added one via /pick mid-session).
+  // user may have added one via /model mid-session).
   const rotation = await buildRotationOptions(deps);
 
   const hookDiagnostics = createDiagnosticEmitter(

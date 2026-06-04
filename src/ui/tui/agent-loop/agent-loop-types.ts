@@ -95,7 +95,7 @@ export interface RunRefs {
   responsesChain?: ResponsesChain;
   /** Set to true when the user declines the "set up a fallback?" prompt.
    *  Subsequent rate-limit failures bypass the prompt for the rest of the
-   *  session. Cleared when the user opens the picker via /pick. */
+   *  session. Cleared when the user opens the picker via /model. */
   rotationPromptDeclined: boolean;
   /** Session-scoped compaction-model choice. Unset until the user is
    *  prompted on the first compaction. Cleared on a provider swap whose

@@ -37,7 +37,7 @@
 | `agent`                | `useAgentLoop` | Read state, mutate refs, add notices                      |
 | `exit`                 | Ink `useApp`   | Exit on `/exit`                                           |
 | `tabs`                 | `useTabs`      | Multi-tab commands (`/new`, `/close`, `/tabs`, `/switch`) |
-| `openPicker`           | `Session.tsx`  | `/pick` and Ctrl+K                                        |
+| `openPicker`           | `Session.tsx`  | `/model` and Ctrl+K                                      |
 | `toggleFullOutput`     | `Session.tsx`  | `/full`                                                   |
 | `openCompactionPicker` | `Session.tsx`  | `/compaction-model`                                       |
 

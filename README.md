@@ -38,7 +38,7 @@ npm install && npm run build && npm link
 factory
 ```
 
-That's it. `factory` opens a picker for provider, key, and model the first time (for simple-key providers, it can validate and save keys during the flow). Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/pick` / `Ctrl+K` mid-session) to choose a different one.
+That's it. `factory` opens a picker for provider, key, and model the first time (for simple-key providers, it can validate and save keys during the flow). Subsequent runs jump straight into the prompt with the last provider/model you used; pass `--pick` (or use `/model` / `Ctrl+K` mid-session) to choose a different one.
 
 > **`npm link` permission errors?** It writes a symlink into your npm global prefix; if that's a system path it needs sudo. Either set a user-writable prefix once (`npm config set prefix "$HOME/.npm-global"` and add `$HOME/.npm-global/bin` to your `PATH`), skip linking and run `npx factory` from the repo, or invoke directly with `node /path/to/factory/dist/index.js`.
 

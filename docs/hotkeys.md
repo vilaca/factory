@@ -19,7 +19,7 @@ Each tab is an independent agent (own conversation, working directory, provider,
 | -------- | --------------------------------------------------- |
 | `Ctrl+K` | Open the provider/model picker (recent pairs first) |
 
-The picker is the same one shown on first launch and via `--pick` / `/pick`.
+The picker is the same one shown on first launch and via `--pick` / `/model`.
 
 ## Run control
 

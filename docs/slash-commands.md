@@ -10,8 +10,7 @@ Slash commands are typed at the prompt and run synchronously — they don't go t
 | `/tabs`                 | List open tabs                                                                                                                                                           |
 | `/switch <n\|label>`    | Switch to a tab by index, label, or unique prefix                                                                                                                        |
 | `/clear`                | Clear conversation history                                                                                                                                               |
-| `/model [<name>]`       | Show current provider/model, or switch (accepts `<provider>:<model>` to switch both)                                                                                     |
-| `/pick`                 | Open the provider/model picker (recent pairs first)                                                                                                                      |
+| `/model [<provider>:<model>]` | Open the provider/model picker, or switch directly with `<provider>:<model>`                                                                              |
 | `/rotate`               | View the active rotation chain. Subcommands: `add`, `insert`, `remove`, `move`, `clear`, `refresh` (return to the head of the chain and reset the in-memory failure log) |
 | `/keys [<provider>]`    | Show saved keys with usage / rate-limit / cache-hit counters                                                                                                             |
 | `/stats`                | Cache hit rate, compaction events, and largest tool results for the current session                                                                                      |

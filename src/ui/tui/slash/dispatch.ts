@@ -156,22 +156,15 @@ function handleCorrect(arg: string, { agent }: SlashCommandContext): void {
   agent.setCorrector(next);
 }
 
-async function handleModel(arg: string, { agent }: SlashCommandContext): Promise<void> {
-  const refs = agent.refs.current!;
+
+
+async function handleModel(arg: string, ctx: SlashCommandContext): Promise<void> {
   if (arg) {
-    await agent.setModelByName(arg);
+    // Power user syntax: /model <provider>:<model>
+    await ctx.agent.setModelByName(arg);
     return;
   }
-  agent.addNoticeBlock([
-    { level: 'info', text: `Current: ${refs.provider.name} / ${refs.model}` },
-    {
-      level: 'info',
-      text: 'Switch with /pick (or Ctrl+K). Power users: /model <provider>:<model>.',
-    },
-  ]);
-}
-
-function handlePick(_arg: string, ctx: SlashCommandContext): void {
+  // No argument: open the picker
   if (ctx.openPicker) ctx.openPicker();
   else ctx.agent.addNotice('warn', 'Picker not available in this context.');
 }
@@ -298,15 +291,11 @@ const SLASH_COMMANDS: readonly SlashCommandSpec[] = [
   },
   {
     name: '/model',
-    argSpec: '[<name>]',
-    description: 'Show current provider/model, or switch model. Accepts <provider>:<model>.',
+    argSpec: '[<provider>:<model>]',
+    description: 'Open the provider/model picker, or switch with <provider>:<model>',
     handler: handleModel,
   },
-  {
-    name: '/pick',
-    description: 'Open the provider/model picker (also Ctrl+K)',
-    handler: handlePick,
-  },
+
   {
     name: '/compaction-model',
     argSpec: '[show|clear]',
@@ -454,7 +443,7 @@ function formatSynopsis(spec: SlashCommandSpec): string {
 
 function printHelp(agent: AgentLoopApi): void {
   const hotkeys: [string, string][] = [
-    ['Ctrl+K', 'Open the provider/model picker'],
+    ['Ctrl+K', 'Open the provider/model picker (same as /model)'],
     ['Ctrl+T', 'New tab'],
     ['Ctrl+W', 'Close active tab (or exit if last tab)'],
     ['Ctrl+N / Ctrl+P', 'Cycle to next / previous tab'],

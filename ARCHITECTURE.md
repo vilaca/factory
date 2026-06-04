@@ -162,7 +162,7 @@ Two render targets: the React + Ink TUI under `tui/`, and the non-TTY `headless.
   - `compose-system-prompt.ts` — per-turn system prompt composition.
   - `agent-loop-types.ts` — `RunRefs`, `AgentLoopApi`, `AgentLoopDeps` shapes.
 - `components/` — Ink components (status bar, conversation display, permission panel, plan-approval panel, rotation prompt, etc.).
-  - `provider-picker/` — shared picker used at startup and mid-session (`/pick`, `Ctrl+K`) with explicit layer split:
+  - `provider-picker/` — shared picker used at startup and mid-session (`/model`, `Ctrl+K`) with explicit layer split:
     - `index.tsx` — top-level component state + hook wiring.
     - `render-body.tsx` + `stages.tsx` — display layer (stage-specific rendering).
     - `prepare.ts` — preparation layer (model ranking/sorting for display).
