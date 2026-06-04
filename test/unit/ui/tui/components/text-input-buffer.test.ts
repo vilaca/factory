@@ -6,6 +6,7 @@ import {
   insertAtCursor,
   normalizeNewlines,
   stripNewlines,
+  wrapBufferForDisplay,
 } from '../../../../../src/ui/tui/components/text-input-buffer.js';
 
 describe('text-input-buffer', () => {
@@ -126,6 +127,43 @@ describe('text-input-buffer', () => {
     });
     it('clamps an out-of-range offset to the end of the buffer', () => {
       assert.deepEqual(cursorRowCol('hi', 99), { row: 0, col: 2 });
+    });
+  });
+
+  describe('wrapBufferForDisplay', () => {
+    it('wraps long logical rows to the requested display width', () => {
+      assert.deepEqual(wrapBufferForDisplay('abcdef', 2, 3), {
+        rows: ['abc', 'def'],
+        cursor: { row: 0, col: 2 },
+      });
+    });
+
+    it('moves the cursor to the next visual row at a wrap boundary', () => {
+      assert.deepEqual(wrapBufferForDisplay('abcdef', 3, 3), {
+        rows: ['abc', 'def'],
+        cursor: { row: 1, col: 0 },
+      });
+    });
+
+    it('adds a cursor-only row at end of a full-width line', () => {
+      assert.deepEqual(wrapBufferForDisplay('abc', 3, 3), {
+        rows: ['abc', ''],
+        cursor: { row: 1, col: 0 },
+      });
+    });
+
+    it('preserves explicit empty rows', () => {
+      assert.deepEqual(wrapBufferForDisplay('a\n\nb', 2, 4), {
+        rows: ['a', '', 'b'],
+        cursor: { row: 1, col: 0 },
+      });
+    });
+
+    it('clamps invalid widths to one column', () => {
+      assert.deepEqual(wrapBufferForDisplay('ab', 1, 0), {
+        rows: ['a', 'b'],
+        cursor: { row: 1, col: 0 },
+      });
     });
   });
 });

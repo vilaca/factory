@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput, usePaste } from 'ink';
 import chalk from 'chalk';
-import { cursorRowCol, deleteBeforeCursor, insertAtCursor } from './text-input-buffer.js';
+import { deleteBeforeCursor, insertAtCursor, wrapBufferForDisplay } from './text-input-buffer.js';
 
 /**
  * Minimal text input. Replaces ink-text-input because that component
@@ -27,6 +27,8 @@ interface TextInputProps {
   /** Allow the buffer to span multiple lines. Defaults to false so the
    *  API-token field in the provider picker stays single-line. */
   multiline?: boolean;
+  /** Width available for the editable text, excluding prompt/prefix cells. */
+  width?: number;
 }
 
 export function TextInput({
@@ -36,6 +38,7 @@ export function TextInput({
   focus = true,
   showCursor = true,
   multiline = false,
+  width,
 }: TextInputProps): React.ReactElement {
   const [cursorOffset, setCursorOffset] = useState(value.length);
 
@@ -142,11 +145,12 @@ export function TextInput({
     return <Text>{display}</Text>;
   }
 
-  const rows = value.split('\n');
-  const { row, col } = cursorRowCol(value, cursorOffset);
+  const displayWidth = Math.max(1, Math.floor(width ?? 80));
+  const { rows, cursor } = wrapBufferForDisplay(value, cursorOffset, displayWidth);
+  const { row, col } = cursor;
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width={displayWidth}>
       {rows.map((line, i) => {
         let content: string;
         if (showCursorNow && i === row) {

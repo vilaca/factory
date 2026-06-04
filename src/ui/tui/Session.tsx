@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useApp } from 'ink';
+import { Box, Text, useApp, useStdout } from 'ink';
 import { TextInput } from './components/text-input.js';
 import type { Provider } from '../../providers/types.js';
 import type { AgentConfig } from '../../core/config/types.js';
@@ -90,6 +90,7 @@ export function Session(props: SessionProps): React.ReactElement {
   const isActive = props.isActive ?? true;
   const { exit } = useApp();
   const [input, setInput] = useState('');
+  const { stdout } = useStdout();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerRecents, setPickerRecents] = useState<RecentPair[]>([]);
   const [pickerRecentsLoading, setPickerRecentsLoading] = useState(false);
@@ -390,13 +391,18 @@ export function Session(props: SessionProps): React.ReactElement {
         (() => {
           const totalWaiting = tabs ? tabs.waitingTabs.size : 0;
           const showWaiting = tabs && tabs.tabs.length > 1 && totalWaiting > 0;
+          const tabPrefix = props.tabLabel ? `[${props.tabLabel}]` : '';
+          const waitingPrefix = showWaiting ? ` (${totalWaiting} waiting)` : '';
+          const outputPrefix = showFullOutput ? ' [full]' : '';
+          const prefixWidth = tabPrefix.length + waitingPrefix.length + outputPrefix.length + 2;
+          const inputWidth = Math.max(1, (stdout.columns ?? 80) - 2 - prefixWidth);
           return (
             <>
               <Separator />
               <Box paddingX={1} width="100%">
-                {props.tabLabel && <Text dimColor>{`[${props.tabLabel}]`}</Text>}
-                {showWaiting && <Text color="yellow">{` (${totalWaiting} waiting)`}</Text>}
-                {showFullOutput && <Text color="cyan">{' [full]'}</Text>}
+                {props.tabLabel && <Text dimColor>{tabPrefix}</Text>}
+                {showWaiting && <Text color="yellow">{waitingPrefix}</Text>}
+                {showFullOutput && <Text color="cyan">{outputPrefix}</Text>}
                 <Text color={inputAccentColor} bold>
                   {'> '}
                 </Text>
@@ -408,6 +414,7 @@ export function Session(props: SessionProps): React.ReactElement {
                   }}
                   focus={!pickerOpen}
                   multiline
+                  width={inputWidth}
                 />
               </Box>
               <Separator />
