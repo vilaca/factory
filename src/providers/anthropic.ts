@@ -598,16 +598,20 @@ export function mergeAnthropicUsage(
 
 export function mapAnthropicUsage(u: AnthropicUsageLike): TokenUsage {
   const input = u.input_tokens ?? 0;
+  const cached = u.cache_read_input_tokens ?? 0;
+  const cacheCreation = u.cache_creation_input_tokens ?? 0;
   const output = u.output_tokens ?? 0;
+  // Anthropic splits prompt-side tokens into three buckets. For context
+  // fullness we need the full prompt footprint (uncached + cache reads +
+  // cache writes), not just the uncached bucket.
+  const prompt = input + cached + cacheCreation;
   return {
-    promptTokens: input,
+    promptTokens: prompt,
     completionTokens: output,
-    totalTokens: input + output,
-    ...(typeof u.cache_read_input_tokens === 'number'
-      ? { cachedPromptTokens: u.cache_read_input_tokens }
-      : {}),
+    totalTokens: prompt + output,
+    ...(typeof u.cache_read_input_tokens === 'number' ? { cachedPromptTokens: cached } : {}),
     ...(typeof u.cache_creation_input_tokens === 'number'
-      ? { cacheCreationTokens: u.cache_creation_input_tokens }
+      ? { cacheCreationTokens: cacheCreation }
       : {}),
   };
 }

@@ -106,8 +106,8 @@ describe('key-stats', () => {
       const stat = await getStats('anthropic', 'k1');
       // 80 + 50 cached
       assert.strictEqual(stat?.cachedInputTokens, 130);
-      // (100 - 80) + (50 - 50) = 20 fresh
-      assert.strictEqual(stat?.uncachedInputTokens, 20);
+      // (100 - 80 - 10) + (50 - 50 - 0) = 10 fresh
+      assert.strictEqual(stat?.uncachedInputTokens, 10);
       // 10 + 0 creation
       assert.strictEqual(stat?.cacheCreationTokens, 10);
       assert.ok(stat?.lastCacheReadAt);

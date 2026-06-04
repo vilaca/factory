@@ -317,8 +317,9 @@ describe('AnthropicProvider — cache token plumbing', () => {
       { role: 'user', content: 'hi' },
     ]);
 
-    assert.strictEqual(result.usage?.promptTokens, 100);
+    assert.strictEqual(result.usage?.promptTokens, 185);
     assert.strictEqual(result.usage?.completionTokens, 20);
+    assert.strictEqual(result.usage?.totalTokens, 205);
     assert.strictEqual(result.usage?.cachedPromptTokens, 80);
     assert.strictEqual(result.usage?.cacheCreationTokens, 5);
   });
@@ -375,8 +376,9 @@ describe('AnthropicProvider — cache token plumbing', () => {
 
     const withUsage = chunks.find(c => c.usage);
     assert.ok(withUsage, 'expected a chunk to carry usage');
-    assert.strictEqual(withUsage.usage.promptTokens, 200);
+    assert.strictEqual(withUsage.usage.promptTokens, 360);
     assert.strictEqual(withUsage.usage.completionTokens, 30);
+    assert.strictEqual(withUsage.usage.totalTokens, 390);
     assert.strictEqual(withUsage.usage.cachedPromptTokens, 150);
     assert.strictEqual(withUsage.usage.cacheCreationTokens, 10);
   });
@@ -446,9 +448,9 @@ describe('AnthropicProvider — cache token plumbing', () => {
 
     const withUsage = chunks.find(c => c.usage);
     assert.ok(withUsage, 'expected a terminal usage chunk');
-    assert.strictEqual(withUsage.usage.promptTokens, 123);
+    assert.strictEqual(withUsage.usage.promptTokens, 203);
     assert.strictEqual(withUsage.usage.completionTokens, 17);
-    assert.strictEqual(withUsage.usage.totalTokens, 140);
+    assert.strictEqual(withUsage.usage.totalTokens, 220);
     assert.strictEqual(withUsage.usage.cachedPromptTokens, 80);
   });
 });
