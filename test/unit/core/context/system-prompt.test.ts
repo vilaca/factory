@@ -95,7 +95,12 @@ describe('buildSystemPrompt — model tiers', () => {
       assert.ok(
         prompt.startsWith('You are an interactive coding assistant running in a terminal.'),
       );
-      assert.ok(prompt.includes('Action over description'));
+      assert.ok(prompt.includes('Operating loop'));
+      assert.ok(!prompt.includes('Tool output discipline'));
+      assert.ok(!prompt.includes('TypeScript detected'));
+      assert.ok(!prompt.includes('src/**/*.ts'));
+      assert.ok(prompt.includes('## User changes'));
+      assert.ok(prompt.includes('Do not overwrite, revert, remove, or clean up changes'));
       // Strong-only line — medium and weak don't include it.
       assert.ok(prompt.includes('When running Bash commands, quote paths with spaces.'));
     } finally {
@@ -110,7 +115,10 @@ describe('buildSystemPrompt — model tiers', () => {
       assert.ok(
         prompt.startsWith('You are an interactive coding assistant running in a terminal.'),
       );
-      assert.ok(prompt.includes('Action over description'));
+      assert.ok(prompt.includes('Operating loop'));
+      assert.ok(!prompt.includes('Tool output discipline'));
+      assert.ok(prompt.includes('## User changes'));
+      assert.ok(prompt.includes('work with them instead of discarding them'));
       // Strong-only sentence should NOT appear in medium tier.
       assert.ok(!prompt.includes('When running Bash commands, quote paths with spaces.'));
     } finally {
@@ -124,8 +132,9 @@ describe('buildSystemPrompt — model tiers', () => {
       const prompt = await buildSystemPrompt(dir, 'weak');
       assert.ok(prompt.startsWith('You are a coding assistant.'));
       assert.ok(prompt.includes('Keep responses short.'));
+      assert.ok(prompt.includes('Do not overwrite, revert, remove, or clean up user changes'));
       // Strong/medium-only sections should NOT appear.
-      assert.ok(!prompt.includes('Action over description'));
+      assert.ok(!prompt.includes('Operating loop'));
       assert.ok(!prompt.includes('Anti-fabrication'));
     } finally {
       cleanup(dir);
@@ -150,7 +159,7 @@ describe('buildSystemPrompt — model tiers', () => {
       const prompt = await buildSystemPrompt(dir, 'strong', { provider: 'anthropic' });
       assert.ok(!prompt.includes('## Continuation'));
       // The rest of the strong-tier prompt is still present.
-      assert.ok(prompt.includes('Action over description'));
+      assert.ok(prompt.includes('Operating loop'));
     } finally {
       cleanup(dir);
     }
@@ -199,6 +208,26 @@ describe('buildSystemPrompt — model tiers', () => {
       const prompt = await buildSystemPrompt(dir);
       assert.ok(prompt.includes('## Project Facts'));
       assert.ok(prompt.includes('1.2.3'));
+      assert.ok(!prompt.includes('TypeScript detected'));
+      assert.ok(!prompt.includes('src/**/*.ts'));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it('adds TypeScript source guidance when tsconfig.json is detected', async () => {
+    const dir = tmpDir();
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { outDir: 'dist', strict: true } }),
+      );
+      const prompt = await buildSystemPrompt(dir);
+      assert.ok(prompt.includes('## Project Facts'));
+      assert.ok(prompt.includes('### tsconfig.json'));
+      assert.ok(prompt.includes('TypeScript detected'));
+      assert.ok(prompt.includes('src/**/*.ts'));
+      assert.ok(prompt.includes('`dist/`'));
     } finally {
       cleanup(dir);
     }
