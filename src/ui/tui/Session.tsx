@@ -85,6 +85,65 @@ function findCachedProvider(cache: Map<string, Provider>, name: string): Provide
   return undefined;
 }
 
+interface SessionInputRowProps {
+  isActive: boolean;
+  tabs: React.ContextType<typeof TabsContext>;
+  tabLabel?: string;
+  showFullOutput: boolean;
+  columns?: number;
+  inputAccentColor: 'yellow' | 'cyan' | 'green';
+  input: string;
+  setInput: React.Dispatch<React.SetStateAction<string>>;
+  handleSubmit: (value: string) => void;
+  pickerOpen: boolean;
+}
+
+function SessionInputRow({
+  isActive,
+  tabs,
+  tabLabel,
+  showFullOutput,
+  columns,
+  inputAccentColor,
+  input,
+  setInput,
+  handleSubmit,
+  pickerOpen,
+}: SessionInputRowProps): React.ReactElement | null {
+  if (!isActive) return null;
+  const totalWaiting = tabs ? tabs.waitingTabs.size : 0;
+  const showWaiting = !!tabs && tabs.tabs.length > 1 && totalWaiting > 0;
+  const tabPrefix = tabLabel ? `[${tabLabel}]` : '';
+  const waitingPrefix = showWaiting ? ` (${totalWaiting} waiting)` : '';
+  const outputPrefix = showFullOutput ? ' [full]' : '';
+  const prefixWidth = tabPrefix.length + waitingPrefix.length + outputPrefix.length + 2;
+  const inputWidth = Math.max(1, (columns ?? 80) - 2 - prefixWidth);
+  return (
+    <>
+      <Separator />
+      <Box paddingX={1} width="100%">
+        {tabLabel && <Text dimColor>{tabPrefix}</Text>}
+        {showWaiting && <Text color="yellow">{waitingPrefix}</Text>}
+        {showFullOutput && <Text color="cyan">{outputPrefix}</Text>}
+        <Text color={inputAccentColor} bold>
+          {'> '}
+        </Text>
+        <TextInput
+          value={input}
+          onChange={setInput}
+          onSubmit={value => {
+            handleSubmit(value);
+          }}
+          focus={!pickerOpen}
+          multiline
+          width={inputWidth}
+        />
+      </Box>
+      <Separator />
+    </>
+  );
+}
+
 // eslint-disable-next-line complexity -- TODO(complexity): extract subviews (input bar, transcript, modals) into child components.
 export function Session(props: SessionProps): React.ReactElement {
   const isActive = props.isActive ?? true;
@@ -387,40 +446,20 @@ export function Session(props: SessionProps): React.ReactElement {
         />
       )}
 
-      {isActive &&
-        (() => {
-          const totalWaiting = tabs ? tabs.waitingTabs.size : 0;
-          const showWaiting = tabs && tabs.tabs.length > 1 && totalWaiting > 0;
-          const tabPrefix = props.tabLabel ? `[${props.tabLabel}]` : '';
-          const waitingPrefix = showWaiting ? ` (${totalWaiting} waiting)` : '';
-          const outputPrefix = showFullOutput ? ' [full]' : '';
-          const prefixWidth = tabPrefix.length + waitingPrefix.length + outputPrefix.length + 2;
-          const inputWidth = Math.max(1, (stdout.columns ?? 80) - 2 - prefixWidth);
-          return (
-            <>
-              <Separator />
-              <Box paddingX={1} width="100%">
-                {props.tabLabel && <Text dimColor>{tabPrefix}</Text>}
-                {showWaiting && <Text color="yellow">{waitingPrefix}</Text>}
-                {showFullOutput && <Text color="cyan">{outputPrefix}</Text>}
-                <Text color={inputAccentColor} bold>
-                  {'> '}
-                </Text>
-                <TextInput
-                  value={input}
-                  onChange={setInput}
-                  onSubmit={value => {
-                    void handleSubmit(value);
-                  }}
-                  focus={!pickerOpen}
-                  multiline
-                  width={inputWidth}
-                />
-              </Box>
-              <Separator />
-            </>
-          );
-        })()}
+      <SessionInputRow
+        isActive={isActive}
+        tabs={tabs}
+        tabLabel={props.tabLabel}
+        showFullOutput={showFullOutput}
+        columns={stdout.columns}
+        inputAccentColor={inputAccentColor}
+        input={input}
+        setInput={setInput}
+        handleSubmit={value => {
+          void handleSubmit(value);
+        }}
+        pickerOpen={pickerOpen}
+      />
 
       <StatusBar
         planMode={planMode}
