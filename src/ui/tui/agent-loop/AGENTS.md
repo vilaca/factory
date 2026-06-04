@@ -5,6 +5,7 @@ The React-hook orchestrator (`useAgentLoop`) and the pure helpers it delegates t
 ## Getting Started
 
 New to this module? Start here:
+
 1. Read `agent-loop-types.ts` to understand `RunRefs` (the shared state shape)
 2. Look at `use-agent-loop.ts` to see how React state connects to the agent loop
 3. Check `run-loop.ts` to see how turns are driven
@@ -46,6 +47,7 @@ run-loop.ts → event-handler.ts (turn execution → mutation sink)
 ```
 
 Key state containers:
+
 - `RunRefs` (mutable, survives renders) — the source of truth for everything the runtime needs between turns
 - React state (ephemeral, per-render) — UI control surface + derived view of RunRefs + input trigger channel
 - `event-handler.ts` — the sole mutation sink for AgentEvents
@@ -53,6 +55,7 @@ Key state containers:
 ## Priming Behavior
 
 Priming can happen independently of swap operations:
+
 - **Mount-time prime**: Runs during setup.ts to initialize the context window
 - **Swap-time prime**: May be immediate (sync) or deferred (async) depending on provider capabilities
 - **Context window reuse**: The same context window may be reused across multiple swaps when providers share compatible windows
@@ -88,6 +91,7 @@ Inherits everything in `ui/tui/AGENTS.md`. The most relevant rule when editing h
 ## Tests
 
 Unit tests live in `test/unit/ui/tui/agent-loop/`:
+
 - `event-handler.test.ts` — event → state mutation wiring
 - `swap.test.ts` — provider/model swap flows
 - `event-handler-activity.test.ts` — activity label transitions
