@@ -1,26 +1,12 @@
 import { formatArgValue } from '../format.js';
 import type { AgentLoopApi } from '../agent-loop/use-agent-loop.js';
-import type { TabsContextValue } from '../tabs/TabsContext.js';
 import { EXPERIMENTAL_FLAG_KEYS, type ExperimentalFlagKey } from '../../../core/config/types.js';
+import type { SlashCommandContext, SlashCommandSpec, SlashHandler } from './types.js';
 import { dispatchRotate } from './rotate.js';
 import { dispatchKeys } from './keys.js';
 import { dispatchStats } from './stats.js';
 import { dispatchHooks } from './hooks.js';
 import { EXIT_GRACE_MS } from '../constants.js';
-
-interface SlashCommandContext {
-  agent: AgentLoopApi;
-  exit: () => void;
-  tabs?: TabsContextValue;
-  openPicker?: () => void;
-  toggleFullOutput?: () => boolean;
-  /** Opens the provider/model picker in compaction-target mode and resolves
-   *  with the chosen tuple (or null on cancel). Wired by the TUI; absent in
-   *  headless/test contexts that don't host the picker. */
-  openCompactionPicker?: () => Promise<{ providerName: string; model: string } | null>;
-}
-
-type SlashHandler = (arg: string, ctx: SlashCommandContext) => void | Promise<void>;
 
 function handleExit(_arg: string, ctx: SlashCommandContext): void {
   const { agent, exit, tabs } = ctx;
@@ -253,14 +239,6 @@ function handleEmoji(arg: string, { agent }: SlashCommandContext): void {
  *  Group commands by purpose (tabs → conversation/model → rotation /
  *  diagnostics → per-tab → plan-mode → misc → help) to keep the output
  *  scannable. */
-interface SlashCommandSpec {
-  name: string;
-  aliases?: readonly string[];
-  argSpec?: string;
-  description?: string;
-  handler: SlashHandler;
-}
-
 const SLASH_COMMANDS: readonly SlashCommandSpec[] = [
   {
     name: '/exit',
