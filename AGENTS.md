@@ -1,6 +1,44 @@
-# factory — agent orientation
+# factory - agent orientation
 
 Entry point for AI agents working in this codebase. Read this first, then follow the links to the module you're touching.
+
+## Before coding
+
+1. Read this file.
+2. Read the AGENTS.md for the subsystem you are modifying.
+3. Read existing tests before modifying code.
+4. When fixing bugs, prefer adding or updating a failing test first.
+5. Prefer extending existing patterns over introducing new abstractions.
+
+## How to explore
+
+When investigating a feature:
+
+1. Find the relevant module from Task Routing.
+2. Read that module's AGENTS.md.
+3. Read the tests for the affected code.
+4. Read the implementation.
+5. Only then make changes.
+
+## Coding conventions
+
+- Prefer small focused functions.
+- Avoid introducing dependencies unless necessary.
+- Match existing file structure and naming conventions.
+- Keep public interfaces minimal.
+- Prefer explicit types over `any`.
+
+## Common mistakes
+
+- Do not bypass modularity rules.
+- Do not disable tests to make CI pass.
+- Do not duplicate provider implementations.
+- Do not add new top-level folders without discussion.
+
+## When uncertain
+
+Prefer making the smallest change that satisfies the request.
+Preserve existing architecture and patterns unless the task explicitly requires a redesign.
 
 ## Done means
 
@@ -54,7 +92,7 @@ src/
   utils/            — shared primitives (no imports from sibling top-level folders)
 ```
 
-## Architecture invariants (enforced by `npm run test:unit`)
+## Architecture invariants (enforced)
 
 All rules are in `test/unit/arch/modularity.test.ts` and documented in `MODULARITY_RULES.md`. The short version:
 
@@ -66,6 +104,8 @@ All rules are in `test/unit/arch/modularity.test.ts` and documented in `MODULARI
 - `@modelcontextprotocol/sdk` is confined to `src/mcp/client.ts` and `src/mcp/adapter.ts`.
 
 Violating these is a CI failure. If you genuinely need cross-layer communication, the right move is almost always adding a helper to `utils/` or extending a seam file — not adding an exception.
+
+If a change requires violating modularity rules, stop and explain the architectural conflict instead of introducing a workaround.
 
 ## Test layout
 
