@@ -1,10 +1,10 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useStdout } from 'ink';
 import { makePickerCommitHandler } from '../components/provider-picker/commit-handler.js';
-import {
+import type {
   ProviderPicker,
-  type ProviderEntry,
-  type RecentPair,
+  ProviderEntry,
+  RecentPair,
 } from '../components/provider-picker/index.js';
 import { useAgentLoop, type AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 import { TabsContext } from '../tabs/TabsContext.js';
@@ -115,8 +115,11 @@ export function SessionContainer(props: SessionProps): React.ReactElement {
     openCompactionPicker,
   });
 
-  const inputAccentColor =
-    agent.permissionRequest ? 'yellow' : agent.state === 'running' ? 'cyan' : 'green';
+  const inputAccentColor = agent.permissionRequest
+    ? 'yellow'
+    : agent.state === 'running'
+      ? 'cyan'
+      : 'green';
   const providerList = useMemo<ProviderEntry[]>(buildProviderList, []);
   const spinner =
     !agent.permissionRequest && agent.compacting
@@ -150,7 +153,10 @@ export function SessionContainer(props: SessionProps): React.ReactElement {
     validateKey: pickerAdapter.validateKey,
     saveKey: pickerAdapter.saveKey,
     deleteKey: pickerAdapter.deleteKey,
-    purpose: fallbackPickerResolver || compactionPickerResolver ? 'select-rotation-entry' : 'select-active',
+    purpose:
+      fallbackPickerResolver || compactionPickerResolver
+        ? 'select-rotation-entry'
+        : 'select-active',
     onCancel: () => {
       if (compactionPickerResolver) {
         compactionPickerResolver(null);

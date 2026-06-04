@@ -73,7 +73,10 @@ export function SessionView(props: SessionViewProps): React.ReactElement {
       />
 
       {props.permissionRequest && (
-        <PermissionPanel toolName={props.permissionRequest.toolName} args={props.permissionRequest.args} />
+        <PermissionPanel
+          toolName={props.permissionRequest.toolName}
+          args={props.permissionRequest.args}
+        />
       )}
 
       {props.planMode && props.plannedCallsLength > 0 && props.state === 'idle' && (

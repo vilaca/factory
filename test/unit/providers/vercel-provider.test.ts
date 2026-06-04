@@ -250,7 +250,7 @@ describe('VercelProvider', () => {
           (err: Error) =>
             err.message.includes('Vercel AI Gateway API error 401') &&
             err.message.includes('AI_GATEWAY_API_KEY') &&
-            err.message.includes('vercelToken/token'),
+            err.message.includes('saved API key'),
         );
       },
     );

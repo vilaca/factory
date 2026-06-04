@@ -160,7 +160,11 @@ export function useAgentLoopActions(
     await swapModel(name, buildSwapCtx());
   }
 
-  async function setProviderByName(name: string, requestedModel?: string, keyId?: string): Promise<void> {
+  async function setProviderByName(
+    name: string,
+    requestedModel?: string,
+    keyId?: string,
+  ): Promise<void> {
     await swapProvider(name, requestedModel, keyId, buildSwapCtx());
   }
 
@@ -170,7 +174,9 @@ export function useAgentLoopActions(
     state.setPlanMode(state.refs.current.planMode);
     const sp = state.composeSystemPrompt();
     state.refs.current.conversation.updateSystemPrompt(sp);
-    state.refs.current.sessionLogger?.logSystemPromptChange(`plan-mode=${state.refs.current.planMode}`);
+    state.refs.current.sessionLogger?.logSystemPromptChange(
+      `plan-mode=${state.refs.current.planMode}`,
+    );
     state.refs.current.sessionLogger?.logSystemPrompt(sp);
     state.addNotice('cyan', `Plan mode: ${state.refs.current.planMode ? 'ON' : 'OFF'}.`);
   }
@@ -222,8 +228,13 @@ export function useAgentLoopActions(
     state.refs.current.conversation.updateSystemPrompt(sp);
     state.refs.current.sessionLogger?.logSystemPromptChange('plan-mode=false');
     state.refs.current.sessionLogger?.logSystemPrompt(sp);
-    state.addNotice('cyan', `Executing ${plan.length} planned tool call${plan.length === 1 ? '' : 's'}...`);
-    const summary = plan.map(p => `- ${p.toolName}: ${JSON.stringify(p.args).slice(0, 200)}`).join('\n');
+    state.addNotice(
+      'cyan',
+      `Executing ${plan.length} planned tool call${plan.length === 1 ? '' : 's'}...`,
+    );
+    const summary = plan
+      .map(p => `- ${p.toolName}: ${JSON.stringify(p.args).slice(0, 200)}`)
+      .join('\n');
     state.setState('running');
     try {
       await runAgentLoopInternal(

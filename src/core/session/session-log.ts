@@ -11,12 +11,4 @@ export {
 } from './session-log/rollups.js';
 
 export type { SessionLogger } from './session-log/writer.js';
-export type {
-  SessionStartMeta,
-  LastSessionSelection,
-  RecentSession,
-  ProviderAuthMeta,
-  ModelRequestMeta,
-  SessionLoggerOpts,
-  SessionErrorStatus,
-} from './session-log/types.js';
+export type { RecentSession, SessionErrorStatus } from './session-log/types.js';

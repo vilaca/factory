@@ -3,34 +3,9 @@ import type { Config, ProviderKey } from '../config/types.js';
 import { updateGlobalConfig } from '../config/index.js';
 
 /**
- * Helpers over the multi-key credential store. The store lives at
- * `Config.keys[providerName]: ProviderKey[]`. Pre-multi-key configs keep
- * working via the legacy `<provider>Token` fields — `listKeys` synthesises
- * a virtual entry for them on read, and `migrateLegacyKeys` rewrites the
- * config to bake those entries in on the next save.
+ * Helpers over the multi-key credential store.
+ * The store lives at `Config.keys[providerName]: ProviderKey[]`.
  */
-
-const LEGACY_KEY_ID = 'legacy';
-
-/** Provider name → legacy `<provider>Token` config field.
- *  Hardcoded to avoid a core → providers/registry dependency. When adding a
- *  new provider with a legacy token field, add an entry here too. */
-const LEGACY_TOKEN_KEY: Record<string, keyof Config> = {
-  huggingface: 'huggingfaceToken',
-  anthropic: 'anthropicToken',
-  copilot: 'copilotToken',
-  openrouter: 'openrouterToken',
-  vercel: 'vercelToken',
-  opencodezen: 'opencodeZenToken',
-  googleaistudio: 'googleAiStudioToken',
-  mistral: 'mistralToken',
-  codestral: 'codestralToken',
-  cerebras: 'cerebrasToken',
-  groq: 'groqToken',
-  cohere: 'cohereToken',
-  openai: 'openaiToken',
-  workersai: 'workersAiToken',
-};
 
 /** Last 4 chars of the token. Always returned even for short tokens. */
 export function keyFingerprint(token: string): string {
@@ -107,53 +82,15 @@ export function describeKey(key: ProviderKey): string {
   return key.label ? `${key.label} · …${fp}` : `…${fp}`;
 }
 
-function legacyTokenFor(cfg: Config, provider: string): string | undefined {
-  const field = LEGACY_TOKEN_KEY[provider];
-  if (!field) return undefined;
-  const value = cfg[field];
-  return typeof value === 'string' && value ? value : undefined;
-}
-
-function legacyExtrasFor(cfg: Config, provider: string): Record<string, string> | undefined {
-  // WorkersAI is the only provider with a per-key non-token field today.
-  if (provider === 'workersai' && cfg.workersAiAccountId) {
-    return { accountId: cfg.workersAiAccountId };
-  }
-  return undefined;
-}
-
-function syntheticLegacyKey(
-  token: string,
-  extras: Record<string, string> | undefined,
-): ProviderKey {
-  return {
-    id: LEGACY_KEY_ID,
-    label: 'default',
-    token,
-    createdAt: new Date(0).toISOString(),
-    ...(extras ? { extras } : {}),
-  };
-}
-
-/**
- * Returns the list of keys saved for `provider`. If the multi-key store is
- * empty for that provider but a legacy `<provider>Token` is set, returns a
- * synthetic single-element list with `id='legacy'`. The synthetic entry is
- * not persisted on read — `migrateLegacyKeys` is what bakes it in.
- */
+/** Returns the list of keys saved for `provider`. */
 export function listKeys(cfg: Config, provider: string): ProviderKey[] {
-  const stored = cfg.keys?.[provider];
-  if (stored && stored.length > 0) return stored;
-  const token = legacyTokenFor(cfg, provider);
-  if (!token) return [];
-  return [syntheticLegacyKey(token, legacyExtrasFor(cfg, provider))];
+  return cfg.keys?.[provider] ?? [];
 }
 
 /**
  * Returns the chosen key for `provider`. With `id` provided, returns the
  * matching entry (or undefined if it's gone). Without `id`, returns the
- * first entry — which is the synthetic legacy one before migration, or
- * the most-recently-written one after.
+ * first entry.
  */
 export function getKey(cfg: Config, provider: string, id?: string): ProviderKey | undefined {
   const list = listKeys(cfg, provider);
@@ -192,35 +129,4 @@ export async function deleteKey(provider: string, id: string): Promise<void> {
     if (next.length === existing.length) return {};
     return { keys: { ...cfg.keys, [provider]: next } };
   });
-}
-
-/**
- * Synthesises real `ProviderKey` entries for any provider that still has a
- * legacy `<provider>Token` set but no `keys[provider]` entries. Returns
- * `{ changed, next }`; the caller (typically `loadGlobalConfig`) persists
- * `next` only when `changed` is true. Legacy fields are *not* removed —
- * downgrading to an older factory build keeps working.
- */
-export function migrateLegacyKeys(cfg: Config): { changed: boolean; next: Config } {
-  const nextKeys: Record<string, ProviderKey[]> = { ...(cfg.keys ?? {}) };
-  let changed = false;
-  for (const provider of Object.keys(LEGACY_TOKEN_KEY)) {
-    const haveStored = nextKeys[provider] && nextKeys[provider].length > 0;
-    if (haveStored) continue;
-    const token = legacyTokenFor(cfg, provider);
-    if (!token) continue;
-    const extras = legacyExtrasFor(cfg, provider);
-    nextKeys[provider] = [
-      {
-        id: randomUUID(),
-        label: 'default',
-        token,
-        createdAt: new Date().toISOString(),
-        ...(extras ? { extras } : {}),
-      },
-    ];
-    changed = true;
-  }
-  if (!changed) return { changed: false, next: cfg };
-  return { changed: true, next: { ...cfg, keys: nextKeys } };
 }

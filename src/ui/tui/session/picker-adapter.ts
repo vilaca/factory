@@ -12,7 +12,7 @@ import {
 import { prime } from '../../../providers/prime.js';
 import { errorMessage } from '../../../utils/errors.js';
 
-export function findCachedProvider(cache: Map<string, Provider>, name: string): Provider | undefined {
+function findCachedProvider(cache: Map<string, Provider>, name: string): Provider | undefined {
   const prefix = `${name}\0`;
   for (const [key, value] of cache) {
     if (key.startsWith(prefix)) return value;
@@ -33,7 +33,8 @@ export function buildPickerAdapter(args: BuildPickerAdapterArgs) {
   return {
     getModelInfo: (prov: string, m: string) => {
       const cached = findCachedProvider(pickerProviderCache.current, prov);
-      const source = cached ?? (prov === providerName ? (refsProvider ?? propsProvider) : undefined);
+      const source =
+        cached ?? (prov === providerName ? (refsProvider ?? propsProvider) : undefined);
       return source ? buildPickerInfo(source, m) : undefined;
     },
     loadModels: async (name: string, keyId?: string) => {

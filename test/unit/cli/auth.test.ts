@@ -61,8 +61,10 @@ beforeEach(() => {
 });
 
 describe('resolveCredentialsFor — simple-prompt providers', () => {
-  it('prefers --token over config and env', () => {
-    const config: Config = { anthropicToken: 'config-token' };
+  it('prefers --token over stored keys and env', () => {
+    const config: Config = {
+      keys: { anthropic: [{ id: 'k1', token: 'config-token', createdAt: '2026-01-01T00:00:00Z' }] },
+    };
     process.env.ANTHROPIC_API_KEY = 'env-token';
     const creds = resolveCredentialsFor(DESCRIPTORS.anthropic, config, 'cli-token');
     assert.strictEqual(creds.token, 'cli-token');
@@ -313,7 +315,7 @@ describe('saveCredentialsAfterModelDiscovery', () => {
     assert.strictEqual(keys[0].id, result);
   });
 
-  it('persists a non-simple-prompt token on the legacy field (e.g. googleaistudio api-key)', async () => {
+  it('persists a googleaistudio api-key token to the named config field', async () => {
     const auth: AuthResult = {
       token: 'gemini-test-key',
       authMode: 'api-key',
