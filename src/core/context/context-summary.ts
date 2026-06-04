@@ -1,6 +1,7 @@
 import type { ChatMessage, Provider } from '../../providers/types.js';
 import { estimateMessagesTokens } from '../../utils/tokens.js';
 import { isError } from '../../utils/errors.js';
+import { normalizeToolArguments } from '../../utils/tool-call-args.js';
 
 const LATEST_USER_MAX_CHARS = 500;
 const LATEST_ASSISTANT_MAX_CHARS = 300;
@@ -24,7 +25,7 @@ const SUMMARY_BUDGET_SAFETY = 0.85;
 interface SummaryToolCall {
   function: {
     name: string;
-    arguments?: Record<string, unknown>;
+    arguments?: Record<string, unknown> | string;
   };
 }
 export type SummaryMessage = { role: string; content: string; tool_calls?: SummaryToolCall[] };
@@ -99,7 +100,7 @@ export function buildMechanicalSummary(messages: SummaryMessage[]): string {
     if (msg.tool_calls) {
       for (const tc of msg.tool_calls) {
         toolsUsed.add(tc.function.name);
-        const args = tc.function.arguments;
+        const args = normalizeToolArguments(tc.function.arguments);
         if (args?.file_path) filesAccessed.add(String(args.file_path));
         if (args?.path) filesAccessed.add(String(args.path));
       }

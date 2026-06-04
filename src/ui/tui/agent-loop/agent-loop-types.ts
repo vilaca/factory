@@ -127,6 +127,8 @@ export interface RunRefs {
   scopedProjectInstructions: string | null;
   /** Probe dirs touched by file/search tools this session. */
   instructionTouchedDirs: Set<string>;
+  /** Virtual root dirs treated as overlays for scoped instruction files (e.g., ~/.factory). */
+  instructionVirtualRootDirs: string[];
   /** Scoped instruction files currently loaded (absolute paths). */
   scopedInstructionFiles: Set<string>;
   lastSubstantivePrompt: string | null;

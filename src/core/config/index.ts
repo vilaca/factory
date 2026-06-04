@@ -11,19 +11,12 @@ const PROJECT_CONFIG_DIR = '.factory';
 const PROJECT_CONFIG_FILE = 'config.json';
 const PROJECT_INSTRUCTIONS_FILE = 'INSTRUCTIONS.md';
 
-// Startup instruction files loaded at session init, in priority order.
-// Keep these under `.factory/` so startup guidance is explicit and local
-// to this tool, while root-level cross-tool files remain scoped/lazy.
-const PROJECT_STARTUP_INSTRUCTION_SOURCES = [
-  `${PROJECT_CONFIG_DIR}/AGENTS.md`,
-  `${PROJECT_CONFIG_DIR}/${PROJECT_INSTRUCTIONS_FILE}`,
-] as const;
+// Root-level instruction files loaded at session init. Mirrors the scoped set
+// but limited to project-root scope on startup.
+const PROJECT_STARTUP_INSTRUCTION_SOURCES = ['AGENTS.md', PROJECT_INSTRUCTIONS_FILE] as const;
 
-const PROJECT_SCOPED_INSTRUCTION_SOURCES = ['AGENTS.md', 'CLAUDE.md', '.cursorrules'] as const;
+const PROJECT_SCOPED_INSTRUCTION_SOURCES = ['AGENTS.md', 'CLAUDE.md', '.cursorrules', PROJECT_INSTRUCTIONS_FILE] as const;
 
-// Cap on the total injected size to keep the system prompt bounded. Sources
-// past the cap are dropped with a truncation note rather than streamed in.
-const PROJECT_INSTRUCTIONS_MAX_BYTES = 16 * 1024;
 
 function getGlobalConfigFile(): string {
   return path.join(getGlobalConfigDir(), 'config.json');
@@ -243,55 +236,60 @@ function ancestorsToRoot(start: string, root: string): string[] {
   return out;
 }
 
+interface InstructionSource {
+  filePath: string;
+  label: string;
+}
+
 async function loadInstructionBlocks(
-  root: string,
-  relPaths: readonly string[],
+  sources: readonly InstructionSource[],
   onFileLoaded?: (filePath: string) => void,
 ): Promise<string | null> {
-  const contents = await Promise.all(relPaths.map(rel => readTextFile(path.join(root, rel))));
+  const contents = await Promise.all(sources.map(src => readTextFile(src.filePath)));
 
   const parts: string[] = [];
-  let totalBytes = 0;
-  let truncated = false;
 
-  for (let i = 0; i < relPaths.length; i++) {
-    const rel = relPaths[i]!;
+  for (let i = 0; i < sources.length; i++) {
+    const src = sources[i]!;
     const content = contents[i];
     if (content === null || content === undefined || content.length === 0) continue;
 
-    const block = `## From ${rel}\n\n${content}\n\n`;
-    const blockBytes = Buffer.byteLength(block, 'utf-8');
-    if (totalBytes + blockBytes > PROJECT_INSTRUCTIONS_MAX_BYTES) {
-      truncated = true;
-      break;
-    }
-    parts.push(block);
-    totalBytes += blockBytes;
-    onFileLoaded?.(path.join(root, rel));
+    parts.push(`## From ${src.label}\n\n${content}\n\n`);
+    onFileLoaded?.(src.filePath);
   }
 
   if (parts.length === 0) return null;
-
-  let result = parts.join('').trimEnd();
-  if (truncated) {
-    result += `\n\n_(Project instructions truncated at ${PROJECT_INSTRUCTIONS_MAX_BYTES} bytes; remaining sources were skipped.)_`;
-  }
-  return result;
+  return parts.join('').trimEnd();
 }
 
 /**
  * Loads startup project instructions from the project root.
  *
- * Startup reads `.factory/AGENTS.md` and `.factory/INSTRUCTIONS.md`.
- * Root-level scoped cross-tool files (`AGENTS.md`, `CLAUDE.md`,
- * `.cursorrules`) are loaded lazily based on touched directories during
- * tool execution.
+ * Startup reads `.factory/AGENTS.md` and `.factory/INSTRUCTIONS.md`, plus
+ * virtual project-root instruction files under `~/.factory/` when present.
+ * Other scoped instruction files are loaded lazily during execution.
  */
 export async function loadProjectInstructions(
   cwd: string,
   onFileLoaded?: (filePath: string) => void,
 ): Promise<string | null> {
-  return loadInstructionBlocks(cwd, PROJECT_STARTUP_INSTRUCTION_SOURCES, onFileLoaded);
+  const root = path.resolve(cwd);
+  const projectInstrDir = path.join(root, PROJECT_CONFIG_DIR);
+  const virtualRoot = path.join(os.homedir(), '.factory');
+  const sources: InstructionSource[] = [];
+  for (const name of PROJECT_STARTUP_INSTRUCTION_SOURCES) {
+    sources.push({
+      filePath: path.join(projectInstrDir, name),
+      label: path.join(PROJECT_CONFIG_DIR, name),
+    });
+  }
+  for (const name of PROJECT_STARTUP_INSTRUCTION_SOURCES) {
+    sources.push({
+      filePath: path.join(virtualRoot, name),
+      label: path.join('~/.factory', name),
+    });
+  }
+  return loadInstructionBlocks(sources, onFileLoaded);
 }
 
 /**
@@ -299,12 +297,19 @@ export async function loadProjectInstructions(
  * - each touched directory
  * - its parents up to and including `projectRoot`
  *
- * Directories are traversed root → child, so deeper instructions appear later.
+ * Directories are sorted child → root (deepest first) so the most specific
+ * instructions appear earliest in the prompt and are never displaced by
+ * shallower, more general files. Virtual-root (~/.factory/) entries follow
+ * all project directories.
+ *
+ * There is no byte cap: all discovered files are included. The context
+ * manager handles overall window budgeting.
  */
 export async function loadScopedProjectInstructions(
   projectRoot: string,
   touchedDirs: Iterable<string>,
   onFileLoaded?: (filePath: string) => void,
+  options?: { virtualRootDirs?: readonly string[] },
 ): Promise<string | null> {
   const root = path.resolve(projectRoot);
   const dirs = new Set<string>();
@@ -314,22 +319,33 @@ export async function loadScopedProjectInstructions(
     }
   }
 
+  // Sort deepest first so more-specific (child) instructions come before
+  // less-specific (parent) ones. Tie-break alphabetically for stability.
   const sortedDirs = [...dirs].sort((a, b) => {
     const aDepth = path.relative(root, a).split(path.sep).filter(Boolean).length;
     const bDepth = path.relative(root, b).split(path.sep).filter(Boolean).length;
-    if (aDepth !== bDepth) return aDepth - bDepth;
+    if (aDepth !== bDepth) return bDepth - aDepth; // deeper first
     return a.localeCompare(b);
   });
 
-  const relPaths: string[] = [];
+  const sources: InstructionSource[] = [];
+
   for (const dir of sortedDirs) {
     const relDir = path.relative(root, dir);
     for (const name of PROJECT_SCOPED_INSTRUCTION_SOURCES) {
-      relPaths.push(relDir ? path.join(relDir, name) : name);
+      const label = relDir ? path.join(relDir, name) : name;
+      sources.push({ filePath: path.join(root, label), label });
     }
   }
 
-  return loadInstructionBlocks(root, relPaths, onFileLoaded);
+  // Virtual-root entries (~/.factory/) come after all project directories.
+  for (const virtualRoot of options?.virtualRootDirs ?? []) {
+    for (const name of PROJECT_SCOPED_INSTRUCTION_SOURCES) {
+      sources.push({ filePath: path.join(virtualRoot, name), label: path.join('~/.factory', name) });
+    }
+  }
+
+  return loadInstructionBlocks(sources, onFileLoaded);
 }
 
 interface CliOverrides {

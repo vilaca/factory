@@ -1,3 +1,4 @@
+import path from 'path';
 import type { MutableRefObject } from 'react';
 import { Conversation } from '../../../core/context/conversation.js';
 import { ContextManager } from '../../../core/context/context-manager.js';
@@ -104,6 +105,9 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
   conversation.addUser(buildEnvironmentMessage(cwd));
   conversation.addAssistant('Got it.');
   const scopedInstructions = createScopedProjectInstructionsState(cwd);
+  for (const filePath of opts.loadedFiles ?? []) {
+    scopedInstructions.loadedFiles.add(path.resolve(String(filePath)));
+  }
   const permissions = new PermissionManager();
   if (opts.autoAllowTools) {
     for (const t of opts.autoAllowTools) permissions.allowAll(t);
@@ -174,6 +178,7 @@ export function createInitialRefs(input: InitialRefsInput): RunRefs {
     projectRoot: scopedInstructions.projectRoot,
     scopedProjectInstructions: scopedInstructions.scopedInstructions,
     instructionTouchedDirs: scopedInstructions.touchedDirs,
+    instructionVirtualRootDirs: scopedInstructions.virtualRootDirs,
     scopedInstructionFiles: scopedInstructions.loadedFiles,
     lastSubstantivePrompt: null,
     replayCounts: new Map(),

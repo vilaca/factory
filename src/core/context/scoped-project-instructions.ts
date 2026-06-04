@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 import { loadScopedProjectInstructions } from '../config/index.js';
 
@@ -6,16 +7,20 @@ export interface ScopedProjectInstructionsState {
   touchedDirs: Set<string>;
   scopedInstructions: string | null;
   loadedFiles: Set<string>;
+  virtualRootDirs: string[];
 }
 
 export function createScopedProjectInstructionsState(
   projectRoot: string,
+  virtualRootDirs: string[] = [path.join(os.homedir(), '.factory')],
 ): ScopedProjectInstructionsState {
+  const resolvedRoot = path.resolve(projectRoot);
   return {
-    projectRoot: path.resolve(projectRoot),
-    touchedDirs: new Set<string>(),
+    projectRoot: resolvedRoot,
+    touchedDirs: new Set<string>([resolvedRoot]),
     scopedInstructions: null,
     loadedFiles: new Set<string>(),
+    virtualRootDirs,
   };
 }
 
@@ -24,10 +29,30 @@ function isWithinRoot(target: string, root: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+function extractPathsFromCommand(command: string, cwd: string): string[] {
+  const tokens = command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+  const paths: string[] = [];
+  for (const rawToken of tokens) {
+    let token = rawToken.trim();
+    if (!token || token.startsWith('-')) continue;
+    if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+      token = token.slice(1, -1);
+    }
+    if (!token.includes('/') && !token.startsWith('.')) continue;
+    if (token.startsWith('~')) {
+      token = path.join(os.homedir(), token.slice(1));
+    }
+    const abs = path.resolve(cwd, token);
+    paths.push(abs);
+  }
+  return paths;
+}
+
 function toProbeDirs(_toolName: string, args: Record<string, unknown>, cwd: string): string[] {
   const resolvedCwd = path.resolve(cwd);
   const rawFilePath = typeof args.file_path === 'string' ? args.file_path : undefined;
   const rawSearchPath = typeof args.path === 'string' ? args.path : undefined;
+  const rawCommand = typeof args.command === 'string' ? args.command : undefined;
 
   // Any successful tool call counts as "touching" the current working
   // directory. This ensures scoped instructions can load/update even for
@@ -45,16 +70,20 @@ function toProbeDirs(_toolName: string, args: Record<string, unknown>, cwd: stri
     dirs.add(path.dirname(abs));
   }
 
+  if (rawCommand) {
+    for (const absPath of extractPathsFromCommand(rawCommand, resolvedCwd)) {
+      dirs.add(path.dirname(absPath));
+    }
+  }
+
   return Array.from(dirs);
 }
 
 export async function refreshScopedProjectInstructionsFromToolCall(
   state: ScopedProjectInstructionsState,
-  event: { toolName: string; args: Record<string, unknown>; result: { success: boolean } },
+  event: { toolName: string; args: Record<string, unknown> },
   cwd: string,
 ): Promise<{ changed: boolean; newFiles: string[] }> {
-  if (!event.result.success) return { changed: false, newFiles: [] };
-
   const probeDirs = toProbeDirs(event.toolName, event.args, cwd);
   let hasInRootProbe = false;
   for (const dir of probeDirs) {
@@ -75,6 +104,7 @@ export async function refreshScopedProjectInstructionsFromToolCall(
     filePath => {
       loadedFiles.add(filePath);
     },
+    { virtualRootDirs: state.virtualRootDirs },
   );
 
   const newFiles = Array.from(loadedFiles).filter(f => !state.loadedFiles.has(f));
