@@ -214,10 +214,6 @@ export async function chatAnthropicNoStream(
     content: content || undefined,
     tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
     done: true,
-    usage: {
-      promptTokens: u.input_tokens ?? 0,
-      completionTokens: u.output_tokens ?? 0,
-      totalTokens: (u.input_tokens ?? 0) + (u.output_tokens ?? 0),
-    },
+    usage: mapAnthropicUsage(u),
   };
 }

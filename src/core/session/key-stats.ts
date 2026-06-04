@@ -21,7 +21,7 @@ interface KeyStat {
   lastFailureAt?: string;
   /** Cumulative input tokens served from cache for this key. */
   cachedInputTokens?: number;
-  /** Cumulative input tokens NOT served from cache (raw - cached). */
+  /** Cumulative fresh input tokens (prompt - cached - cache-creation). */
   uncachedInputTokens?: number;
   /** Cumulative cache-creation tokens billed for this key (Anthropic). */
   cacheCreationTokens?: number;
@@ -140,8 +140,9 @@ export async function recordTokenUsage(
   const stats = await ensureCache();
   const entry = getOrCreate(stats, provider, keyId);
   const cached = usage.cachedPromptTokens ?? 0;
+  const created = usage.cacheCreationTokens ?? 0;
   const total = usage.promptTokens ?? 0;
-  const uncached = Math.max(0, total - cached);
+  const uncached = Math.max(0, total - cached - created);
   entry.cachedInputTokens = (entry.cachedInputTokens ?? 0) + cached;
   entry.uncachedInputTokens = (entry.uncachedInputTokens ?? 0) + uncached;
   if (typeof usage.cacheCreationTokens === 'number') {

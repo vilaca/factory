@@ -93,11 +93,12 @@ function parseSession(raw: string): SessionStats {
       const usage = ev.usage;
       if (usage) {
         const cached = usage.cachedPromptTokens ?? 0;
+        const created = usage.cacheCreationTokens ?? 0;
         const total = usage.promptTokens ?? 0;
-        const uncached = Math.max(0, total - cached);
+        const uncached = Math.max(0, total - cached - created);
         stats.cachedInputTokens += cached;
         stats.uncachedInputTokens += uncached;
-        stats.cacheCreationTokens += usage.cacheCreationTokens ?? 0;
+        stats.cacheCreationTokens += created;
         const turnTotal = cached + uncached;
         stats.perTurnHitRate.push(turnTotal > 0 ? cached / turnTotal : 0);
       } else {
