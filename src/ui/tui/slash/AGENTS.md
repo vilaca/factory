@@ -1,6 +1,6 @@
 # ui/tui/slash — orientation
 
-`/command` handlers. `dispatch.ts` is the single dispatcher; each command is a small function in this folder or, for the bigger families (rotate, keys, stats, hooks), its own file.
+`/command` handlers. `dispatch.ts` is the entrypoint dispatcher; command metadata lives in `spec.ts`, dispatch lookup in `dispatch-map.ts`, help rendering in `help.ts`, and handlers are grouped under `handlers/` or dedicated family files (rotate, keys, stats, hooks).
 
 ## Public entry
 
@@ -8,18 +8,25 @@
 
 ## Files
 
-- `dispatch.ts` — the dispatcher + the `SLASH_COMMANDS` table + `printHelp` + the small commands inlined as arrow functions. **Single-source contract:** `SLASH_COMMANDS: readonly SlashCommandSpec[]` is the only place command metadata lives; `HANDLERS` (the dispatch map) and `printHelp` (the `/help` output) are both derived from it. Adding a command is one entry; aliases live on the entry; the `description` field is the on/off switch for `/help` visibility (omit it for easter eggs).
-- `rotate.ts`, `rotate-helpers.ts`, `rotate-subcommands.ts` — `/rotate` family. The biggest slash subtree because rotation has subcommands (`set`, `add`, `show`, `enable`, `disable`, `refresh`, `keys-on/off`, …).
+- `dispatch.ts` — public dispatcher entry (`dispatchSlashCommand`).
+- `spec.ts` — **single-source contract**: `SLASH_COMMANDS: readonly SlashCommandSpec[]` is the only place command metadata lives. Adding a command is one entry; aliases live on the entry; `description` is the `/help` visibility switch (omit for easter eggs).
+- `dispatch-map.ts` — derives `HANDLERS` from `SLASH_COMMANDS` (`name` + `aliases`).
+- `help.ts` — `/help` rendering (`formatSynopsis`, `printHelp`).
+- `handlers/tabs.ts` — `/exit`, `/new`, `/close`, `/tabs`, `/switch`.
+- `handlers/model.ts` — `/model`, `/compaction-model`.
+- `handlers/plan.ts` — `/plan`, `/queue`, `/approve`, `/cancel` helpers.
+- `handlers/diagnostics.ts` — `/hooks`, `/full`, `/log`, `/correct`, `/exp`, `/skills`, `/skill`, `/emoji`.
+- `rotate.ts`, `rotate-helpers.ts`, `rotate-subcommands.ts` — `/rotate` family.
 - `keys.ts` — `/keys` (per-provider key listing / health snapshot).
 - `stats.ts` — `/stats` (per-session cache hits, compaction events, largest tool results).
-- `hooks.ts` — `/hooks` (active hook list, taken from `RunRefs.hooksConfig`).
+- `hooks.ts` — `/hooks` backend listing logic (used by diagnostics handler).
 
 ## Adding a new slash command
 
 1. Decide where the handler lives. Rule of thumb:
-   - Small, no subcommands → inline in `dispatch.ts` next to peers.
-   - Subcommands or > ~40 LOC → new file `slash/<name>.ts` exporting `dispatch<Name>(arg, agent)`.
-2. Add **one** entry to `SLASH_COMMANDS` in `dispatch.ts`:
+   - Existing domain → add to `handlers/<domain>.ts`.
+   - New domain/subcommands → create `handlers/<name>.ts` (or dedicated family file under `slash/`).
+2. Add **one** entry to `SLASH_COMMANDS` in `spec.ts`:
    ```ts
    { name: '/foo', argSpec: '<bar>', description: 'Do foo with bar', handler: handleFoo }
    ```
@@ -30,7 +37,7 @@
 
 ## What `SlashCommandContext` carries
 
-`dispatch.ts` builds the context once per session:
+`use-session-input.ts` builds the context once per session:
 
 | Field                  | Set by         | Purpose                                                   |
 | ---------------------- | -------------- | --------------------------------------------------------- |
