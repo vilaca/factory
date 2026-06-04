@@ -2,16 +2,16 @@
 
 ## Context
 
-* Instruction files can be named `AGENTS.md`, `CLAUDE.md`, `.cursorrules` or `INSTRUCTIONS.md`.
-* They can exist under `~/.factory/`, project root, and its child folders.
-* Instruction files are not mandatory: they might not exist in any given folder.
+- Instruction files can be named `AGENTS.md`, `CLAUDE.md`, `.cursorrules` or `INSTRUCTIONS.md`.
+- They can exist under `~/.factory/`, project root, and its child folders.
+- Instruction files are not mandatory: they might not exist in any given folder.
 
 ## Decision
 
 ### Discovery rules
 
 - The project root boundary is the process working directory at session initialisation. Parent traversal must never ascend above this directory.
-- A directory becomes *touched* when it or a file within it is explicitly referenced by an operation.
+- A directory becomes _touched_ when it or a file within it is explicitly referenced by an operation.
 - When a directory becomes touched, discover scoped instruction files in that directory and each ancestor up to project root.
 - Discoveries happen on tool start regardless of whether the tool succeeds (failed calls still mark touched dirs and load instructions).
 - Each instruction file is loaded at most once per active conversation context. If the session is reset (`/clear`) or a compaction rebuild drops instruction content, the loader may re-read as part of rebuilding the prompt.

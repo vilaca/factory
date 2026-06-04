@@ -15,8 +15,12 @@ const PROJECT_INSTRUCTIONS_FILE = 'INSTRUCTIONS.md';
 // but limited to project-root scope on startup.
 const PROJECT_STARTUP_INSTRUCTION_SOURCES = ['AGENTS.md', PROJECT_INSTRUCTIONS_FILE] as const;
 
-const PROJECT_SCOPED_INSTRUCTION_SOURCES = ['AGENTS.md', 'CLAUDE.md', '.cursorrules', PROJECT_INSTRUCTIONS_FILE] as const;
-
+const PROJECT_SCOPED_INSTRUCTION_SOURCES = [
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.cursorrules',
+  PROJECT_INSTRUCTIONS_FILE,
+] as const;
 
 function getGlobalConfigFile(): string {
   return path.join(getGlobalConfigDir(), 'config.json');
@@ -341,7 +345,10 @@ export async function loadScopedProjectInstructions(
   // Virtual-root entries (~/.factory/) come after all project directories.
   for (const virtualRoot of options?.virtualRootDirs ?? []) {
     for (const name of PROJECT_SCOPED_INSTRUCTION_SOURCES) {
-      sources.push({ filePath: path.join(virtualRoot, name), label: path.join('~/.factory', name) });
+      sources.push({
+        filePath: path.join(virtualRoot, name),
+        label: path.join('~/.factory', name),
+      });
     }
   }
 
