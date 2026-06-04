@@ -9,6 +9,7 @@ Validations (run on push to `main` and on PR):
 - `typecheck.yml` — `tsc --noEmit`.
 - `format-check.yml` — `prettier --check` (advisory; the workflow reports failure on drift but should not be marked required in branch protection).
 - `knip.yml` — unused-export / dependency check (advisory; the workflow reports failure on issues but should not be marked required in branch protection).
+- `circular-deps.yml` — `madge -c` circular dependency check (fails if circular dependencies are detected).
 
 Tests (run on push to `main` and on PR):
 
