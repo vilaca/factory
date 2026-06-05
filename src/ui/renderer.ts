@@ -501,10 +501,7 @@ export function renderWelcome(
   gitBranch?: string,
   tools: string[] = [],
 ): string {
-  const cwdLine =
-    chalk.dim('  CWD:   ') +
-    chalk.white(cwd) +
-    (gitBranch ? chalk.dim('  (') + chalk.cyan(gitBranch) + chalk.dim(')') : '');
+  const branch = (gitBranch ? chalk.dim('  (') + chalk.cyan(gitBranch) + chalk.dim(')') : '');
   // Both "Exp:" and "Tools:" produce comma-separated lists that can easily
   // overflow narrow terminals; wrap them so continuation lines align under
   // the value column instead of the left margin.
@@ -517,11 +514,11 @@ export function renderWelcome(
     chalk.dim('  v' + getBuildInfo().version),
     '',
     chalk.dim('  Model: ') + chalk.white(model),
-    cwdLine,
-    chalk.dim('  Logs:  ') + chalk.white(sessionLogDestination ?? 'disabled'),
-    chalk.dim('  Exp:   ') + chalk.white(expValue),
-    '',
     chalk.dim('  Tools: ') + chalk.white(toolsValue),
+    chalk.dim('  Flags: ') + chalk.white(expValue),
+    chalk.dim('  Logs:  ') + chalk.white(sessionLogDestination ?? 'disabled'),
+    chalk.dim('  Cwd:   ') + chalk.white(cwd) + branch,
+    '',
     chalk.dim('  Type /help for commands, /exit to quit'),
     '',
     chalk.dim('─'.repeat(WELCOME_RULE_WIDTH)),
