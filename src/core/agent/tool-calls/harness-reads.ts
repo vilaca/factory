@@ -32,7 +32,7 @@ export async function* runHarnessScopedInstructionReads(
     const synthetic = yield* tryReadCacheHit(toolCall, ctx);
     if (synthetic) continue;
 
-    for await (const event of executeToolCall(toolCall, ctx)) {
+    for await (const event of executeToolCall(toolCall, ctx, { skipPermissionCheck: true })) {
       if (event.type === 'tool-call-result' && event.result.success && ctx.fileCache) {
         await maintainFileCache(toolCall, ctx.fileCache);
       }
