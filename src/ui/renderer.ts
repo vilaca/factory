@@ -32,13 +32,43 @@ interface CodeTokenLike {
   lang?: unknown;
 }
 
+export function markdownRenderWidth(columns: number | undefined): number {
+  const fallback = DEFAULT_TERMINAL_COLS;
+  const width = columns ?? fallback;
+  return Math.max(1, width - 1);
+}
+
+function formatTerminalList(body: string, ordered: boolean, indent: string): string {
+  const lines = body
+    .trim()
+    .split('\n')
+    .filter(line => line.length > 0);
+
+  if (!ordered) return lines.join('\n');
+
+  let index = 0;
+  return lines
+    .map(line => {
+      if (/^\*\s+/.test(line)) {
+        index += 1;
+        return line.replace(/^\*\s+/, `${index}. `);
+      }
+      return line;
+    })
+    .join('\n')
+    .replace(new RegExp(`\\n${indent}(?=\\d+\\.\\s+)`, 'g'), '\n');
+}
+
 // marked-terminal v7's `text` renderer ignores marked v15's `tokens` array on
 // text tokens, so inline formatting (bold/italic/code/links) is dropped inside
 // list items. Patch it to parse the inline tokens when present.
 const ext = markedTerminal({
   reflowText: false,
-  width: 0,
+  // Reserve one column to avoid edge wraps where rule-ish lines end up exactly
+  // terminal-width and spill a trailing dash on the next row.
+  width: markdownRenderWidth(process.stdout.columns),
   showSectionPrefix: false,
+  list: formatTerminalList,
   // marked-terminal supports `tab` (indent width), but its exported
   // `MarkedTerminalOptions` type doesn't currently include it.
   tab: 2,
@@ -75,6 +105,12 @@ function listIndent(line: string): number | null {
   const match = line.match(/^(\s*)(?:[-*+]\s+|\d+[.)]\s+)/);
   if (!match) return null;
   return match[1]?.length ?? 0;
+}
+
+function listKind(line: string): 'ordered' | 'unordered' | null {
+  if (/^\s*\d+[.)]\s+/.test(line)) return 'ordered';
+  if (/^\s*[-*+]\s+/.test(line)) return 'unordered';
+  return null;
 }
 
 function isFenceDelimiter(line: string): boolean {
@@ -122,13 +158,79 @@ function collapseBlankRunsOutsideFences(lines: string[]): string[] {
   return out;
 }
 
+function normalizeTopLevelListIndentation(lines: string[]): string[] {
+  const out: string[] = [];
+  let inFence = false;
+
+  for (const line of lines) {
+    if (isFenceDelimiter(line)) {
+      out.push(line);
+      inFence = !inFence;
+      continue;
+    }
+
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+
+    const prevNonEmpty = [...out].reverse().find(l => l.trim() !== '');
+    const prevIndent = prevNonEmpty ? listIndent(prevNonEmpty) : null;
+
+    const topLevelMatch = line.match(/^( {1,3})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+    if (topLevelMatch) {
+      const currentIndent = topLevelMatch[1]?.length ?? 0;
+      const currentKind = listKind(topLevelMatch[2] ?? '');
+      const prevKind = prevNonEmpty ? listKind(prevNonEmpty) : null;
+      if (
+        prevNonEmpty === undefined ||
+        isDashRule(prevNonEmpty) ||
+        prevIndent === null ||
+        prevIndent >= currentIndent ||
+        (currentKind === 'ordered' && prevKind === 'unordered' && prevIndent === currentIndent)
+      ) {
+        out.push(topLevelMatch[2] ?? line);
+        continue;
+      }
+    }
+
+    const nestedAfterTopLevelMatch = line.match(/^( {4,})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+    if (nestedAfterTopLevelMatch) {
+      if (prevIndent === 0) {
+        out.push(`   ${nestedAfterTopLevelMatch[2] ?? line}`);
+        continue;
+      }
+
+      const currentIndent = nestedAfterTopLevelMatch[1]?.length ?? 0;
+      const currentKind = listKind(nestedAfterTopLevelMatch[2] ?? '');
+      const prevKind = prevNonEmpty ? listKind(prevNonEmpty) : null;
+      const startsDeeperLevel = /:\s*$/.test(prevNonEmpty ?? '');
+      if (
+        prevIndent !== null &&
+        prevIndent >= 3 &&
+        currentIndent > prevIndent &&
+        prevKind !== null &&
+        currentKind === prevKind &&
+        !startsDeeperLevel
+      ) {
+        out.push(`${' '.repeat(prevIndent)}${nestedAfterTopLevelMatch[2] ?? line}`);
+        continue;
+      }
+    }
+
+    out.push(line);
+  }
+
+  return out;
+}
+
 /**
  * Heuristic normalizer for occasionally malformed LLM list output:
- * - Removes blank lines between a list item and an immediate nested list.
- * - Removes blank lines between nested sibling list items.
+ * - Removes blank lines between list items when the next item is at the same
+ *   or deeper indentation.
+ * - Keeps exactly one blank line when a list outdents to a higher level.
  *
- * It intentionally leaves top-level loose lists untouched and skips fenced code
- * blocks entirely.
+ * Skips fenced code blocks entirely.
  */
 export function normalizeMarkdownLists(text: string): string {
   const lines = text.split('\n');
@@ -166,12 +268,16 @@ export function normalizeMarkdownLists(text: string): string {
 
     const nextLine = lines[j] ?? '';
     const nextIndent = listIndent(nextLine);
-    const shouldTighten =
-      nextIndent !== null &&
-      (nextIndent > currentIndent || (currentIndent > 0 && nextIndent === currentIndent));
+    const shouldTighten = nextIndent !== null && nextIndent >= currentIndent;
 
     if (!shouldTighten) {
-      for (let k = i + 1; k < j; k++) out.push(lines[k] ?? '');
+      // Preserve separation when outdenting back to a higher-level list,
+      // but normalize any oversized blank run down to a single line.
+      if (nextIndent !== null && nextIndent < currentIndent) {
+        out.push('');
+      } else {
+        for (let k = i + 1; k < j; k++) out.push(lines[k] ?? '');
+      }
       i = j;
       continue;
     }
@@ -187,6 +293,7 @@ export function normalizeMarkdownLists(text: string): string {
  * Normalizes common formatting glitches in model markdown output:
  * - canonicalizes long dash-only separator lines to `---`
  * - guarantees a blank line before horizontal rules
+ * - normalizes accidental indentation before top-level list markers
  * - collapses repeated blank runs outside fenced code blocks
  * - tightens malformed nested list spacing (`normalizeMarkdownLists`)
  */
@@ -213,7 +320,8 @@ export function normalizeMarkdown(text: string): string {
     out.push(line);
   }
 
-  const collapsed = collapseBlankRunsOutsideFences(out).join('\n');
+  const normalizedIndent = normalizeTopLevelListIndentation(out);
+  const collapsed = collapseBlankRunsOutsideFences(normalizedIndent).join('\n');
   return normalizeMarkdownLists(collapsed);
 }
 
