@@ -50,30 +50,17 @@ async function readTextFile(filePath: string): Promise<string | null> {
 }
 
 // In-process cache so steady-state callers (every agent turn re-reads via
-// run-loop.ts) don't repeatedly stat/parse/validate the same file or
-// re-import migrateLegacyKeys. Keyed by resolved filePath so a mid-process
-// env change (XDG_CONFIG_HOME swap in tests) routes to a different entry.
-// Writes via saveGlobalConfig / updateGlobalConfig refresh the entry.
+// run-loop.ts) don't repeatedly stat/parse/validate the same file. Keyed by
+// resolved filePath so a mid-process env change (XDG_CONFIG_HOME swap in
+// tests) routes to a different entry. Writes via saveGlobalConfig /
+// updateGlobalConfig refresh the entry.
 const configCache = new Map<string, Promise<Config>>();
 
 function loadGlobalConfigUncached(filePath: string): Promise<Config> {
   return (async () => {
     const data = await readJsonFile(filePath);
     if (data === null) return {};
-    const validated = validateConfig(data, filePath);
-    const { migrateLegacyKeys } = await import('../auth/credentials.js');
-    const { changed, next } = migrateLegacyKeys(validated);
-    if (changed) {
-      try {
-        await saveGlobalConfig({ keys: next.keys });
-      } catch {
-        // Best-effort: keep returning the migrated-in-memory config so the
-        // current session works even if the disk write fails (read-only fs,
-        // permission glitch). The next launch will retry the migration.
-      }
-      return next;
-    }
-    return validated;
+    return validateConfig(data, filePath);
   })();
 }
 
@@ -93,7 +80,7 @@ export async function loadGlobalConfig(): Promise<Config> {
 
 // In-process serialization for config writes. Without this, two concurrent
 // `addKey()` calls (e.g., user adds a key in one tab while another tab
-// races a credential migration) interleave: each reads the same baseline,
+// updates config) interleave: each reads the same baseline,
 // each writes its own merged result, and one write clobbers the other.
 // The mutex covers both saveGlobalConfig and updateGlobalConfig so they
 // can't interleave with each other either. Cross-process safety still
@@ -153,9 +140,8 @@ async function writeMergedConfig(
     await fs.chmod(filePath, 0o600).catch(() => {});
     await fs.chmod(dir, 0o700).catch(() => {});
   }
-  // Drop the cache instead of repopulating: writes don't run
-  // migrateLegacyKeys, so the next load needs to re-read and migrate
-  // if the persisted shape changed.
+  // Drop the cache instead of repopulating so the next load re-reads the
+  // on-disk file after every write.
   configCache.delete(filePath);
   return validated;
 }

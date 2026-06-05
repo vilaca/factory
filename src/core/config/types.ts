@@ -159,10 +159,8 @@ interface SecurityConfig {
 }
 
 /**
- * One saved credential for a provider. Pre-multi-key configs migrate their
- * single `<provider>Token` field into a one-element array on first save
- * under the new schema; the legacy field is left in place for downgrade
- * safety. The picker shows last-4 + optional label to identify the entry.
+ * One saved credential for a provider.
+ * The picker shows last-4 + optional label to identify the entry.
  */
 export interface ProviderKey {
   /** Stable id, minted via crypto.randomUUID(). Recent-session payloads
@@ -193,25 +191,12 @@ export interface Config {
   model?: string;
   host?: string;
   token?: string;
-  huggingfaceToken?: string;
-  anthropicToken?: string;
   copilotToken?: string;
   githubToken?: string;
-  openrouterToken?: string;
-  vercelToken?: string;
-  opencodeZenToken?: string;
   googleAiStudioToken?: string;
   googleAiStudioAuthMode?: GoogleAiStudioAuthMode;
-  mistralToken?: string;
-  codestralToken?: string;
-  cerebrasToken?: string;
-  groqToken?: string;
-  cohereToken?: string;
-  openaiToken?: string;
-  workersAiToken?: string;
   workersAiAccountId?: string;
-  /** Multi-key credential store. Source of truth once migrated; legacy
-   *  `*Token` fields above remain readable as a fallback. */
+  /** Multi-key credential store. Source of truth for provider credentials. */
   keys?: ConfigKeys;
   agent?: AgentConfig;
   permissions?: PermissionConfig;

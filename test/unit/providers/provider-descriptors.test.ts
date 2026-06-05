@@ -40,16 +40,6 @@ describe('DESCRIPTORS', () => {
     }
   });
 
-  it('every credentialed provider declares a configTokenKey', () => {
-    for (const descriptor of DESCRIPTOR_LIST) {
-      if (descriptor.authFlow === 'none') continue;
-      assert.ok(
-        descriptor.configTokenKey,
-        `descriptor ${descriptor.name} (${descriptor.authFlow}) is missing configTokenKey`,
-      );
-    }
-  });
-
   it('descriptorByAlias resolves canonical names and aliases', () => {
     assert.strictEqual(descriptorByAlias('openrouter')?.name, 'openrouter');
     assert.strictEqual(descriptorByAlias('open-router')?.name, 'openrouter');
@@ -79,15 +69,19 @@ describe('resolveToken', () => {
 
   it('prefers cliToken over every other source', () => {
     withClearedEnv(['MISTRAL_API_KEY'], () => {
-      const config: Config = { mistralToken: 'from-config', token: 'generic' };
+      const config: Config = { token: 'generic' };
       assert.strictEqual(resolveToken(DESCRIPTORS.mistral, config, 'from-cli'), 'from-cli');
     });
   });
 
-  it('falls back to configTokenKey when no cli token', () => {
+  it('falls back to env vars when no cli token and no config token field is present', () => {
     withClearedEnv(['MISTRAL_API_KEY'], () => {
-      const config: Config = { mistralToken: 'from-config' };
-      assert.strictEqual(resolveToken(DESCRIPTORS.mistral, config), 'from-config');
+      process.env.MISTRAL_API_KEY = 'from-env';
+      try {
+        assert.strictEqual(resolveToken(DESCRIPTORS.mistral, {}), 'from-env');
+      } finally {
+        delete process.env.MISTRAL_API_KEY;
+      }
     });
   });
 
@@ -100,7 +94,7 @@ describe('resolveToken', () => {
     }
   });
 
-  it('does NOT leak generic config.token to providers (acceptsGenericToken default false)', () => {
+  it('does NOT leak generic config.token to simple-prompt providers', () => {
     withClearedEnv(['OPENROUTER_API_KEY', 'MISTRAL_API_KEY', 'COHERE_API_KEY'], () => {
       const config: Config = { token: 'sk-or-v1-DO-NOT-LEAK' };
       assert.strictEqual(resolveToken(DESCRIPTORS.mistral, config), undefined);
@@ -112,7 +106,7 @@ describe('resolveToken', () => {
   it('honors envPrecedesConfig for Vercel', () => {
     process.env.AI_GATEWAY_API_KEY = 'env-wins';
     try {
-      const config: Config = { vercelToken: 'config-loses' };
+      const config: Config = {};
       assert.strictEqual(resolveToken(DESCRIPTORS.vercel, config), 'env-wins');
     } finally {
       delete process.env.AI_GATEWAY_API_KEY;

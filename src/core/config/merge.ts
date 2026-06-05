@@ -93,25 +93,12 @@ const SCALAR_KEYS = [
   'model',
   'host',
   'token',
-  'huggingfaceToken',
-  'anthropicToken',
   'copilotToken',
   'githubToken',
-  'openrouterToken',
-  'vercelToken',
-  'opencodeZenToken',
   'googleAiStudioToken',
   'googleAiStudioAuthMode',
-  'mistralToken',
-  'codestralToken',
-  'cerebrasToken',
-  'groqToken',
-  'cohereToken',
-  'openaiToken',
-  'workersAiToken',
   'workersAiAccountId',
 ] as const;
-
 export function mergeConfigs(...configs: Config[]): Config {
   const result: Config = {};
 

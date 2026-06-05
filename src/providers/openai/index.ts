@@ -12,5 +12,5 @@ export {
   finalizeResponsesToolCalls,
 } from './responses-tool-calls.js';
 export { extractResponsesUsage } from './responses-usage.js';
-export { streamOpenAiResponses, sendOpenAiResponses } from './responses-stream.js';
+export { streamOpenAiResponses } from './responses-stream.js';
 export { OpenAIProvider } from './provider.js';

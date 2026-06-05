@@ -8,15 +8,11 @@ import type {
   ModelInfo,
   ModelPickerInfo,
 } from '../types.js';
-import {
-  buildChatBody,
-  buildResponsesBody,
-  fetchOpenAiCatalog,
-  sendOpenAiChat,
-  sendOpenAiResponses,
-  streamOpenAiChat,
-  streamOpenAiResponses,
-} from './index.js';
+import { buildChatBody } from './messages.js';
+import { buildResponsesBody } from './responses-messages.js';
+import { fetchOpenAiCatalog } from './catalog.js';
+import { sendOpenAiChat, streamOpenAiChat } from './stream.js';
+import { sendOpenAiResponses, streamOpenAiResponses } from './responses-stream.js';
 import { bearerAuth, normalizeBaseUrl, warnHardcodedEstimateFallback } from '../shared.js';
 import { filterOpenAiCatalog, type OpenAiModel } from './catalog-filter.js';
 import { buildCapabilities, buildModelDetail, buildModelWarning } from './model-metadata.js';

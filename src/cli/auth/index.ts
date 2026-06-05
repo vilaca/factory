@@ -21,34 +21,13 @@ import {
 import type { StartupCredentials, AuthResult } from './types.js';
 export type { StartupCredentials, AuthResult };
 
-export function resolveCredentialsFor(
+function resolveSimplePromptCredentials(
   descriptor: ProviderDescriptor,
   config: Config,
-  cliToken?: string,
-  keyId?: string,
+  cliToken: string | undefined,
+  keyId: string | undefined,
 ): StartupCredentials {
-  if (descriptor.name === 'googleaistudio') {
-    const authMode = resolveGoogleAiStudioAuthMode(config, cliToken);
-    return {
-      authMode,
-      token: authMode === 'api-key' ? resolveToken(descriptor, config, cliToken) : undefined,
-    };
-  }
-  if (descriptor.name === 'copilot') {
-    return {
-      token:
-        cliToken ??
-        config.copilotToken ??
-        process.env.GITHUB_COPILOT_API_KEY ??
-        process.env.COPILOT_API_KEY,
-      githubToken: config.githubToken,
-    };
-  }
-  // Simple-prompt providers: prefer the multi-key store (with synthetic
-  // legacy fallback), but cliToken still wins, and env still wins for
-  // env-precedes-config descriptors (Vercel). When nothing is stored or
-  // exposed, fall through to resolveToken so env-only setups keep working.
-  if (descriptor.authFlow === 'simple-prompt' && !cliToken) {
+  if (!cliToken) {
     const key = getKey(config, descriptor.name, keyId);
     if (key) {
       if (descriptor.envPrecedesConfig) {
@@ -74,6 +53,42 @@ export function resolveCredentialsFor(
           : undefined,
       };
     }
+  }
+  const fromEnv = (descriptor.envVars ?? []).map(name => process.env[name]).find(Boolean);
+  return {
+    token: cliToken ?? fromEnv,
+    accountId: descriptor.needsAccountId ? config.workersAiAccountId : undefined,
+  };
+}
+
+export function resolveCredentialsFor(
+  descriptor: ProviderDescriptor,
+  config: Config,
+  cliToken?: string,
+  keyId?: string,
+): StartupCredentials {
+  if (descriptor.name === 'googleaistudio') {
+    const authMode = resolveGoogleAiStudioAuthMode(config, cliToken);
+    return {
+      authMode,
+      token: authMode === 'api-key' ? resolveToken(descriptor, config, cliToken) : undefined,
+    };
+  }
+  if (descriptor.name === 'copilot') {
+    return {
+      token:
+        cliToken ??
+        config.copilotToken ??
+        process.env.GITHUB_COPILOT_API_KEY ??
+        process.env.COPILOT_API_KEY,
+      githubToken: config.githubToken,
+    };
+  }
+  // Simple-prompt providers: prefer the multi-key store. cliToken still
+  // wins, and env still wins for env-precedes-config descriptors (Vercel).
+  // When no key is stored, fall back to env vars only.
+  if (descriptor.authFlow === 'simple-prompt') {
+    return resolveSimplePromptCredentials(descriptor, config, cliToken, keyId);
   }
   return {
     token: resolveToken(descriptor, config, cliToken),
@@ -235,7 +250,6 @@ export async function saveCredentialsAfterModelDiscovery(
   modelsAvailable: boolean,
 ): Promise<string | undefined> {
   if (!auth.shouldSave) return undefined;
-  if (!descriptor.configTokenKey) return undefined;
 
   const credentialsLabel = descriptor.needsAccountId ? 'credentials' : 'API key';
   const successDetail = descriptor.needsAccountId
@@ -257,10 +271,11 @@ export async function saveCredentialsAfterModelDiscovery(
     return undefined;
   }
 
-  // For simple-prompt providers we now write into the multi-key store so
-  // adding a second key later doesn't overwrite the first. Copilot and
-  // Google AI Studio keep their existing single-credential persistence —
-  // their auth flows aren't multi-key-aware (device flow / OAuth).
+  // Simple-prompt providers write into the multi-key store so adding a
+  // second key later doesn't overwrite the first.
+  // Google AI Studio api-key flow persists the token to its named config
+  // field (googleAiStudioToken) so resolveGoogleAiStudioAuthMode can read it.
+  // Copilot (device-flow) handles its own persistence in flows.ts.
   let savedKeyId: string | undefined;
   if (descriptor.authFlow === 'simple-prompt' && auth.token) {
     const extras =
@@ -270,15 +285,11 @@ export async function saveCredentialsAfterModelDiscovery(
       extras,
     });
     savedKeyId = saved.id;
-  } else {
-    const update: Record<string, unknown> = { [descriptor.configTokenKey]: auth.token };
-    if (descriptor.needsAccountId && auth.accountId) {
-      update.workersAiAccountId = auth.accountId;
-    }
-    if (descriptor.name === 'googleaistudio' && auth.authMode === 'api-key') {
-      update.googleAiStudioAuthMode = 'api-key';
-    }
-    await saveGlobalConfig(update);
+  } else if (descriptor.name === 'googleaistudio' && auth.token) {
+    await saveGlobalConfig({
+      googleAiStudioToken: auth.token,
+      ...(auth.authMode === 'api-key' ? { googleAiStudioAuthMode: 'api-key' } : {}),
+    });
   }
   appendProviderLog({
     provider: descriptor.name,

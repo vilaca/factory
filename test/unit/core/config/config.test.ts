@@ -40,38 +40,22 @@ describe('loadProjectConfig', () => {
     const content = JSON.stringify({
       provider: 'ollama',
       model: 'qwen3-coder:30b',
-      huggingfaceToken: 'hf-test',
-      openrouterToken: 'sk-or-v1-test',
-      vercelToken: 'agw-test',
-      opencodeZenToken: 'zen-test',
       googleAiStudioToken: 'gemini-test',
       googleAiStudioAuthMode: 'oauth',
-      mistralToken: 'mistral-test',
-      codestralToken: 'codestral-test',
-      cerebrasToken: 'cerebras-test',
-      groqToken: 'groq-test',
-      cohereToken: 'cohere-test',
-      workersAiToken: 'workersai-test',
       workersAiAccountId: 'workersai-account-test',
+      keys: {
+        openai: [{ id: 'k1', token: 'sk-openai-test', createdAt: '2026-01-01T00:00:00.000Z' }],
+      },
       agent: { compactionThreshold: 0.7, recencyWindow: 4 },
       permissions: { allowAll: ['Bash', 'Read'] },
     });
     await withTempProject(content, async cwd => {
       const cfg = await loadProjectConfig(cwd);
       assert.strictEqual(cfg.provider, 'ollama');
-      assert.strictEqual(cfg.huggingfaceToken, 'hf-test');
-      assert.strictEqual(cfg.openrouterToken, 'sk-or-v1-test');
-      assert.strictEqual(cfg.vercelToken, 'agw-test');
-      assert.strictEqual(cfg.opencodeZenToken, 'zen-test');
       assert.strictEqual(cfg.googleAiStudioToken, 'gemini-test');
       assert.strictEqual(cfg.googleAiStudioAuthMode, 'oauth');
-      assert.strictEqual(cfg.mistralToken, 'mistral-test');
-      assert.strictEqual(cfg.codestralToken, 'codestral-test');
-      assert.strictEqual(cfg.cerebrasToken, 'cerebras-test');
-      assert.strictEqual(cfg.groqToken, 'groq-test');
-      assert.strictEqual(cfg.cohereToken, 'cohere-test');
-      assert.strictEqual(cfg.workersAiToken, 'workersai-test');
       assert.strictEqual(cfg.workersAiAccountId, 'workersai-account-test');
+      assert.strictEqual(cfg.keys?.openai?.[0]?.id, 'k1');
       assert.deepStrictEqual(cfg.permissions?.allowAll, ['Bash', 'Read']);
     });
   });
@@ -302,22 +286,6 @@ describe('loadScopedProjectInstructions', () => {
 });
 
 describe('saveGlobalConfig', () => {
-  it('persists a HuggingFace token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ huggingfaceToken: 'hf_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.huggingfaceToken, 'hf_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
   it('persists a Copilot token in the global config', async () => {
     const prev = process.env.XDG_CONFIG_HOME;
     const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
@@ -334,62 +302,18 @@ describe('saveGlobalConfig', () => {
     }
   });
 
-  it('persists a Google AI Studio token in the global config', async () => {
+  it('persists a Google AI Studio token and auth mode in the global config', async () => {
     const prev = process.env.XDG_CONFIG_HOME;
     const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
     process.env.XDG_CONFIG_HOME = configHome;
 
     try {
-      await saveGlobalConfig({ googleAiStudioToken: 'gemini_test_token' });
+      await saveGlobalConfig({
+        googleAiStudioToken: 'gemini_test_token',
+        googleAiStudioAuthMode: 'oauth',
+      });
       const cfg = await loadGlobalConfig();
       assert.strictEqual(cfg.googleAiStudioToken, 'gemini_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists a Vercel AI Gateway token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ vercelToken: 'agw_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.vercelToken, 'agw_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists an OpenCode Zen token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ opencodeZenToken: 'zen_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.opencodeZenToken, 'zen_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists a Google AI Studio auth mode in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ googleAiStudioAuthMode: 'oauth' });
-      const cfg = await loadGlobalConfig();
       assert.strictEqual(cfg.googleAiStudioAuthMode, 'oauth');
     } finally {
       if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
@@ -398,98 +322,14 @@ describe('saveGlobalConfig', () => {
     }
   });
 
-  it('persists a Mistral token in the global config', async () => {
+  it('persists Workers AI account id in the global config', async () => {
     const prev = process.env.XDG_CONFIG_HOME;
     const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
     process.env.XDG_CONFIG_HOME = configHome;
 
     try {
-      await saveGlobalConfig({ mistralToken: 'mistral_test_token' });
+      await saveGlobalConfig({ workersAiAccountId: 'workersai_account_test' });
       const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.mistralToken, 'mistral_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists a Codestral token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ codestralToken: 'codestral_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.codestralToken, 'codestral_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists a Cerebras token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ cerebrasToken: 'cerebras_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.cerebrasToken, 'cerebras_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists a Groq token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ groqToken: 'groq_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.groqToken, 'groq_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists a Cohere token in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({ cohereToken: 'cohere_test_token' });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.cohereToken, 'cohere_test_token');
-    } finally {
-      if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = prev;
-      await fs.rm(configHome, { recursive: true, force: true });
-    }
-  });
-
-  it('persists Workers AI credentials in the global config', async () => {
-    const prev = process.env.XDG_CONFIG_HOME;
-    const configHome = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-global-config-'));
-    process.env.XDG_CONFIG_HOME = configHome;
-
-    try {
-      await saveGlobalConfig({
-        workersAiToken: 'workersai_test_token',
-        workersAiAccountId: 'workersai_account_test',
-      });
-      const cfg = await loadGlobalConfig();
-      assert.strictEqual(cfg.workersAiToken, 'workersai_test_token');
       assert.strictEqual(cfg.workersAiAccountId, 'workersai_account_test');
     } finally {
       if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
@@ -551,15 +391,9 @@ describe('saveGlobalConfig', () => {
     process.env.XDG_CONFIG_HOME = configHome;
 
     try {
-      await Promise.all([
-        saveGlobalConfig({ token: 'a' }),
-        saveGlobalConfig({ huggingfaceToken: 'b' }),
-      ]);
+      await Promise.all([saveGlobalConfig({ token: 'a' }), saveGlobalConfig({ githubToken: 'b' })]);
       const cfg = await loadGlobalConfig();
-      // One of the writes wins last; either way, the file must be valid JSON
-      // (loadGlobalConfig would throw otherwise) and contain at least one of
-      // the two values.
-      assert.ok(cfg.token === 'a' || cfg.huggingfaceToken === 'b');
+      assert.ok(cfg.token === 'a' || cfg.githubToken === 'b');
     } finally {
       if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = prev;

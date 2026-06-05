@@ -233,7 +233,7 @@ function augmentAuthError(err: unknown): Error {
     // TODO: Detect 401s returned during model requests and replace this generic
     // hint with a response-specific explanation of the required AI Gateway key.
     return new Error(
-      `${err.message}\nCheck --token, AI_GATEWAY_API_KEY, VERCEL_OIDC_TOKEN, and any saved vercelToken/token in your factory config.`,
+      `${err.message}\nCheck --token, AI_GATEWAY_API_KEY, VERCEL_OIDC_TOKEN, or any saved API key in your factory config.`,
     );
   }
   return err;

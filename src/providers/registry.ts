@@ -38,29 +38,16 @@ export type StartupProviderName =
 
 type AuthFlow = 'none' | 'simple-prompt' | 'device-flow' | 'oauth-or-key';
 
-type ProviderConfigTokenKey =
-  | 'huggingfaceToken'
-  | 'anthropicToken'
-  | 'copilotToken'
-  | 'githubToken'
-  | 'openrouterToken'
-  | 'vercelToken'
-  | 'opencodeZenToken'
-  | 'googleAiStudioToken'
-  | 'mistralToken'
-  | 'codestralToken'
-  | 'cerebrasToken'
-  | 'groqToken'
-  | 'cohereToken'
-  | 'openaiToken'
-  | 'workersAiToken';
-
 type ProviderConfigAuthModeKey = 'googleAiStudioAuthMode';
 
 type ProviderConfigView = {
   token?: string;
+  copilotToken?: string;
+  githubToken?: string;
+  googleAiStudioToken?: string;
   googleAiStudioAuthMode?: GoogleAiStudioAuthMode;
-} & Partial<Record<ProviderConfigTokenKey, string>>;
+  workersAiAccountId?: string;
+};
 
 export interface CreateProviderOptions {
   host?: string;
@@ -79,11 +66,8 @@ export interface ProviderDescriptor {
   label: string;
   aliases: string[];
 
-  configTokenKey?: ProviderConfigTokenKey;
-  altConfigTokenKey?: ProviderConfigTokenKey;
   configAuthModeKey?: ProviderConfigAuthModeKey;
   envVars?: string[];
-  acceptsGenericToken?: boolean;
   envPrecedesConfig?: boolean;
 
   authFlow: AuthFlow;
@@ -134,7 +118,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'huggingface',
     label: 'HuggingFace',
     aliases: ['huggingface', 'hugging face', 'hf'],
-    configTokenKey: 'huggingfaceToken',
     envVars: ['HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -149,7 +132,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'anthropic',
     label: 'Anthropic',
     aliases: ['anthropic', 'claude'],
-    configTokenKey: 'anthropicToken',
     envVars: ['ANTHROPIC_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -163,8 +145,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'copilot',
     label: 'GitHub Copilot',
     aliases: ['copilot', 'github copilot', 'github-copilot', 'githubcopilot'],
-    configTokenKey: 'copilotToken',
-    altConfigTokenKey: 'githubToken',
     envVars: ['GITHUB_COPILOT_API_KEY', 'COPILOT_API_KEY'],
     authFlow: 'device-flow',
     probeAtStartup: false,
@@ -180,7 +160,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'openrouter',
     label: 'OpenRouter',
     aliases: ['openrouter', 'open-router', 'open router', 'or'],
-    configTokenKey: 'openrouterToken',
     envVars: ['OPENROUTER_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -194,7 +173,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'vercel',
     label: 'Vercel AI Gateway',
     aliases: ['vercel', 'ai-gateway', 'ai gateway', 'aigateway', 'vercel-ai-gateway'],
-    configTokenKey: 'vercelToken',
     envVars: ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN'],
     envPrecedesConfig: true,
     authFlow: 'simple-prompt',
@@ -210,7 +188,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'opencodezen',
     label: 'OpenCode Zen',
     aliases: ['opencodezen', 'opencode-zen', 'zen'],
-    configTokenKey: 'opencodeZenToken',
     envVars: ['OPENCODE_ZEN_API_KEY', 'OPENCODE_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -233,7 +210,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
       'ai-studio',
       'gemini',
     ],
-    configTokenKey: 'googleAiStudioToken',
     configAuthModeKey: 'googleAiStudioAuthMode',
     envVars: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
     authFlow: 'oauth-or-key',
@@ -252,7 +228,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'mistral',
     label: 'Mistral',
     aliases: ['mistral', 'mistral.ai'],
-    configTokenKey: 'mistralToken',
     envVars: ['MISTRAL_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -266,7 +241,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'codestral',
     label: 'Codestral',
     aliases: ['codestral', 'codestral.mistral.ai'],
-    configTokenKey: 'codestralToken',
     envVars: ['CODESTRAL_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -280,7 +254,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'cerebras',
     label: 'Cerebras',
     aliases: ['cerebras'],
-    configTokenKey: 'cerebrasToken',
     envVars: ['CEREBRAS_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -294,7 +267,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'groq',
     label: 'Groq',
     aliases: ['groq'],
-    configTokenKey: 'groqToken',
     envVars: ['GROQ_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -308,7 +280,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'cohere',
     label: 'Cohere',
     aliases: ['cohere'],
-    configTokenKey: 'cohereToken',
     envVars: ['COHERE_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -322,7 +293,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'openai',
     label: 'OpenAI',
     aliases: ['openai', 'open-ai', 'oai'],
-    configTokenKey: 'openaiToken',
     envVars: ['OPENAI_API_KEY'],
     authFlow: 'simple-prompt',
     probeAtStartup: true,
@@ -336,7 +306,6 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
     name: 'workersai',
     label: 'Cloudflare Workers AI',
     aliases: ['workersai', 'workers-ai', 'cloudflare', 'cloudflare-workers-ai'],
-    configTokenKey: 'workersAiToken',
     envVars: ['CLOUDFLARE_API_TOKEN'],
     authFlow: 'simple-prompt',
     needsAccountId: true,
@@ -407,15 +376,9 @@ export function resolveToken(
   if (cliToken) return cliToken;
 
   const fromConfig = (): string | undefined => {
-    if (descriptor.configTokenKey) {
-      const value = config[descriptor.configTokenKey];
-      if (typeof value === 'string' && value) return value;
-    }
-    if (descriptor.altConfigTokenKey) {
-      const value = config[descriptor.altConfigTokenKey];
-      if (typeof value === 'string' && value) return value;
-    }
-    if (descriptor.acceptsGenericToken && config.token) return config.token;
+    // Google AI Studio keeps its token in a named config field.
+    if (descriptor.name === 'googleaistudio' && config.googleAiStudioToken)
+      return config.googleAiStudioToken;
     return undefined;
   };
 
