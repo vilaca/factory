@@ -1,6 +1,6 @@
 import os from 'os';
 import path from 'path';
-import { loadScopedProjectInstructions } from '../config/index.js';
+import { discoverScopedProjectInstructionFiles } from '../config/index.js';
 
 export interface ScopedProjectInstructionsState {
   projectRoot: string;
@@ -100,19 +100,20 @@ export async function refreshScopedProjectInstructionsFromToolCall(
 
   if (!hasInRootProbe) return { changed: false, newFiles: [] };
 
-  const loadedFiles: Set<string> = new Set();
-  const scoped = await loadScopedProjectInstructions(
+  const discoveredFiles = await discoverScopedProjectInstructionFiles(
     state.projectRoot,
     state.touchedDirs,
-    filePath => {
-      loadedFiles.add(filePath);
-    },
     { virtualRootDirs: state.virtualRootDirs },
   );
+  const loadedFiles = new Set(discoveredFiles);
 
-  const newFiles = Array.from(loadedFiles).filter(f => !state.loadedFiles.has(f));
-  const changed = scoped !== state.scopedInstructions;
-  state.scopedInstructions = scoped;
+  const newFiles = discoveredFiles.filter(f => !state.loadedFiles.has(f));
+  const changed =
+    newFiles.length > 0 ||
+    state.loadedFiles.size !== loadedFiles.size ||
+    Array.from(state.loadedFiles).some(f => !loadedFiles.has(f));
+  // Scoped instruction content is no longer injected into the system prompt.
+  state.scopedInstructions = null;
   state.loadedFiles = loadedFiles;
 
   return { changed, newFiles };

@@ -282,25 +282,11 @@ export async function loadProjectInstructions(
   return loadInstructionBlocks(sources, onFileLoaded);
 }
 
-/**
- * Loads directory-scoped instruction files for the union of:
- * - each touched directory
- * - its parents up to and including `projectRoot`
- *
- * Directories are sorted child → root (deepest first) so the most specific
- * instructions appear earliest in the prompt and are never displaced by
- * shallower, more general files. Virtual-root (~/.factory/) entries follow
- * all project directories.
- *
- * There is no byte cap: all discovered files are included. The context
- * manager handles overall window budgeting.
- */
-export async function loadScopedProjectInstructions(
+function buildScopedInstructionSources(
   projectRoot: string,
   touchedDirs: Iterable<string>,
-  onFileLoaded?: (filePath: string) => void,
   options?: { virtualRootDirs?: readonly string[] },
-): Promise<string | null> {
+): InstructionSource[] {
   const root = path.resolve(projectRoot);
   const dirs = new Set<string>();
   for (const dir of touchedDirs) {
@@ -338,6 +324,55 @@ export async function loadScopedProjectInstructions(
     }
   }
 
+  return sources;
+}
+
+/**
+ * Discovers existing scoped instruction file paths in child→root order.
+ *
+ * This is a metadata-only pass (stat/access), used by the runtime harness to
+ * schedule explicit Read tool calls so instruction content reaches the model
+ * through normal tool results instead of system-prompt injection.
+ */
+export async function discoverScopedProjectInstructionFiles(
+  projectRoot: string,
+  touchedDirs: Iterable<string>,
+  options?: { virtualRootDirs?: readonly string[] },
+): Promise<string[]> {
+  const sources = buildScopedInstructionSources(projectRoot, touchedDirs, options);
+  const existing = await Promise.all(
+    sources.map(async src => {
+      try {
+        const st = await fs.stat(src.filePath);
+        return st.isFile() ? src.filePath : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return existing.filter((f): f is string => Boolean(f));
+}
+
+/**
+ * Loads directory-scoped instruction files for the union of:
+ * - each touched directory
+ * - its parents up to and including `projectRoot`
+ *
+ * Directories are sorted child → root (deepest first) so the most specific
+ * instructions appear earliest in the prompt and are never displaced by
+ * shallower, more general files. Virtual-root (~/.factory/) entries follow
+ * all project directories.
+ *
+ * There is no byte cap: all discovered files are included. The context
+ * manager handles overall window budgeting.
+ */
+export async function loadScopedProjectInstructions(
+  projectRoot: string,
+  touchedDirs: Iterable<string>,
+  onFileLoaded?: (filePath: string) => void,
+  options?: { virtualRootDirs?: readonly string[] },
+): Promise<string | null> {
+  const sources = buildScopedInstructionSources(projectRoot, touchedDirs, options);
   return loadInstructionBlocks(sources, onFileLoaded);
 }
 

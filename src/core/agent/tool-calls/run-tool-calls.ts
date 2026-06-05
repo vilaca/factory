@@ -9,6 +9,7 @@ import { runHook } from '../../hooks/index.js';
 import { errorMessage, makeAbortError } from '../../../utils/errors.js';
 import { tryReadCacheHit, maintainFileCache } from './run-tool-calls-cache.js';
 import { executeToolCall } from './run-tool-calls-execute.js';
+import { runHarnessScopedInstructionReads } from './harness-reads.js';
 import { mergeAsyncGenerators } from './merge-async-generators.js';
 import { AsyncMutex } from './async-mutex.js';
 import type { ToolLoopContext } from './types.js';
@@ -153,6 +154,7 @@ async function* runSingleToolCall(
   });
   if (startRefresh?.changed) {
     yield { type: 'scoped-project-instructions-updated', files: startRefresh.newFiles };
+    yield* runHarnessScopedInstructionReads(startRefresh.newFiles, ctx);
   }
 
   if (ctx.fileCache && toolCall.function?.name === TOOL_NAMES.Read) {
@@ -225,6 +227,7 @@ async function* executeAndTrack(
         });
         if (refresh?.changed) {
           yield { type: 'scoped-project-instructions-updated', files: refresh.newFiles };
+          yield* runHarnessScopedInstructionReads(refresh.newFiles, ctx);
         }
       } else {
         tracking.lastFailedResult = {

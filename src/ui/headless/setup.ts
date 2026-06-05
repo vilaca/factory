@@ -6,13 +6,11 @@ import { instrumentProviderRequests } from '../../providers/instrument.js';
 import { logModelRequestTo } from '../session-bridge.js';
 import { PermissionManager } from '../../security/permissions.js';
 import type { ResponsesChain } from '../../core/agent/types.js';
+import { FileCache } from '../../core/agent/cache/file-cache.js';
 import { errorMessage } from '../../utils/errors.js';
 import { createSessionLogger, type SessionLogger } from '../../core/session/session-log.js';
 import { getBuildInfo } from '../../utils/build-info.js';
-import {
-  buildEnvironmentMessage,
-  getScopedProjectInstructionsPrompt,
-} from '../../core/context/system-prompt.js';
+import { buildEnvironmentMessage } from '../../core/context/system-prompt.js';
 import {
   createScopedProjectInstructionsState,
   refreshScopedProjectInstructionsFromToolCall,
@@ -26,7 +24,6 @@ import {
   type DiagnosticEmitter,
 } from '../diagnostics.js';
 import type { HeadlessOptions, HeadlessRunState } from './types.js';
-import { formatScopedInstructionFiles } from './io.js';
 import type { EnvPolicy } from '../../security/env.js';
 
 export interface HeadlessRuntime {
@@ -35,6 +32,7 @@ export interface HeadlessRuntime {
   conversation: Conversation;
   permissions: PermissionManager;
   contextManager: ContextManager;
+  fileCache: FileCache;
   hooksEnabled: boolean;
   sessionLogger: SessionLogger | undefined;
   diagnostics: DiagnosticEmitter;
@@ -246,24 +244,8 @@ export async function setupHeadlessRuntime(
       { toolName: info.toolName, args: info.args },
       info.cwd,
     );
-    if (refresh.changed) {
-      const scoped = getScopedProjectInstructionsPrompt(scopedInstructionState.scopedInstructions);
-      const next = scoped ? `${options.systemPrompt}\n\n${scoped}` : options.systemPrompt;
-      conversation.updateSystemPrompt(next);
-    }
     return refresh;
   };
-
-  const preTurnRefresh = await refreshScopedInstructions({
-    toolName: 'TurnStart',
-    args: {},
-    cwd,
-  });
-  if (preTurnRefresh?.changed) {
-    const names = formatScopedInstructionFiles(preTurnRefresh.newFiles, cwd);
-    const suffix = names.length > 0 ? `: ${names}` : '';
-    diagnostics.info(`loaded scoped project instructions${suffix}`, 'project-instructions-scoped');
-  }
 
   return {
     cwd,
@@ -271,6 +253,7 @@ export async function setupHeadlessRuntime(
     conversation,
     permissions,
     contextManager,
+    fileCache: new FileCache(),
     hooksEnabled,
     sessionLogger,
     diagnostics,

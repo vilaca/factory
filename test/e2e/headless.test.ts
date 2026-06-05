@@ -266,7 +266,7 @@ describe('Headless mode', () => {
         home,
       });
       assert.strictEqual(r.exitCode, 0, r.stderr);
-      assert.match(r.stderr, /loaded scoped project instructions/i);
+      assert.match(r.stderr, /harness queued read for scoped instruction files/i);
       assert.match(r.stderr, /AGENTS\.md/);
       assert.match(r.stderr, /CLAUDE\.md/);
     } finally {
