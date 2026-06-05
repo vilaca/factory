@@ -59,31 +59,24 @@ function clampTimeout(raw: unknown): number {
   return Math.max(MIN_TIMEOUT_MS, Math.min(n, MAX_TIMEOUT_MS));
 }
 
-// Per-stream caps when both streams produced output. A single huge stdout
-// (verbose build log) used to swallow the whole budget and truncate the
-// fenced stderr away — which is exactly the case where stderr matters
-// most (compile error buried after megabytes of progress). Each stream
-// gets its own cap and footer so the smaller one always survives.
-const STDOUT_CAP_BYTES = 40_000;
-const STDERR_CAP_BYTES = 10_000;
-// When only one stream produced output, the unused budget folds into it
-// so single-stream behaviour matches the previous 50KB cap exactly.
-const SOLO_CAP_BYTES = STDOUT_CAP_BYTES + STDERR_CAP_BYTES;
-
-function truncateStream(s: string, cap: number): string {
-  return s.length > cap ? s.slice(0, cap) + '\n...(output truncated)' : s;
-}
-
 // Combined view: stdout as-is, with any non-empty stderr fenced under a
 // `--- stderr ---` separator. Empty-stderr (the common case) stays a flat
 // stdout string so we don't pay token overhead for noise. Models otherwise
 // confuse warnings/progress on stderr (npm, cargo, pytest) with real
 // errors, and useful failure messages on stderr get buried mid-stdout.
 function formatBody(stdout: string, stderr: string): string {
-  if (!stderr) return truncateStream(stdout, SOLO_CAP_BYTES);
-  if (!stdout) return `--- stderr ---\n${truncateStream(stderr, SOLO_CAP_BYTES)}`;
-  const out = truncateStream(stdout, STDOUT_CAP_BYTES);
-  const err = truncateStream(stderr, STDERR_CAP_BYTES);
+  const MAX_LINES = 100;
+
+  function truncateByLines(s: string, maxLines: number): string {
+    const lines = s.split('\n');
+    if (lines.length <= maxLines) return s;
+    return '...(output truncated)\n' + lines.slice(-maxLines).join('\n');
+  }
+
+  if (!stderr) return truncateByLines(stdout, MAX_LINES);
+  if (!stdout) return `--- stderr ---\n${truncateByLines(stderr, MAX_LINES)}`;
+  const out = truncateByLines(stdout, MAX_LINES);
+  const err = truncateByLines(stderr, MAX_LINES);
   const sep = out.endsWith('\n') ? '--- stderr ---\n' : '\n--- stderr ---\n';
   return `${out}${sep}${err}`;
 }
