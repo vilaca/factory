@@ -20,4 +20,4 @@ jobs:
           cache: 'npm'
       - run: npx -y npm@11.12.1 ci
       - name: Check for circular dependencies
-        run: npx madge -c src
+        run: npm run check-circular
