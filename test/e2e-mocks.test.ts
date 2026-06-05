@@ -53,7 +53,7 @@ describe('Startup and welcome', () => {
     try {
       const output = await cli.waitForOutput('test-model:latest', 5000);
       assert.ok(output.includes('factory'));
-      assert.ok(output.includes('Exp:'));
+      assert.ok(output.includes('Flags:'));
       assert.ok(output.includes('bashDedup=off'));
       assert.ok(output.includes('readCache=on'));
       assert.ok(output.includes('lineCountHint=on'));
