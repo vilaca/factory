@@ -239,7 +239,7 @@ async function main(): Promise<void> {
     ...(compactionModel ? { compactionModel } : {}),
   };
 
-  const isInteractiveTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+  const isInteractiveTty = process.stdout.isTTY && process.stdin.isTTY;
   if (isInteractiveTty) {
     if (!cliArgs.noClear) {
       process.stdout.write('\x1b[2J\x1b[3J\x1b[H');

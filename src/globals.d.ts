@@ -9,5 +9,4 @@ declare module 'marked-terminal' {
     showSectionPrefix?: boolean;
   }
   export function markedTerminal(options?: MarkedTerminalOptions): MarkedExtension;
-  export default class Renderer {}
 }
