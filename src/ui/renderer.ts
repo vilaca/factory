@@ -81,6 +81,47 @@ function isFenceDelimiter(line: string): boolean {
   return /^\s*(?:```|~~~)/.test(line);
 }
 
+function isDashRule(line: string): boolean {
+  return /^\s*-{4,}\s*$/.test(line);
+}
+
+function collapseBlankRunsOutsideFences(lines: string[]): string[] {
+  const out: string[] = [];
+  let inFence = false;
+  let pendingBlank = false;
+
+  for (const line of lines) {
+    if (isFenceDelimiter(line)) {
+      if (pendingBlank) {
+        out.push('');
+        pendingBlank = false;
+      }
+      out.push(line);
+      inFence = !inFence;
+      continue;
+    }
+
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+
+    if (line.trim() === '') {
+      pendingBlank = true;
+      continue;
+    }
+
+    if (pendingBlank) {
+      out.push('');
+      pendingBlank = false;
+    }
+    out.push(line);
+  }
+
+  if (pendingBlank) out.push('');
+  return out;
+}
+
 /**
  * Heuristic normalizer for occasionally malformed LLM list output:
  * - Removes blank lines between a list item and an immediate nested list.
@@ -142,9 +183,43 @@ export function normalizeMarkdownLists(text: string): string {
   return out.join('\n');
 }
 
+/**
+ * Normalizes common formatting glitches in model markdown output:
+ * - canonicalizes long dash-only separator lines to `---`
+ * - guarantees a blank line before horizontal rules
+ * - collapses repeated blank runs outside fenced code blocks
+ * - tightens malformed nested list spacing (`normalizeMarkdownLists`)
+ */
+export function normalizeMarkdown(text: string): string {
+  const lines = text.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+
+  for (const line of lines) {
+    if (isFenceDelimiter(line)) {
+      out.push(line);
+      inFence = !inFence;
+      continue;
+    }
+
+    if (!inFence && isDashRule(line)) {
+      if (out.length > 0 && (out[out.length - 1] ?? '').trim() !== '') {
+        out.push('');
+      }
+      out.push('---');
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  const collapsed = collapseBlankRunsOutsideFences(out).join('\n');
+  return normalizeMarkdownLists(collapsed);
+}
+
 export function renderMarkdown(text: string): string {
   if (!text.trim()) return text;
-  const normalized = normalizeMarkdownLists(text);
+  const normalized = normalizeMarkdown(text);
   const rendered = marked.parse(normalized);
   if (typeof rendered === 'string') {
     return rendered.replace(/^\n+/, '').replace(/\n+$/, '');
