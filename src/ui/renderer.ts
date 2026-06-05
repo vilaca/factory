@@ -158,6 +158,52 @@ function collapseBlankRunsOutsideFences(lines: string[]): string[] {
   return out;
 }
 
+function shouldNormalizeTopLevelList(
+  line: string,
+  prevNonEmpty: string | undefined,
+  prevIndent: number | null,
+): boolean {
+  const topLevelMatch = line.match(/^( {1,3})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+  if (!topLevelMatch) return false;
+
+  const currentIndent = topLevelMatch[1]?.length ?? 0;
+  const currentKind = listKind(topLevelMatch[2] ?? '');
+  const prevKind = prevNonEmpty ? listKind(prevNonEmpty) : null;
+
+  return (
+    prevNonEmpty === undefined ||
+    isDashRule(prevNonEmpty) ||
+    prevIndent === null ||
+    prevIndent >= currentIndent ||
+    (currentKind === 'ordered' && prevKind === 'unordered' && prevIndent === currentIndent)
+  );
+}
+
+function shouldNormalizeNestedList(
+  line: string,
+  prevNonEmpty: string | undefined,
+  prevIndent: number | null,
+): boolean {
+  const nestedAfterTopLevelMatch = line.match(/^( {4,})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+  if (!nestedAfterTopLevelMatch) return false;
+
+  if (prevIndent === 0) return true;
+
+  const currentIndent = nestedAfterTopLevelMatch[1]?.length ?? 0;
+  const currentKind = listKind(nestedAfterTopLevelMatch[2] ?? '');
+  const prevKind = prevNonEmpty ? listKind(prevNonEmpty) : null;
+  const startsDeeperLevel = /:\s*$/.test(prevNonEmpty ?? '');
+
+  return (
+    prevIndent !== null &&
+    prevIndent >= 3 &&
+    currentIndent > prevIndent &&
+    prevKind !== null &&
+    currentKind === prevKind &&
+    !startsDeeperLevel
+  );
+}
+
 function normalizeTopLevelListIndentation(lines: string[]): string[] {
   const out: string[] = [];
   let inFence = false;
@@ -177,45 +223,20 @@ function normalizeTopLevelListIndentation(lines: string[]): string[] {
     const prevNonEmpty = [...out].reverse().find(l => l.trim() !== '');
     const prevIndent = prevNonEmpty ? listIndent(prevNonEmpty) : null;
 
-    const topLevelMatch = line.match(/^( {1,3})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
-    if (topLevelMatch) {
-      const currentIndent = topLevelMatch[1]?.length ?? 0;
-      const currentKind = listKind(topLevelMatch[2] ?? '');
-      const prevKind = prevNonEmpty ? listKind(prevNonEmpty) : null;
-      if (
-        prevNonEmpty === undefined ||
-        isDashRule(prevNonEmpty) ||
-        prevIndent === null ||
-        prevIndent >= currentIndent ||
-        (currentKind === 'ordered' && prevKind === 'unordered' && prevIndent === currentIndent)
-      ) {
-        out.push(topLevelMatch[2] ?? line);
-        continue;
-      }
+    if (shouldNormalizeTopLevelList(line, prevNonEmpty, prevIndent)) {
+      const topLevelMatch = line.match(/^( {1,3})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+      out.push(topLevelMatch?.[2] ?? line);
+      continue;
     }
 
-    const nestedAfterTopLevelMatch = line.match(/^( {4,})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
-    if (nestedAfterTopLevelMatch) {
+    if (shouldNormalizeNestedList(line, prevNonEmpty, prevIndent)) {
+      const nestedAfterTopLevelMatch = line.match(/^( {4,})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
       if (prevIndent === 0) {
-        out.push(`   ${nestedAfterTopLevelMatch[2] ?? line}`);
-        continue;
+        out.push(`   ${nestedAfterTopLevelMatch?.[2] ?? line}`);
+      } else {
+        out.push(`${' '.repeat(prevIndent ?? 0)}${nestedAfterTopLevelMatch?.[2] ?? line}`);
       }
-
-      const currentIndent = nestedAfterTopLevelMatch[1]?.length ?? 0;
-      const currentKind = listKind(nestedAfterTopLevelMatch[2] ?? '');
-      const prevKind = prevNonEmpty ? listKind(prevNonEmpty) : null;
-      const startsDeeperLevel = /:\s*$/.test(prevNonEmpty ?? '');
-      if (
-        prevIndent !== null &&
-        prevIndent >= 3 &&
-        currentIndent > prevIndent &&
-        prevKind !== null &&
-        currentKind === prevKind &&
-        !startsDeeperLevel
-      ) {
-        out.push(`${' '.repeat(prevIndent)}${nestedAfterTopLevelMatch[2] ?? line}`);
-        continue;
-      }
+      continue;
     }
 
     out.push(line);
