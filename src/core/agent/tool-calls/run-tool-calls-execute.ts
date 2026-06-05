@@ -22,6 +22,12 @@ export interface ExecuteToolCallOptions {
   replaceLastToolResult?: boolean;
   /** Prepended to the recorded output. */
   outputPrefix?: string;
+  /**
+   * Internal host escape hatch for deterministic framework-owned calls
+   * (e.g. harness-scoped instruction Reads). Skips user permission prompting
+   * while still preserving tool-call start/result events and normal execution.
+   */
+  skipPermissionCheck?: boolean;
 }
 
 type RecordResult = (output: string, name?: string) => void;
@@ -97,7 +103,9 @@ export async function* executeToolCall(
     return;
   }
 
+  const skipPermissionCheck = options?.skipPermissionCheck ?? false;
   const skipPrompt =
+    skipPermissionCheck ||
     bashOutcome.kind === 'pre-allow' ||
     webFetch.kind === 'pre-allow' ||
     ctx.permissions.isAutoAllowed(tool.name);

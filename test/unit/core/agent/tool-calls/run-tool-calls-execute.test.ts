@@ -155,6 +155,19 @@ describe('executeToolCall — permission gating', () => {
     assert.deepStrictEqual(types, ['tool-call-start', 'permission-request', 'tool-call-result']);
   });
 
+  it('skips permission prompting when host marks the call as framework-owned', async () => {
+    const tool = fakeTool({ name: 'Read' });
+    const ctx = makeCtx({ toolRegistry: makeRegistry([tool]) });
+    const { events } = await collect(
+      executeToolCall(tc('Read', { file_path: '/repo/AGENTS.md' }), ctx, {
+        skipPermissionCheck: true,
+      }),
+    );
+    assert.strictEqual(tool.calls.length, 1);
+    assert.ok(!events.some(e => e.type === 'permission-request'));
+    assert.ok(events.some(e => e.type === 'tool-call-result'));
+  });
+
   it('allow-all marks the tool auto-allowed for subsequent calls', async () => {
     const tool = fakeTool({ name: 'Read' });
     const permissions = new PermissionManager();
