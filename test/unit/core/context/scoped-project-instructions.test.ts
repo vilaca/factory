@@ -9,7 +9,7 @@ import {
 } from '../../../../src/core/context/scoped-project-instructions.js';
 
 describe('refreshScopedProjectInstructionsFromToolCall', () => {
-  it('loads scoped instructions after a successful Bash call in cwd', async () => {
+  it('discovers scoped instruction files after a successful Bash call in cwd', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-bash-'));
     try {
       await fs.writeFile(path.join(root, 'AGENTS.md'), 'root-guidance');
@@ -22,14 +22,14 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
 
       const refreshed = await refreshScopedProjectInstructionsFromToolCall(state, event, root);
       assert.equal(refreshed.changed, true);
-      assert.match(state.scopedInstructions ?? '', /root-guidance/);
+      assert.equal(state.scopedInstructions, null);
       assert.deepEqual(refreshed.newFiles, [path.join(root, 'AGENTS.md')]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it('loads instructions even when the tool call ultimately fails', async () => {
+  it('discovers instructions even when the tool call ultimately fails', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-fail-'));
     try {
       await fs.writeFile(path.join(root, 'AGENTS.md'), 'root-guidance');
@@ -42,14 +42,14 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
 
       const refreshed = await refreshScopedProjectInstructionsFromToolCall(state, event, root);
       assert.equal(refreshed.changed, true);
-      assert.match(state.scopedInstructions ?? '', /root-guidance/);
+      assert.equal(state.scopedInstructions, null);
       assert.deepEqual(refreshed.newFiles, [path.join(root, 'AGENTS.md')]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it('loads child directory instructions before parent (deepest first)', async () => {
+  it('discovers child directory instructions before parent (deepest first)', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-depth-'));
     try {
       await fs.mkdir(path.join(root, 'src', 'ui', 'tui', 'agent-loop'), { recursive: true });
@@ -67,26 +67,19 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
 
       const refreshed = await refreshScopedProjectInstructionsFromToolCall(state, event, root);
       assert.equal(refreshed.changed, true);
-
-      const instructions = state.scopedInstructions ?? '';
-      const specificIdx = instructions.indexOf('specific-guidance');
-      const rootIdx = instructions.indexOf('root-guidance');
-      assert.ok(specificIdx !== -1, 'specific-guidance should be present');
-      assert.ok(rootIdx !== -1, 'root-guidance should be present');
-      assert.ok(
-        specificIdx < rootIdx,
-        'deeper (child) instructions should appear before shallower (root) ones',
-      );
+      assert.deepEqual(refreshed.newFiles, [
+        path.join(root, 'src', 'ui', 'tui', 'agent-loop', 'AGENTS.md'),
+        path.join(root, 'AGENTS.md'),
+      ]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it('includes all instruction files without a byte cap', async () => {
+  it('discovers all instruction files without a byte cap', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-nocap-'));
     try {
       await fs.mkdir(path.join(root, 'deep', 'a', 'b', 'c'), { recursive: true });
-      // Write many large-ish instruction files to exceed any old 16 KiB cap
       const bigContent = 'x'.repeat(4096);
       await fs.writeFile(path.join(root, 'AGENTS.md'), `root ${bigContent}`);
       await fs.writeFile(path.join(root, 'deep', 'AGENTS.md'), `deep ${bigContent}`);
@@ -101,19 +94,18 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
 
       const refreshed = await refreshScopedProjectInstructionsFromToolCall(state, event, root);
       assert.equal(refreshed.changed, true);
-
-      const instructions = state.scopedInstructions ?? '';
-      assert.ok(instructions.includes('root'), 'root AGENTS.md should be included');
-      assert.ok(instructions.includes('deep'), 'deep AGENTS.md should be included');
-      assert.ok(instructions.includes('deeper'), 'deeper AGENTS.md should be included');
-      assert.ok(instructions.includes('deepest'), 'deepest AGENTS.md should be included');
-      assert.ok(!instructions.includes('truncated'), 'no truncation notice should appear');
+      assert.deepEqual(refreshed.newFiles, [
+        path.join(root, 'deep', 'a', 'b', 'AGENTS.md'),
+        path.join(root, 'deep', 'a', 'AGENTS.md'),
+        path.join(root, 'deep', 'AGENTS.md'),
+        path.join(root, 'AGENTS.md'),
+      ]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it('reloads scoped instructions for already-touched directories', async () => {
+  it('does not re-report unchanged discovered instruction files', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'oc-scoped-refresh-'));
     try {
       await fs.mkdir(path.join(root, 'src'), { recursive: true });
@@ -128,12 +120,11 @@ describe('refreshScopedProjectInstructionsFromToolCall', () => {
 
       const first = await refreshScopedProjectInstructionsFromToolCall(state, event, root);
       assert.equal(first.changed, true);
-      assert.match(state.scopedInstructions ?? '', /version-one/);
+      assert.deepEqual(first.newFiles, [path.join(root, 'AGENTS.md')]);
 
-      await fs.writeFile(path.join(root, 'AGENTS.md'), 'version-two');
       const second = await refreshScopedProjectInstructionsFromToolCall(state, event, root);
-      assert.equal(second.changed, true);
-      assert.match(state.scopedInstructions ?? '', /version-two/);
+      assert.equal(second.changed, false);
+      assert.deepEqual(second.newFiles, []);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

@@ -113,11 +113,17 @@ export function handleAgentEvent(
       break;
     case 'scoped-project-instructions-updated': {
       const names = formatScopedInstructionFiles(event.files, projectRoot);
-      const suffix = names.length > 0 ? `: ${names}` : '';
-      diagnostics.info(
-        `loaded scoped project instructions${suffix}`,
-        'project-instructions-scoped',
-      );
+      if (names.length > 0) {
+        diagnostics.info(
+          `harness queued Read for scoped instruction files: ${names}`,
+          'project-instructions-scoped',
+        );
+      } else {
+        diagnostics.info(
+          'harness refreshed scoped instruction discovery',
+          'project-instructions-scoped',
+        );
+      }
       break;
     }
     case 'output-cap-reached':

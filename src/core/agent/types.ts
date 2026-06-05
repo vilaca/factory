@@ -115,6 +115,8 @@ export type AgentEvent =
   | { type: 'hook-error'; event: string; error: string }
   | { type: 'hook-fired'; event: string; hookCommand: string; notice?: string }
   | { type: 'read-cache-hit'; path: string; afterCompaction: boolean }
+  /** Harness discovered scoped instruction files and queued synthetic Read calls.
+   * `files` are newly discovered absolute paths for this refresh pass. */
   | { type: 'scoped-project-instructions-updated'; files: string[] }
   | { type: 'repetition-detected'; line: string; streak: number }
   | { type: 'empty-turn-warning'; completionTokens: number }

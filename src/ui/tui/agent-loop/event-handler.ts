@@ -390,14 +390,14 @@ const HANDLERS: EventHandlers = {
     const count = event.files.length;
     if (count === 0) {
       diagnostics.info(
-        'Loaded additional scoped project instructions.',
+        'Harness refreshed scoped instruction discovery.',
         'project-instructions-scoped',
       );
       return;
     }
     const names = formatScopedInstructionFiles(event.files, deps.refs.current?.projectRoot);
     diagnostics.info(
-      `Loaded scoped project instructions from ${count} file${count === 1 ? '' : 's'}: ${names}`,
+      `Harness queued Read for scoped instruction file${count === 1 ? '' : 's'}: ${names}`,
       'project-instructions-scoped',
     );
   },

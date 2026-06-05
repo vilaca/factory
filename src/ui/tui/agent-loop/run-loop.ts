@@ -1,6 +1,6 @@
-import path from 'path';
 import { runAgent } from '../../../core/agent/run-agent.js';
 import type { AgentOptions, RotationOptions } from '../../../core/agent/types.js';
+import type { ToolLoopContext } from '../../../core/agent/tool-calls/run-tool-calls.js';
 import { createProvider } from '../../../providers/registry.js';
 import { prime } from '../../../providers/prime.js';
 import { descriptorByAlias } from '../../../providers/registry.js';
@@ -14,12 +14,9 @@ import { listKeys } from '../../../core/auth/credentials.js';
 import { getWarmthLog } from '../../../core/session/key-stats.js';
 import { handleAgentEvent } from './event-handler.js';
 import type { AgentLoopDeps } from './agent-loop-types.js';
-import {
-  createDiagnosticEmitter,
-  sessionLogDiagnosticSink,
-  tuiDiagnosticSink,
-} from '../../diagnostics.js';
+import { createDiagnosticEmitter, sessionLogDiagnosticSink } from '../../diagnostics.js';
 import { refreshScopedProjectInstructionsFromToolCall } from '../../../core/context/scoped-project-instructions.js';
+import { runHarnessScopedInstructionReads } from '../../../core/agent/tool-calls/harness-reads.js';
 
 /** Anthropic's default ephemeral cache TTL. The rotation tiebreaker uses
  *  the same window so a key that hit cache "recently" by Anthropic's
@@ -47,16 +44,6 @@ const MAX_REPLAYS_PER_PROMPT = 2;
 function isSubstantivePrompt(s: string): boolean {
   if (s.length >= 25) return true;
   return !TRIVIAL_PROMPTS.has(s.toLowerCase());
-}
-
-function formatScopedInstructionFiles(files: string[], projectRoot: string): string {
-  return files
-    .map(file => {
-      const rel = path.relative(projectRoot, file);
-      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return file;
-      return rel;
-    })
-    .join(', ');
 }
 
 /**
@@ -169,7 +156,6 @@ async function buildRotationOptions(deps: AgentLoopDeps): Promise<RotationOption
 // eslint-disable-next-line complexity -- TODO(complexity): split pre-turn refresh/rotation setup from event pump.
 export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDeps): Promise<void> {
   if (!deps.refs.current) return;
-  const projectRoot = deps.refs.current.projectRoot;
   deps.refs.current.abort = new AbortController();
   deps.setThinking(true);
 
@@ -232,10 +218,6 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
     );
     refs.scopedProjectInstructions = scopedState.scopedInstructions;
     refs.scopedInstructionFiles = scopedState.loadedFiles;
-    if (refresh.changed) {
-      refs.conversation.updateSystemPrompt(deps.composeSystemPrompt());
-      deps.refreshTokenEstimate();
-    }
     return refresh;
   };
 
@@ -245,18 +227,65 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
     cwd: cwdRef.current,
   });
   if (preTurnRefresh?.changed) {
-    const diagnostics = createDiagnosticEmitter(
-      tuiDiagnosticSink((level, text) => deps.addNotice(level, text)),
-      sessionLogDiagnosticSink(() => deps.refs.current?.sessionLogger),
+    handleAgentEvent(
+      { type: 'scoped-project-instructions-updated', files: preTurnRefresh.newFiles },
+      deps,
+      {
+        getStreamingBuffer: () => assistantBuffer,
+        setStreamingBuffer: s => {
+          assistantBuffer = s;
+        },
+        addSuccessfulToolCall: () => {
+          successfulToolCallsThisRun++;
+        },
+        markAutoRetryExhausted: () => {
+          autoRetryExhaustedThisRun = true;
+        },
+        markTokenLimitHalt: () => {
+          tokenLimitHaltThisRun = true;
+        },
+      },
     );
-    const count = preTurnRefresh.newFiles.length;
-    const names = formatScopedInstructionFiles(preTurnRefresh.newFiles, projectRoot);
-    diagnostics.info(
-      count > 0
-        ? `Loaded scoped project instructions from ${count} file${count === 1 ? '' : 's'}: ${names}`
-        : 'Loaded additional scoped project instructions.',
-      'project-instructions-scoped',
-    );
+
+    if (preTurnRefresh.newFiles.length > 0 && deps.refs.current) {
+      const harnessCtx: ToolLoopContext = {
+        conversation: deps.refs.current.conversation,
+        permissions: deps.refs.current.permissions,
+        toolRegistry: deps.refs.current.toolRegistry,
+        signal: deps.refs.current.abort.signal,
+        useUserResultFraming: !deps.refs.current.nativeToolSupport,
+        planMode: deps.refs.current.planMode,
+        enableCorrector: deps.refs.current.enableCorrector,
+        fileCache: deps.refs.current.fileCache,
+        provider: deps.refs.current.provider,
+        model: deps.refs.current.model,
+        userInput,
+        cwdRef,
+        pathPolicy: deps.refs.current.pathPolicy,
+        envPolicy: deps.refs.current.envPolicy,
+      };
+      for await (const event of runHarnessScopedInstructionReads(
+        preTurnRefresh.newFiles,
+        harnessCtx,
+      )) {
+        deps.refs.current.sessionLogger?.logAgentEvent(event);
+        handleAgentEvent(event, deps, {
+          getStreamingBuffer: () => assistantBuffer,
+          setStreamingBuffer: s => {
+            assistantBuffer = s;
+          },
+          addSuccessfulToolCall: () => {
+            successfulToolCallsThisRun++;
+          },
+          markAutoRetryExhausted: () => {
+            autoRetryExhaustedThisRun = true;
+          },
+          markTokenLimitHalt: () => {
+            tokenLimitHaltThisRun = true;
+          },
+        });
+      }
+    }
   }
 
   const agent = runAgent(userInput, {
