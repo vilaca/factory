@@ -738,4 +738,21 @@ describe('architecture: module boundaries', () => {
       }, 'CLI argument parsing is hand-rolled in src/cli/args.ts — do not introduce a parsing library');
     await expectNoViolations(rule, 'src → CLI parsing library');
   });
+
+  it('production code must not import from dist or dist-test', async () => {
+    const importRegex = /(?:from|require\(\))\s*['\"]([^'\"]+)['\"]/g;
+    const rule = projectFiles()
+      .inFolder('src/**')
+      .should()
+      .adhereTo(file => {
+        for (const m of file.content.matchAll(importRegex)) {
+          const importPath = m[1];
+          if (importPath.includes('/dist/') || importPath.includes('/dist-test/')) {
+            return false;
+          }
+        }
+        return true;
+      }, 'production code must import from source files, not compiled dist output');
+    await expectNoViolations(rule, 'src → dist');
+  });
 });
