@@ -1,11 +1,13 @@
 import { TOOL_NAMES } from '../../tools/types.js';
 
-export function formatArgValue(v: unknown): string {
+export function formatArgValue(v: unknown, toolName?: string): string {
   const str = typeof v === 'string' ? v : JSON.stringify(v);
   const lines = str.split('\n');
   const firstLine = lines[0] ?? '';
   const moreLines = lines.length > 1 ? ` …${lines.length - 1} more lines` : '';
-  const truncated = firstLine.length > 100 ? firstLine.slice(0, 100) + '…' : firstLine;
+  // For bash commands, use a much higher limit (1000 chars) since commands can be long
+  const maxLength = toolName === TOOL_NAMES.Bash ? 1000 : 100;
+  const truncated = firstLine.length > maxLength ? firstLine.slice(0, maxLength) + '…' : firstLine;
   return truncated + moreLines;
 }
 
@@ -32,6 +34,6 @@ export function summarizeToolArgs(toolName: string, args: Record<string, unknown
   const value =
     primaryKey && args[primaryKey] !== undefined ? args[primaryKey] : Object.values(args)[0];
   if (value === undefined) return '';
-  const formatted = formatArgValue(value);
+  const formatted = formatArgValue(value, toolName);
   return QUOTE_PRIMARY_ARG.has(toolName) ? `'${formatted}'` : formatted;
 }

@@ -1,4 +1,5 @@
 import path from 'path';
+import { TOOL_NAMES } from '../../tools/types.js';
 
 export async function readAllStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -8,12 +9,14 @@ export async function readAllStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf-8').trim();
 }
 
-export function formatArgsBrief(args: Record<string, unknown>): string {
+export function formatArgsBrief(args: Record<string, unknown>, toolName?: string): string {
   const parts: string[] = [];
   for (const [k, v] of Object.entries(args)) {
     const str = typeof v === 'string' ? v : JSON.stringify(v);
     const oneLine = str.split('\n')[0] ?? '';
-    const truncated = oneLine.length > 80 ? oneLine.slice(0, 80) + '…' : oneLine;
+    // For bash commands, use a much higher limit (1000 chars) since commands can be long
+    const maxLength = toolName === TOOL_NAMES.Bash ? 1000 : 80;
+    const truncated = oneLine.length > maxLength ? oneLine.slice(0, maxLength) + '…' : oneLine;
     parts.push(`${k}=${truncated}`);
   }
   return parts.join(' ');
