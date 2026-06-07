@@ -66,7 +66,8 @@ describe('summarizeToolArgs', () => {
   });
 
   it('handles long bash commands without truncation', () => {
-    const longCommand = 'cd /Users/vilaca/work/factory/main && npx prettier --write test/unit/ui/markdown-normalization-fix.test.ts test/unit/ui/another-very-long-file-name-that-makes-the-command-exceed-100-characters.test.ts';
+    const longCommand =
+      'cd /Users/vilaca/work/factory/main && npx prettier --write test/unit/ui/markdown-normalization-fix.test.ts test/unit/ui/another-very-long-file-name-that-makes-the-command-exceed-100-characters.test.ts';
     const args = { command: longCommand };
     const result = summarizeToolArgs(TOOL_NAMES.Bash, args);
     assert.strictEqual(result, longCommand);
