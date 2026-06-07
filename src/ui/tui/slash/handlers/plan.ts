@@ -40,7 +40,7 @@ export function printPlanQueue(agent: AgentLoopApi): void {
   agent.plannedCalls.forEach((p, i) => {
     lines.push({ level: 'cyan', text: `  #${i + 1} ${p.toolName}` });
     for (const [k, v] of Object.entries(p.args)) {
-      lines.push({ level: 'info', text: `     ${k}: ${formatArgValue(v)}` });
+      lines.push({ level: 'info', text: `     ${k}: ${formatArgValue(v, p.toolName)}` });
     }
   });
   lines.push({ level: 'info', text: '  Type y to approve, n to drop, or describe revisions.' });

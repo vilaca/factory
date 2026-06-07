@@ -23,7 +23,7 @@ export function handleAgentEvent(
       process.stdout.write(event.content);
       break;
     case 'tool-call-start':
-      process.stderr.write(`▶ ${event.toolName} ${formatArgsBrief(event.args)}\n`);
+      process.stderr.write(`▶ ${event.toolName} ${formatArgsBrief(event.args, event.toolName)}\n`);
       break;
     case 'tool-call-result': {
       process.stderr.write(`  ${event.result.success ? '✓' : '✗'} ${event.toolName}\n`);
