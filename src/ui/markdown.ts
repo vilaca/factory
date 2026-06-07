@@ -196,7 +196,7 @@ function shouldNormalizeNestedList(
   );
 }
 
-function normalizeTopLevelListIndentation(lines: string[]): string[] {
+export function normalizeTopLevelListIndentation(lines: string[]): string[] {
   const out: string[] = [];
   let inFence = false;
 
@@ -215,18 +215,18 @@ function normalizeTopLevelListIndentation(lines: string[]): string[] {
     const prevNonEmpty = [...out].reverse().find(l => l.trim() !== '');
     const prevIndent = prevNonEmpty ? listIndent(prevNonEmpty) : null;
 
-    if (shouldNormalizeTopLevelList(line, prevNonEmpty, prevIndent)) {
-      const topLevelMatch = line.match(/^( {1,3})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
-      out.push(topLevelMatch?.[2] ?? line);
+    const topLevelMatch = line.match(/^( {1,3})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+    if (topLevelMatch && shouldNormalizeTopLevelList(line, prevNonEmpty, prevIndent)) {
+      out.push(topLevelMatch[2] ?? line);
       continue;
     }
 
-    if (shouldNormalizeNestedList(line, prevNonEmpty, prevIndent)) {
-      const nestedAfterTopLevelMatch = line.match(/^( {4,})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+    const nestedAfterTopLevelMatch = line.match(/^( {4,})((?:[-*+]\s+|\d+[.)]\s+).*)$/);
+    if (nestedAfterTopLevelMatch && shouldNormalizeNestedList(line, prevNonEmpty, prevIndent)) {
       if (prevIndent === 0) {
-        out.push(`   ${nestedAfterTopLevelMatch?.[2] ?? line}`);
+        out.push(`   ${nestedAfterTopLevelMatch[2] ?? line}`);
       } else {
-        out.push(`${' '.repeat(prevIndent ?? 0)}${nestedAfterTopLevelMatch?.[2] ?? line}`);
+        out.push(`${' '.repeat(prevIndent ?? 0)}${nestedAfterTopLevelMatch[2] ?? line}`);
       }
       continue;
     }
@@ -338,7 +338,7 @@ export function normalizeMarkdown(text: string): string {
   return normalizeMarkdownLists(collapsed);
 }
 
-export function renderMarkdown(text: string): string {
+export function renderMarkdown(text: string) {
   if (!text.trim()) return text;
   const normalized = normalizeMarkdown(text);
   const rendered = marked.parse(normalized);
