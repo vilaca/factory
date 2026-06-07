@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { formatArgValue, summarizeToolArgs } from '../../../../src/ui/tui/format.js';
-import { TOOL_NAMES } from '../../../../src/tools/types.js';
+import { formatArgValue, summarizeToolArgs } from '../../../../dist/ui/tui/format.js';
+import { TOOL_NAMES } from '../../../../dist/tools/types.js';
 
 describe('formatArgValue', () => {
   it('truncates long strings at 100 characters by default', () => {
