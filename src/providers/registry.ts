@@ -15,6 +15,7 @@ import { GroqProvider } from './groq.js';
 import { CohereProvider } from './cohere.js';
 import { OpenAIProvider } from './openai/index.js';
 import { WorkersAiProvider } from './workersai.js';
+import { NvidiaProvider } from './nvidia.js';
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -34,7 +35,8 @@ export type StartupProviderName =
   | 'groq'
   | 'cohere'
   | 'openai'
-  | 'workersai';
+  | 'workersai'
+  | 'nvidia';
 
 type AuthFlow = 'none' | 'simple-prompt' | 'device-flow' | 'oauth-or-key';
 
@@ -324,6 +326,19 @@ export const DESCRIPTORS: Record<StartupProviderName, ProviderDescriptor> = {
         host: opts.host,
         accountId: opts.accountId,
       }),
+  },
+  nvidia: {
+    name: 'nvidia',
+    label: 'NVIDIA NIM',
+    aliases: ['nvidia', 'nim', 'nvidia-nim'],
+    envVars: ['NVIDIA_API_KEY'],
+    authFlow: 'simple-prompt',
+    probeAtStartup: true,
+    showInPicker: 'always',
+    promptHeader: 'NVIDIA API key required.',
+    inputPrompt: '  Enter NVIDIA API key: ',
+    missingError: 'NVIDIA API key required.',
+    factory: opts => new NvidiaProvider({ token: opts.token, host: opts.host }),
   },
 };
 
