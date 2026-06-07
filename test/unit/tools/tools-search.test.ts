@@ -129,6 +129,87 @@ describe('Grep tool', () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it('accepts include_content as boolean true', async () => {
+    const fp = tmpFile('grep-bool-true', 'findme in this file\nnothing here\n');
+    try {
+      const result = await grep.execute({ pattern: 'findme', path: fp, include_content: true });
+      assert.strictEqual(result.success, true);
+      // Should include line numbers when include_content is true
+      assert.ok(result.output.includes('findme in this file'));
+      assert.ok(result.output.includes('1:'));
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('accepts include_content as boolean false', async () => {
+    const fp = tmpFile('grep-bool-false', 'findme in this file\nnothing here\n');
+    try {
+      const result = await grep.execute({ pattern: 'findme', path: fp, include_content: false });
+      assert.strictEqual(result.success, true);
+      // Should only show file path when include_content is false
+      assert.ok(result.output.includes(fp));
+      assert.ok(!result.output.includes('1:'));
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('accepts include_content as string "true"', async () => {
+    const fp = tmpFile('grep-string-true', 'findme in this file\nnothing here\n');
+    try {
+      const result = await grep.execute({ pattern: 'findme', path: fp, include_content: 'true' });
+      assert.strictEqual(result.success, true);
+      // Should include line numbers when include_content is "true"
+      assert.ok(result.output.includes('findme in this file'));
+      assert.ok(result.output.includes('1:'));
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('accepts include_content as string "false"', async () => {
+    const fp = tmpFile('grep-string-false', 'findme in this file\nnothing here\n');
+    try {
+      const result = await grep.execute({ pattern: 'findme', path: fp, include_content: 'false' });
+      assert.strictEqual(result.success, true);
+      // Should only show file path when include_content is "false"
+      assert.ok(result.output.includes(fp));
+      assert.ok(!result.output.includes('1:'));
+    } finally {
+      cleanup(fp);
+    }
+  });
+
+  it('treats case-insensitive string values correctly', async () => {
+    const fp = tmpFile('grep-case', 'findme in this file\nnothing here\n');
+    try {
+      // Test "True" (capital T)
+      const result1 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'True' });
+      assert.strictEqual(result1.success, true);
+      assert.ok(result1.output.includes('1:'));
+      
+      // Test "TRUE" (all caps)
+      const result2 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'TRUE' });
+      assert.strictEqual(result2.success, true);
+      assert.ok(result2.output.includes('1:'));
+      
+      // Test "False" (capital F)
+      const result3 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'False' });
+      assert.strictEqual(result3.success, true);
+      assert.ok(result3.output.includes(fp));
+      assert.ok(!result3.output.includes('1:'));
+      
+      // Test "FALSE" (all caps)
+      const result4 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'FALSE' });
+      assert.strictEqual(result4.success, true);
+      assert.ok(result4.output.includes(fp));
+      assert.ok(!result4.output.includes('1:'));
+    } finally {
+      cleanup(fp);
+    }
+  });
 });
 
 // ─── Search tools deny-list ─────────────────────────────────────────────
