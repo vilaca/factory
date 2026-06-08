@@ -5,6 +5,7 @@ import { summarizeToolArgs } from '../format.js';
 import { AssistantText } from './assistant-text.js';
 import { TOOL_NAMES } from '../../../tools/types.js';
 
+// eslint-disable-next-line complexity -- TODO(complexity)
 export function DisplayItemView({
   item,
   showFullOutput = false,
@@ -126,6 +127,20 @@ export function DisplayItemView({
               </Text>
             );
           })}
+        </Box>
+      );
+    }
+    case 'notice-box': {
+      return (
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor={item.borderColor ?? 'cyan'}
+          paddingX={1}
+        >
+          {item.lines.map((line, i) => (
+            <Text key={i}>{line}</Text>
+          ))}
         </Box>
       );
     }

@@ -6,6 +6,8 @@ import type { Provider } from '../../providers/types.js';
 import type { PickerOption } from '../picker.js';
 import { exitStartupSelection } from '../prompts.js';
 import { createStartupPickerDataSource } from './picker-data.js';
+import { CopilotAuthManager } from '../../providers/copilot/auth.js';
+import { saveGlobalConfig } from '../../core/config/index.js';
 import {
   ProviderPicker,
   type ProviderEntry,
@@ -98,6 +100,17 @@ function StartupShim({
     exit();
   };
   const keyProps = createStartupPickerDataSource();
+  const runDeviceFlowAuth = async (
+    _provider: string,
+    onCode: (info: { userCode: string; verificationUri: string; expiresIn: number }) => void,
+  ): Promise<void> => {
+    const auth = new CopilotAuthManager({
+      onGithubTokenPersist: async (githubToken: string) => {
+        await saveGlobalConfig({ githubToken });
+      },
+    });
+    await auth.authenticateWithDeviceFlow(onCode);
+  };
   return (
     <ProviderPicker
       providers={providers}
@@ -105,6 +118,9 @@ function StartupShim({
       initialProvider={initialProvider}
       initialModel={initialModel}
       {...keyProps}
+      runDeviceFlowAuth={runDeviceFlowAuth}
+      isDeviceFlowAuthed={keyProps.isDeviceFlowAuthed}
+      revokeDeviceFlowAuth={keyProps.revokeDeviceFlowAuth}
       onCommit={(provider, model, keyId) => {
         // Reached from recent picks and from the full provider→key→model flow.
         finish({

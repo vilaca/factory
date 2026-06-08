@@ -14,6 +14,7 @@ import { getKey as defaultGetKey } from '../../../core/auth/credentials.js';
 import {
   descriptorByAlias as defaultDescriptorByAlias,
   createProvider as defaultCreateProvider,
+  runDeviceFlowAuth as defaultRunDeviceFlowAuth,
 } from '../../../providers/registry.js';
 import { errorMessage } from '../../../utils/errors.js';
 import { instrumentProviderRequests } from '../../../providers/instrument.js';
@@ -32,6 +33,7 @@ export interface SwapProviderDeps {
   loadGlobalConfig: typeof defaultLoadGlobalConfig;
   getKey: typeof defaultGetKey;
   validateModelToolSupport: typeof defaultValidateModelToolSupport;
+  runDeviceFlowAuth: typeof defaultRunDeviceFlowAuth;
 }
 
 const DEFAULT_DEPS: SwapProviderDeps = {
@@ -40,12 +42,14 @@ const DEFAULT_DEPS: SwapProviderDeps = {
   loadGlobalConfig: defaultLoadGlobalConfig,
   getKey: defaultGetKey,
   validateModelToolSupport: defaultValidateModelToolSupport,
+  runDeviceFlowAuth: defaultRunDeviceFlowAuth,
 };
 
 export interface SwapContext {
   refs: MutableRefObject<RunRefs | null>;
   opts: UseAgentLoopOptions;
   addNotice: (level: NoticeLevel, text: string) => void;
+  addNoticeBox: (lines: string[], borderColor?: string) => void;
   setModel: (m: string) => void;
   setProviderName: (n: string) => void;
   setContextWindow: (n: number) => void;
@@ -151,6 +155,9 @@ async function resolveProviderKey(
         }
         resolvedKeyId = key.id;
       }
+      if (descriptor.authFlow === 'device-flow' && cfg.githubToken) {
+        createOpts.githubToken = cfg.githubToken;
+      }
     } catch {
       // Fall through with empty opts; provider may still pick up env vars.
     }
@@ -165,7 +172,7 @@ async function resolveProviderKey(
  *  pick the first model the new provider lists. */
 export async function swapProvider(
   name: string,
-  requestedModel: string | undefined,
+  requestedModelParam: string | undefined,
   keyId: string | undefined,
   ctx: SwapContext,
   deps: SwapProviderDeps = DEFAULT_DEPS,
@@ -173,6 +180,10 @@ export async function swapProvider(
   const refs = ctx.refs.current;
   if (!refs) return;
   const trimmed = name.trim();
+  // Normalise '' (committed by the picker for device-flow providers that
+  // have no saved credentials) to undefined so the model falls through to
+  // "pick first available" rather than triggering the no-model warning.
+  const requestedModel = requestedModelParam !== '' ? requestedModelParam : undefined;
   if (!trimmed) {
     ctx.addNotice('info', `Current provider: ${refs.provider.name}`);
     return;
@@ -205,8 +216,42 @@ export async function swapProvider(
   try {
     ({ provider: nextProvider, models: availableModels } = await prime(unprimed));
   } catch (err) {
-    ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${errorMessage(err)}`);
-    return;
+    // For device-flow providers (Copilot) with no credentials, try running
+    // the device flow inline. Show the user code via addNotice so it's
+    // readable in the session UI, then retry with the new credentials.
+    const descriptor = deps.descriptorByAlias(trimmed);
+    if (descriptor?.authFlow === 'device-flow') {
+      try {
+        const githubToken = await deps.runDeviceFlowAuth(
+          ({
+            userCode,
+            verificationUri,
+            expiresIn,
+          }: {
+            userCode: string;
+            verificationUri: string;
+            expiresIn: number;
+          }) => {
+            ctx.addNoticeBox([
+              'GitHub Authentication',
+              '',
+              `Open:  ${verificationUri}`,
+              `Code:  ${userCode}`,
+              `       (expires in ${Math.ceil(expiresIn / 60)} minute(s))`,
+            ]);
+          },
+        );
+        const retryOpts = { ...createOpts, githubToken };
+        const retryUnprimed = deps.createProvider(trimmed, retryOpts);
+        ({ provider: nextProvider, models: availableModels } = await prime(retryUnprimed));
+      } catch (authErr) {
+        ctx.addNotice('danger', `GitHub authentication failed: ${errorMessage(authErr)}`);
+        return;
+      }
+    } else {
+      ctx.addNotice('danger', `Cannot list models for ${trimmed}: ${errorMessage(err)}`);
+      return;
+    }
   }
 
   const nextModel: string | undefined = requestedModel ?? availableModels[0];

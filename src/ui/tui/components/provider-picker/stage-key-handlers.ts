@@ -28,6 +28,7 @@ interface StageHandlerDeps {
     preselectModel: string | undefined,
   ) => Promise<void>;
   selectProviderEntry: (entry: ProviderEntry) => void;
+  revokeAndReturnToProvider: (provider: string) => Promise<void>;
 }
 
 export function handleEscapeKeypress(stage: Stage, deps: StageHandlerDeps): boolean {
@@ -82,6 +83,9 @@ export function handleEscapeKeypress(stage: Stage, deps: StageHandlerDeps): bool
       if (startsAtModel) onCancel();
       else setStage({ kind: 'provider' });
       return true;
+    case 'device-flow-manage':
+      setStage({ kind: 'provider' });
+      return true;
   }
 }
 
@@ -112,6 +116,8 @@ export function handleStageKeypress(
       return handleErrorStageKeypress(input, key, deps);
     case 'model':
       return handleModelStageKeypress(stage, input, key, deps);
+    case 'device-flow-manage':
+      return handleDeviceFlowManageStageKeypress(stage, input, key, deps);
   }
 }
 
@@ -352,6 +358,28 @@ function handleModelStageKeypress(
   if (jump >= 0 && jump < stage.models.length) {
     const model = stage.models[jump];
     if (model) onCommit(stage.provider, model, stage.keyId);
+  }
+  return true;
+}
+
+function handleDeviceFlowManageStageKeypress(
+  stage: Extract<Stage, { kind: 'device-flow-manage' }>,
+  _input: string,
+  key: PickerKey,
+  deps: StageHandlerDeps,
+): boolean {
+  const { setStage, revokeAndReturnToProvider, loadAndShowModels } = deps;
+  if (key.upArrow || key.downArrow) {
+    setStage({ ...stage, selectedIdx: stage.selectedIdx === 0 ? 1 : 0 });
+    return true;
+  }
+  if (key.return) {
+    if (stage.selectedIdx === 1) {
+      void revokeAndReturnToProvider(stage.provider);
+    } else {
+      void loadAndShowModels(stage.provider, undefined, undefined);
+    }
+    return true;
   }
   return true;
 }

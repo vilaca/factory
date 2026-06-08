@@ -29,5 +29,11 @@ export type DisplayItem =
       id: number;
       lines: { text: string; level: 'info' | 'warn' | 'danger' | 'cyan'; bold?: boolean }[];
     }
+  | {
+      kind: 'notice-box';
+      id: number;
+      lines: string[];
+      borderColor?: string;
+    }
   | { kind: 'permission-prompt'; id: number; toolName: string; args: Record<string, unknown> }
   | { kind: 'status'; id: number; turnsUsed: number; usage?: { totalTokens: number } };

@@ -311,6 +311,11 @@ export function LoadingStage({ stage }: LoadingStageProps): React.ReactElement {
         {stage.provider}
       </Text>
       <Text dimColor>Loading models…</Text>
+      {stage.hint?.map((line, i) => (
+        <Text key={i} color="cyan">
+          {line}
+        </Text>
+      ))}
     </>
   );
 }
@@ -330,6 +335,27 @@ export function ErrorStage({ stage, startsAtModel }: ErrorStageProps): React.Rea
       <Text dimColor>
         {startsAtModel ? 'Press Esc to cancel.' : 'Press Esc or any key to go back.'}
       </Text>
+    </>
+  );
+}
+
+interface DeviceFlowManageStageProps {
+  stage: Extract<Stage, { kind: 'device-flow-manage' }>;
+}
+
+export function DeviceFlowManageStage({ stage }: DeviceFlowManageStageProps): React.ReactElement {
+  const opts = [' Use Copilot ', ' Disconnect from GitHub '];
+  return (
+    <>
+      <Text color="cyan" bold>
+        {stage.provider} — connected via GitHub
+      </Text>
+      <Box flexDirection="column">
+        {opts.map((o, i) => {
+          const sel = i === stage.selectedIdx;
+          return <Text key={i}>{sel ? chalk.inverse(o) : `  ${o.trim()}`}</Text>;
+        })}
+      </Box>
     </>
   );
 }

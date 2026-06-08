@@ -1,7 +1,7 @@
 import type React from 'react';
 import type { Provider } from '../../../providers/types.js';
 import { buildPickerInfo } from '../components/provider-picker/build-info.js';
-import { loadGlobalConfig } from '../../../core/config/index.js';
+import { loadGlobalConfig, updateGlobalConfig } from '../../../core/config/index.js';
 import { descriptorByAlias, createProvider } from '../../../providers/registry.js';
 import {
   addKey as addCredentialKey,
@@ -38,10 +38,10 @@ export function buildPickerAdapter(args: BuildPickerAdapterArgs) {
       return source ? buildPickerInfo(source, m) : undefined;
     },
     loadModels: async (name: string, keyId?: string) => {
-      const cfg = keyId ? await loadGlobalConfig() : null;
+      const cfg = await loadGlobalConfig();
       const descriptor = descriptorByAlias(name);
       const opts: Parameters<typeof createProvider>[1] = {};
-      if (cfg && descriptor && keyId) {
+      if (descriptor && keyId) {
         const list = listKeys(cfg, descriptor.name);
         const key = list.find(k => k.id === keyId);
         if (key) {
@@ -51,6 +51,7 @@ export function buildPickerAdapter(args: BuildPickerAdapterArgs) {
           }
         }
       }
+      if (cfg.githubToken) opts.githubToken = cfg.githubToken;
       const unprimed = createProvider(name, opts);
       const { provider: p, models } = await prime(unprimed);
       pickerProviderCache.current.set(`${name}\0${keyId ?? ''}`, p);
@@ -106,6 +107,13 @@ export function buildPickerAdapter(args: BuildPickerAdapterArgs) {
       const descriptor = descriptorByAlias(name);
       if (!descriptor) return;
       await deleteCredentialKey(descriptor.name, keyId);
+    },
+    isDeviceFlowAuthed: async (_name: string) => {
+      const cfg = await loadGlobalConfig();
+      return Boolean(cfg.githubToken);
+    },
+    revokeDeviceFlowAuth: async (_name: string) => {
+      await updateGlobalConfig(() => ({ githubToken: undefined }));
     },
   };
 }
