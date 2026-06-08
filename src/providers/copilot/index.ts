@@ -9,7 +9,15 @@ import type {
   ModelTier,
 } from '../types.js';
 import { CopilotAuthManager, inferCopilotCredentialKind } from './auth.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
+import {
+  buildChatBody,
+  buildResponsesBody,
+  isResponsesApiOnly,
+  sendOpenAiChat,
+  sendOpenAiResponses,
+  streamOpenAiChat,
+  streamOpenAiResponses,
+} from '../openai/index.js';
 import { filterChatModels } from '../list-models-filter.js';
 import { formatTokenCount, warnHardcodedEstimateFallback } from '../shared.js';
 
@@ -89,6 +97,22 @@ export class CopilotProvider implements Provider {
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
     const session = await this.requireChatSession(options?.signal);
+    if (isResponsesApiOnly(model)) {
+      yield* streamOpenAiResponses({
+        url: `${session.apiBaseUrl}/responses`,
+        headers: this.auth.authHeaders(session.token),
+        body: buildResponsesBody({
+          model,
+          messages,
+          tools,
+          stream: true,
+          options: options ? { ...options, temperature: undefined } : undefined,
+        }),
+        signal: options?.signal,
+        providerName: PROVIDER_NAME,
+      });
+      return;
+    }
     yield* streamOpenAiChat({
       url: `${session.apiBaseUrl}/chat/completions`,
       headers: this.auth.authHeaders(session.token),
@@ -113,6 +137,21 @@ export class CopilotProvider implements Provider {
     options?: ChatOptions,
   ): Promise<ChatChunk> {
     const session = await this.requireChatSession(options?.signal);
+    if (isResponsesApiOnly(model)) {
+      return sendOpenAiResponses({
+        url: `${session.apiBaseUrl}/responses`,
+        headers: this.auth.authHeaders(session.token),
+        body: buildResponsesBody({
+          model,
+          messages,
+          tools,
+          stream: false,
+          options: options ? { ...options, temperature: undefined } : undefined,
+        }),
+        signal: options?.signal,
+        providerName: PROVIDER_NAME,
+      });
+    }
     return sendOpenAiChat({
       url: `${session.apiBaseUrl}/chat/completions`,
       headers: this.auth.authHeaders(session.token),

@@ -9,7 +9,15 @@ import type {
   ModelPickerInfo,
   ModelTier,
 } from './types.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from './openai/index.js';
+import {
+  buildChatBody,
+  buildResponsesBody,
+  isResponsesApiOnly,
+  sendOpenAiChat,
+  sendOpenAiResponses,
+  streamOpenAiChat,
+  streamOpenAiResponses,
+} from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
 import {
   bearerAuth,
@@ -123,6 +131,22 @@ export class WorkersAiProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
+    if (isResponsesApiOnly(model)) {
+      yield* streamOpenAiResponses({
+        url: `${this.chatBaseUrl}/responses`,
+        headers: this.authHeaders(),
+        body: buildResponsesBody({
+          model,
+          messages,
+          tools,
+          stream: true,
+          options: options ? { ...options, temperature: undefined } : undefined,
+        }),
+        signal: options?.signal,
+        providerName: PROVIDER_NAME,
+      });
+      return;
+    }
     yield* streamOpenAiChat({
       url: `${this.chatBaseUrl}/chat/completions`,
       headers: this.authHeaders(),
@@ -138,6 +162,21 @@ export class WorkersAiProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
+    if (isResponsesApiOnly(model)) {
+      return sendOpenAiResponses({
+        url: `${this.chatBaseUrl}/responses`,
+        headers: this.authHeaders(),
+        body: buildResponsesBody({
+          model,
+          messages,
+          tools,
+          stream: false,
+          options: options ? { ...options, temperature: undefined } : undefined,
+        }),
+        signal: options?.signal,
+        providerName: PROVIDER_NAME,
+      });
+    }
     return sendOpenAiChat({
       url: `${this.chatBaseUrl}/chat/completions`,
       headers: this.authHeaders(),

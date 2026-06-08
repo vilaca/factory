@@ -26,19 +26,10 @@ export function detectOpenCodeZenRoute(model: string): OpenCodeZenRoute {
   if (id.startsWith('gemini-')) {
     return 'google-native';
   }
-  // TODO: Add Zen /responses support for GPT models once the provider layer can
-  // preserve Responses API streaming items and tool events without flattening
-  // them into chat-completions semantics.
   if (id.startsWith('gpt-')) {
     return 'openai-responses';
   }
   return 'chat-completions';
-}
-
-export function unsupportedOpenCodeZenRouteError(model: string): Error {
-  return new Error(
-    `OpenCode Zen model "${model}" uses the /responses API, which this CLI does not support yet.`,
-  );
 }
 
 export function buildModelDetail(modelId: string): string {
