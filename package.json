@@ -84,12 +84,12 @@
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "ollama": "^0.6.3",
-    "react": "^19.2.5"
+    "react": "^19.2.7"
   },
   "devDependencies": {
     "@lydell/node-pty": "^1.2.0-beta.12",
     "@types/node": "^22.19.19",
-    "@types/react": "^19.2.15",
+    "@types/react": "^19.2.17",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.59.1",
     "archunit": "^2.3.0",
