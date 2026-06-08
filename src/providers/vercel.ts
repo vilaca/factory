@@ -11,9 +11,13 @@ import type {
 } from './types.js';
 import {
   buildChatBody,
+  buildResponsesBody,
   fetchOpenAiCatalog,
+  isResponsesApiOnly,
   sendOpenAiChat,
+  sendOpenAiResponses,
   streamOpenAiChat,
+  streamOpenAiResponses,
 } from './openai/index.js';
 import { filterChatModels } from './list-models-filter.js';
 import {
@@ -121,6 +125,22 @@ export class VercelProvider implements Provider {
   ): AsyncGenerator<ChatChunk> {
     this.requireAuth();
     try {
+      if (isResponsesApiOnly(model)) {
+        yield* streamOpenAiResponses({
+          url: `${this.baseUrl}/responses`,
+          headers: this.authHeaders(),
+          body: buildResponsesBody({
+            model,
+            messages,
+            tools,
+            stream: true,
+            options: options ? { ...options, temperature: undefined } : undefined,
+          }),
+          signal: options?.signal,
+          providerName: PROVIDER_NAME,
+        });
+        return;
+      }
       yield* streamOpenAiChat({
         url: `${this.baseUrl}/chat/completions`,
         headers: this.authHeaders(),
@@ -149,6 +169,21 @@ export class VercelProvider implements Provider {
   ): Promise<ChatChunk> {
     this.requireAuth();
     try {
+      if (isResponsesApiOnly(model)) {
+        return await sendOpenAiResponses({
+          url: `${this.baseUrl}/responses`,
+          headers: this.authHeaders(),
+          body: buildResponsesBody({
+            model,
+            messages,
+            tools,
+            stream: false,
+            options: options ? { ...options, temperature: undefined } : undefined,
+          }),
+          signal: options?.signal,
+          providerName: PROVIDER_NAME,
+        });
+      }
       return await sendOpenAiChat({
         url: `${this.baseUrl}/chat/completions`,
         headers: this.authHeaders(),

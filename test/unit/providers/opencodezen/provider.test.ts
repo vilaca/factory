@@ -28,7 +28,7 @@ function withServer(
 }
 
 describe('OpenCodeZenProvider', () => {
-  it('lists every Zen model route except unsupported /responses models', async () => {
+  it('lists all Zen models including GPT /responses models', async () => {
     await withServer(
       (req, res) => {
         assert.strictEqual(req.method, 'GET');
@@ -53,6 +53,7 @@ describe('OpenCodeZenProvider', () => {
         const models = await provider.listModels();
         assert.deepStrictEqual(models, [
           'qwen3.6-plus',
+          'gpt-5.4',
           'claude-sonnet-4-6',
           'gemini-3-flash',
           'minimax-m2.5-free',
@@ -266,6 +267,38 @@ describe('OpenCodeZenProvider', () => {
           completionTokens: 4,
           totalTokens: 14,
         });
+      },
+    );
+  });
+
+  it('routes GPT models through the /responses API', async () => {
+    await withServer(
+      (req, res) => {
+        assert.strictEqual(req.method, 'POST');
+        assert.strictEqual(req.url, '/zen/v1/responses', 'GPT models should use /responses');
+        assert.strictEqual(req.headers.authorization, 'Bearer test-token');
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          assert.strictEqual(parsed.model, 'gpt-5.4');
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              output: [{ type: 'message', content: [{ type: 'output_text', text: 'done' }] }],
+              usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new OpenCodeZenProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream('gpt-5.4', [{ role: 'user', content: 'hello' }]);
+        assert.strictEqual(result.content, 'done');
       },
     );
   });
