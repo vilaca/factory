@@ -2,6 +2,7 @@ import React from 'react';
 import type { ModelDisplayInfo, ProviderEntry, RecentPair, Stage } from './types.js';
 import {
   ConfirmDeleteStage,
+  DeviceFlowManageStage,
   ErrorStage,
   KeyAddStage,
   KeyDeleteStage,
@@ -82,6 +83,8 @@ export function renderPickerBody(args: RenderBodyArgs): React.ReactElement | nul
       return <ErrorStage stage={stage} startsAtModel={startsAtModel} />;
     case 'model':
       return <ModelStage stage={stage} modelIndex={modelIndex} getModelInfo={getModelInfo} />;
+    case 'device-flow-manage':
+      return <DeviceFlowManageStage stage={stage} />;
   }
 }
 
@@ -90,6 +93,7 @@ export function pickerFooterText(stage: Stage, escLabelText: string): string {
   if (stage.kind === 'key-validating') return 'validating…';
   if (stage.kind === 'key-validate-failed') return '↑/↓ choose · Enter confirm · Esc back to edit';
   if (stage.kind === 'key-confirm-delete') return 'y/Enter confirm · n/Esc cancel';
+  if (stage.kind === 'device-flow-manage') return 'Enter use · D disconnect · Esc back';
   return `↑/↓ navigate · 0–9/A–Z jump · Enter select · Esc ${escLabelText}`;
 }
 

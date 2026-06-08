@@ -9,6 +9,21 @@ interface CreatePickerDataActionsArgs {
   getModelInfo?: (provider: string, model: string) => ModelDisplayInfo | undefined;
   loadKeysForProvider?: (provider: string) => Promise<KeySummary[]>;
   multiKeyProviders?: ReadonlySet<string>;
+  deviceFlowProviders?: ReadonlySet<string>;
+  /** Called on device-flow providers when credentials are missing and no
+   *  runDeviceFlowAuth is provided — lets the host drive auth outside the picker. */
+  onCommitProviderOnly?: (provider: string) => void;
+  /** When provided, auth is handled inside the picker: the callback runs the
+   *  device flow and calls onCode when the code is ready. After it resolves,
+   *  loadModels is retried and the model list is shown inside the picker. */
+  runDeviceFlowAuth?: (
+    provider: string,
+    onCode: (info: { userCode: string; verificationUri: string; expiresIn: number }) => void,
+  ) => Promise<void>;
+  /** Returns true when the provider already has device-flow credentials stored. */
+  isDeviceFlowAuthed?: (provider: string) => Promise<boolean>;
+  /** Clears stored device-flow credentials for the provider. */
+  revokeDeviceFlowAuth?: (provider: string) => Promise<void>;
   isFallbackPicker: boolean;
   initialProvider?: string;
   initialKeyId?: string;
@@ -25,6 +40,7 @@ export interface PickerDataActions {
   ) => Promise<void>;
   enterProvider: (name: string, preselectModel?: string) => Promise<void>;
   selectProviderEntry: (entry: ProviderEntry) => void;
+  revokeAndReturnToProvider: (provider: string) => Promise<void>;
 }
 
 /**
@@ -41,6 +57,11 @@ export function createPickerDataActions(args: CreatePickerDataActionsArgs): Pick
     getModelInfo,
     loadKeysForProvider,
     multiKeyProviders,
+    deviceFlowProviders,
+    onCommitProviderOnly,
+    runDeviceFlowAuth,
+    isDeviceFlowAuthed,
+    revokeDeviceFlowAuth,
     isFallbackPicker,
     initialProvider,
     initialKeyId,
@@ -63,6 +84,7 @@ export function createPickerDataActions(args: CreatePickerDataActionsArgs): Pick
     name: string,
     keyId: string | undefined,
     preselectModel: string | undefined,
+    alreadyAuthed = false,
   ): Promise<void> {
     setStage({ kind: 'loading', provider: name, ...(keyId ? { keyId } : {}) });
     try {
@@ -78,12 +100,52 @@ export function createPickerDataActions(args: CreatePickerDataActionsArgs): Pick
       setStage({ kind: 'model', provider: name, models, ...(keyId ? { keyId } : {}) });
     } catch (err) {
       const msg = errorMessage(err);
+      if (!alreadyAuthed && deviceFlowProviders?.has(name) && runDeviceFlowAuth) {
+        try {
+          await runDeviceFlowAuth(name, ({ userCode, verificationUri, expiresIn }) => {
+            setStage({
+              kind: 'loading',
+              provider: name,
+              ...(keyId ? { keyId } : {}),
+              hint: [
+                `Open: ${verificationUri}`,
+                `Code: ${userCode}`,
+                `(expires in ${Math.ceil(expiresIn / 60)}m)`,
+              ],
+            });
+          });
+          await loadAndShowModels(name, keyId, preselectModel, true);
+        } catch (authErr) {
+          const authMsg = errorMessage(authErr);
+          reportError(`picker:auth:${name}`, authMsg);
+          setStage({ kind: 'error', provider: name, message: authMsg });
+        }
+        return;
+      }
+      if (deviceFlowProviders?.has(name) && onCommitProviderOnly) {
+        onCommitProviderOnly(name);
+        return;
+      }
       reportError(`picker:loadModels:${name}`, msg);
       setStage({ kind: 'error', provider: name, message: msg });
     }
   }
 
+  async function revokeAndReturnToProvider(provider: string): Promise<void> {
+    if (revokeDeviceFlowAuth) {
+      await revokeDeviceFlowAuth(provider);
+    }
+    setStage({ kind: 'provider' });
+  }
+
   async function enterProvider(name: string, preselectModel?: string): Promise<void> {
+    if (!isFallbackPicker && deviceFlowProviders?.has(name) && isDeviceFlowAuthed) {
+      const authed = await isDeviceFlowAuthed(name);
+      if (authed) {
+        setStage({ kind: 'device-flow-manage', provider: name, selectedIdx: 0 });
+        return;
+      }
+    }
     if (isMultiKey(name) && loadKeysForProvider) {
       try {
         const keys = await loadKeysForProvider(name);
@@ -124,5 +186,6 @@ export function createPickerDataActions(args: CreatePickerDataActionsArgs): Pick
     loadAndShowModels,
     enterProvider,
     selectProviderEntry,
+    revokeAndReturnToProvider,
   };
 }

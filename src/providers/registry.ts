@@ -1,5 +1,6 @@
 import type { GoogleAiStudioAuthMode } from './auth-modes.js';
 import type { Provider, UnprimedProvider } from './types.js';
+import { CopilotAuthManager } from './copilot/auth.js';
 import { OllamaProvider } from './ollama.js';
 import { HuggingFaceProvider } from './huggingface.js';
 import { LlamaCppProvider } from './llamacpp.js';
@@ -417,4 +418,20 @@ export function noModelsMessageFor(descriptor: ProviderDescriptor): string {
 export function saveSuccessMessageFor(descriptor: ProviderDescriptor, configDir: string): string {
   const label = descriptor.saveSuccessLabel ?? descriptor.label;
   return `Saved ${label} credentials to ${configDir}/config.json`;
+}
+
+/** Run the GitHub device-flow auth for Copilot and return the obtained token.
+ *  The caller is responsible for persisting the token to config. */
+export async function runDeviceFlowAuth(
+  onCode: (params: { userCode: string; verificationUri: string; expiresIn: number }) => void,
+): Promise<string> {
+  let obtainedToken: string | undefined;
+  const auth = new CopilotAuthManager({
+    onGithubTokenPersist: async (githubToken: string) => {
+      obtainedToken = githubToken;
+    },
+  });
+  await auth.authenticateWithDeviceFlow(onCode);
+  if (!obtainedToken) throw new Error('Device flow completed but no token was obtained.');
+  return obtainedToken;
 }

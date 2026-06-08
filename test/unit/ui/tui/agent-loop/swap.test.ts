@@ -172,6 +172,9 @@ function makeHarness(
     ),
     getKey: mock.fn(() => undefined) as unknown as SwapProviderDeps['getKey'],
     validateModelToolSupport: mock.fn(async () => opts.validation ?? { mode: 'native' }),
+    runDeviceFlowAuth: mock.fn(
+      async () => undefined,
+    ) as unknown as SwapProviderDeps['runDeviceFlowAuth'],
   };
   return { ctx, deps, log, notices, nextProvider, refs };
 }

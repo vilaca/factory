@@ -148,6 +148,7 @@ export function useAgentLoopActions(
       refs: state.refs,
       opts,
       addNotice: state.addNotice,
+      addNoticeBox: state.addNoticeBox,
       setModel: state.setModel,
       setProviderName: state.setProviderName,
       setContextWindow: state.setContextWindow,

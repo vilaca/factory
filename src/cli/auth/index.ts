@@ -122,7 +122,12 @@ export async function probeAllProviders(
   config: Config,
   credentials: Map<StartupProviderName, StartupCredentials>,
 ): Promise<Map<StartupProviderName, string[] | null>> {
-  const probes = DESCRIPTOR_LIST.filter(d => d.probeAtStartup).map(async descriptor => {
+  // Include device-flow providers (e.g. copilot) when credentials are already
+  // saved — this lets canResumeLastSession fast-path startup without showing
+  // the picker. Providers without credentials are still skipped via canProbe.
+  const probes = DESCRIPTOR_LIST.filter(
+    d => d.probeAtStartup || canProbe(d, credentials.get(d.name as StartupProviderName) ?? {}),
+  ).map(async descriptor => {
     const creds = credentials.get(descriptor.name) ?? {};
     if (!canProbe(descriptor, creds)) {
       return [descriptor.name, null] as const;

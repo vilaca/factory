@@ -26,6 +26,13 @@ interface UseProviderPickerKeysArgs {
   saveKey?: (provider: string, token: string) => Promise<string>;
   deleteKey?: (provider: string, keyId: string) => Promise<void>;
   multiKeyProviders?: ReadonlySet<string>;
+  deviceFlowProviders?: ReadonlySet<string>;
+  runDeviceFlowAuth?: (
+    provider: string,
+    onCode: (info: { userCode: string; verificationUri: string; expiresIn: number }) => void,
+  ) => Promise<void>;
+  isDeviceFlowAuthed?: (provider: string) => Promise<boolean>;
+  revokeDeviceFlowAuth?: (provider: string) => Promise<void>;
   initialProvider?: string;
   initialKeyId?: string;
   initialModel?: string;
@@ -60,6 +67,10 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
     saveKey,
     deleteKey,
     multiKeyProviders,
+    deviceFlowProviders,
+    runDeviceFlowAuth,
+    isDeviceFlowAuthed,
+    revokeDeviceFlowAuth,
     initialProvider,
     initialKeyId,
     initialModel,
@@ -70,19 +81,25 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
     onError,
   } = args;
 
-  const { loadAndShowModels, selectProviderEntry } = createPickerDataActions({
-    setStage,
-    setModelIndex: idx => setModelIndex(idx),
-    loadModels,
-    ...(getModelInfo ? { getModelInfo } : {}),
-    ...(loadKeysForProvider ? { loadKeysForProvider } : {}),
-    ...(multiKeyProviders ? { multiKeyProviders } : {}),
-    isFallbackPicker,
-    ...(initialProvider ? { initialProvider } : {}),
-    ...(initialKeyId ? { initialKeyId } : {}),
-    ...(initialModel ? { initialModel } : {}),
-    ...(onError ? { onError } : {}),
-  });
+  const { loadAndShowModels, selectProviderEntry, revokeAndReturnToProvider } =
+    createPickerDataActions({
+      setStage,
+      setModelIndex: idx => setModelIndex(idx),
+      loadModels,
+      ...(getModelInfo ? { getModelInfo } : {}),
+      ...(loadKeysForProvider ? { loadKeysForProvider } : {}),
+      ...(multiKeyProviders ? { multiKeyProviders } : {}),
+      ...(deviceFlowProviders ? { deviceFlowProviders } : {}),
+      ...(runDeviceFlowAuth ? { runDeviceFlowAuth } : {}),
+      ...(isDeviceFlowAuthed ? { isDeviceFlowAuthed } : {}),
+      ...(revokeDeviceFlowAuth ? { revokeDeviceFlowAuth } : {}),
+      onCommitProviderOnly: (provider: string) => onCommit(provider, ''),
+      isFallbackPicker,
+      ...(initialProvider ? { initialProvider } : {}),
+      ...(initialKeyId ? { initialKeyId } : {}),
+      ...(initialModel ? { initialModel } : {}),
+      ...(onError ? { onError } : {}),
+    });
 
   useInput((input, key) => {
     if (key.escape) {
@@ -102,6 +119,7 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
         ...(deleteKey ? { deleteKey } : {}),
         loadAndShowModels,
         selectProviderEntry,
+        revokeAndReturnToProvider,
       });
       if (handled) return;
     }
@@ -127,6 +145,7 @@ export function useProviderPickerKeys(args: UseProviderPickerKeysArgs): void {
       ...(deleteKey ? { deleteKey } : {}),
       loadAndShowModels,
       selectProviderEntry,
+      revokeAndReturnToProvider,
     });
   });
 }

@@ -41,6 +41,23 @@ interface ProviderPickerProps {
    *  picker. Other providers short-circuit to model loading without
    *  showing a key stage. */
   multiKeyProviders?: ReadonlySet<string>;
+  /** Provider names that use device-flow auth. When model loading fails for
+   *  these without credentials, the picker either runs auth inline (if
+   *  runDeviceFlowAuth is provided) or commits provider-only so the host
+   *  can drive the flow. */
+  deviceFlowProviders?: ReadonlySet<string>;
+  /** When provided, the picker handles device-flow auth internally: it shows
+   *  the device code in the loading stage, then retries model listing after
+   *  the callback resolves. The callback must persist the acquired token before
+   *  returning so the loadModels retry succeeds. */
+  runDeviceFlowAuth?: (
+    provider: string,
+    onCode: (info: { userCode: string; verificationUri: string; expiresIn: number }) => void,
+  ) => Promise<void>;
+  /** Returns true when the provider already has stored device-flow credentials. */
+  isDeviceFlowAuthed?: (provider: string) => Promise<boolean>;
+  /** Clears stored device-flow credentials and returns to the provider stage. */
+  revokeDeviceFlowAuth?: (provider: string) => Promise<void>;
   initialProvider?: string;
   initialModel?: string;
   initialKeyId?: string;
@@ -73,7 +90,7 @@ interface ProviderPickerProps {
   purpose?: 'select-active' | 'select-rotation-entry';
 }
 
-// eslint-disable-next-line sonarjs/cognitive-complexity -- complexity-ok: prop destructure + conditional spreads into two hooks (useValidateKeyEffect / useProviderPickerKeys); the body is mechanical wiring.
+// eslint-disable-next-line complexity, sonarjs/cognitive-complexity -- TODO(complexity)
 export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
   const {
     providers,
@@ -86,6 +103,10 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     saveKey,
     deleteKey,
     multiKeyProviders,
+    deviceFlowProviders,
+    runDeviceFlowAuth,
+    isDeviceFlowAuthed,
+    revokeDeviceFlowAuth,
     initialProvider,
     initialModel,
     initialKeyId,
@@ -152,6 +173,10 @@ export function ProviderPicker(props: ProviderPickerProps): React.ReactElement {
     ...(saveKey ? { saveKey } : {}),
     ...(deleteKey ? { deleteKey } : {}),
     ...(multiKeyProviders ? { multiKeyProviders } : {}),
+    ...(deviceFlowProviders ? { deviceFlowProviders } : {}),
+    ...(runDeviceFlowAuth ? { runDeviceFlowAuth } : {}),
+    ...(isDeviceFlowAuthed ? { isDeviceFlowAuthed } : {}),
+    ...(revokeDeviceFlowAuth ? { revokeDeviceFlowAuth } : {}),
     ...(initialProvider ? { initialProvider } : {}),
     ...(initialKeyId ? { initialKeyId } : {}),
     ...(initialModel ? { initialModel } : {}),

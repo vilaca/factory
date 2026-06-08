@@ -9,8 +9,14 @@ import type {
 import { useAgentLoop, type AgentLoopApi } from '../agent-loop/use-agent-loop.js';
 import { TabsContext } from '../tabs/TabsContext.js';
 import type { Provider } from '../../../providers/types.js';
-import { listProviderNames, DESCRIPTORS, DESCRIPTOR_LIST } from '../../../providers/registry.js';
+import {
+  listProviderNames,
+  DESCRIPTORS,
+  DESCRIPTOR_LIST,
+  runDeviceFlowAuth,
+} from '../../../providers/registry.js';
 import { getRecentSessions } from '../../../core/session/session-log.js';
+import { updateGlobalConfig } from '../../../core/config/index.js';
 import { useRotationFallback } from '../hooks/use-rotation-fallback.js';
 import { useCompactionPicker } from '../hooks/use-compaction-picker.js';
 import { useSessionInput } from '../hooks/use-session-input.js';
@@ -27,6 +33,10 @@ function buildProviderList(): ProviderEntry[] {
 
 const SIMPLE_PROMPT_PROVIDERS = new Set(
   DESCRIPTOR_LIST.filter(d => d.authFlow === 'simple-prompt').map(d => d.name),
+);
+
+const DEVICE_FLOW_PROVIDERS = new Set(
+  DESCRIPTOR_LIST.filter(d => d.authFlow === 'device-flow').map(d => d.name),
 );
 
 export function SessionContainer(props: SessionProps): React.ReactElement {
@@ -148,6 +158,13 @@ export function SessionContainer(props: SessionProps): React.ReactElement {
     initialModel: agent.model,
     getModelInfo: pickerAdapter.getModelInfo,
     multiKeyProviders: SIMPLE_PROMPT_PROVIDERS,
+    deviceFlowProviders: DEVICE_FLOW_PROVIDERS,
+    runDeviceFlowAuth: async (_provider, onCode) => {
+      const githubToken = await runDeviceFlowAuth(onCode);
+      await updateGlobalConfig(() => ({ githubToken }));
+    },
+    isDeviceFlowAuthed: pickerAdapter.isDeviceFlowAuthed,
+    revokeDeviceFlowAuth: pickerAdapter.revokeDeviceFlowAuth,
     loadModels: pickerAdapter.loadModels,
     loadKeysForProvider: pickerAdapter.loadKeysForProvider,
     validateKey: pickerAdapter.validateKey,

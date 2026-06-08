@@ -66,6 +66,7 @@ export interface AgentLoopStateStore {
   addItem: (item: DisplayItem) => void;
   addNotice: (level: NoticeLevel, text: string) => void;
   addNoticeBlock: (lines: { level: NoticeLevel; text: string; bold?: boolean }[]) => void;
+  addNoticeBox: (lines: string[], borderColor?: string) => void;
   refreshTokenEstimate: () => void;
   composeSystemPrompt: () => string;
 }
@@ -125,6 +126,9 @@ export function useAgentLoopState(opts: UseAgentLoopOptions): AgentLoopStateStor
         noticeDiagnostics.error(line.text, `notice:${line.level}`);
       }
     }
+  }
+  function addNoticeBox(lines: string[], borderColor?: string): void {
+    addItem({ kind: 'notice-box', id: nextId(), lines, ...(borderColor ? { borderColor } : {}) });
   }
 
   function refreshTokenEstimate(): void {
@@ -202,6 +206,7 @@ export function useAgentLoopState(opts: UseAgentLoopOptions): AgentLoopStateStor
     addItem,
     addNotice,
     addNoticeBlock,
+    addNoticeBox,
     refreshTokenEstimate,
     composeSystemPrompt,
   };
