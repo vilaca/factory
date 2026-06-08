@@ -248,15 +248,18 @@ function estimateContextWindow(model: string): number {
     // NVIDIA gpt-oss-120b models have a 128,000 token context window (approx 128k)
     return 128000;
   }
-  if (model.includes('llama-3.1-70b')
-    || model.includes('llama-3.3-70b')
-    || model.includes('llama-3.3-49b') // TODO: confirm
+  if (
+    model.includes('llama-3.1-70b') ||
+    model.includes('llama-3.3-70b') ||
+    model.includes('llama-3.3-49b') // TODO: confirm
   ) {
     return 32768;
   }
-  if (model.includes('nemotron-3-ultra-550b')
-    || model.includes('nemotron-3-ultra-253b')
-    || model.includes('nemotron-3-super-120b')) {
+  if (
+    model.includes('nemotron-3-ultra-550b') ||
+    model.includes('nemotron-3-ultra-253b') ||
+    model.includes('nemotron-3-super-120b')
+  ) {
     return 1048576;
   }
   return 8192;
@@ -272,14 +275,17 @@ function estimateMaxOutput(model: string): number {
   if (model.includes('gpt-oss-120b')) {
     return 4096;
   }
-  if (model.includes('nemotron-3-ultra-550b')
-    || model.includes('nemotron-3-ultra-253b')
-    || model.includes('nemotron-3-super-120b')) {
+  if (
+    model.includes('nemotron-3-ultra-550b') ||
+    model.includes('nemotron-3-ultra-253b') ||
+    model.includes('nemotron-3-super-120b')
+  ) {
     return 8192;
   }
-  if (model.includes('llama-3.1-70b')
-    || model.includes('llama-3.3-70b')
-    || model.includes('llama-3.3-49b') // TODO: confirm
+  if (
+    model.includes('llama-3.1-70b') ||
+    model.includes('llama-3.3-70b') ||
+    model.includes('llama-3.3-49b') // TODO: confirm
   ) {
     return 4096;
   }
