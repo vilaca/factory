@@ -189,18 +189,18 @@ describe('Grep tool', () => {
       const result1 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'True' });
       assert.strictEqual(result1.success, true);
       assert.ok(result1.output.includes('1:'));
-      
+
       // Test "TRUE" (all caps)
       const result2 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'TRUE' });
       assert.strictEqual(result2.success, true);
       assert.ok(result2.output.includes('1:'));
-      
+
       // Test "False" (capital F)
       const result3 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'False' });
       assert.strictEqual(result3.success, true);
       assert.ok(result3.output.includes(fp));
       assert.ok(!result3.output.includes('1:'));
-      
+
       // Test "FALSE" (all caps)
       const result4 = await grep.execute({ pattern: 'findme', path: fp, include_content: 'FALSE' });
       assert.strictEqual(result4.success, true);

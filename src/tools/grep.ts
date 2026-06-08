@@ -252,7 +252,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   const rawPath = (args.path as string) ?? ctx?.cwd ?? process.cwd();
   const fileGlob = args.glob as string | undefined;
   const includeContent = (args.include_content as boolean | string) ?? false;
-  const includeContentBool = typeof includeContent === 'string' ? includeContent.toLowerCase() === 'true' : includeContent;
+  const includeContentBool =
+    typeof includeContent === 'string' ? includeContent.toLowerCase() === 'true' : includeContent;
 
   if (!pattern) {
     return { success: false, output: 'pattern is required' };
