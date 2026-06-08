@@ -220,7 +220,8 @@ function estimateModelTier(model: string): ModelTier {
     model.includes('nemotron-3-ultra-550b') ||
     model.includes('nemotron-3-ultra-253b') ||
     model.includes('llama-3.1-70b') ||
-    model.includes('llama-3.3-70b')
+    model.includes('llama-3.3-70b') ||
+    model.includes('gpt-oss-120b')
   ) {
     return 'strong';
   }
@@ -242,16 +243,21 @@ function estimateContextWindow(model: string): number {
   if (model === 'meta/llama-3.3-70b-instruct' || model === 'meta/llama-3.1-70b-instruct') {
     return 131072;
   }
-  if (
-    model.includes('nemotron-3-ultra-550b') ||
-    model.includes('nemotron-3-ultra-253b') ||
-    model.includes('llama-3.1-70b') ||
-    model.includes('llama-3.3-70b')
+  // NVIDIA gpt-oss-120b models have 128K context
+  if (model.includes('gpt-oss-120b')) {
+    // NVIDIA gpt-oss-120b models have a 128,000 token context window (approx 128k)
+    return 128000;
+  }
+  if (model.includes('llama-3.1-70b')
+    || model.includes('llama-3.3-70b')
+    || model.includes('llama-3.3-49b') // TODO: confirm
   ) {
     return 32768;
   }
-  if (model.includes('nemotron-3-super-120b') || model.includes('llama-3.3-49b')) {
-    return 16384;
+  if (model.includes('nemotron-3-ultra-550b')
+    || model.includes('nemotron-3-ultra-253b')
+    || model.includes('nemotron-3-super-120b')) {
+    return 1048576;
   }
   return 8192;
 }
@@ -262,13 +268,19 @@ function estimateMaxOutput(model: string): number {
   if (model === 'meta/llama-3.3-70b-instruct' || model === 'meta/llama-3.1-70b-instruct') {
     return 8192;
   }
-  if (model.includes('nemotron-3-ultra-550b') || model.includes('nemotron-3-ultra-253b')) {
-    return 8192;
-  }
-  if (model.includes('nemotron-3-super-120b')) {
+  // NVIDIA gpt-oss-120b models with 128K context
+  if (model.includes('gpt-oss-120b')) {
     return 4096;
   }
-  if (model.includes('llama-3.1-70b') || model.includes('llama-3.3-70b')) {
+  if (model.includes('nemotron-3-ultra-550b')
+    || model.includes('nemotron-3-ultra-253b')
+    || model.includes('nemotron-3-super-120b')) {
+    return 8192;
+  }
+  if (model.includes('llama-3.1-70b')
+    || model.includes('llama-3.3-70b')
+    || model.includes('llama-3.3-49b') // TODO: confirm
+  ) {
     return 4096;
   }
   return 2048;
