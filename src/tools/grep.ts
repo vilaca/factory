@@ -45,9 +45,9 @@ const definition: ToolDefinition = {
           description: 'Glob pattern to filter files (e.g. "*.ts", "*.{js,jsx}")',
         },
         include_content: {
-          type: 'boolean',
+          type: ['boolean', 'string'],
           description:
-            'If true, show matching lines with line numbers. If false (default), show only file paths.',
+            'If true or "true", show matching lines with line numbers. If false or "false" (default), show only file paths.',
         },
       },
     },
@@ -251,7 +251,8 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
   const pattern = args.pattern as string;
   const rawPath = (args.path as string) ?? ctx?.cwd ?? process.cwd();
   const fileGlob = args.glob as string | undefined;
-  const includeContent = (args.include_content as boolean) ?? false;
+  const includeContent = (args.include_content as boolean | string) ?? false;
+  const includeContentBool = typeof includeContent === 'string' ? includeContent.toLowerCase() === 'true' : includeContent;
 
   if (!pattern) {
     return { success: false, output: 'pattern is required' };
@@ -271,16 +272,16 @@ async function execute(args: Record<string, unknown>, ctx?: ToolContext): Promis
     throw err;
   }
 
-  const rgResult = await tryRipgrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal);
+  const rgResult = await tryRipgrep(pattern, searchPath, fileGlob, includeContentBool, ctx?.signal);
   const result =
-    rgResult ?? (await tryGrep(pattern, searchPath, fileGlob, includeContent, ctx?.signal));
+    rgResult ?? (await tryGrep(pattern, searchPath, fileGlob, includeContentBool, ctx?.signal));
 
   // Post-filter: a search rooted at e.g. ~/ would otherwise let rg/grep
   // recurse into ~/.ssh and surface filenames (with -l) or content lines
   // (with -n). assertPathAllowed only guards the root; the deny list has
   // to be applied to each result path too.
   const isDenied = await buildDenyMatcher(policy);
-  return filterDeniedResults(result, includeContent, isDenied);
+  return filterDeniedResults(result, includeContentBool, isDenied);
 }
 
 function filterDeniedResults(
