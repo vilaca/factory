@@ -1,5 +1,5 @@
 import { createProvider, DESCRIPTOR_LIST, descriptorByAlias } from '../../providers/registry.js';
-import { loadGlobalConfig } from '../../core/config/index.js';
+import { loadGlobalConfig, updateGlobalConfig } from '../../core/config/index.js';
 import { addKey, keyFingerprint, listKeys } from '../../core/auth/credentials.js';
 import { errorMessage } from '../../utils/errors.js';
 
@@ -7,8 +7,13 @@ const SIMPLE_PROMPT_PROVIDERS = new Set(
   DESCRIPTOR_LIST.filter(d => d.authFlow === 'simple-prompt').map(d => d.name),
 );
 
+const DEVICE_FLOW_PROVIDERS = new Set(
+  DESCRIPTOR_LIST.filter(d => d.authFlow === 'device-flow').map(d => d.name),
+);
+
 export interface StartupPickerDataSource {
   multiKeyProviders: ReadonlySet<string>;
+  deviceFlowProviders: ReadonlySet<string>;
   loadModels: (name: string, keyId?: string) => Promise<string[]>;
   loadKeysForProvider: (
     name: string,
@@ -18,6 +23,8 @@ export interface StartupPickerDataSource {
     token: string,
   ) => Promise<{ ok: boolean; models?: string[]; error?: string }>;
   saveKey: (name: string, token: string) => Promise<string>;
+  isDeviceFlowAuthed: (name: string) => Promise<boolean>;
+  revokeDeviceFlowAuth: (name: string) => Promise<void>;
 }
 
 /**
@@ -29,11 +36,12 @@ export interface StartupPickerDataSource {
 export function createStartupPickerDataSource(): StartupPickerDataSource {
   return {
     multiKeyProviders: SIMPLE_PROMPT_PROVIDERS,
+    deviceFlowProviders: DEVICE_FLOW_PROVIDERS,
     loadModels: async (name, keyId) => {
-      const cfg = keyId ? await loadGlobalConfig() : null;
+      const cfg = await loadGlobalConfig();
       const descriptor = descriptorByAlias(name);
       const opts: Parameters<typeof createProvider>[1] = {};
-      if (cfg && descriptor && keyId) {
+      if (descriptor && keyId) {
         const list = listKeys(cfg, descriptor.name);
         const key = list.find(k => k.id === keyId);
         if (key) {
@@ -43,6 +51,7 @@ export function createStartupPickerDataSource(): StartupPickerDataSource {
           }
         }
       }
+      if (cfg.githubToken) opts.githubToken = cfg.githubToken;
       const provider = createProvider(name, opts);
       return await provider.listModels();
     },
@@ -83,6 +92,13 @@ export function createStartupPickerDataSource(): StartupPickerDataSource {
         ...(extras ? { extras } : {}),
       });
       return entry.id;
+    },
+    isDeviceFlowAuthed: async (_name: string) => {
+      const cfg = await loadGlobalConfig();
+      return Boolean(cfg.githubToken);
+    },
+    revokeDeviceFlowAuth: async (_name: string) => {
+      await updateGlobalConfig(() => ({ githubToken: undefined }));
     },
   };
 }

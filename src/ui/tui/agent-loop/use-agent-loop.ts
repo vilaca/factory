@@ -55,6 +55,7 @@ export function useAgentLoop(opts: UseAgentLoopOptions): AgentLoopApi {
     historyDown: actions.historyDown,
     addNotice: state.addNotice,
     addNoticeBlock: state.addNoticeBlock,
+    addNoticeBox: state.addNoticeBox,
     setIdle: actions.setIdle,
     toggleEmojiMode: actions.toggleEmojiMode,
     setUserEmoji: actions.setUserEmoji,

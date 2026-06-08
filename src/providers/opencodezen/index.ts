@@ -9,7 +9,14 @@ import type {
   ModelInfo,
   ModelPickerInfo,
 } from '../types.js';
-import { buildChatBody, sendOpenAiChat, streamOpenAiChat } from '../openai/index.js';
+import {
+  buildChatBody,
+  buildResponsesBody,
+  sendOpenAiChat,
+  sendOpenAiResponses,
+  streamOpenAiChat,
+  streamOpenAiResponses,
+} from '../openai/index.js';
 import {
   type OpenCodeZenModel,
   buildCapabilities,
@@ -21,7 +28,6 @@ import {
   estimateModelTier,
   normalizeBaseUrl,
   supportsToolsByName,
-  unsupportedOpenCodeZenRouteError,
 } from './models.js';
 import { filterChatModels } from '../list-models-filter.js';
 import { bearerAuth, warnHardcodedEstimateFallback } from '../shared.js';
@@ -66,8 +72,7 @@ export class OpenCodeZenProvider implements Provider {
   getCapabilities(model: string): ProviderCapabilities {
     const lower = model.toLowerCase();
     const cached = this.modelsCache?.find(item => item.id === model);
-    const route = cached?.route ?? detectOpenCodeZenRoute(model);
-    const supportsTools = route !== 'openai-responses' && supportsToolsByName(lower);
+    const supportsTools = supportsToolsByName(lower);
 
     if (!cached) {
       warnHardcodedEstimateFallback({
@@ -83,7 +88,7 @@ export class OpenCodeZenProvider implements Provider {
       maxOutputTokens: estimateMaxOutput(lower),
       toolSupport: supportsTools ? 'native' : 'none',
       parallelToolCalls: supportsTools,
-      streaming: route !== 'openai-responses',
+      streaming: true,
       tokenCounting: 'exact',
       modelTier: estimateModelTier(lower),
     };
@@ -95,7 +100,7 @@ export class OpenCodeZenProvider implements Provider {
     const route =
       this.modelsCache?.find(item => item.id === model)?.route ?? detectOpenCodeZenRoute(model);
     return {
-      supportsTools: route !== 'openai-responses' && supportsToolsByName(lower),
+      supportsTools: supportsToolsByName(lower),
       capabilities: buildCapabilities(lower, route),
     };
   }
@@ -124,7 +129,20 @@ export class OpenCodeZenProvider implements Provider {
         );
         return;
       case 'openai-responses':
-        throw unsupportedOpenCodeZenRouteError(model);
+        yield* streamOpenAiResponses({
+          url: `${this.baseUrl}/responses`,
+          headers: this.requireOpenAiAuthHeaders(),
+          body: buildResponsesBody({
+            model,
+            messages,
+            tools,
+            stream: true,
+            options: options ? { ...options, temperature: undefined } : undefined,
+          }),
+          signal: options?.signal,
+          providerName: PROVIDER_NAME,
+        });
+        return;
     }
   }
 
@@ -149,7 +167,19 @@ export class OpenCodeZenProvider implements Provider {
           options,
         );
       case 'openai-responses':
-        throw unsupportedOpenCodeZenRouteError(model);
+        return sendOpenAiResponses({
+          url: `${this.baseUrl}/responses`,
+          headers: this.requireOpenAiAuthHeaders(),
+          body: buildResponsesBody({
+            model,
+            messages,
+            tools,
+            stream: false,
+            options: options ? { ...options, temperature: undefined } : undefined,
+          }),
+          signal: options?.signal,
+          providerName: PROVIDER_NAME,
+        });
     }
   }
 
@@ -244,10 +274,7 @@ export class OpenCodeZenProvider implements Provider {
       if (typeof i.id !== 'string' || !i.id) continue;
       idable.push({ id: i.id, owned_by: i.owned_by });
     }
-    this.modelsCache = filterChatModels('opencodezen', idable, item => {
-      const route = detectOpenCodeZenRoute(item.id);
-      return route === 'openai-responses' ? `non-chat: route='${route}'` : true;
-    }).map(item => ({
+    this.modelsCache = filterChatModels('opencodezen', idable, () => true).map(item => ({
       id: item.id,
       owned_by: typeof item.owned_by === 'string' ? item.owned_by : undefined,
       route: detectOpenCodeZenRoute(item.id),

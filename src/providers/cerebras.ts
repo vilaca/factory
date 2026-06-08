@@ -11,9 +11,13 @@ import type {
 } from './types.js';
 import {
   buildChatBody,
+  buildResponsesBody,
   fetchOpenAiCatalog,
+  isResponsesApiOnly,
   sendOpenAiChat,
+  sendOpenAiResponses,
   streamOpenAiChat,
+  streamOpenAiResponses,
 } from './openai/index.js';
 import {
   bearerAuth,
@@ -98,6 +102,22 @@ export class CerebrasProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<ChatChunk> {
+    if (isResponsesApiOnly(model)) {
+      yield* streamOpenAiResponses({
+        url: `${this.baseUrl}/responses`,
+        headers: this.authHeaders(),
+        body: buildResponsesBody({
+          model,
+          messages,
+          tools,
+          stream: true,
+          options: options ? { ...options, temperature: undefined } : undefined,
+        }),
+        signal: options?.signal,
+        providerName: 'Cerebras',
+      });
+      return;
+    }
     yield* streamOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.authHeaders(),
@@ -120,6 +140,21 @@ export class CerebrasProvider implements Provider {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): Promise<ChatChunk> {
+    if (isResponsesApiOnly(model)) {
+      return sendOpenAiResponses({
+        url: `${this.baseUrl}/responses`,
+        headers: this.authHeaders(),
+        body: buildResponsesBody({
+          model,
+          messages,
+          tools,
+          stream: false,
+          options: options ? { ...options, temperature: undefined } : undefined,
+        }),
+        signal: options?.signal,
+        providerName: 'Cerebras',
+      });
+    }
     return sendOpenAiChat({
       url: `${this.baseUrl}/chat/completions`,
       headers: this.authHeaders(),

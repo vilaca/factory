@@ -186,6 +186,71 @@ describe('CopilotProvider', () => {
     );
   });
 
+  it('includes codex models in listModels', async () => {
+    await withServer(
+      (req, res) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            data: [
+              {
+                id: 'gpt-5.3-codex',
+                capabilities: { type: 'chat' },
+                model_picker_enabled: true,
+                policy: { state: 'enabled' },
+              },
+              {
+                id: 'gpt-4.1',
+                capabilities: { type: 'chat' },
+                model_picker_enabled: true,
+                policy: { state: 'enabled' },
+              },
+            ],
+          }),
+        );
+      },
+      async baseUrl => {
+        const provider = new CopilotProvider({ token: 'test-token', host: baseUrl });
+        const models = await provider.listModels();
+        assert.ok(models.includes('gpt-5.3-codex'), 'codex model should be listed');
+        assert.ok(models.includes('gpt-4.1'));
+      },
+    );
+  });
+
+  it('routes codex models to /responses not /chat/completions', async () => {
+    await withServer(
+      (req, res) => {
+        assert.strictEqual(req.method, 'POST');
+        assert.strictEqual(req.url, '/responses', 'codex should use /responses endpoint');
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          assert.strictEqual(parsed.model, 'gpt-5.3-codex');
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              output: [{ type: 'message', content: [{ type: 'output_text', text: 'done' }] }],
+              usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+            }),
+          );
+        });
+      },
+      async baseUrl => {
+        const provider = new CopilotProvider({ token: 'test-token', host: baseUrl });
+        const result = await provider.chatNoStream('gpt-5.3-codex', [
+          { role: 'user', content: 'hello' },
+        ]);
+        assert.strictEqual(result.content, 'done');
+      },
+    );
+  });
+
   it('coalesces sparse streamed tool call indices without yielding holes', async () => {
     await withServer(
       (req, res) => {

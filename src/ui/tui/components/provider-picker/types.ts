@@ -70,9 +70,10 @@ export type Stage =
   | { kind: 'key-add'; provider: string; tokenDraft: string }
   | { kind: 'key-validating'; provider: string; token: string }
   | { kind: 'key-validate-failed'; provider: string; token: string; error: string; choice: 0 | 1 }
-  | { kind: 'loading'; provider: string; keyId?: string }
+  | { kind: 'loading'; provider: string; keyId?: string; hint?: string[] }
   | { kind: 'model'; provider: string; models: string[]; keyId?: string }
-  | { kind: 'error'; provider: string; message: string };
+  | { kind: 'error'; provider: string; message: string }
+  | { kind: 'device-flow-manage'; provider: string; selectedIdx: 0 | 1 };
 
 /** How many rows the provider/model windowed list shows at once. */
 export const VISIBLE_ROWS = 8;
