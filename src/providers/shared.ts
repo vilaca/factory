@@ -50,14 +50,6 @@ export function warnHardcodedEstimateFallback(opts: {
     action: 'hardcoded-estimate-fallback',
     detail,
   });
-
-  try {
-    process.stderr.write(
-      `warning: ${opts.provider} is using hardcoded capability estimates for model "${model}" (${fields.join(', ')}) — ${opts.reason}.\n`,
-    );
-  } catch {
-    // Warnings are best-effort and must never break chat/model selection.
-  }
 }
 
 /**
