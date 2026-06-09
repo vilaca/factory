@@ -13,6 +13,7 @@ interface MarkedTerminalExt {
       token: unknown,
     ) => string;
     code: (token: unknown) => string;
+    tablecell: (token: unknown) => string;
   };
 }
 
@@ -89,6 +90,26 @@ ext.renderer.code = function (token: unknown): string {
     }
   }
   return origCode.call(this, token);
+};
+
+// marked-terminal may pad table cells to align columns, which can cause
+// separator lines to exceed the reserved width. Reduce the computed cell
+// width by 1 to account for the width reservation in markdownRenderWidth.
+// marked-terminal appends TABLE_CELL_SPLIT ('^*||*^') to every cell, so we
+// must strip it before matching and re-append it after.
+const TABLE_CELL_SPLIT = '^*||*^';
+const origTablecell = ext.renderer.tablecell;
+ext.renderer.tablecell = function (token: unknown): string {
+  const result = origTablecell.call(this, token);
+  if (typeof result !== 'string') return result;
+  const splitIdx = result.lastIndexOf(TABLE_CELL_SPLIT);
+  if (splitIdx === -1) return result;
+  const content = result.slice(0, splitIdx);
+  const reduced = content.replace(/^(\s*)-+(\s*)$/, (match, leading, trailing) => {
+    const dashCount = match.length - leading.length - trailing.length;
+    return dashCount > 1 ? leading + '-'.repeat(dashCount - 1) + trailing : match;
+  });
+  return reduced + TABLE_CELL_SPLIT;
 };
 
 const marked = new Marked(ext as unknown as Parameters<typeof Marked.prototype.use>[0]);
