@@ -1,66 +1,108 @@
 # core/skills — orientation
 
-User-authored "skills": markdown files with YAML frontmatter that get injected into the system prompt either always (`alwaysOn: true`) or when their `triggers` regex matches the latest user turn or the recently-used tool list.
+User-authored "skills": markdown files with YAML frontmatter that are injected into the model's context either always (`alwaysOn: true`) or on demand via model-driven or manual invocation.
 
 ## Public entry
 
-- `loadSkills(cwd)` (`loader.ts`) — reads `~/.factory/skills/*.md` (global) + `<cwd>/.factory/skills/*.md` (project), returns `{ skills, warnings }`. Project skills override global skills that share the same `name`.
-- `Skill` interface (`loader.ts`) — `{ name, description, alwaysOn, triggers, triggerRegexes, tools, body, sourcePath, scope }`.
-- `matchSkills(skills, ctx)` (`matcher.ts`) — per-turn filter: returns the subset whose `triggers` match the latest user input or whose `tools` overlap the recently-used tool list.
-- `index.ts` — barrel + the `SkillsRegistry` wrapper used by the session bootstrap.
+- `loadSkills(cwd, config?)` (`loader.ts`) — reads `~/.factory/skills/*/SKILL.md` (personal) and `<cwd>/.factory/skills/*/SKILL.md` (project), plus optional enterprise and plugin scopes. Returns `{ skills, warnings }`. Higher-priority scopes override lower-priority skills by `name`.
+- `Skill` interface (`loader.ts`) — metadata-only record: see below.
+- `loadSkillBody(skill)` (`loader.ts`) — lazily reads and caches the body of a skill. Safe to call multiple times.
+- `invokeSkill(name, args, ctx)` (`invoke.ts`) — orchestrates lookup → path check → body load → render → permission scope → inject or fork.
+- `index.ts` — barrel + `SkillsRegistry` wrapper used by the session bootstrap.
 
 ## Files
 
-- `index.ts` — `SkillsRegistry`: cached load + per-turn match API.
-- `loader.ts` — file discovery, frontmatter split, custom YAML-ish parser, schema validation.
-- `matcher.ts` — small per-turn matcher (regex against user input, set intersection against tools).
+| File | Responsibility |
+|---|---|
+| `index.ts` | `SkillsRegistry`: cached load + catalog/alwaysOn section API. |
+| `loader.ts` | File discovery, frontmatter split, custom YAML parser, schema validation, lazy body loading. |
+| `invoke.ts` | Invocation orchestrator: lookup, path gating, body load, render, permission push/pop, inject or fork. |
+| `render.ts` | Argument substitution (`$ARGUMENTS`, `$0..$9`, named) and shell injection (`` !`cmd` ``, `` !```block``` ``). |
+| `permissions.ts` | `pushSkillScope` — stack-based allowed/disallowed tool permission frame. |
+| `scopes.ts` | `resolveScopes` — builds the ordered list of scope roots from cwd, home, env, and config. |
+
+## Skill interface (`loader.ts`)
+
+```ts
+interface Skill {
+  name: string;
+  description: string;
+  whenToUse?: string;
+  argumentHint?: string;
+  argumentNames: string[];
+  allowedTools: string[];
+  disallowedTools: string[];
+  disableModelInvocation: boolean;
+  userInvocable: boolean;
+  model?: string;
+  effort?: 'low' | 'medium' | 'high';
+  context: 'current' | 'fork';
+  agent?: string;
+  paths: string[];
+  shell?: string;
+  alwaysOn: boolean;
+  scope: 'enterprise' | 'personal' | 'project' | 'plugin';
+  pluginName?: string;
+  sourceDir: string;    // absolute path to the skill directory
+  metadataOnly: boolean;
+  body?: string;        // populated by loadSkillBody()
+}
+```
 
 ## Skill file format
-
-A skill is a markdown file with YAML frontmatter:
 
 ```md
 ---
 name: kebab-case-name
-description: One-line summary surfaced in `/skills`.
+description: One-line summary surfaced in the model catalog and /skills.
+when_to_use: Extended hint for model invocation decisions.
+argument-hint: "<arg>"
+arguments:
+  - branch
+allowed-tools:
+  - Bash(git *)
+disallowed-tools:
+  - AskUserQuestion
+disable-model-invocation: false
+user-invocable: true
+model: claude-opus-4-7
+effort: high
+context: fork
+agent: Explore
+paths:
+  - /home/ci
+  - infra/
+shell: bash
 alwaysOn: false
-triggers:
-  - 'regex pattern'
-  - 'another pattern'
-tools:
-  - Bash
-  - Edit
 ---
 
-Body in markdown. Injected verbatim into the system prompt when matched.
+Skill body. Injected verbatim when invoked. Argument substitution and
+shell injection (!\`cmd\`) are processed at invocation time.
 ```
 
-Schema rules enforced in `parseSkillFile`:
+## Invocation model (model-driven)
 
-- `name` — required, must match `/^[a-z0-9][a-z0-9-]*$/`. Used as the dedupe key (project overrides global by `name`).
-- `description` — required string.
-- `alwaysOn` — boolean, defaults to `false`. When true, the skill is injected every turn regardless of `triggers` / `tools`.
-- `triggers` — array of regex strings (case-insensitive). Compiled at load time into `triggerRegexes`; an invalid pattern fails loading of that file (becomes a warning).
-- `tools` — array of tool name strings. When non-empty, the skill is injected only when one of the named tools was used recently.
+Activation is **model-driven**: `SkillsRegistry.catalogSection()` injects a short catalog into the system prompt listing every skill where `disableModelInvocation` is false. The model calls the `invoke_skill` tool when the user's request matches; the tool dispatches to `invokeSkill()`. There is no regex-trigger path — the deprecated `evaluate()` and `formatInjection()` stubs on `SkillsRegistry` exist only to avoid crashes during the transition and always return empty results.
 
 ## Load-bearing details
 
-- **Custom YAML parser, intentional.** `parseFrontmatter` is hand-rolled (~50 LOC) because the schema is small: scalars, booleans, string arrays (block or inline). The custom parser keeps the runtime dependency surface small and the error messages targeted. **Don't add `js-yaml` / `yaml` as a dependency** to "modernize" this — the parser is the size it is because we control the grammar.
-- **Project shadows global by `name`, not by file path.** Two skills with the same `name` collapse to the project one. This is the only way users can override a packaged skill without editing global state.
-- **Triggers are compiled once at load.** `triggerRegexes` is populated in `parseSkillFile`. The per-turn matcher in `matcher.ts` reuses them so a hot loop of turns doesn't recompile N regexes per skill.
-- **Malformed files become warnings, not exceptions.** One bad skill file shouldn't kill startup. `loadSkillsFromDir` accumulates errors into the `warnings` array; the caller surfaces them via the session log.
-- **`triggerRegexes` is optional on the `Skill` interface** so test fixtures can omit it; production code always populates it via `parseSkillFile`. If you read `triggerRegexes` from a non-test path, treat its absence as "no triggers", not as an error.
+- **Directory-per-skill layout only.** Flat `.md` files under a scope root are detected by `findLegacyFlatSkills` and produce a migration warning; they are not loaded.
+- **Custom YAML parser, intentional.** `parseFrontmatter` is hand-rolled. The schema is small (scalars, booleans, string arrays). **Don't add `js-yaml` / `yaml`** — the parser is intentionally constrained to the grammar we own.
+- **Precedence: project → personal → enterprise.** Scopes are loaded in that order; each scope's `Map.set()` overwrites the previous for the same `name`. Plugin skills are namespaced `<pluginName>:<skill>` and never overwrite user scopes.
+- **Lazy body loading.** `loadSkillMetadata` discards the body; `loadSkillBody` reads and caches it on first call. `alwaysOn` skills are the exception — `alwaysOnSection()` requires the body at startup.
+- **Malformed files become warnings, not exceptions.** One bad `SKILL.md` does not abort startup. Errors accumulate in the `warnings` array returned from `loadSkills`.
 
 ## Adding a new frontmatter field
 
 1. Extend the `Skill` interface in `loader.ts`.
-2. Add parsing + validation in `parseSkillFile`. Defaults go here, not in the caller.
-3. If the field affects matching, update `matchSkills` in `matcher.ts`. If it affects injection shape, update the system-prompt composer in `ui/tui/agent-loop/compose-system-prompt.ts`.
-4. Update the example block at the top of this file.
+2. Add parsing + validation in `parseSkillFields`. Defaults go here, not in the caller.
+3. If the field affects invocation shape, update `invoke.ts` or `render.ts`.
+4. If it affects system-prompt injection, update `SkillsRegistry.catalogSection()` or `alwaysOnSection()` in `index.ts`.
+5. Update the field reference in `docs/skills.md`.
 
 ## Don't
 
-- **Don't add a YAML library dependency.** _Folklore:_ no mechanical check. The hand-rolled parser is intentional — the schema is small enough that an off-the-shelf parser is mostly liability (broader grammar accepted than we promise, larger error surface). Extend `parseFrontmatter` if you need a new scalar shape.
-- **Don't compile trigger regexes on the matcher path.** _Folklore:_ no mechanical check. Compilation happens once in `parseSkillFile`; the matcher reads `triggerRegexes` only. Re-compiling per turn costs O(skills × turns).
-- **Don't throw on a malformed skill file.** _Folklore:_ no mechanical check. The convention is "skip + warn" so one user-authored typo doesn't break the session. Errors land in the returned `warnings` array.
-- **Don't bypass project-shadows-global.** _Folklore:_ no mechanical check. The `Map` in `loadSkills` is keyed by `name`; ordering (globals first, then project) is what makes the override work.
+- **Don't add a YAML library dependency.** The hand-rolled parser covers our grammar exactly. Extend `parseFrontmatter` for new scalar shapes.
+- **Don't compile regexes on the invoke path.** No regex-trigger path exists; don't re-introduce one.
+- **Don't throw on a malformed skill file.** Convention: skip + warn. Errors land in the `warnings` array.
+- **Don't bypass project-shadows-global.** The `Map` in `loadSkills` keyed by `name` with project loaded first, enterprise last, is what makes precedence work.
