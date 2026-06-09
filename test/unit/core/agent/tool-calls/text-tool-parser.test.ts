@@ -250,4 +250,89 @@ Now I will run another:
       assert.strictEqual(result.malformedCount, 1);
     });
   });
+
+  describe('Hermes-style function tags with whitespace', () => {
+    it('parses <function> tag with whitespace inside <tool_call>', () => {
+      const content = `<tool_call>
+ <function=Read>
+ <parameter=file_path>
+ /foo/bar
+ </parameter>
+ </function>
+</tool_call>`;
+      const result = parseTextToolCalls(content, new Set(['Read']));
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Read');
+      assert.strictEqual(argsOf(result.toolCalls[0]).file_path, '/foo/bar');
+    });
+
+    it('parses multiple parameters with whitespace in Hermes format', () => {
+      const content = `<tool_call>
+ <function=Grep>
+ <parameter=pattern>
+ from.*providers/auth-modes
+ </parameter>
+ <parameter=path>
+ /Users/vilaca/work/factory/main/src/core
+ </parameter>
+ <parameter=include_content>
+ true
+ </parameter>
+ </function>
+</tool_call>`;
+      const result = parseTextToolCalls(content, new Set(['Grep']));
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Grep');
+      assert.strictEqual(argsOf(result.toolCalls[0]).pattern, 'from.*providers/auth-modes');
+      assert.strictEqual(
+        argsOf(result.toolCalls[0]).path,
+        '/Users/vilaca/work/factory/main/src/core',
+      );
+      assert.strictEqual(argsOf(result.toolCalls[0]).include_content, true);
+    });
+
+    it('parses mixed quoted and unquoted parameter values in Hermes format', () => {
+      const content = `<tool_call>
+ <function=Write>
+ <parameter=file_path>
+ /some/path.ts
+ </parameter>
+ <parameter=content>
+ export function foo() { }
+ </parameter>
+ </function>
+</tool_call>`;
+      const result = parseTextToolCalls(content, new Set(['Write']));
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Write');
+      assert.strictEqual(argsOf(result.toolCalls[0]).file_path, '/some/path.ts');
+      assert.match(argsOf(result.toolCalls[0]).content as string, /export function foo/);
+    });
+
+    it('handles capitalized booleans like True/False in parameter values', () => {
+      const content = `<tool_call>
+ <function=Grep>
+ <parameter=pattern>
+ from.*auth-modes
+ </parameter>
+ <parameter=path>
+ /Users/vilaca/work/factory/main/src/core
+ </parameter>
+ <parameter=include_content>
+ True
+ </parameter>
+ </function>
+ </tool_call>`;
+      const result = parseTextToolCalls(content, new Set(['Grep']));
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].function.name, 'Grep');
+      assert.strictEqual(argsOf(result.toolCalls[0]).pattern, 'from.*auth-modes');
+      assert.strictEqual(
+        argsOf(result.toolCalls[0]).path,
+        '/Users/vilaca/work/factory/main/src/core',
+      );
+      // "True" as a string (not JSON-parseable as boolean, so kept as string)
+      assert.strictEqual(argsOf(result.toolCalls[0]).include_content, 'True');
+    });
+  });
 });

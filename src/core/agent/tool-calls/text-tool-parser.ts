@@ -6,8 +6,9 @@ const TOOL_CALL_TAG_PATTERN = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
 const JSON_FENCE_PATTERN = /```(?:json)?\s*\n([\s\S]*?)\n```/g;
 const SHELL_FENCE_PATTERN = /```(?:bash|sh|shell|console)\s*\n([\s\S]*?)\n```/g;
 // Hermes/Llama-style: <function=Name><parameter=key>value</parameter>...</function>
-const FUNCTION_TAG_PATTERN = /<function=([^>\s]+)>([\s\S]*?)<\/function>/g;
-const PARAMETER_TAG_PATTERN = /<parameter=([^>\s]+)>([\s\S]*?)<\/parameter>/g;
+// Also supports whitespace around tags: <function=Name>\n<parameter=key>\nvalue\n</parameter>
+const FUNCTION_TAG_PATTERN = /<function=([^>\s]+)>\s*([\s\S]*?)\s*<\/function>/g;
+const PARAMETER_TAG_PATTERN = /<parameter=([^>\s]+)>\s*([\s\S]*?)\s*<\/parameter>/g;
 
 type ParseSource = 'tag' | 'fence' | 'bare' | 'shell-fence' | 'function-tag';
 
@@ -85,6 +86,13 @@ export function parseTextToolCalls(
   const knownToolNamesLower = knownToolNames ? buildLowerNameMap(knownToolNames) : undefined;
 
   let cleaned = content.replace(TOOL_CALL_TAG_PATTERN, (_match, body: string) => {
+    // Check if the body contains <function> tags (Hermes-style inside <tool_call>)
+    // In that case, don't try to parse as JSON; let the FUNCTION_TAG_PATTERN handle it
+    if (/<function=/.test(body)) {
+      // Return the body as-is so FUNCTION_TAG_PATTERN can process it below
+      return _match;
+    }
+
     const call = tryParseToolCall(body, knownToolNames, knownToolNamesLower);
     if (call) {
       toolCalls.push(call);
@@ -124,8 +132,8 @@ export function parseTextToolCalls(
     sources.push('function-tag');
     return '';
   });
-  // Some models emit a stray closing tag — strip it so it doesn't show as text.
-  cleaned = cleaned.replace(/<\/tool_call>/g, '');
+  // Some models emit stray tags — strip both opening and closing so they don't show as text.
+  cleaned = cleaned.replace(/<\/?tool_call>/g, '');
 
   cleaned = cleaned.replace(JSON_FENCE_PATTERN, (match, body: string) => {
     const call = tryParseToolCall(body, knownToolNames, knownToolNamesLower);
