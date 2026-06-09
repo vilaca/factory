@@ -46,7 +46,21 @@ export function createInvokeSkillTool(ctx: InvokeContext): StandardToolHandler {
     }
     const skillArgs = typeof args.arguments === 'string' ? args.arguments : '';
 
-    const result = await invokeSkill(name, skillArgs, ctx);
+    // Capture the injection message instead of letting invokeSkill add it
+    // to the conversation immediately. If the skill is injected, the message
+    // would land before the tool_result, violating the Anthropic/Copilot API
+    // requirement that tool_result immediately follows tool_use. Instead we
+    // return it as pendingUserMessage so the executor applies it after
+    // tool_result is committed.
+    let captured: string | undefined;
+    const captureCtx: InvokeContext = {
+      ...ctx,
+      injectSystemMessage: (text: string) => {
+        captured = `[System: ${text}]`;
+      },
+    };
+
+    const result = await invokeSkill(name, skillArgs, captureCtx);
 
     switch (result.kind) {
       case 'not-found':
@@ -68,6 +82,7 @@ export function createInvokeSkillTool(ctx: InvokeContext): StandardToolHandler {
         return {
           success: true,
           output: `Skill "${name}" injected into context.`,
+          ...(captured !== undefined ? { pendingUserMessage: captured } : {}),
         };
       case 'delegated':
         return {

@@ -12,14 +12,14 @@ User-authored "skills": markdown files with YAML frontmatter that are injected i
 
 ## Files
 
-| File | Responsibility |
-|---|---|
-| `index.ts` | `SkillsRegistry`: cached load + catalog/alwaysOn section API. |
-| `loader.ts` | File discovery, frontmatter split, custom YAML parser, schema validation, lazy body loading. |
-| `invoke.ts` | Invocation orchestrator: lookup, path gating, body load, render, permission push/pop, inject or fork. |
-| `render.ts` | Argument substitution (`$ARGUMENTS`, `$0..$9`, named) and shell injection (`` !`cmd` ``, `` !```block``` ``). |
-| `permissions.ts` | `pushSkillScope` — stack-based allowed/disallowed tool permission frame. |
-| `scopes.ts` | `resolveScopes` — builds the ordered list of scope roots from cwd, home, env, and config. |
+| File             | Responsibility                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `index.ts`       | `SkillsRegistry`: cached load + catalog/alwaysOn section API.                                               |
+| `loader.ts`      | File discovery, frontmatter split, custom YAML parser, schema validation, lazy body loading.                |
+| `invoke.ts`      | Invocation orchestrator: lookup, path gating, body load, render, permission push/pop, inject or fork.       |
+| `render.ts`      | Argument substitution (`$ARGUMENTS`, `$0..$9`, named) and shell injection (`` !`cmd` ``, ` !```block``` `). |
+| `permissions.ts` | `pushSkillScope` — stack-based allowed/disallowed tool permission frame.                                    |
+| `scopes.ts`      | `resolveScopes` — builds the ordered list of scope roots from cwd, home, env, and config.                   |
 
 ## Skill interface (`loader.ts`)
 
@@ -43,9 +43,9 @@ interface Skill {
   alwaysOn: boolean;
   scope: 'enterprise' | 'personal' | 'project' | 'plugin';
   pluginName?: string;
-  sourceDir: string;    // absolute path to the skill directory
+  sourceDir: string; // absolute path to the skill directory
   metadataOnly: boolean;
-  body?: string;        // populated by loadSkillBody()
+  body?: string; // populated by loadSkillBody()
 }
 ```
 
@@ -56,7 +56,7 @@ interface Skill {
 name: kebab-case-name
 description: One-line summary surfaced in the model catalog and /skills.
 when_to_use: Extended hint for model invocation decisions.
-argument-hint: "<arg>"
+argument-hint: '<arg>'
 arguments:
   - branch
 allowed-tools:

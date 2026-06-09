@@ -16,7 +16,7 @@
 ## Why factory
 
 - **Bring your own model.** Pick what fits your privacy, cost, and latency. 16 providers on equal footing — local-first ([Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp)) and cloud ([Anthropic Claude](https://www.anthropic.com), [Cerebras](https://cloud.cerebras.ai/), [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/), [Codestral](https://mistral.ai/news/codestral), [Cohere](https://cohere.com/), [GitHub Copilot](https://github.com/features/copilot), [Google AI Studio](https://aistudio.google.com), [Groq](https://console.groq.com/), [HuggingFace](https://huggingface.co), [Mistral](https://mistral.ai), [OpenAI](https://platform.openai.com), [OpenCode Zen](https://opencode.ai/docs/zen/), [OpenRouter](https://openrouter.ai), [Vercel AI Gateway](https://vercel.com/docs/ai-gateway)).
-- Supports *Anthropic Claude-Code* [skills](./docs/skills.md) format.
+- Supports _Anthropic Claude-Code_ [skills](./docs/skills.md) format.
 - **Multi-tab sessions.** Each tab is an independent agent with its own conversation, working directory, provider, and model. Run a frontier LLM on a refactor in one tab while a local LLM explores tests in another. Switch with `Ctrl+N`/`Ctrl+P` or jump directly with `F1`–`F12`.
 - **Two-tier rotation.** When a key hits a rate limit or auth failure, factory swaps to the next saved key for the same model; when keys for a model are exhausted, it walks a configurable chain of `<provider>:<model>` fallbacks — frontier → fast → free, automatic.
 - **Picker with key management.** Startup and in-session pickers support provider → key → model selection, key validation, and saved-key reuse for providers that support multiple API keys.

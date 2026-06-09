@@ -29,12 +29,12 @@ Enterprise > Personal > Project
 
 Plugin skills are namespaced (`<pluginName>:<skill-name>`) and never conflict with the three user scopes.
 
-| Scope      | Root                                           | Set via                              |
-| ---------- | ---------------------------------------------- | ------------------------------------ |
-| Project    | `.factory/skills/` in `cwd`                    | checked in with the repo             |
-| Personal   | `~/.factory/skills/`                           | your home directory                  |
-| Enterprise | any directory                                  | `FACTORY_ENTERPRISE_SKILLS_DIR` env var or `agent.enterprise.skillsDir` in config |
-| Plugin     | `<plugin.root>/skills/`                        | `agent.plugins[].root` in config     |
+| Scope      | Root                        | Set via                                                                           |
+| ---------- | --------------------------- | --------------------------------------------------------------------------------- |
+| Project    | `.factory/skills/` in `cwd` | checked in with the repo                                                          |
+| Personal   | `~/.factory/skills/`        | your home directory                                                               |
+| Enterprise | any directory               | `FACTORY_ENTERPRISE_SKILLS_DIR` env var or `agent.enterprise.skillsDir` in config |
+| Plugin     | `<plugin.root>/skills/`     | `agent.plugins[].root` in config                                                  |
 
 ---
 
@@ -47,7 +47,7 @@ Every `SKILL.md` starts with a YAML frontmatter block delimited by `---`.
 name: deploy-staging
 description: Deploy the current branch to the staging environment.
 when_to_use: When the user asks to deploy, push to staging, or release a feature branch.
-argument-hint: "<branch>"
+argument-hint: '<branch>'
 arguments:
   - branch
 allowed-tools:
@@ -67,30 +67,29 @@ paths:
 shell: bash
 alwaysOn: false
 ---
-
 Deploy `$branch` to staging …
 ```
 
 ### Field reference
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `name` | string | directory name | Kebab-case identifier (`[a-z0-9][a-z0-9:_-]*`). Used as the dedup key across scopes. |
-| `description` | string | `""` | One-line summary shown in `/skills` and used by the model to decide when to invoke. |
-| `when_to_use` | string | — | Extended hint appended to the catalog entry seen by the model (`whenToUse` also accepted). |
-| `argument-hint` | string | — | Placeholder text shown in the `/skills` listing, e.g. `"<branch>"` (`argumentHint` also accepted). |
-| `arguments` | string[] | `[]` | Named argument list. Maps positional tokens to `$name` variables. |
-| `allowed-tools` | string[] | `[]` | Tools pre-authorized for the duration of this skill (`allowedTools` also accepted). Accepts the same pattern syntax as settings permissions (e.g. `Bash(git *)`). |
-| `disallowed-tools` | string[] | `[]` | Tools hard-denied for the duration of this skill, overriding global allow-all (`disallowedTools` also accepted). |
-| `disable-model-invocation` | bool | `false` | When `true`, the skill is hidden from the model's catalog and can only be invoked by the user manually via `/skill-name`. |
-| `user-invocable` | bool | `true` | When `false`, the skill is hidden from user command listings but remains available for model-driven invocation. |
-| `model` | string | session default | Override the model used when `context: fork`. |
-| `effort` | `low` \| `medium` \| `high` | — | Effort hint passed to the sub-agent when `context: fork`. |
-| `context` | `current` \| `fork` | `current` | `current` injects the skill body into the running conversation. `fork` runs it in an isolated sub-agent and returns the summary. |
-| `agent` | string | — | Sub-agent type to use when `context: fork` (e.g. `Explore`, `general-purpose`). |
-| `paths` | string[] | `[]` | Path restriction: skill is only invocable when `cwd` matches at least one pattern. Absolute patterns match as prefix; relative patterns match as a path segment. |
-| `shell` | string | `sh` | Interpreter for shell injection blocks (e.g. `bash`, `zsh`). |
-| `alwaysOn` | bool | `false` | When `true`, the skill body is inlined into every system prompt turn (`always-on` also accepted). No lazy loading — body is read at startup. |
+| Field                      | Type                        | Default         | Description                                                                                                                                                       |
+| -------------------------- | --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`                     | string                      | directory name  | Kebab-case identifier (`[a-z0-9][a-z0-9:_-]*`). Used as the dedup key across scopes.                                                                              |
+| `description`              | string                      | `""`            | One-line summary shown in `/skills` and used by the model to decide when to invoke.                                                                               |
+| `when_to_use`              | string                      | —               | Extended hint appended to the catalog entry seen by the model (`whenToUse` also accepted).                                                                        |
+| `argument-hint`            | string                      | —               | Placeholder text shown in the `/skills` listing, e.g. `"<branch>"` (`argumentHint` also accepted).                                                                |
+| `arguments`                | string[]                    | `[]`            | Named argument list. Maps positional tokens to `$name` variables.                                                                                                 |
+| `allowed-tools`            | string[]                    | `[]`            | Tools pre-authorized for the duration of this skill (`allowedTools` also accepted). Accepts the same pattern syntax as settings permissions (e.g. `Bash(git *)`). |
+| `disallowed-tools`         | string[]                    | `[]`            | Tools hard-denied for the duration of this skill, overriding global allow-all (`disallowedTools` also accepted).                                                  |
+| `disable-model-invocation` | bool                        | `false`         | When `true`, the skill is hidden from the model's catalog and can only be invoked by the user manually via `/skill-name`.                                         |
+| `user-invocable`           | bool                        | `true`          | When `false`, the skill is hidden from user command listings but remains available for model-driven invocation.                                                   |
+| `model`                    | string                      | session default | Override the model used when `context: fork`.                                                                                                                     |
+| `effort`                   | `low` \| `medium` \| `high` | —               | Effort hint passed to the sub-agent when `context: fork`.                                                                                                         |
+| `context`                  | `current` \| `fork`         | `current`       | `current` injects the skill body into the running conversation. `fork` runs it in an isolated sub-agent and returns the summary.                                  |
+| `agent`                    | string                      | —               | Sub-agent type to use when `context: fork` (e.g. `Explore`, `general-purpose`).                                                                                   |
+| `paths`                    | string[]                    | `[]`            | Path restriction: skill is only invocable when `cwd` matches at least one pattern. Absolute patterns match as prefix; relative patterns match as a path segment.  |
+| `shell`                    | string                      | `sh`            | Interpreter for shell injection blocks (e.g. `bash`, `zsh`).                                                                                                      |
+| `alwaysOn`                 | bool                        | `false`         | When `true`, the skill body is inlined into every system prompt turn (`always-on` also accepted). No lazy loading — body is read at startup.                      |
 
 ---
 
@@ -98,12 +97,12 @@ Deploy `$branch` to staging …
 
 Arguments passed after the skill name (e.g. `/deploy-staging main "my message"`) are available inside the skill body:
 
-| Syntax | Expands to |
-|---|---|
-| `$ARGUMENTS` | Full raw argument string |
-| `$ARGUMENTS[n]` | n-th positional token (0-indexed) |
-| `$0` … `$9` | Positional tokens 0–9 |
-| `$name` | Named argument (requires `arguments:` list) |
+| Syntax          | Expands to                                  |
+| --------------- | ------------------------------------------- |
+| `$ARGUMENTS`    | Full raw argument string                    |
+| `$ARGUMENTS[n]` | n-th positional token (0-indexed)           |
+| `$0` … `$9`     | Positional tokens 0–9                       |
+| `$name`         | Named argument (requires `arguments:` list) |
 
 Named arguments map by position: the first entry in `arguments` binds `$name` to `$0`, the second to `$1`, etc.
 
@@ -114,11 +113,13 @@ Named arguments map by position: the first entry in `arguments` binds `$name` to
 Skill bodies can embed live command output using `!` prefixed backtick syntax. Commands run at invocation time in the skill's `cwd`, not at load time.
 
 **Inline:**
+
 ```
 Current branch: !`git rev-parse --abbrev-ref HEAD`
 ```
 
 **Block:**
+
 ````
 Recent commits:
 !```
