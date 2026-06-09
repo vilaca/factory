@@ -89,11 +89,11 @@ describe('CopilotProvider', () => {
     const provider = new CopilotProvider({ token: 'test-token' });
     assert.deepStrictEqual(provider.getModelPickerInfo('gpt-4.1'), {
       label: 'gpt-4.1',
-      detail: 'tools · max 16.4k out',
+      detail: 'tools · 128k ctx · max 16.4k out',
     });
     assert.deepStrictEqual(provider.getModelPickerInfo('o4-mini'), {
       label: 'o4-mini',
-      detail: 'tools · max 8.2k out',
+      detail: 'tools · 128k ctx · max 8.2k out',
     });
   });
 

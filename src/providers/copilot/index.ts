@@ -64,9 +64,13 @@ export class CopilotProvider implements Provider {
 
   getModelPickerInfo(model: string): ModelPickerInfo {
     const caps = this.getCapabilities(model);
+    const details: string[] = [];
+    if (caps.toolSupport === 'native') details.push('tools');
+    details.push(`${formatTokenCount(caps.contextWindow)} ctx`);
+    details.push(`max ${formatTokenCount(caps.maxOutputTokens)} out`);
     return {
       label: model,
-      detail: `tools · max ${formatTokenCount(caps.maxOutputTokens)} out`,
+      detail: details.join(' · '),
     };
   }
 
