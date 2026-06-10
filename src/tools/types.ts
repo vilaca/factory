@@ -83,6 +83,12 @@ interface ToolSuccess extends ToolResultBase {
    * cleanly (so success stays true and auto-retry doesn't fire on every
    * failing test) but the user needs to see the exit code and output. */
   important?: boolean;
+  /** A user message to be added to the conversation AFTER the tool_result
+   * is committed. Used by invoke_skill to inject the skill system message
+   * without breaking the tool_use → tool_result adjacency requirement of
+   * the Anthropic/Copilot API. The executor applies this after recordResult
+   * so the sequence is always: tool_use → tool_result → user(injection). */
+  pendingUserMessage?: string;
   cwdAfter?: never;
   softError?: never;
   hardError?: never;
@@ -104,6 +110,10 @@ interface BashSuccess extends ToolResultBase {
    * agent loop reads this and updates the session's `refs.cwd` so the
    * new directory persists across subsequent tool calls. */
   cwdAfter?: string;
+  /** Inherited from ToolSuccess — see that interface for the contract.
+   * Present here so the executor's pendingUserMessage check compiles
+   * against the unified ExecutedToolResult type. */
+  pendingUserMessage?: string;
   softError?: never;
   hardError?: never;
   skipCorrector?: never;

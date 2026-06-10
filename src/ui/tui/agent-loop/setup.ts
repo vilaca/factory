@@ -165,12 +165,30 @@ export function mountSession(opts: UseAgentLoopOptions, ctx: MountContext): () =
     initialExperimental.skills ?? true,
     sessionLogger,
     ctx.addNotice,
-  ).then(reg => {
+  ).then(async reg => {
     if (!ctx.refs.current || !reg) return;
     ctx.refs.current.skills = reg;
-    if (reg.alwaysOnSection().length > 0) {
+
+    // Register invoke_skill tool now that we have the live registry + refs.
+    const { createInvokeSkillTool } = await import('../../../tools/invoke-skill.js');
+    const refs = ctx.refs.current;
+    const invokeCtx = {
+      registry: reg,
+      permissions: refs.permissions,
+      get cwd() {
+        return refs.cwd;
+      },
+      shellInjectionEnabled: refs.experimental.skills !== false,
+      injectSystemMessage: (text: string) => {
+        refs.conversation.addUser(`[System: ${text}]`);
+      },
+    };
+    refs.toolRegistry.register(createInvokeSkillTool(invokeCtx));
+
+    const needsPromptRebuild = reg.alwaysOnSection().length > 0 || reg.catalogSection().length > 0;
+    if (needsPromptRebuild) {
       const sp = ctx.composeSystemPrompt();
-      ctx.refs.current.conversation.updateSystemPrompt(sp);
+      refs.conversation.updateSystemPrompt(sp);
       sessionLogger?.logSystemPromptChange('skills-loaded');
       sessionLogger?.logSystemPrompt(sp);
     }

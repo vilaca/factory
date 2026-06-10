@@ -1,162 +1,235 @@
+import type { Dirent } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
-import os from 'os';
+import type { AgentConfig } from '../config/types.js';
+import { resolveScopes, findLegacyFlatSkills, type SkillScope } from './scopes.js';
 import { errorMessage } from '../../utils/errors.js';
 
 /**
- * One parsed skill ready for matching/injection. `sourcePath` is kept around
- * for diagnostic messages and for the `/skill <name>` slash command.
+ * Full skill record. Fields are populated in two phases:
+ *  - Phase 1 (metadata): everything except `body`. `metadataOnly` is true.
+ *  - Phase 2 (body): `loadSkillBody()` fills `body` and clears `metadataOnly`.
  */
 export interface Skill {
   name: string;
   description: string;
+  whenToUse?: string;
+  argumentHint?: string;
+  argumentNames: string[];
+  allowedTools: string[];
+  disallowedTools: string[];
+  disableModelInvocation: boolean;
+  userInvocable: boolean;
+  model?: string;
+  effort?: 'low' | 'medium' | 'high';
+  context: 'current' | 'fork';
+  agent?: string;
+  paths: string[];
+  shell?: string;
   alwaysOn: boolean;
-  /** Raw regex source strings from frontmatter (kept for diagnostics). */
-  triggers: string[];
-  /** Pre-compiled triggers — built once at load time so matcher.ts doesn't
-   *  re-compile per turn per skill. Optional so test fixtures can omit it;
-   *  production loader always populates it. */
-  triggerRegexes?: RegExp[];
-  /** Tool names; when set, only inject when one was used recently. */
-  tools: string[];
-  body: string;
-  sourcePath: string;
-  /** "global" or "project". Project shadows global by skill name. */
-  scope: 'global' | 'project';
+  scope: 'enterprise' | 'personal' | 'project' | 'plugin';
+  pluginName?: string;
+  /** Absolute path to the directory containing SKILL.md. */
+  sourceDir: string;
+  metadataOnly: boolean;
+  body?: string;
 }
 
-interface SkillLoadResult {
+export interface SkillLoadResult {
   skills: Skill[];
-  /** One per malformed/skipped file, surfaced via the session log. */
   warnings: string[];
 }
 
-const SKILLS_SUBDIR = path.join('.factory', 'skills');
+const SKILL_FILE = 'SKILL.md';
 
 /**
- * Load skills from `~/.factory/skills/*.md` (global) and `<cwd>/.factory/skills/*.md`
- * (project). Project entries override global entries that share the same `name`.
- * Malformed files are skipped — they accumulate as warnings instead of throwing,
- * since one bad file shouldn't kill startup.
+ * Load skills from all configured scopes. Project < Personal < Enterprise
+ * (enterprise wins on name collision). Plugin skills are namespaced and
+ * never collide with the three user scopes.
  */
-export async function loadSkills(cwd: string): Promise<SkillLoadResult> {
+export async function loadSkills(cwd: string, config?: AgentConfig): Promise<SkillLoadResult> {
   const warnings: string[] = [];
-  const globalDir = path.join(os.homedir(), SKILLS_SUBDIR);
-  const projectDir = path.join(cwd, SKILLS_SUBDIR);
+  const scopes = await resolveScopes(cwd, config);
 
-  const [globalSkills, projectSkills] = await Promise.all([
-    loadSkillsFromDir(globalDir, 'global', warnings),
-    loadSkillsFromDir(projectDir, 'project', warnings),
-  ]);
+  // Check for legacy flat files and warn.
+  for (const scope of scopes) {
+    const legacy = await findLegacyFlatSkills(scope);
+    for (const file of legacy) {
+      const base = path.basename(file, '.md');
+      const dir = path.dirname(file);
+      warnings.push(
+        `"${file}" is a flat skill file — directory-per-skill layout required. ` +
+          `Run: mkdir -p "${path.join(dir, base)}" && mv "${file}" "${path.join(dir, base, SKILL_FILE)}"`,
+      );
+    }
+  }
 
-  // Project overrides global by name. Build a map seeded from globals, then
-  // overwrite with project entries.
+  // Build a map in precedence order: project → personal → enterprise.
+  // Each successive scope overwrites the previous for the same name.
+  // Plugins are namespaced so they never overwrite.
   const byName = new Map<string, Skill>();
-  for (const s of globalSkills) byName.set(s.name, s);
-  for (const s of projectSkills) byName.set(s.name, s);
+
+  for (const scope of scopes) {
+    const { skills, warnings: sw } = await loadSkillsFromScope(scope);
+    for (const w of sw) warnings.push(w);
+    for (const skill of skills) {
+      byName.set(skill.name, skill);
+    }
+  }
 
   return { skills: [...byName.values()], warnings };
 }
 
-async function loadSkillsFromDir(
-  dir: string,
-  scope: 'global' | 'project',
-  warnings: string[],
-): Promise<Skill[]> {
-  let entries: string[];
+async function loadSkillsFromScope(
+  scope: SkillScope,
+): Promise<{ skills: Skill[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  let entries: Dirent[];
   try {
-    entries = await fs.readdir(dir);
+    entries = await fs.readdir(scope.root, { withFileTypes: true });
   } catch {
-    return [];
+    return { skills: [], warnings };
   }
-  const mdEntries = entries.filter(e => e.endsWith('.md'));
-  const reads = await Promise.all(
-    mdEntries.map(async entry => {
-      const filePath = path.join(dir, entry);
+
+  const skillDirs = entries.filter(e => e.isDirectory());
+  const results = await Promise.all(
+    skillDirs.map(async entry => {
+      const dir = path.join(scope.root, entry.name);
+      const skillFile = path.join(dir, SKILL_FILE);
+      let raw: string;
       try {
-        return { filePath, raw: await fs.readFile(filePath, 'utf-8') };
+        raw = await fs.readFile(skillFile, 'utf-8');
       } catch {
+        return null; // No SKILL.md — silently skip (non-skill dir).
+      }
+      try {
+        return loadSkillMetadata(raw, dir, scope);
+      } catch (err) {
+        warnings.push(`${skillFile}: ${errorMessage(err)}`);
         return null;
       }
     }),
   );
-  const out: Skill[] = [];
-  for (const r of reads) {
-    if (!r) continue;
-    try {
-      const skill = parseSkillFile(r.raw, r.filePath, scope);
-      if (skill) out.push(skill);
-    } catch (err: unknown) {
-      warnings.push(`${r.filePath}: ${errorMessage(err)}`);
-    }
+
+  const skills: Skill[] = [];
+  for (const r of results) {
+    if (r) skills.push(r);
   }
-  return out;
+  return { skills, warnings };
 }
 
 /**
- * Split a skill markdown file into frontmatter + body, parse the
- * frontmatter, validate the schema, return a Skill (or throw).
+ * Parse frontmatter only — body is intentionally discarded. The registry
+ * holds metadata-only skills; call `loadSkillBody()` to populate the body
+ * on first invocation.
  */
-export function parseSkillFile(
-  raw: string,
-  sourcePath: string,
-  scope: 'global' | 'project',
-): Skill | null {
+export function loadSkillMetadata(raw: string, sourceDir: string, scope: SkillScope): Skill {
   const split = splitFrontmatter(raw);
   if (!split) {
     throw new Error('missing YAML frontmatter (expected file to start with ---)');
   }
   const fm = parseFrontmatter(split.frontmatter);
-
-  const name = fm.name;
-  if (typeof name !== 'string' || !name) {
-    throw new Error('"name" is required and must be a string');
-  }
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
-    throw new Error(`"name" must be kebab-case (got "${name}")`);
-  }
-  const description = fm.description;
-  if (typeof description !== 'string' || !description) {
-    throw new Error('"description" is required and must be a string');
-  }
-
-  const alwaysOn = fm.alwaysOn ?? false;
-  if (typeof alwaysOn !== 'boolean') {
-    throw new Error('"alwaysOn" must be a boolean');
-  }
-
-  const triggers = fm.triggers ?? [];
-  if (!Array.isArray(triggers) || !triggers.every(t => typeof t === 'string')) {
-    throw new Error('"triggers" must be an array of strings');
-  }
-  // Compile + validate triggers upfront so a bad pattern is caught at load
-  // time and the per-turn matcher.ts doesn't have to re-compile per skill.
-  const triggerRegexes: RegExp[] = [];
-  for (const t of triggers as string[]) {
-    try {
-      triggerRegexes.push(new RegExp(t, 'i'));
-    } catch (e: unknown) {
-      throw new Error(`invalid regex in "triggers": ${t} (${errorMessage(e)})`);
-    }
-  }
-
-  const tools = fm.tools ?? [];
-  if (!Array.isArray(tools) || !tools.every(t => typeof t === 'string')) {
-    throw new Error('"tools" must be an array of strings');
-  }
+  const name = resolveSkillName(fm, sourceDir, scope);
+  const fields = parseSkillFields(fm);
+  const scopeKind = scope.kind;
+  const pluginName = scope.kind === 'plugin' ? scope.pluginName : undefined;
 
   return {
     name,
-    description,
-    alwaysOn,
-    triggers: triggers as string[],
-    triggerRegexes,
-    tools: tools as string[],
-    body: split.body.trim(),
-    sourcePath,
-    scope,
+    ...fields,
+    scope: scopeKind,
+    ...(pluginName !== undefined ? { pluginName } : {}),
+    sourceDir,
+    metadataOnly: true,
   };
 }
+
+function resolveSkillName(
+  fm: Record<string, FmValue>,
+  sourceDir: string,
+  scope: SkillScope,
+): string {
+  const rawName = (fm['name'] as string | undefined) ?? path.basename(sourceDir);
+  const name =
+    scope.kind === 'plugin' && scope.pluginName ? `${scope.pluginName}:${rawName}` : rawName;
+  if (!/^[a-z0-9][a-z0-9:_-]*$/.test(name)) {
+    throw new Error(`skill name must be kebab-case (got "${name}")`);
+  }
+  return name;
+}
+
+type SkillFields = Omit<
+  Skill,
+  'name' | 'scope' | 'pluginName' | 'sourceDir' | 'metadataOnly' | 'body'
+>;
+
+function parseSkillFields(fm: Record<string, FmValue>): SkillFields {
+  const description = getString(fm, 'description') ?? '';
+  const whenToUse = getOptionalString(fm, 'when_to_use') ?? getOptionalString(fm, 'whenToUse');
+  const argumentHint =
+    getOptionalString(fm, 'argument-hint') ?? getOptionalString(fm, 'argumentHint');
+  const argumentNames = getStringArray(fm, 'arguments') ?? [];
+  const allowedTools =
+    getStringArray(fm, 'allowed-tools') ?? getStringArray(fm, 'allowedTools') ?? [];
+  const disallowedTools =
+    getStringArray(fm, 'disallowed-tools') ?? getStringArray(fm, 'disallowedTools') ?? [];
+  const disableModelInvocation = getBoolean(fm, 'disable-model-invocation') ?? false;
+  const userInvocable = getBoolean(fm, 'user-invocable') ?? true;
+  const model = getOptionalString(fm, 'model');
+  const effort = parseEffort(getOptionalString(fm, 'effort'));
+  const context = parseContext(getOptionalString(fm, 'context') ?? 'current');
+  const agent = getOptionalString(fm, 'agent');
+  const paths = getStringArray(fm, 'paths') ?? [];
+  const shell = getOptionalString(fm, 'shell');
+  const alwaysOn = getBoolean(fm, 'alwaysOn') ?? getBoolean(fm, 'always-on') ?? false;
+
+  return {
+    description,
+    ...(whenToUse !== undefined ? { whenToUse } : {}),
+    ...(argumentHint !== undefined ? { argumentHint } : {}),
+    argumentNames,
+    allowedTools,
+    disallowedTools,
+    disableModelInvocation,
+    userInvocable,
+    ...(model !== undefined ? { model } : {}),
+    ...(effort !== undefined ? { effort } : {}),
+    context,
+    ...(agent !== undefined ? { agent } : {}),
+    paths,
+    ...(shell !== undefined ? { shell } : {}),
+    alwaysOn,
+  };
+}
+
+function parseEffort(raw: string | undefined): 'low' | 'medium' | 'high' | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === 'low' || raw === 'medium' || raw === 'high') return raw;
+  throw new Error(`"effort" must be "low", "medium", or "high" (got "${raw}")`);
+}
+
+function parseContext(raw: string): 'current' | 'fork' {
+  if (raw === 'current' || raw === 'fork') return raw;
+  throw new Error(`"context" must be "current" or "fork" (got "${raw}")`);
+}
+
+/**
+ * Read and return the body of a skill. Caches by storing `body` on the
+ * skill record and clearing `metadataOnly`. Safe to call multiple times —
+ * subsequent calls return the cached body immediately.
+ */
+export async function loadSkillBody(skill: Skill): Promise<string> {
+  if (!skill.metadataOnly && skill.body !== undefined) return skill.body;
+  const skillFile = path.join(skill.sourceDir, SKILL_FILE);
+  const raw = await fs.readFile(skillFile, 'utf-8');
+  const split = splitFrontmatter(raw);
+  const body = split ? split.body.trim() : raw.trim();
+  skill.body = body;
+  skill.metadataOnly = false;
+  return body;
+}
+
+// ---------- Frontmatter split + parser ----------
 
 interface Split {
   frontmatter: string;
@@ -164,7 +237,6 @@ interface Split {
 }
 
 function splitFrontmatter(raw: string): Split | null {
-  // Allow optional BOM and leading whitespace; require --- on its own line at the top.
   const text = raw.replace(/^﻿/, '');
   if (!/^---\s*\r?\n/.test(text)) return null;
   const afterFirst = text.replace(/^---\s*\r?\n/, '');
@@ -178,9 +250,10 @@ function splitFrontmatter(raw: string): Split | null {
 type FmValue = string | boolean | string[];
 
 /**
- * Tiny YAML-ish parser. We intentionally don't depend on a real YAML library
- * because the skill schema is small: scalar strings, booleans, and string
- * arrays (block list with `- ` or inline `[a, b]`). Anything else throws.
+ * Tiny YAML-ish parser. No external dep — same intentional constraint as
+ * the original. Supports scalars, booleans, inline arrays `[a, b]`, and
+ * block lists `- item`. Extends the original to allow hyphens in keys
+ * (needed for `allowed-tools`, `disable-model-invocation`, etc.).
  */
 export function parseFrontmatter(text: string): Record<string, FmValue> {
   const out: Record<string, FmValue> = {};
@@ -192,7 +265,8 @@ export function parseFrontmatter(text: string): Record<string, FmValue> {
       i++;
       continue;
     }
-    const m = /^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
+    // Allow hyphens in key names (e.g. `allowed-tools`, `when_to_use`).
+    const m = /^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
     if (!m) {
       throw new Error(`malformed frontmatter line: "${line}"`);
     }
@@ -200,14 +274,12 @@ export function parseFrontmatter(text: string): Record<string, FmValue> {
     const rest = m[2];
 
     if (rest === '' || rest === undefined) {
-      // Block list expected on following lines, indented with `- `.
       const list: string[] = [];
       i++;
       while (i < lines.length) {
         const next = lines[i]!;
         if (/^\s*-\s+/.test(next)) {
-          const value = next.replace(/^\s*-\s+/, '');
-          list.push(parseScalar(value));
+          list.push(parseScalar(next.replace(/^\s*-\s+/, '')));
           i++;
         } else if (next.trim() === '') {
           i++;
@@ -248,8 +320,7 @@ function parseScalar(raw: string): string {
   ) {
     const inner = trimmed.slice(1, -1);
     if (trimmed.startsWith('"')) {
-      // Minimal escape handling — \\, \", \n, \t. Anything else passes through.
-      return inner.replace(/\\(["\\nt])/g, (_, c) => {
+      return inner.replace(/\\(["\\nt])/g, (_, c: string) => {
         if (c === 'n') return '\n';
         if (c === 't') return '\t';
         return c;
@@ -283,4 +354,31 @@ function splitTopLevelCommas(s: string): string[] {
   }
   if (buf.length > 0 || parts.length > 0) parts.push(buf);
   return parts;
+}
+
+// ---------- Typed field accessors ----------
+
+function getString(fm: Record<string, FmValue>, key: string): string | undefined {
+  const v = fm[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string') throw new Error(`"${key}" must be a string`);
+  return v;
+}
+
+function getOptionalString(fm: Record<string, FmValue>, key: string): string | undefined {
+  return getString(fm, key);
+}
+
+function getBoolean(fm: Record<string, FmValue>, key: string): boolean | undefined {
+  const v = fm[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'boolean') throw new Error(`"${key}" must be a boolean`);
+  return v;
+}
+
+function getStringArray(fm: Record<string, FmValue>, key: string): string[] | undefined {
+  const v = fm[key];
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v)) throw new Error(`"${key}" must be an array of strings`);
+  return v as string[];
 }

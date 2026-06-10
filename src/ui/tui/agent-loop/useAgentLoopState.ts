@@ -148,6 +148,7 @@ export function useAgentLoopState(opts: UseAgentLoopOptions): AgentLoopStateStor
       subagents: refs.current.experimental.subagents ?? false,
       gitDirty: refs.current.gitDirty,
       alwaysOnSkills: refs.current.skills?.alwaysOnSection() ?? '',
+      skillCatalog: refs.current.skills?.catalogSection() ?? '',
       scopedProjectInstructions: refs.current.scopedProjectInstructions,
     });
   }

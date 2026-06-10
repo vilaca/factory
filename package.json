@@ -37,6 +37,7 @@
   "scripts": {
     "build": "tsc",
     "build:test": "tsc -p tsconfig.test.json",
+    "check:types": "tsc -p tsconfig.test.json --noEmit",
     "clean": "rm -rf dist dist-test *.tsbuildinfo",
     "check-circular": "npx -y madge -c src",
     "knip": "knip --exclude dependencies,binaries",

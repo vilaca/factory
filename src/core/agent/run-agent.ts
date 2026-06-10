@@ -46,7 +46,9 @@ export async function* runAgent(
     return;
   }
 
-  conversation.addUser(userInput);
+  if (userInput) {
+    conversation.addUser(userInput);
+  }
 
   let turnsUsed = 0;
   let lastUsage: TokenUsage | undefined;

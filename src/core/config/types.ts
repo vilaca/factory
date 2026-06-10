@@ -2,6 +2,16 @@ import type { McpServerConfig } from '../../mcp/types.js';
 
 export type GoogleAiStudioAuthMode = 'api-key' | 'oauth';
 
+/** One plugin that may contribute skills, hooks, and MCP integrations. */
+export interface PluginConfig {
+  /** Canonical plugin name — used as the namespace prefix for plugin skills
+   *  (e.g. `"official:code-review"` maps to skill `official:code-review:review`). */
+  name: string;
+  /** Absolute path to the plugin installation root. Skills are expected at
+   *  `<root>/skills/`. */
+  root: string;
+}
+
 export interface AgentConfig {
   compactionThreshold?: number;
   recencyWindow?: number;
@@ -34,6 +44,13 @@ export interface AgentConfig {
    *  cwd; the JSON event payload arrives on stdin and the hook may write
    *  a JSON object back on stdout. See README "Hooks". */
   hooks?: HooksConfig;
+  /** Enterprise-wide skill directory. Overrides personal + project skills
+   *  when present. Can also be set via FACTORY_ENTERPRISE_SKILLS_DIR env. */
+  enterprise?: {
+    skillsDir?: string;
+  };
+  /** Plugin registrations that may contribute skills and other assets. */
+  plugins?: PluginConfig[];
 }
 
 export interface HookEntry {

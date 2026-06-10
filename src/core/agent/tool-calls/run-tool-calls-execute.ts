@@ -307,6 +307,14 @@ async function* executeAndEmit(
     if (result.success && ctx.stepEnforcer) {
       ctx.stepEnforcer.record(tool.name, args);
     }
+    // Apply any pending user message AFTER the tool_result is committed so
+    // the conversation sequence stays tool_use → tool_result → user(msg).
+    // This keeps the Anthropic/Copilot API requirement that tool_result
+    // immediately follows tool_use. Currently used by invoke_skill to
+    // inject the skill system message without violating that constraint.
+    if (result.success && result.pendingUserMessage) {
+      ctx.conversation.addUser(result.pendingUserMessage);
+    }
     yield { type: 'tool-call-result', toolName: tool.name, args, result };
   } catch (err: unknown) {
     // Reliability stack (Phase 6): ToolResolutionError is the

@@ -16,6 +16,8 @@ export class PermissionManager {
    *  tool overall; it just suppresses the prompt for matching URLs. */
   private allowedDomains: Set<string> = new Set();
   private bashRules: BashRule[] = [];
+  /** Stack of disallowed-tool sets pushed by skill permission scopes. */
+  private disallowedScopeStack: Set<string>[] = [];
 
   isAutoAllowed(toolName: string): boolean {
     return this.allowedTools.has(toolName.toLowerCase());
@@ -23,6 +25,28 @@ export class PermissionManager {
 
   allowAll(toolName: string): void {
     this.allowedTools.add(toolName.toLowerCase());
+  }
+
+  /** Remove a previously-added allow-all entry. Used by skill scope pop. */
+  revokeAllowed(toolName: string): void {
+    this.allowedTools.delete(toolName.toLowerCase());
+  }
+
+  /** Push a set of tool names that are denied for the duration of a skill
+   *  invocation. Stacks — nested pushes each add a frame. */
+  pushDisallowedScope(toolNames: string[]): void {
+    this.disallowedScopeStack.push(new Set(toolNames.map(t => t.toLowerCase())));
+  }
+
+  /** Remove the most-recently-pushed disallowed scope frame. */
+  popDisallowedScope(): void {
+    this.disallowedScopeStack.pop();
+  }
+
+  /** True when `toolName` is explicitly denied by any active skill scope. */
+  isScopeDenied(toolName: string): boolean {
+    const lower = toolName.toLowerCase();
+    return this.disallowedScopeStack.some(s => s.has(lower));
   }
 
   /** True when `hostname` is in the per-session WebFetch whitelist.
@@ -45,6 +69,7 @@ export class PermissionManager {
   reset(): void {
     this.allowedTools.clear();
     this.allowedDomains.clear();
+    this.disallowedScopeStack = [];
     // bashRules are policy, not session permissions, and persist across
     // reset(). They're cleared explicitly via clearBashRules() or by
     // re-loading from config.
@@ -74,6 +99,9 @@ export class PermissionManager {
    * then fall back to allow-all / prompt.
    */
   evaluateBashCommand(command: string): PermissionEvaluation {
+    if (this.isScopeDenied(TOOL_NAMES.Bash)) {
+      return { kind: 'deny', reason: 'disallowed by active skill scope', source: 'skill-scope' };
+    }
     const evalResult: BashEvaluation = evaluateBash(command, this.bashRules);
     if (evalResult.decision === 'deny') {
       return { kind: 'deny', reason: evalResult.reason ?? 'denied', source: evalResult.source };
@@ -94,6 +122,9 @@ export class PermissionManager {
    * execute() so denial happens at the I/O boundary regardless of caller.
    */
   evaluateTool(toolName: string): PermissionEvaluation {
+    if (this.isScopeDenied(toolName)) {
+      return { kind: 'deny', reason: 'disallowed by active skill scope', source: 'skill-scope' };
+    }
     if (this.isAutoAllowed(toolName)) {
       return { kind: 'allow', source: 'allow-all' };
     }

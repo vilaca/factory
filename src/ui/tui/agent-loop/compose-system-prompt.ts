@@ -16,6 +16,8 @@ interface SystemPromptParts {
   gitDirty: boolean | null;
   /** Pre-rendered alwaysOn skills section, or empty string. */
   alwaysOnSkills?: string;
+  /** Skill catalog (name + description + when_to_use) for model-driven invocation. */
+  skillCatalog?: string;
   /** Directory-scoped AGENTS/CLAUDE/.cursorrules discovered at runtime. */
   scopedProjectInstructions?: string | null;
 }
@@ -31,5 +33,6 @@ export function composeSystemPrompt(p: SystemPromptParts): string {
   const scoped = getScopedProjectInstructionsPrompt(p.scopedProjectInstructions ?? null);
   if (scoped) parts.push(scoped);
   if (p.alwaysOnSkills && p.alwaysOnSkills.trim().length > 0) parts.push(p.alwaysOnSkills);
+  if (p.skillCatalog && p.skillCatalog.trim().length > 0) parts.push(p.skillCatalog);
   return parts.join('\n\n');
 }

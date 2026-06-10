@@ -45,17 +45,18 @@ Preserve existing architecture and patterns unless the task explicitly requires 
 Before declaring any task complete, all of the following must pass:
 
 ```bash
-npx tsc --noEmit          # type check
-npm run lint              # eslint
-npm run test:unit         # fast (~6s), runs arch/modularity checks too
-npm run knip              # check for unused files/exports/dependencies
-npm run format:check      # check code formatting
+npm run check:types                   # type check src/ and test/
+npm run lint                          # eslint
+npm run test:unit                     # fast (~16s), runs arch/modularity checks too
+npm run knip                          # check for unused files/exports/dependencies
+npm run check-circular                # check for circular dependencies
+npm run format:check                  # check code formatting
 ```
 
 For changes that touch the agent loop, tools, or e2e flows, also run:
 
 ```bash
-npm run test:e2e          # requires a clean build first (tsc runs inside)
+npm run test:e2e                      # requires a clean build first (tsc runs inside)
 ```
 
 Coverage is gated at 60% lines / 75% branches / 83% functions. If you add new code, add tests.

@@ -1,21 +1,21 @@
 import type { Skill } from './loader.js';
 import { loadSkills } from './loader.js';
-import { shouldInjectSkill, type MatchContext } from './matcher.js';
 
 export { loadSkills };
 
 /**
- * In-memory registry created once per session. Owns the list of loaded skills,
- * keeps track of which conditional skills have already been injected so a
- * trigger that fires twice in a row doesn't double-inject the same body, and
- * exposes the per-turn evaluation entry point.
+ * In-memory registry created once per session. Holds metadata-only Skill
+ * records; bodies are loaded lazily on first invocation via `loadSkillBody`.
+ *
+ * The old regex-trigger evaluate() path is retired — skill activation is
+ * now model-driven via the `invoke_skill` tool. The registry's job is to:
+ *  - hold the loaded skill catalog
+ *  - expose it for system-prompt catalog injection
+ *  - service `find()` calls from slash dispatch and invoke.ts
+ *  - produce the `alwaysOnSection()` that is inlined into the system prompt
  */
 export class SkillsRegistry {
   private readonly skills: Skill[];
-  private readonly recentToolNames: string[] = [];
-  private readonly RECENT_TOOL_WINDOW = 5;
-  /** Last body injected per skill — used to suppress immediate-repeat injections. */
-  private readonly lastInjectedBody = new Map<string, string>();
 
   constructor(skills: Skill[]) {
     this.skills = skills;
@@ -31,52 +31,47 @@ export class SkillsRegistry {
   }
 
   /**
-   * Concatenated bodies of every alwaysOn skill, joined by blank lines, ready
-   * to be appended under a `## Skills` heading in the system prompt.
+   * Catalog section injected into the system prompt for all skills where
+   * `!disableModelInvocation`. Each line is:
+   *   - <name> — <description>[. Use when: <when_to_use>]
+   * The model reads this and calls `invoke_skill` when appropriate.
+   */
+  catalogSection(): string {
+    const visible = this.skills.filter(s => !s.disableModelInvocation);
+    if (visible.length === 0) return '';
+    const lines = visible.map(s => {
+      const base = `- ${s.name} — ${s.description}`;
+      return s.whenToUse ? `${base}. Use when: ${s.whenToUse}` : base;
+    });
+    return `## Skills\n\nYou have access to the following skills. Invoke them with the \`invoke_skill\` tool when the user's request matches.\n\n${lines.join('\n')}`;
+  }
+
+  /**
+   * Concatenated bodies of every alwaysOn skill, joined by blank lines,
+   * ready to be appended under a `## Skills (always-on)` heading in the
+   * system prompt. These skills are inlined verbatim so they're always
+   * in context — lazy loading doesn't apply to them.
    */
   alwaysOnSection(): string {
-    const on = this.skills.filter(s => s.alwaysOn);
+    const on = this.skills.filter(s => s.alwaysOn && s.body !== undefined);
     if (on.length === 0) return '';
     const parts = on.map(s => `### ${s.name}\n${s.body}`);
-    return `## Skills\n${parts.join('\n\n')}`;
+    return `## Skills (always-on)\n${parts.join('\n\n')}`;
   }
 
-  /**
-   * Track a tool used during the turn. We keep a rolling window so triggers
-   * with `tools:` constraints can intersect against the recent-call history.
-   */
-  recordToolUsed(name: string): void {
-    this.recentToolNames.push(name);
-    if (this.recentToolNames.length > this.RECENT_TOOL_WINDOW) {
-      this.recentToolNames.shift();
-    }
+  /** @deprecated — no-op stub kept so any external callers don't crash
+   *  while the transition lands. Remove once all callers are migrated. */
+  recordToolUsed(_name: string): void {
+    // model-driven path: tool tracking is no longer needed
   }
 
-  /**
-   * Evaluate every conditional skill and return the bodies that should be
-   * injected this turn. De-duplicates against the previous injection so a
-   * skill firing twice in succession isn't injected twice.
-   */
-  evaluate(userMessage: string): { skill: Skill; body: string }[] {
-    const ctx: MatchContext = { userMessage, recentToolNames: [...this.recentToolNames] };
-    const out: { skill: Skill; body: string }[] = [];
-    for (const skill of this.skills) {
-      if (!shouldInjectSkill(skill, ctx)) continue;
-      const previous = this.lastInjectedBody.get(skill.name);
-      if (previous === skill.body) continue;
-      this.lastInjectedBody.set(skill.name, skill.body);
-      out.push({ skill, body: skill.body });
-    }
-    return out;
+  /** @deprecated — returns [] always; model-driven path replaces this. */
+  evaluate(_userMessage: string): { skill: Skill; body: string }[] {
+    return [];
   }
 
-  /**
-   * Format the matched bodies as one consolidated system message. Returns
-   * empty string when nothing matched.
-   */
-  formatInjection(matches: { skill: Skill; body: string }[]): string {
-    if (matches.length === 0) return '';
-    const parts = matches.map(m => `### ${m.skill.name}\n${m.body}`);
-    return `## Skills (auto-injected)\n${parts.join('\n\n')}`;
+  /** @deprecated — returns '' always. */
+  formatInjection(_matches: { skill: Skill; body: string }[]): string {
+    return '';
   }
 }
