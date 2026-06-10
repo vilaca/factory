@@ -404,18 +404,26 @@ export async function runAgentLoopInternal(userInput: string, deps: AgentLoopDep
 export async function processInput(trimmed: string, deps: AgentLoopDeps): Promise<void> {
   if (!deps.refs.current) return;
 
-  deps.refs.current.sessionLogger?.logUserInput(trimmed);
-  deps.addItem({ kind: 'user-input', id: deps.nextId(), text: trimmed });
+  // Synthetic system messages (e.g. injected skill content) are not real user
+  // input: skip the display bubble, session log, substantive-prompt tracking,
+  // and conditional skill evaluation. The content still flows into the
+  // conversation via runAgent(userInput) → conversation.addUser(), which now
+  // runs AFTER harness reads so the ordering is correct.
+  const isSyntheticSystem = trimmed.startsWith('[System:');
 
-  if (isSubstantivePrompt(trimmed)) {
-    deps.refs.current.lastSubstantivePrompt = trimmed;
+  if (!isSyntheticSystem) {
+    deps.refs.current.sessionLogger?.logUserInput(trimmed);
+    if (trimmed) {
+      deps.addItem({ kind: 'user-input', id: deps.nextId(), text: trimmed });
+    }
+    if (isSubstantivePrompt(trimmed)) {
+      deps.refs.current.lastSubstantivePrompt = trimmed;
+    }
   }
 
-  // Evaluate conditional skills against the new prompt and inject any
-  // matched bodies as a single synthetic system message. Goes in *before*
-  // the user prompt so the model sees the skill context first.
+  // Evaluate conditional skills against real user prompts only.
   const skills = deps.refs.current.skills;
-  if (skills) {
+  if (skills && !isSyntheticSystem) {
     const matches = skills.evaluate(trimmed);
     const text = skills.formatInjection(matches);
     if (text) {

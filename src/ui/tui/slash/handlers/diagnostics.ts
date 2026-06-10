@@ -90,7 +90,7 @@ export function handleSkillsList(agent: AgentLoopApi): void {
   if (skills.length === 0) {
     agent.addNotice(
       'info',
-      'No skills loaded. Drop .md files into .factory/skills/ (project) or ~/.factory/skills/ (global).',
+      'No skills loaded. Add SKILL.md files to .factory/skills/<name>/SKILL.md (project) or ~/.factory/skills/<name>/SKILL.md (personal).',
     );
     return;
   }
@@ -98,16 +98,12 @@ export function handleSkillsList(agent: AgentLoopApi): void {
     { level: 'cyan', text: `Loaded skills (${skills.length}):` },
   ];
   for (const s of skills) {
-    const flags = [
-      s.alwaysOn ? 'always-on' : null,
-      s.triggers.length > 0
-        ? `${s.triggers.length} trigger${s.triggers.length === 1 ? '' : 's'}`
-        : null,
-      s.tools.length > 0 ? `tools=[${s.tools.join(',')}]` : null,
-      s.scope,
-    ]
-      .filter(Boolean)
-      .join(', ');
+    const visibility = s.disableModelInvocation
+      ? 'user-only'
+      : s.userInvocable
+        ? 'user+model'
+        : 'model-only';
+    const flags = [s.alwaysOn ? 'always-on' : null, s.scope, visibility].filter(Boolean).join(', ');
     lines.push({ level: 'cyan', text: `  ${s.name}` });
     lines.push({ level: 'info', text: `    ${s.description}` });
     lines.push({ level: 'info', text: `    [${flags}]` });
@@ -137,11 +133,15 @@ export function handleSkillShow(agent: AgentLoopApi, arg: string): void {
     { level: 'cyan', text: `${skill.name} — ${skill.description}` },
     {
       level: 'info',
-      text: `(source: ${skill.sourcePath}, scope: ${skill.scope}, alwaysOn: ${skill.alwaysOn})`,
+      text: `(source: ${skill.sourceDir}, scope: ${skill.scope}, alwaysOn: ${skill.alwaysOn})`,
     },
   ];
-  for (const line of skill.body.split('\n')) {
-    lines.push({ level: 'info', text: line });
+  if (skill.body !== undefined) {
+    for (const line of skill.body.split('\n')) {
+      lines.push({ level: 'info', text: line });
+    }
+  } else {
+    lines.push({ level: 'info', text: '(body not yet loaded — invoke the skill to load it)' });
   }
   agent.addNoticeBlock(lines);
 }
