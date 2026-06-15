@@ -33,15 +33,20 @@ Enforce one-way dependency flow and prohibit layer skipping.
 
 - `src/core/**` must not depend on `src/ui/**` or `src/cli/**`.
 - `src/core/**` must not depend on concrete provider/tool implementations (only seam files — see B).
+- `src/core/**` may reach `src/tools/**` only through `src/tools/host.ts` (the `ToolHost` seam).
+- `src/tools/**` must not depend on `src/core/**`, except for the orchestration tools `src/tools/delegate.ts` and `src/tools/invoke-skill.ts` (façades over core capabilities; tracked exception, exit condition documented in the test).
+- `src/tools/**` must not depend on `src/ui/**` (system never imports UI — UI consumes the `AgentEvent` stream).
 - `src/security/**` must stay primitive (no dependency on sibling top-level layers).
 - `src/providers/**` must not depend on `src/ui/**`, `src/tools/**`, `src/core/**`, `src/mcp/**`, `src/cli/**`.
+- `src/providers/**` must not import `node:fs`. Allowlisted: `copilot/auth.ts` and `googleaistudio/auth.ts` (on-disk auth-token readers for external CLIs).
 - `src/ui/**` must not depend on `src/mcp/**`.
 - `src/ui/**` must not import concrete provider implementations (only seam files — see B).
 - `src/ui/**` must not import concrete tool handler files (only seam files — see B).
 - `src/ui/headless.ts` must not depend on `src/ui/tui/**`.
 - `src/utils/**` must not depend on any sibling top-level folder.
+- `src/index.ts` is a thin bootstrap (≤30 non-trivial lines, no imports from `src/{core,providers,tools,mcp,security}/**`). Cross-layer wiring lives in `src/cli/startup/main.ts` and the phase helpers it composes.
 
-These are currently enforced in `modularity.test.ts` and should remain enforced.
+These are enforced in `test/unit/arch/layers.test.ts` and should remain enforced.
 
 ---
 
@@ -51,7 +56,8 @@ Only stable seams are allowed across boundaries.
 
 #### Required constraints
 
-- Cross-layer imports must go through declared seam files. The canonical seam sets per boundary are defined in `modularity.test.ts` (the `except:` arrays in the relevant rules). Changing a seam set is an architecture change; update both the test and this section together.
+- Cross-layer imports must go through declared seam files. The canonical seam sets per boundary are defined in `test/unit/arch/boundary-surfaces.test.ts` (and the `except:` arrays in `layers.test.ts`). Changing a seam set is an architecture change; update both the test and this section together.
+- `src/tools/host.ts` is the sole seam between `src/core/**` and `src/tools/**`. It surfaces the `ToolHost` interface plus the type re-exports core needs (`ToolHandler`, `ToolResult`, `ToolContext`, `ToolDefinition`, `TOOL_NAMES`, `ToolResolutionError`).
 - `src/providers/openai/**` is an internal adapter — only files within `src/providers/**` may import from it.
 - `@modelcontextprotocol/sdk` imports are confined to `src/mcp/client.ts` and `src/mcp/adapter.ts`.
 
@@ -77,6 +83,8 @@ Keep side effects behind intended layers.
 - UI must not import network SDKs directly.
 - UI must not import Node networking/child-process modules directly.
 - `console.*` usage is restricted to files that run before the TUI mounts (startup and MCP connection surface). The canonical allowlist is in the `console.*` rule in `modularity.test.ts`; additions require the same pre-TUI justification documented there.
+- `process.stdout.write` / `process.stderr.write` (and `cork`/`uncork`) follow the same boundary as `console.*` — the canonical allowlist is in `io-boundaries.test.ts` and additionally permits the headless protocol surface (`src/ui/headless/**`), the pre-TUI splash (`src/ui/logo.ts`), debug channels (`src/utils/debug.ts`, `src/providers/instrument.ts`), and last-resort writes from the session-log writer.
+- `process.exit` is restricted to process-lifetime surfaces: `src/index.ts`, `src/cli/**` startup and phase files, and the headless/TUI exit sites under `src/ui/**`. Phase code must throw rather than exit; see `src/cli/startup/AGENTS.md`.
 
 ---
 
@@ -89,6 +97,7 @@ Prevent long-term drift.
 - No cycles in `src/**`.
 - Provider classes must be registered in `src/providers/registry.ts`.
 - Do not introduce external CLI argument parser libraries.
+- No `export *` (or `export type *`) re-exports under `src/**`. Wildcards silently widen the public surface and defeat the seam allowlists in §B; list named exports instead.
 
 ### F. Regression Contracts
 
@@ -129,11 +138,9 @@ Minimum CI gate:
 
 - `npm run test:unit:rest` (includes `test/unit/arch/**/*.test.ts`)
 
-Recommended explicit gate (future):
+Explicit arch gate:
 
-- Add `npm run test:unit:arch` script:
-  - `tsx --test 'test/unit/arch/**/*.test.ts'`
-- Mark it as a required status check.
+- `npm run test:unit:arch` — runs only `test/unit/arch/**/*.test.ts`. Should be marked as a required status check in CI.
 
 ---
 
@@ -166,16 +173,21 @@ When fixing a violation:
 
 ---
 
-## 8) Suggested Next Tightening Steps
+## 8) Test Layout
 
-1. **Add dedicated script** `test:unit:arch` in `package.json`.
-2. **Split `modularity.test.ts`** into focused files per category:
-   - `layers.test.ts`
-   - `boundary-surfaces.test.ts`
-   - `runtime-contracts.test.ts`
-   - `io-boundaries.test.ts`
-3. **Add allowlist metadata format** (comment template with owner + removal condition).
-4. **Add CI diff guard** to flag allowlist growth automatically.
+Architecture rules live in `test/unit/arch/`, split per category with shared helpers in `_helpers.ts`:
+
+- `layers.test.ts` — §A
+- `boundary-surfaces.test.ts` — §B (includes §F contracts cf880ed and 550f093)
+- `runtime-contracts.test.ts` — §C (includes §F contracts f848472 and 44aeb26)
+- `io-boundaries.test.ts` — §D
+- `structural-hygiene.test.ts` — §E (includes the §F render.ts-helpers contract)
+
+### Suggested next tightening steps
+
+1. **Add allowlist metadata format** (comment template with owner + removal condition).
+2. **Add CI diff guard** to flag allowlist growth automatically.
+3. **Brand `ContextFillTokens`** to retire the 44aeb26 arch rule by making the wrong assignment a compile error.
 
 ---
 

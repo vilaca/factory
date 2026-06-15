@@ -1,5 +1,5 @@
 import type { Provider, ToolCallMessage } from '../../../providers/types.js';
-import type { ToolRegistry } from '../../../tools/registry.js';
+import type { ToolHost } from '../../../tools/host.js';
 import { parseFirstJsonObject } from '../../../utils/json-extract.js';
 import { errorMessage, isError } from '../../../utils/errors.js';
 import * as fs from 'fs/promises';
@@ -40,7 +40,7 @@ export async function correctToolCall(
   request: CorrectionRequest,
   provider: Provider,
   model: string,
-  toolRegistry: ToolRegistry,
+  toolRegistry: ToolHost,
   signal?: AbortSignal,
 ): Promise<CorrectorOutcome> {
   const validNames = toolRegistry.getNames();

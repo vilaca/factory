@@ -1,7 +1,7 @@
 import type { ToolCallMessage } from '../../../providers/types.js';
 import type { AgentEvent } from '../types.js';
-import type { ToolResult } from '../../../tools/types.js';
-import { TOOL_NAMES } from '../../../tools/types.js';
+import type { ToolResult } from '../../../tools/host.js';
+import { TOOL_NAMES } from '../../../tools/host.js';
 import { FileCache } from '../cache/file-cache.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import type { ToolLoopContext } from './types.js';

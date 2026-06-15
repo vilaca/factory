@@ -1,6 +1,6 @@
 import type { ToolCallMessage } from '../../../providers/types.js';
 import type { AgentEvent } from '../types.js';
-import { TOOL_NAMES } from '../../../tools/types.js';
+import { TOOL_NAMES } from '../../../tools/host.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import { correctToolCall, readFileForCorrector } from './tool-call-corrector.js';
 import { selectWeakTier } from '../call-model/weak-tier.js';

@@ -1,5 +1,5 @@
 import type { ChatMessage, ToolCallMessage } from '../../providers/types.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { ToolDefinition } from '../../tools/host.js';
 import type { ContextManager } from '../context/context-manager.js';
 import type { AgentEvent, AgentOptions, ResponsesChain } from './types.js';
 import type { TurnExit, TurnState } from './phase-types.js';

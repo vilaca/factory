@@ -1,6 +1,5 @@
 import type { Provider, TokenUsage, ToolCallMessage } from '../../providers/types.js';
-import type { ExecutedToolResult } from '../../tools/types.js';
-import type { ToolRegistry } from '../../tools/registry.js';
+import type { ExecutedToolResult, ToolHost } from '../../tools/host.js';
 import type { Conversation } from '../context/conversation.js';
 import type { ContextManager } from '../context/context-manager.js';
 import type { PermissionManager, PermissionDecision } from '../../security/permissions.js';
@@ -165,7 +164,7 @@ export interface AgentOptions {
   model: string;
   conversation: Conversation;
   permissions: PermissionManager;
-  toolRegistry: ToolRegistry;
+  toolRegistry: ToolHost;
   contextManager?: ContextManager;
   signal?: AbortSignal;
   useTextToolFallback?: boolean;

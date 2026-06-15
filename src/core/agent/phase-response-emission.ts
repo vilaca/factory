@@ -4,7 +4,7 @@ import type { AgentEvent, AgentOptions, ResponsesChain } from './types.js';
 import type { TurnExit } from './phase-types.js';
 import type { StepEnforcer } from './step-enforcer.js';
 import type { ActivationFlags } from './reliability-config.js';
-import { TOOL_NAMES } from '../../tools/types.js';
+import { TOOL_NAMES } from '../../tools/host.js';
 import { normalizeToolArguments } from '../../utils/tool-call-args.js';
 
 export interface ResponseEmissionInput {

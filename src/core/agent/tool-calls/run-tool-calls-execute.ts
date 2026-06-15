@@ -1,11 +1,10 @@
 import type { ToolCallMessage } from '../../../providers/types.js';
 import type { AgentEvent, PermissionDecision } from '../types.js';
-import type { ToolHandler } from '../../../tools/types.js';
+import type { ToolHandler } from '../../../tools/host.js';
 import type { PermissionManager } from '../../../security/permissions.js';
-import { TOOL_NAMES } from '../../../tools/types.js';
+import { TOOL_NAMES, ToolResolutionError } from '../../../tools/host.js';
 import { formatToolResultMessage } from './tool-result-format.js';
 import { errorMessage } from '../../../utils/errors.js';
-import { ToolResolutionError } from '../../../tools/errors.js';
 import { validateAgainstSchema } from '../../../utils/json-schema-validate.js';
 import type { ToolLoopContext } from './types.js';
 import { PLAN_ARGS_PREVIEW_CHARS } from './constants.js';

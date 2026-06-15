@@ -1,9 +1,9 @@
 import type { Provider, TokenUsage } from '../../providers/types.js';
-import type { ToolDefinition } from '../../tools/types.js';
+import type { ToolDefinition } from '../../tools/host.js';
 import type { AgentEvent, AgentOptions } from './types.js';
 import type { TurnExit } from './phase-types.js';
 import type { ActivationFlags } from './reliability-config.js';
-import { TOOL_NAMES } from '../../tools/types.js';
+import { TOOL_NAMES } from '../../tools/host.js';
 import { autoEnableForModel } from './reliability-config.js';
 import { maybeCompact } from './compaction.js';
 import { errorMessage, isError } from '../../utils/errors.js';

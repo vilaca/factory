@@ -164,5 +164,7 @@ export function handleAgentEvent(
       if (event.stopReason === 'error') state.exitCode = state.exitCode || 1;
       else if (event.stopReason === 'token-limit') state.exitCode = state.exitCode || 5;
       break;
+    default:
+      break;
   }
 }
