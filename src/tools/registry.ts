@@ -1,4 +1,5 @@
 import type { ToolDefinition, ToolHandler } from './types.js';
+import type { ToolHost } from './host.js';
 import { readTool } from './read.js';
 import { writeTool } from './write.js';
 import { editTool } from './edit.js';
@@ -7,9 +8,8 @@ import { globTool } from './glob.js';
 import { grepTool } from './grep.js';
 import { webFetchTool } from './web/index.js';
 import { respondTool } from './respond.js';
-import { validatePrereqReferences } from '../core/agent/step-enforcer.js';
 
-export class ToolRegistry {
+export class ToolRegistry implements ToolHost {
   // Canonical store keyed by the handler's exact name. `getAll()` iterates
   // only this map, so callers get one entry per tool without a Set dedup.
   private tools: Map<string, ToolHandler> = new Map();
@@ -46,16 +46,6 @@ export class ToolRegistry {
   register(handler: ToolHandler): void {
     this.tools.set(handler.name, handler);
     this.byLowerName.set(handler.name.toLowerCase(), handler);
-  }
-
-  /** Validate every registered tool's declared prerequisites. Throws if
-   *  any prereq references a tool name that isn't registered. Run this
-   *  after all `register()` calls — at startup, after the registry is
-   *  fully populated. The reliability spec wants this at build time so
-   *  a typo surfaces as a startup error, not a confusing
-   *  prerequisite_nudge at runtime. */
-  validatePrerequisites(): void {
-    validatePrereqReferences(this.getDefinitions());
   }
 
   unregister(name: string): void {

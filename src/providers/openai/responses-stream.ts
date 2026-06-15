@@ -125,6 +125,9 @@ function applyToolCallEvent(ev: ResponsesStreamEvent, state: DispatchState): voi
           arguments: ev.arguments,
         });
       }
+      return;
+    default:
+      return;
   }
 }
 
@@ -168,6 +171,8 @@ function applyTerminalEvent(ev: ResponsesStreamEvent, state: DispatchState): voi
       const status = sseErrorStatus(ev.response?.error);
       throw apiError(state.providerName, status, msg);
     }
+    default:
+      return;
   }
 }
 

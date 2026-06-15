@@ -1,24 +1,27 @@
 import type { PathPolicy } from '../security/paths.js';
 import type { EnvPolicy } from '../security/env.js';
-import type { ToolDefinition, ToolPrerequisite } from '../utils/tool-definition.js';
+import type { ToolDefinition } from '../utils/tool-definition.js';
 import { TOOL_NAMES } from '../utils/tool-names.js';
 
 // Canonical tool-author surface. Everything a new built-in tool needs
 // to implement or reference is exported from this single module, even
 // when the underlying definitions live elsewhere:
 //
-//   - `ToolDefinition` / `ToolPrerequisite` physically live in
+//   - `ToolDefinition` physically lives in
 //     `src/utils/tool-definition.ts` because `providers/` also imports
-//     `ToolDefinition` and the arch test forbids providers → tools.
+//     it and the arch test forbids providers → tools.
 //   - `TOOL_NAMES` physically lives in `src/utils/tool-names.ts`
 //     because `security/permissions.ts` also imports it and the arch
 //     test forbids security → tools.
+//   - `ToolPrerequisite` also lives in `src/utils/tool-definition.ts`
+//     for the same reason and is re-exported via `src/tools/host.ts`.
 //
 // Both indirections are wire-format-driven (the contract crosses the
 // tools/providers and tools/security boundaries). They are re-exported
-// here so a tool author or a tool-call site only ever needs to read
-// `src/tools/types.js` to see the full surface.
-export type { ToolDefinition, ToolPrerequisite };
+// here so a tool author can pull the full handler surface (TOOL_NAMES,
+// ToolDefinition, ToolResult, ToolHandler, ToolContext) from a single
+// module. core/ uses the seam at `src/tools/host.ts` instead.
+export type { ToolDefinition };
 export { TOOL_NAMES };
 
 export type ToolCategory = 'read-only' | 'write' | 'execute';

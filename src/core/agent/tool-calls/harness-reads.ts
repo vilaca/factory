@@ -1,4 +1,4 @@
-import { TOOL_NAMES } from '../../../tools/types.js';
+import { TOOL_NAMES } from '../../../tools/host.js';
 import type { ToolCallMessage } from '../../../providers/types.js';
 import type { AgentEvent } from '../types.js';
 import type { ToolLoopContext } from './types.js';

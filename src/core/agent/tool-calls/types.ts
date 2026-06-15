@@ -1,6 +1,6 @@
 import type { Provider } from '../../../providers/types.js';
 import type { HooksConfig } from '../../config/types.js';
-import type { ToolRegistry } from '../../../tools/registry.js';
+import type { ToolHost } from '../../../tools/host.js';
 import type { PathPolicy } from '../../../security/paths.js';
 import type { EnvPolicy } from '../../../security/env.js';
 import type { Conversation } from '../../context/conversation.js';
@@ -13,7 +13,7 @@ import type { StepEnforcer } from '../step-enforcer.js';
 export interface ToolLoopContext {
   conversation: Conversation;
   permissions: PermissionManager;
-  toolRegistry: ToolRegistry;
+  toolRegistry: ToolHost;
   signal: AbortSignal | undefined;
   useUserResultFraming: boolean;
   planMode: boolean;

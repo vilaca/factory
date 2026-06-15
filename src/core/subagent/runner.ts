@@ -1,6 +1,6 @@
 import type { Provider } from '../../providers/types.js';
-import type { ToolRegistry } from '../../tools/registry.js';
-import { TOOL_NAMES } from '../../tools/types.js';
+import type { ToolHost } from '../../tools/host.js';
+import { TOOL_NAMES } from '../../tools/host.js';
 import type { AgentEvent } from '../agent/types.js';
 import { Conversation } from '../context/conversation.js';
 import { PermissionManager } from '../../security/permissions.js';
@@ -49,7 +49,7 @@ interface SubagentRunOptions {
   /** The registry of tools available to the subagent. Callers must provide
    *  this — use buildSubagentRegistry() from src/tools/index.ts for the
    *  standard read-only set (Read, Glob, Grep, allow-listed Bash). */
-  registry: ToolRegistry;
+  registry: ToolHost;
   /** Allows tests to inject a runner. Production code uses the default. */
   runner?: typeof runAgent;
 }
