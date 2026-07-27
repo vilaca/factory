@@ -76,17 +76,17 @@
     "docs:preview": "vitepress preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0",
-    "@huggingface/inference": "^4.13.22",
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@huggingface/inference": "^4.13.23",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "chalk": "^5.4.1",
     "cli-highlight": "^2.1.11",
-    "google-auth-library": "^10.9.0",
-    "ink": "^7.1.0",
+    "google-auth-library": "^10.9.1",
+    "ink": "^7.1.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "ollama": "^0.6.3",
-    "react": "^19.2.7"
+    "react": "^19.2.8"
   },
   "devDependencies": {
     "@lydell/node-pty": "^1.2.0-beta.12",
