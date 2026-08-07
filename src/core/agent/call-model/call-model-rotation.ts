@@ -54,9 +54,7 @@ interface RotationOutcome {
 }
 
 export type RotationDecision =
-  | { kind: 'rotated' }
-  | { kind: 'rethrow'; err: unknown }
-  | { kind: 'noop' };
+  { kind: 'rotated' } | { kind: 'rethrow'; err: unknown } | { kind: 'noop' };
 
 function resetAccumulators(state: RotationState): void {
   state.fullContent = '';

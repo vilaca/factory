@@ -16,8 +16,7 @@ export type CommitHandlerDeps = {
   /** Resolver for the compaction-model picker. Present when the picker was
    *  opened from the first-compaction prompt. */
   compactionPickerResolver?:
-    | ((value: { providerName: string; model: string } | null) => void)
-    | null;
+    ((value: { providerName: string; model: string } | null) => void) | null;
   /** Resolver for the rotation-fallback picker. Present when the picker was
    *  opened from the rate-limit / auth fallback flow. */
   fallbackPickerResolver?: ((value: { provider: string; model: string } | null) => void) | null;

@@ -184,8 +184,7 @@ async function* maybeInjectContextWarning(
  *  dropped rather than retried. */
 function resolveChainPointer(
   chainRef:
-    | { get(): ResponsesChain | undefined; set(value: ResponsesChain | undefined): void }
-    | undefined,
+    { get(): ResponsesChain | undefined; set(value: ResponsesChain | undefined): void } | undefined,
   providerName: string,
   model: string,
   activeKeyId: string | undefined,

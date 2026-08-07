@@ -161,9 +161,7 @@ function makeRecordResult(
 }
 
 type BashPolicyOutcome =
-  | { kind: 'deny'; reason: string }
-  | { kind: 'pre-allow' }
-  | { kind: 'prompt' };
+  { kind: 'deny'; reason: string } | { kind: 'pre-allow' } | { kind: 'prompt' };
 
 /** Built-in forbidden patterns hard-deny before any permission prompt;
  *  allow-all on Bash cannot bypass these. User rules can also pre-resolve to

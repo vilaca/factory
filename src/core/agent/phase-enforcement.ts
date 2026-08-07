@@ -17,9 +17,7 @@ export interface EnforcementInput {
  *    `error`. Other (unexpected) exceptions propagate to the outer
  *    try/catch in `runAgent`, per the `TurnOutcome` contract. */
 export type EnforcementResult =
-  | { kind: 'pass' }
-  | { kind: 'continue' }
-  | { kind: 'done'; stopReason: 'error'; error: Error };
+  { kind: 'pass' } | { kind: 'continue' } | { kind: 'done'; stopReason: 'error'; error: Error };
 
 /** Phase 5 enforcement: run BEFORE tool execution so a premature
  *  terminal or unmet prereq becomes a nudge rather than a wasted tool

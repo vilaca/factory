@@ -213,8 +213,7 @@ describe('event-handler — tool lifecycle', () => {
     assert.strictEqual(successes.length, 0);
     const items = calls.addItem.mock.calls.map(c => c.arguments[0] as { kind: string });
     const result = items.find(i => i.kind === 'tool-result') as
-      | { output: string; outputFull?: string; success: boolean }
-      | undefined;
+      { output: string; outputFull?: string; success: boolean } | undefined;
     assert.ok(result);
     assert.strictEqual(result!.output, 'short');
     assert.strictEqual(result!.outputFull, 'full body');

@@ -271,7 +271,7 @@ export function normalizeMarkdownLists(text: string): string {
   const out: string[] = [];
   let inFence = false;
 
-  for (let i = 0; i < lines.length; ) {
+  for (let i = 0; i < lines.length;) {
     const line = lines[i] ?? '';
     out.push(line);
 
