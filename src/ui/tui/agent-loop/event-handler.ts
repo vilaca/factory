@@ -414,7 +414,6 @@ export function handleAgentEvent(event: AgentEvent, deps: AgentLoopDeps, ss: Str
   // variant. The runtime cast to a generic handler is safe because TS already
   // proved each entry's input matches its key.
   const handler = HANDLERS[event.type] as
-    | ((event: AgentEvent, deps: AgentLoopDeps, ss: StreamingState) => void)
-    | undefined;
+    ((event: AgentEvent, deps: AgentLoopDeps, ss: StreamingState) => void) | undefined;
   if (handler) handler(event, deps, ss);
 }

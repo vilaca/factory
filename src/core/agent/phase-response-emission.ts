@@ -150,8 +150,7 @@ function detectRespondShortCircuit(input: RespondShortCircuitInput): string | nu
  *  provider speaks the Responses API. */
 function captureChainPointer(
   chainRef:
-    | { get(): ResponsesChain | undefined; set(value: ResponsesChain | undefined): void }
-    | undefined,
+    { get(): ResponsesChain | undefined; set(value: ResponsesChain | undefined): void } | undefined,
   responseId: string | undefined,
   conversation: Conversation,
   provider: Provider,

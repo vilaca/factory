@@ -7,10 +7,7 @@ import { formatTokenCount } from '../shared.js';
 export { normalizeBaseUrl, parseToolArgs } from '../shared.js';
 
 export type OpenCodeZenRoute =
-  | 'chat-completions'
-  | 'anthropic-messages'
-  | 'google-native'
-  | 'openai-responses';
+  'chat-completions' | 'anthropic-messages' | 'google-native' | 'openai-responses';
 
 export interface OpenCodeZenModel {
   id: string;
