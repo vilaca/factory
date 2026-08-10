@@ -98,10 +98,10 @@
     "c8": "^12.0.0",
     "eslint": "^10.8.0",
     "eslint-plugin-sonarjs": "^4.2.0",
-    "knip": "^6.31.0",
+    "knip": "^6.32.0",
     "prettier": "^3.9.6",
     "ts-morph": "^28.0.0",
-    "tsx": "^4.23.5",
+    "tsx": "^4.23.10",
     "typescript": "^6.0.3",
     "vitepress": "^1.6.4"
   },
