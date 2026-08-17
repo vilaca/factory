@@ -76,12 +76,12 @@
     "docs:preview": "vitepress preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
-    "@huggingface/inference": "^4.13.25",
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@huggingface/inference": "^4.13.26",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "chalk": "^6.0.0",
     "cli-highlight": "^2.1.11",
-    "google-auth-library": "^11.0.0",
+    "google-auth-library": "^11.0.2",
     "ink": "^7.1.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
