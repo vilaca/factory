@@ -76,7 +76,7 @@
     "docs:preview": "vitepress preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
+    "@anthropic-ai/sdk": "^0.122.0",
     "@huggingface/inference": "^4.13.28",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "chalk": "^6.0.0",
