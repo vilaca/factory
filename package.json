@@ -76,7 +76,7 @@
     "docs:preview": "vitepress preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
+    "@anthropic-ai/sdk": "^0.125.0",
     "@huggingface/inference": "^4.13.28",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "chalk": "^6.0.0",
@@ -86,12 +86,12 @@
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "ollama": "^0.6.3",
-    "react": "^19.2.8"
+    "react": "^19.3.0"
   },
   "devDependencies": {
     "@lydell/node-pty": "^1.2.0-beta.15",
     "@types/node": "^22.20.1",
-    "@types/react": "^19.2.18",
+    "@types/react": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.59.1",
     "archunit": "^2.4.0",
