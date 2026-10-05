@@ -76,22 +76,22 @@
     "docs:preview": "vitepress preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
-    "@huggingface/inference": "^4.13.28",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "chalk": "^6.0.0",
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@huggingface/inference": "^4.13.30",
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "chalk": "^6.0.1",
     "cli-highlight": "^2.1.11",
-    "google-auth-library": "^11.0.2",
+    "google-auth-library": "^11.1.0",
     "ink": "^7.1.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
-    "ollama": "^0.6.3",
-    "react": "^19.2.8"
+    "ollama": "^0.6.4",
+    "react": "^19.3.0"
   },
   "devDependencies": {
     "@lydell/node-pty": "^1.2.0-beta.15",
     "@types/node": "^22.20.1",
-    "@types/react": "^19.2.18",
+    "@types/react": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.59.1",
     "archunit": "^2.4.0",
