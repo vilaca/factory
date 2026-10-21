@@ -78,7 +78,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
     "@huggingface/inference": "^4.13.28",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "chalk": "^6.0.0",
     "cli-highlight": "^2.1.11",
     "google-auth-library": "^11.0.2",
